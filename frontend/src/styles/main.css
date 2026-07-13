@@ -1,0 +1,165 @@
+/* 全局样式：深色科技风格 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #050814;
+  --panel: #0d1424;
+  --panel-2: #111a2e;
+  --border: #1a2844;
+  --border-2: #24344f;
+  --accent: #00d4ff;
+  --accent-2: #7c3aed;
+  --green: #10b981;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --text: #e5e7eb;
+  --text-dim: #6b7a94;
+  --text-mute: #4b5a75;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+#app {
+  height: 100vh;
+}
+
+/* 滚动条统一样式 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* 通用动画 */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 通用面板样式 */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* 状态颜色工具类 */
+.state-run { color: var(--green); }
+.state-idle { color: var(--yellow); }
+.state-error { color: var(--red); }
+.state-maint { color: var(--blue); }
+.state-setup { color: var(--accent-2); }
+
+/* 状态徽章 */
+.state-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.state-badge.run { background: rgba(16, 185, 129, 0.18); color: var(--green); }
+.state-badge.idle { background: rgba(245, 158, 11, 0.15); color: var(--yellow); }
+.state-badge.error { background: rgba(239, 68, 68, 0.18); color: var(--red); }
+.state-badge.maint { background: rgba(59, 130, 246, 0.18); color: var(--blue); }
+.state-badge.setup { background: rgba(124, 58, 237, 0.18); color: var(--accent-2); }
+
+/* 状态圆点 */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.run { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.8s infinite; }
+.status-dot.idle { background: var(--yellow); }
+.status-dot.error { background: var(--red); box-shadow: 0 0 6px var(--red); animation: blink 1s infinite; }
+.status-dot.maint { background: var(--blue); }
+.status-dot.setup { background: var(--accent-2); }
+
+/* 标题样式 */
+.section-title {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+/* 空状态 */
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-mute);
+  font-size: 12px;
+}
+
+/* 输入框统一样式 */
+input, button, select {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+/* 实时指示灯 */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 1.8s infinite;
+  display: inline-block;
+}
+.live-dot.offline {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+
+/* 玻璃质感面板（悬浮覆盖层） */
+.glass-panel {
+  background: rgba(13, 20, 36, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
