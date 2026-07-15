@@ -1,0 +1,3980 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VPO 2D/3D Unified Dashboard</title>
+  <style>
+    :root {
+      --bg: #e9eef3;
+      --surface: #ffffff;
+      --surface-2: #f7f9fb;
+      --ink: #111827;
+      --muted: #64748b;
+      --line: #cbd5e1;
+      --line-strong: #94a3b8;
+      --accent: #0f766e;
+      --accent-2: #2563eb;
+      --idle: #9ca3af;
+      --running: #16a34a;
+      --hold: #d97706;
+      --alarm: #dc2626;
+      --maintenance: #2563eb;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.09)
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body,
+    html {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      color: var(--ink);
+      background: var(--bg);
+      overflow: hidden;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif
+    }
+
+    button,
+    select {
+      font: inherit
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100%;
+      min-width: 320px
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: 0 1px 0 rgba(15, 23, 42, .04)
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.3
+    }
+
+    .subtitle {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center
+    }
+
+    .btn,
+    .select {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface)
+    }
+
+    .btn {
+      padding: 0 11px;
+      cursor: pointer;
+      white-space: nowrap
+    }
+
+    .btn:hover {
+      border-color: var(--line-strong);
+      background: var(--surface-2)
+    }
+
+    .btn.primary {
+      color: #fff;
+      border-color: var(--accent);
+      background: var(--accent)
+    }
+
+    .btn.primary:hover {
+      background: #0b625b
+    }
+
+    .select {
+      padding: 0 32px 0 10px
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      min-height: 0;
+      padding: 12px;
+      position: relative
+    }
+
+    .main>.panel {
+      min-height: 0
+    }
+
+    body.embed-mode {
+      background: 0 0
+    }
+
+    body.embed-mode .app {
+      grid-template-rows: 1fr
+    }
+
+    body.embed-mode .bottom,
+    body.embed-mode .lot-overlay,
+    body.embed-mode .topbar {
+      display: none
+    }
+
+    body.embed-mode .main {
+      padding: 0;
+      gap: 0;
+      height: 100%
+    }
+
+    body.embed-mode .panel {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none
+    }
+
+    body.embed-mode .view-panel {
+      height: 100%
+    }
+
+    body.embed-mode .view-wrap {
+      height: 100%;
+      min-height: 0
+    }
+
+    .view-tabs {
+      display: inline-flex;
+      gap: 8px;
+      padding: 0 12px
+    }
+
+    .view-tab {
+      min-height: 34px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .78);
+      cursor: pointer;
+      transition: border-color 140ms ease, color 140ms ease, background 140ms ease, transform 140ms ease
+    }
+
+    .view-tab:hover {
+      border-color: var(--line-strong);
+      color: var(--ink);
+      transform: translateY(-1px)
+    }
+
+    .view-tab.active {
+      border-color: rgba(37, 99, 235, .4);
+      color: var(--accent-2);
+      background: rgba(219, 234, 254, .8)
+    }
+
+    .view-panel.hidden {
+      display: none
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc
+    }
+
+    .panel-title strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.2
+    }
+
+    .panel-title span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 12px;
+      white-space: nowrap
+    }
+
+    .view-wrap {
+      position: relative;
+      height: calc(100% - 45px);
+      min-height: 280px;
+      background: linear-gradient(180deg, #f8fafc 0, #edf2f7 100%)
+    }
+
+    #map2d,
+    #stage3dCanvas,
+    #stage3dSvg {
+      width: 100%;
+      height: 100%;
+      display: block
+    }
+
+    #map2d {
+      background: linear-gradient(180deg, #f8fafc 0, #edf2f7 100%)
+    }
+
+    #stage3dCanvas {
+      background: linear-gradient(180deg, #f7fafc 0, #e8eef5 100%);
+      cursor: grab;
+      position: absolute;
+      inset: 0;
+      z-index: 1
+    }
+
+    #stage3dSvg {
+      display: none
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #f8fafc
+    }
+
+    .view-tip {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      max-width: calc(100% - 20px);
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .9);
+      font-size: 12px
+    }
+
+    .legend {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: calc(100% - 20px)
+    }
+
+    .legend-item {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .92);
+      font-size: 11px
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--idle)
+    }
+
+    .lot-overlay {
+      position: fixed;
+      left: 24px;
+      top: 150px;
+      z-index: 50;
+      display: grid;
+      gap: 10px;
+      pointer-events: none
+    }
+
+    .lot-chip {
+      pointer-events: auto;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 3px;
+      align-items: flex-start;
+      justify-self: start;
+      min-width: 220px;
+      max-width: min(360px, calc(100vw - 48px));
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 255, 255, .28);
+      border-radius: 14px;
+      color: #0f172a;
+      background: rgba(255, 255, 255, .16);
+      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, .24), 0 4px 10px rgba(15, 23, 42, .04);
+      cursor: pointer;
+      transition: transform 140ms ease, border-color 140ms ease, background 140ms ease
+    }
+
+    .lot-chip.active,
+    .lot-chip:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, .38);
+      background: rgba(255, 255, 255, .22)
+    }
+
+    .lot-chip .label {
+      color: rgba(15, 23, 42, .52);
+      font-size: 11px;
+      line-height: 1.2;
+      letter-spacing: .02em
+    }
+
+    .lot-chip .value {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.06;
+      letter-spacing: .01em;
+      color: var(--accent-2);
+      text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
+      overflow-wrap: anywhere
+    }
+
+    .lot-popover {
+      pointer-events: auto;
+      min-width: 260px;
+      max-width: min(420px, calc(100vw - 48px));
+      padding: 12px 14px 14px;
+      border: 1px solid rgba(148, 163, 184, .45);
+      border-radius: 16px;
+      color: #0f172a;
+      background: rgba(15, 23, 42, .56);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 18px 42px rgba(15, 23, 42, .26);
+      transform-origin: top left;
+      transition: opacity 140ms ease, transform 140ms ease
+    }
+
+    .lot-popover.hidden {
+      opacity: 0;
+      transform: translateY(-4px) scale(.98);
+      pointer-events: none
+    }
+
+    .lot-popover-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px
+    }
+
+    .lot-popover-head strong {
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.2
+    }
+
+    .lot-popover-head span {
+      color: rgba(226, 232, 240, .8);
+      font-size: 11px
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px
+    }
+
+    .detail-card {
+      min-height: 70px;
+      padding: 9px 10px;
+      border: 1px solid rgba(148, 163, 184, .22);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .08)
+    }
+
+    .detail-card span {
+      display: block;
+      color: rgba(226, 232, 240, .76);
+      font-size: 11px;
+      line-height: 1.2
+    }
+
+    .detail-card strong {
+      display: block;
+      margin-top: 5px;
+      color: #fff;
+      font-size: 17px;
+      line-height: 1.15;
+      overflow-wrap: anywhere
+    }
+
+    .detail {
+      min-height: 0;
+      padding: 12px;
+      overflow: auto
+    }
+
+    .detail h2 {
+      margin: 0 0 10px;
+      font-size: 15px
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 104px 1fr;
+      gap: 7px 10px;
+      align-items: start;
+      font-size: 12px;
+      line-height: 1.4
+    }
+
+    .kv .k {
+      color: var(--muted)
+    }
+
+    .kv .v {
+      color: var(--ink);
+      overflow-wrap: anywhere
+    }
+
+    .binding-list {
+      display: grid;
+      gap: 7px;
+      margin-top: 14px
+    }
+
+    .binding-item {
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+      cursor: pointer;
+      text-align: left
+    }
+
+    .binding-item.active,
+    .binding-item:hover {
+      border-color: var(--accent-2);
+      background: #eff6ff
+    }
+
+    .binding-item span,
+    .binding-item strong {
+      display: block
+    }
+
+    .binding-item strong {
+      font-size: 12px
+    }
+
+    .binding-item span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3
+    }
+
+    .bottom {
+      display: grid;
+      grid-template-columns: minmax(120px, 180px) 1fr minmax(160px, 260px);
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--line);
+      background: var(--surface)
+    }
+
+    .timeline-label {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4
+    }
+
+    .timeline-label strong {
+      display: block;
+      color: var(--ink);
+      font-size: 13px
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(var(--count), minmax(38px, 1fr));
+      gap: 8px;
+      min-width: 0
+    }
+
+    .tick {
+      position: relative;
+      min-width: 0;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+      cursor: pointer;
+      overflow: hidden;
+      text-align: left
+    }
+
+    .tick::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      background: var(--state-color, var(--idle))
+    }
+
+    .tick.active {
+      border-color: var(--accent-2);
+      box-shadow: inset 0 0 0 1px var(--accent-2);
+      background: #eff6ff
+    }
+
+    .tick span,
+    .tick strong {
+      display: block;
+      margin-left: 11px;
+      margin-right: 5px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .tick strong {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--ink)
+    }
+
+    .tick span {
+      margin-top: 1px;
+      font-size: 10px;
+      color: var(--muted)
+    }
+
+    .load-status {
+      justify-self: end;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      text-align: right;
+      overflow-wrap: anywhere
+    }
+
+    .hotspot {
+      transition: fill 160ms ease, stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
+      cursor: pointer
+    }
+
+    .hotspot-label {
+      pointer-events: none;
+      font-size: 18px;
+      fill: #0f172a;
+      paint-order: stroke;
+      stroke: rgba(248, 250, 252, 0.9);
+      stroke-width: 5px;
+      stroke-linejoin: round
+    }
+
+    .grid-line {
+      stroke: #dbe5ef;
+      stroke-width: 1
+    }
+
+    .machine-outline {
+      fill: none;
+      stroke: #334155;
+      stroke-width: 2;
+      stroke-dasharray: 8 7;
+      opacity: .42
+    }
+
+    .machine-label {
+      fill: #334155;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0
+    }
+
+    .detail-line {
+      stroke: #64748b;
+      stroke-width: 2;
+      stroke-linecap: round;
+      opacity: .72
+    }
+
+    .small-detail {
+      fill: #475569;
+      stroke: #1f2937;
+      stroke-width: 1
+    }
+
+    .port-pin {
+      fill: #f8fafc;
+      stroke: #334155;
+      stroke-width: 1
+    }
+
+    @keyframes pulseStroke {
+
+      0%,
+      100% {
+        stroke-opacity: 1
+      }
+
+      50% {
+        stroke-opacity: 0.25
+      }
+    }
+
+    .alarm-pulse {
+      animation: pulseStroke .9s ease-in-out infinite
+    }
+
+    @media (max-width:1180px) {
+
+      body,
+      html {
+        overflow: auto
+      }
+
+      .app {
+        min-height: 100%;
+        height: auto
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 440px
+      }
+
+      .lot-overlay {
+        left: 12px;
+        right: 12px;
+        top: 96px
+      }
+
+      .lot-chip,
+      .lot-popover {
+        max-width: calc(100vw - 24px)
+      }
+
+      .detail-grid {
+        grid-template-columns: 1fr
+      }
+
+      .bottom {
+        grid-template-columns: 1fr
+      }
+
+      .load-status {
+        justify-self: stretch;
+        text-align: left
+      }
+    }
+
+    @media (max-width:760px) {
+      .topbar {
+        grid-template-columns: 1fr
+      }
+
+      .toolbar {
+        justify-content: flex-start
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 420px
+      }
+
+      .timeline {
+        grid-template-columns: 1fr
+      }
+
+      .tick {
+        height: 38px
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <h1>VPO 2D/3D &#32479;&#19968;&#39550;&#39542;&#33329;</h1>
+        <p class="subtitle">&#21516;&#19968;&#26465;&#20107;&#20214;&#39537;&#21160; 2D &#28909;&#28857;&#12289;3D
+          &#37096;&#20214;&#12289;&#21578;&#35686;&#29366;&#24577;&#21644;&#22238;&#25918;&#26102;&#38388;&#36724;&#12290;
+        </p>
+      </div>
+      <div class="toolbar" aria-label="&#22238;&#25918;&#25511;&#21046;"><button class="btn" id="prevBtn"
+          type="button">&#19978;&#19968;&#27493;</button> <button class="btn primary" id="playBtn"
+          type="button">&#25773;&#25918;</button> <button class="btn" id="nextBtn"
+          type="button">&#19979;&#19968;&#27493;</button> <button class="btn" id="podAttachBtn" type="button">POD
+          &#31359;&#20837;</button> <button class="btn" id="podDetachBtn" type="button">POD &#33073;&#20986;</button>
+        <button class="btn" id="resetViewBtn" type="button">&#37325;&#32622;&#35270;&#35282;</button> <select
+          class="select" id="speedSelect" aria-label="&#25773;&#25918;&#36895;&#24230;">
+          <option value="1800">&#24930;&#36895;</option>
+          <option value="1200" selected="selected">&#26631;&#20934;</option>
+          <option value="700">&#24555;&#36895;</option>
+        </select></div>
+    </header>
+    <main class="main">
+      <div class="lot-overlay" aria-live="polite"><button class="lot-chip" id="lotChip" type="button"
+          aria-haspopup="dialog" aria-expanded="false"><span class="label">LOT ID</span> <span class="value"
+            id="lotChipValue">-</span></button>
+        <div class="lot-popover hidden" id="lotPopover" role="dialog" aria-label="LOT ID 详细信息">
+          <div class="lot-popover-head"><strong id="lotPopoverTitle">LOT 详情</strong> <span id="lotPopoverHint">悬停 /
+              点击</span></div>
+          <div class="detail-grid">
+            <div class="detail-card"><span>Batch ID</span><strong id="lotDetailBatchId">-</strong></div>
+            <div class="detail-card"><span>Product</span><strong id="lotDetailProduct">-</strong></div>
+            <div class="detail-card"><span>Step</span><strong id="lotDetailStep">-</strong></div>
+          </div>
+        </div>
+      </div>
+      <section class="panel view-panel" data-view-panel="svg3d">
+        <div class="panel-head">
+          <div class="panel-title"><strong>&#36731;&#37327; 3D &#35270;&#22270;</strong>
+            <span>&#37096;&#20214;&#30001;&#32479;&#19968; binding
+              &#39537;&#21160;&#65292;&#25903;&#25345;&#24038;&#38190;&#26059;&#36716;&#12289;&#26041;&#21521;&#38190;&#24179;&#31227;&#19982;&#28378;&#36718;&#32553;&#25918;</span>
+          </div><span class="badge" id="partCount">-</span>
+        </div>
+        <div class="view-wrap"><canvas id="stage3dCanvas"></canvas><svg id="stage3dSvg" viewBox="0 0 1000 1000"
+            role="img" aria-label="VPO 3D SVG &#35270;&#22270;" hidden></svg>
+          <div class="view-tip">&#24038;&#38190;&#26059;&#36716; /
+            &#19978;&#19979;&#24038;&#21491;&#38190;&#24179;&#31227; / &#28378;&#36718;&#32553;&#25918; /
+            &#21452;&#20987;&#22238;&#27491; / &#28857;&#20987; 2D
+            &#25110;&#21015;&#34920;&#32852;&#21160;&#39640;&#20142;</div>
+        </div>
+      </section>
+    </main>
+    <footer class="bottom">
+      <div class="timeline-label"><strong>&#20107;&#20214;&#22238;&#25918;</strong> <span id="timelineSummary">-</span>
+      </div>
+      <div class="timeline" id="timeline"></div>
+      <div class="load-status" id="loadStatus">&#21021;&#22987;&#21270;&#20013;...</div>
+    </footer>
+  </div>
+  <script>
+    const fallbackEvents = [{
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:00Z",
+        event_type: "STATE_CHANGE",
+        machine_state: "Idle",
+        machine_mode: "Auto",
+        source_system: "Replay",
+        source_message_id: "MOCK-0001"
+      }, {
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:05Z",
+        event_type: "POD_ATTACH",
+        machine_state: "Running",
+        machine_mode: "Auto",
+        pod_id: "POD-A17",
+        pod_action: "Attach",
+        source_system: "Replay",
+        source_message_id: "MOCK-0001A"
+      }, {
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:10Z",
+        event_type: "STATE_CHANGE",
+        machine_state: "Running",
+        machine_mode: "Auto",
+        throughput_count: 1533,
+        source_system: "Replay",
+        source_message_id: "MOCK-0002"
+      }, {
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:20Z",
+        event_type: "STATE_CHANGE",
+        machine_state: "Hold",
+        machine_mode: "Manual",
+        source_system: "Replay",
+        source_message_id: "MOCK-0003"
+      }, {
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:25Z",
+        event_type: "POD_DETACH",
+        machine_state: "Hold",
+        machine_mode: "Manual",
+        pod_id: "POD-A17",
+        pod_action: "Detach",
+        source_system: "Replay",
+        source_message_id: "MOCK-0003A"
+      }, {
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:30Z",
+        event_type: "ALARM",
+        machine_state: "Alarm",
+        alarm_code: "ALM-102",
+        alarm_severity: "High",
+        alarm_action: "Raised",
+        source_system: "Replay",
+        source_message_id: "MOCK-0004"
+      }, {
+        tool_id: "VPO-TEST",
+        event_ts_utc: "2026-04-27T09:00:45Z",
+        event_type: "ALARM",
+        machine_state: "Running",
+        alarm_code: "ALM-102",
+        alarm_severity: "High",
+        alarm_action: "Cleared",
+        source_system: "Replay",
+        source_message_id: "MOCK-0005"
+      }],
+      fallbackHotspots = {
+        hotspots: [{
+          hotspot_id: "machine_body",
+          name: "机身主体",
+          points: [
+            [340, 200],
+            [700, 200],
+            [700, 760],
+            [340, 760]
+          ],
+          priority: 1
+        }, {
+          hotspot_id: "wafer_port_front",
+          name: "Wafer入口",
+          points: [
+            [360, 160],
+            [680, 160],
+            [680, 290],
+            [360, 290]
+          ],
+          priority: 2
+        }, {
+          hotspot_id: "operator_control_box",
+          name: "控制盒",
+          points: [
+            [402, 838],
+            [610, 838],
+            [610, 964],
+            [402, 964]
+          ],
+          priority: 3
+        }, {
+          hotspot_id: "comm_panel",
+          name: "通信面板",
+          points: [
+            [382, 790],
+            [548, 790],
+            [548, 832],
+            [382, 832]
+          ],
+          priority: 4
+        }, {
+          hotspot_id: "power_input",
+          name: "电源输入",
+          points: [
+            [560, 874],
+            [630, 874],
+            [630, 948],
+            [560, 948]
+          ],
+          priority: 5
+        }, {
+          hotspot_id: "mounting_points",
+          name: "安装基准",
+          points: [
+            [240, 120],
+            [780, 120],
+            [780, 980],
+            [240, 980]
+          ],
+          priority: 6
+        }]
+      },
+      fallbackMapping = {
+        bindings: [{
+          binding_id: "bind_machine_body",
+          event_scope: ["STATE_CHANGE", "ALARM", "CYCLE"],
+          tags: ["machine_state", "machine_mode", "throughput_count"],
+          view_2d: {
+            hotspot_id: "machine_body",
+            style: {
+              fill_by_state: !0,
+              border_highlight_on_alarm: !0
+            }
+          },
+          view_3d: {
+            part_ids: ["left_inner_rail", "right_inner_rail", "rear_panel", "back_plate_top_cap"],
+            style: {
+              material_color_by_state: !0,
+              pulse_on_alarm: !1
+            }
+          }
+        }, {
+          binding_id: "bind_wafer_port",
+          event_scope: ["STATE_CHANGE", "ALARM", "POD_ATTACH", "POD_DETACH"],
+          tags: ["machine_state", "alarm_code", "alarm_severity", "alarm_action", "pod_id", "pod_action"],
+          view_2d: {
+            hotspot_id: "wafer_port_front",
+            style: {
+              fill_by_state: !0,
+              blink_on_alarm: !0
+            }
+          },
+          view_3d: {
+            part_ids: ["spinner_cup", "top_chamber_inner", "front_stage", "tray_frame_left", "tray_frame_right",
+              "tray_frame_front", "tray_frame_back"
+            ],
+            style: {
+              material_color_by_state: !0,
+              pulse_on_alarm: !0
+            }
+          }
+        }, {
+          binding_id: "bind_operator_control",
+          event_scope: ["ALARM", "STATE_CHANGE"],
+          tags: ["alarm_code", "alarm_action", "machine_mode"],
+          view_2d: {
+            hotspot_id: "operator_control_box",
+            style: {
+              fill_by_state: !1,
+              blink_on_alarm: !0
+            }
+          },
+          view_3d: {
+            part_ids: ["operator_control_box", "control_box_face", "control_box_display", "control_box_knob_ring",
+              "control_box_knob", "control_box_start_button", "control_box_reset_button", "control_box_arm",
+              "control_box_cable"
+            ],
+            style: {
+              material_color_by_state: !1,
+              pulse_on_alarm: !0
+            }
+          }
+        }, {
+          binding_id: "bind_comm_panel",
+          event_scope: ["COMM_STATUS", "ALARM"],
+          tags: ["source_system", "source_message_id", "alarm_code"],
+          view_2d: {
+            hotspot_id: "comm_panel",
+            style: {
+              fill_by_state: !1,
+              border_highlight_on_alarm: !0
+            }
+          },
+          view_3d: {
+            part_ids: ["rear_panel", "vent_panel"],
+            style: {
+              material_color_by_state: !1,
+              pulse_on_alarm: !1
+            }
+          }
+        }, {
+          binding_id: "bind_power_area",
+          event_scope: ["STATE_CHANGE", "ALARM"],
+          tags: ["machine_state", "alarm_code"],
+          view_2d: {
+            hotspot_id: "power_input",
+            style: {
+              fill_by_state: !0,
+              blink_on_alarm: !0
+            }
+          },
+          view_3d: {
+            part_ids: ["base_plate", "base_front_panel"],
+            style: {
+              material_color_by_state: !0,
+              pulse_on_alarm: !1
+            }
+          }
+        }, {
+          binding_id: "bind_mounting",
+          event_scope: ["MAINTENANCE", "STATE_CHANGE"],
+          tags: ["machine_state"],
+          view_2d: {
+            hotspot_id: "mounting_points",
+            style: {
+              fill_by_state: !1,
+              border_highlight_on_alarm: !1
+            }
+          },
+          view_3d: {
+            part_ids: ["base_plate", "mounting_foot_fl", "mounting_foot_fr", "mounting_foot_rl", "mounting_foot_rr",
+              "front_stage"
+            ],
+            style: {
+              material_color_by_state: !1,
+              pulse_on_alarm: !1
+            }
+          }
+        }]
+      },
+      fallbackModel = {
+        version: "3.0.0",
+        model_id: "VPO-2200-01-photo-aligned-light-3d-v3.0",
+        units: "mm",
+        envelope: {
+          width: 540,
+          depth: 760,
+          height: 1030
+        },
+        parts: [{
+          id: "base_plate",
+          type: "box",
+          size: [520, 680, 38],
+          position: [0, -10, 19],
+          rotation_deg: [0, 0, 0],
+          color: "#4b535c"
+        }, {
+          id: "base_top_trim",
+          type: "box",
+          size: [454, 600, 18],
+          position: [0, -18, 54],
+          rotation_deg: [0, 0, 0],
+          color: "#707982"
+        }, {
+          id: "base_front_panel",
+          type: "box",
+          size: [500, 72, 72],
+          position: [0, -352, 74],
+          rotation_deg: [0, 0, 0],
+          color: "#111827"
+        }, {
+          id: "mounting_foot_fl",
+          type: "cylinder",
+          size: [54, 54, 22],
+          position: [-214, -298, 20],
+          rotation_deg: [0, 0, 0],
+          color: "#2f343a"
+        }, {
+          id: "mounting_foot_fr",
+          type: "cylinder",
+          size: [54, 54, 22],
+          position: [214, -298, 20],
+          rotation_deg: [0, 0, 0],
+          color: "#2f343a"
+        }, {
+          id: "mounting_foot_rl",
+          type: "cylinder",
+          size: [54, 54, 22],
+          position: [-214, 288, 20],
+          rotation_deg: [0, 0, 0],
+          color: "#2f343a"
+        }, {
+          id: "mounting_foot_rr",
+          type: "cylinder",
+          size: [54, 54, 22],
+          position: [214, 288, 20],
+          rotation_deg: [0, 0, 0],
+          color: "#2f343a"
+        }, {
+          id: "front_stage",
+          type: "box",
+          size: [300, 240, 48],
+          position: [0, -36, 124],
+          rotation_deg: [0, 0, 0],
+          color: "#cbd5e1"
+        }, {
+          id: "left_inner_rail",
+          type: "box",
+          size: [18, 306, 760],
+          position: [-181, -22, 484],
+          rotation_deg: [0, 0, 0],
+          color: "#5f6972"
+        }, {
+          id: "right_inner_rail",
+          type: "box",
+          size: [18, 306, 760],
+          position: [181, -22, 484],
+          rotation_deg: [0, 0, 0],
+          color: "#5f6972"
+        }, {
+          id: "rear_panel",
+          type: "box",
+          size: [330, 32, 690],
+          position: [0, 112, 444],
+          rotation_deg: [0, 0, 0],
+          color: "#b7ad99"
+        }, {
+          id: "back_plate_top_cap",
+          type: "box",
+          size: [382, 44, 42],
+          position: [0, 108, 802],
+          rotation_deg: [0, 0, 0],
+          color: "#8f8778"
+        }, {
+          id: "vent_panel",
+          type: "box",
+          size: [246, 14, 520],
+          position: [0, 91, 390],
+          rotation_deg: [0, 0, 0],
+          color: "#8e969a"
+        }, {
+          id: "vent_slot_01",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 174],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_02",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 198],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_03",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 222],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_04",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 246],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_05",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 270],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_06",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 294],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_07",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 318],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_08",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 342],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_09",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 366],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_10",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 390],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_11",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 414],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_12",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 438],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_13",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 462],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_14",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 486],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_15",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 510],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_16",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 534],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_17",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 558],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "vent_slot_18",
+          type: "box",
+          size: [172, 10, 5],
+          position: [0, 80, 582],
+          rotation_deg: [0, 0, 0],
+          color: "#374151"
+        }, {
+          id: "operator_control_box",
+          type: "box",
+          size: [198, 92, 112],
+          position: [0, -472, 76],
+          rotation_deg: [0, 0, 0],
+          color: "#111827"
+        }, {
+          id: "control_box_face",
+          type: "box",
+          size: [178, 8, 88],
+          position: [0, -522, 80],
+          rotation_deg: [0, 0, 0],
+          color: "#17202a"
+        }, {
+          id: "control_box_display",
+          type: "box",
+          size: [74, 6, 22],
+          position: [-54, -528, 106],
+          rotation_deg: [0, 0, 0],
+          color: "#e0f2fe"
+        }, {
+          id: "control_box_knob_ring",
+          type: "cylinder",
+          size: [64, 64, 8],
+          position: [0, -530, 78],
+          rotation_deg: [90, 0, 0],
+          color: "#e8c547"
+        }, {
+          id: "control_box_knob",
+          type: "cylinder",
+          size: [42, 42, 16],
+          position: [0, -536, 78],
+          rotation_deg: [90, 0, 0],
+          color: "#c81e2d"
+        }, {
+          id: "control_box_start_button",
+          type: "cylinder",
+          size: [18, 18, 8],
+          position: [-58, -532, 58],
+          rotation_deg: [90, 0, 0],
+          color: "#22c55e"
+        }, {
+          id: "control_box_reset_button",
+          type: "cylinder",
+          size: [18, 18, 8],
+          position: [58, -532, 58],
+          rotation_deg: [90, 0, 0],
+          color: "#64748b"
+        }, {
+          id: "control_box_arm",
+          type: "box",
+          size: [210, 16, 16],
+          position: [0, -414, 128],
+          rotation_deg: [0, 0, 0],
+          color: "#111827"
+        }, {
+          id: "control_box_cable",
+          type: "box",
+          size: [8, 82, 8],
+          position: [0, -434, 50],
+          rotation_deg: [0, 0, 0],
+          color: "#111827"
+        }]
+      },
+      stateColors = {
+        Idle: "#9CA3AF",
+        Running: "#22C55E",
+        Hold: "#F59E0B",
+        Alarm: "#EF4444",
+        Maintenance: "#3B82F6"
+      },
+      RV_BRIDGE_BASE_URL = window.location.origin && "null" !== window.location.origin ? window.location.origin :
+      "http://127.0.0.1:7501",
+      keyboardPanStep = 48,
+      operatorMoveDuration = 500;
+    let activeView = "svg3d";
+    const els = Object.fromEntries(Array.from(document.querySelectorAll("[id]")).map(e => [e.id, e])),
+      ctx = els.stage3dCanvas.getContext("2d"),
+      nsSvg = "http://www.w3.org/2000/svg",
+      viewTabs = Array.from(document.querySelectorAll(".view-tab")),
+      viewPanels = Array.from(document.querySelectorAll("[data-view-panel]"));
+    let events = fallbackEvents,
+      hotspots = fallbackHotspots,
+      mapping = fallbackMapping,
+      model = fallbackModel,
+      eventIndex = 0,
+      selectedBindingId = null,
+      hoveredBindingId = null,
+      playTimer = null,
+      pulseStart = performance.now(),
+      view = defaultView(),
+      dragMode = null,
+      lastX = 0,
+      lastY = 0,
+      podMotion = {
+        kind: null,
+        start: 0,
+        duration: 8e3,
+        from: 0,
+        to: 0
+      },
+      manualPodProgress = null,
+      lastEventIndex = -1,
+      podElevatorLoopToken = 0,
+      laptopUiAnimation = {
+        kind: null,
+        start: 0,
+        duration: 0
+      },
+      scannerUiAnimation = {
+        active: !1,
+        start: 0,
+        duration: 0
+      },
+      rvSource = null,
+      activeSessionId = null,
+      activeToolId = null,
+      threeDFrameReady = !1;
+    const embedMode = "1" === new URLSearchParams(window.location.search).get("embed");
+    async function loadJson(e, t) {
+      try {
+        const t = await fetch(e, {
+          cache: "no-store"
+        });
+        if (!t.ok) throw new Error(e);
+        return {
+          data: await t.json(),
+          loaded: !0
+        }
+      } catch {
+        return {
+          data: t,
+          loaded: !1
+        }
+      }
+    }
+
+    function resolveModelPath(e) {
+      return e ? /^[a-z]+:\/\//i.test(e) ? e : `../${e}` : e
+    }
+
+    function resolveToolId(e) {
+      const t = new URLSearchParams(window.location.search).get("tool_id");
+      if (t) return t.trim();
+      const o = (e || []).find(e => e && e.tool_id);
+      return o && o.tool_id || fallbackEvents[0].tool_id
+    }
+
+    function isSameEvent(e, t) {
+      return !(!e || !t) && (e.source_message_id && t.source_message_id ? e.source_message_id === t.source_message_id :
+        e.tool_id === t.tool_id && e.event_type === t.event_type && e.event_ts_utc === t.event_ts_utc)
+    }
+
+    function mergeLatestEvent(e, t) {
+      const o = Array.isArray(e) ? [...e] : [],
+        i = o.findIndex(e => isSameEvent(e, t));
+      return i >= 0 ? (o[i] = {
+        ...o[i],
+        ...t
+      }, {
+        events: o,
+        index: i
+      }) : (o.push(t), {
+        events: o,
+        index: o.length - 1
+      })
+    }
+    async function loadLatestDbEvent(e) {
+      if (!e) return null;
+      try {
+        const t = await fetch(`${RV_BRIDGE_BASE_URL}/latest-event?tool_id=${encodeURIComponent(e)}`, {
+          cache: "no-store"
+        });
+        return t.ok ? await t.json() : null
+      } catch {
+        return null
+      }
+    }
+
+    function getOrCreateSessionId() {
+      const e = "dtTwinSessionId";
+      let t = sessionStorage.getItem(e);
+      return t || (t = window.crypto && "function" == typeof window.crypto.randomUUID ? window.crypto.randomUUID() :
+        `dt-${Date.now()}-${Math.random().toString(16).slice(2)}`, sessionStorage.setItem(e, t), t)
+    }
+    async function bindSession(e) {
+      if (!e) return null;
+      const t = getOrCreateSessionId(),
+        o = new URLSearchParams({
+          session_id: t,
+          tool_id: e,
+          client_id: window.location.pathname || "vpo-dashboard",
+          bind_mode: "viewer"
+        });
+      try {
+        const e = await fetch(`${RV_BRIDGE_BASE_URL}/bind?${o.toString()}`, {
+          cache: "no-store"
+        });
+        return e.ok ? await e.json() : null
+      } catch {
+        return null
+      }
+    }
+    async function unbindSession() {
+      if (activeSessionId) try {
+        const e = new URLSearchParams({
+          session_id: activeSessionId
+        });
+        await fetch(`${RV_BRIDGE_BASE_URL}/unbind?${e.toString()}`, {
+          cache: "no-store"
+        })
+      } catch {}
+    }
+
+    function formatToBeijingTime(e) {
+      if (!e) return "-";
+      const t = new Date(e);
+      if (Number.isNaN(t.getTime())) return String(e);
+      return new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: !1
+      }).format(t).replace(/\//g, "-")
+    }
+    document.body.classList.toggle("embed-mode", embedMode);
+    const EVENT_NAME_LABELS = {
+        DETACH_POD_PLACE: "满pod放置",
+        POD_LOCK: "锁pod",
+        READ_TAG: "读tag信息",
+        BATCH_START: "UI进站成功",
+        DETACH_POD_UP: "空pod上升",
+        DETACH_POD_REACH_STAGE: "空pod到顶",
+        DETACH_CST_REMOVE: "拿走晶舟",
+        DETACH_POD_DOWN: "空pod下降",
+        DETACH_POD_REACH_POS: "空pod到底",
+        WRITE_TAG: "写入tag信息",
+        POD_UNLOCK: "解锁pod",
+        DETACH_POD_REMOVE: "拿走空pod",
+        IDLE: "待料",
+        ATTACH_POD_PLACE: "空pod放置",
+        ATTACH_POD_UP: "空pod上升",
+        ATTACH_POD_REACH_STAGE: "空pod到顶",
+        ATTACH_CST_PLACE: "晶舟放置",
+        ATTACH_POD_DOWN: "空pod下降",
+        ATTACH_POD_REACH_POS: "空pod到底",
+        ATTACH_POD_REMOVE: "拿走满pod",
+        UI_DOUBLECHECK: "二次确认成功",
+        UI_CONFIRM: "UI确认成功",
+        ALARM: "报警",
+        RUNNING: "运行中",
+        HOLD: "暂停",
+        STATE_CHANGE: "状态变化"
+      },
+      DETACH_FLOW_SEQUENCE = ["DETACH_POD_PLACE", "POD_LOCK", "READ_TAG", "BATCH_START", "DETACH_POD_UP",
+        "DETACH_POD_REACH_STAGE", "DETACH_CST_REMOVE", "DETACH_POD_DOWN", "DETACH_POD_REACH_POS", "WRITE_TAG",
+        "POD_UNLOCK", "DETACH_POD_REMOVE", "IDLE"
+      ],
+      ATTACH_FLOW_SEQUENCE = ["ATTACH_POD_PLACE", "POD_LOCK", "READ_TAG", "BATCH_START", "ATTACH_POD_UP",
+        "ATTACH_POD_REACH_STAGE", "ATTACH_CST_PLACE", "UI_CONFIRM", "ATTACH_POD_DOWN", "ATTACH_POD_REACH_POS",
+        "UI_DOUBLECHECK", "WRITE_TAG", "POD_UNLOCK", "ATTACH_POD_REMOVE", "IDLE"
+      ];
+
+    function normalizeEventStateKey(e) {
+      return String(e && (e.event_name || e.machine_state || e.status || "IDLE") || "IDLE").trim().toUpperCase()
+    }
+
+    function labelForEventState(e) {
+      return EVENT_NAME_LABELS[e] || e || "-"
+    }
+
+    function inferFlowType(e) {
+      for (let t = e; t >= 0; t--) {
+        const e = normalizeEventStateKey(events[t] || {});
+        if (e.startsWith("ATTACH_") || "UI_CONFIRM" === e || "UI_DOUBLECHECK" === e) return "attach";
+        if (e.startsWith("DETACH_")) return "detach"
+      }
+      return null
+    }
+
+    function resolveFlowSequence(e, t) {
+      const o = ATTACH_FLOW_SEQUENCE.includes(e),
+        i = DETACH_FLOW_SEQUENCE.includes(e);
+      if (o && !i) return ATTACH_FLOW_SEQUENCE;
+      if (i && !o) return DETACH_FLOW_SEQUENCE;
+      const n = inferFlowType(t);
+      return "attach" === n ? ATTACH_FLOW_SEQUENCE : "detach" === n ? DETACH_FLOW_SEQUENCE : null
+    }
+
+    function nextStateDisplayText(e) {
+      const t = normalizeEventStateKey(events[e] || {}),
+        o = resolveFlowSequence(t, e);
+      if (!o) return "-";
+      const i = o.indexOf(t);
+      return i < 0 || i >= o.length - 1 ? "-" : `等待${labelForEventState(o[i+1])}`
+    }
+
+    function colorForState(e) {
+      return stateColors[e] || stateColors.Idle
+    }
+
+    function isAlarm(e) {
+      return "Alarm" === e.machine_state || "Raised" === e.alarm_action
+    }
+
+    function clamp255(e) {
+      return Math.max(0, Math.min(255, Math.round(Number(e) || 0)))
+    }
+
+    function toRad(e) {
+      return (e || 0) * Math.PI / 180
+    }
+
+    function defaultView() {
+      const e = els.stage3dCanvas,
+        t = e ? e.clientWidth : 520,
+        o = e ? e.clientHeight : 420,
+        i = Math.min(t / 900, o / 760);
+      return {
+        yaw: .1,
+        pitch: -.26,
+        scale: Math.max(.38, Math.min(.72, i)),
+        panX: 0,
+        panY: -16
+      }
+    }
+
+    function isPodEvent(e) {
+      return e && ("POD_ATTACH" === e.event_type || "POD_DETACH" === e.event_type)
+    }
+
+    function easeInOut(e) {
+      return e < .5 ? 2 * e * e : 1 - Math.pow(-2 * e + 2, 2) / 2
+    }
+
+    function mechanicalEase(e) {
+      return e <= 0 ? 0 : e >= 1 ? 1 : easeInOut(e)
+    }
+
+    function lerpValue(e, t, o) {
+      return e + (t - e) * o
+    }
+
+    function lerpPoint(e, t, o) {
+      return {
+        x: lerpValue(e.x, t.x, o),
+        y: lerpValue(e.y, t.y, o),
+        z: lerpValue(e.z, t.z, o)
+      }
+    }
+
+    function currentLaptopUiAnimation() {
+      if (!laptopUiAnimation.kind) return {
+        active: !1,
+        kind: null,
+        clickStrength: 0,
+        cursorProgress: 0
+      };
+      const e = Math.min(1, Math.max(0, (performance.now() - laptopUiAnimation.start) / laptopUiAnimation.duration));
+      if (e >= 1) {
+        const e = laptopUiAnimation.kind;
+        return laptopUiAnimation = {
+          kind: null,
+          start: 0,
+          duration: 0
+        }, {
+          active: !1,
+          kind: e,
+          clickStrength: 0,
+          cursorProgress: 1
+        }
+      }
+      const t = e < .72 ? mechanicalEase(e / .72) : 1,
+        o = e < .72 ? 0 : Math.sin((e - .72) / .28 * Math.PI);
+      return {
+        active: !0,
+        kind: laptopUiAnimation.kind,
+        clickStrength: o,
+        cursorProgress: t
+      }
+    }
+
+    function currentScannerPose() {
+      const e = {
+          handle: {
+            x: 676,
+            y: -244,
+            z: 96
+          },
+          head: {
+            x: 666,
+            y: -226,
+            z: 158
+          },
+          window: {
+            x: 646,
+            y: -226,
+            z: 158
+          },
+          trigger: {
+            x: 667,
+            y: -236,
+            z: 120
+          },
+          cable: {
+            x: 692,
+            y: -264,
+            z: 48
+          }
+        },
+        t = {
+          x: 198,
+          y: -346,
+          z: 124
+        },
+        o = {
+          x: 160,
+          y: -334,
+          z: 192
+        },
+        i = {
+          x: 132,
+          y: -334,
+          z: 192
+        },
+        n = {
+          x: 179,
+          y: -340,
+          z: 152
+        },
+        r = {
+          x: 286,
+          y: -306,
+          z: 52
+        };
+      if (!scannerUiAnimation.active) return {
+        active: !1,
+        scanning: !1,
+        scanStrength: 0,
+        ...e
+      };
+      const a = Math.min(1, Math.max(0, (performance.now() - scannerUiAnimation.start) / scannerUiAnimation.duration));
+      if (a >= 1) return scannerUiAnimation = {
+        active: !1,
+        start: 0,
+        duration: 0
+      }, {
+        active: !1,
+        scanning: !1,
+        scanStrength: 0,
+        ...e
+      };
+      let d = 0,
+        s = !1,
+        l = 0;
+      return a < .3 ? d = mechanicalEase(a / .3) : a < .75 ? (d = 1, s = !0, l = .45 + .55 * Math.abs(Math.sin(18 * (a -
+        .3)))) : d = 1 - mechanicalEase((a - .75) / .25), {
+        active: !0,
+        scanning: s,
+        scanStrength: l,
+        handle: lerpPoint(e.handle, t, d),
+        head: lerpPoint(e.head, o, d),
+        window: lerpPoint(e.window, i, d),
+        trigger: lerpPoint(e.trigger, n, d),
+        cable: lerpPoint(e.cable, r, d)
+      }
+    }
+
+    function isAccessoryAnimationActive() {
+      return currentLaptopUiAnimation().active || currentScannerPose().active
+    }
+
+    function triggerLaptopEnterButtonClick() {
+      laptopUiAnimation = {
+        kind: "enter",
+        start: performance.now(),
+        duration: 1250
+      }
+    }
+
+    function triggerLaptopConfirmButtonClick() {
+      laptopUiAnimation = {
+        kind: "confirm",
+        start: performance.now(),
+        duration: 1250
+      }
+    }
+
+    function triggerScannerDoubleCheckAnimation() {
+      scannerUiAnimation = {
+        active: !0,
+        start: performance.now(),
+        duration: 1900
+      }
+    }
+
+    function podRestProgress(e) {
+      let t = 0;
+      for (let o = 0; o <= e && o < events.length; o++) "POD_ATTACH" === events[o].event_type && (t = 1),
+        "POD_DETACH" === events[o].event_type && (t = 0);
+      return t
+    }
+
+    function currentPodProgress() {
+      if (podMotion.kind) {
+        const e = Math.min(1, Math.max(0, (performance.now() - podMotion.start) / podMotion.duration)),
+          t = mechanicalEase(e),
+          o = podMotion.from + (podMotion.to - podMotion.from) * t;
+        if (e >= 1) {
+          const e = podMotion.to;
+          return podMotion = {
+            kind: null,
+            start: 0,
+            duration: 8e3,
+            from: e,
+            to: e
+          }, e
+        }
+        return o
+      }
+      return null !== manualPodProgress ? manualPodProgress : podRestProgress(eventIndex)
+    }
+
+    function podDirection() {
+      if (podMotion.kind) return podMotion.kind;
+      if (null !== manualPodProgress) return null;
+      const e = events[eventIndex] || {};
+      return "POD_ATTACH" === e.event_type ? "attach" : "POD_DETACH" === e.event_type ? "detach" : null
+    }
+    window.triggerLaptopEnterButtonClick = triggerLaptopEnterButtonClick, window.triggerLaptopConfirmButtonClick =
+      triggerLaptopConfirmButtonClick, window.triggerScannerDoubleCheckAnimation = triggerScannerDoubleCheckAnimation;
+    const Z_BOTTOM_DOWN_CONST = 148,
+      Z_BOTTOM_UP_CONST = 680;
+
+    function stopPodElevatorLoop() {
+      podElevatorLoopToken += 1
+    }
+
+    function normalizePodOverridePose() {
+      window.podOverride.active = !0, window.podOverride.opPodY = 0, window.podOverride.opPodZ = 0, window.podOverride
+        .opWaferY = 0, window.podOverride.opWaferZ = 0
+    }
+
+    function setPodElevatorPose(e, t, o = {}) {
+      stopPodElevatorLoop(), normalizePodOverridePose(), window.podOverride.frameZ = e, window.podOverride.podBottomZ =
+        t, window.podOverride.coverVisible = void 0 === o.coverVisible || o.coverVisible, window.podOverride
+        .baseVisible = void 0 === o.baseVisible || o.baseVisible, window.podOverride.waferVisible = void 0 !== o
+        .waferVisible && o.waferVisible, updateAll()
+    }
+
+    function startRepeatingPodElevator(e, t = {}) {
+      normalizePodOverridePose(), window.podOverride.coverVisible = void 0 === t.coverVisible || t.coverVisible, window
+        .podOverride.baseVisible = void 0 === t.baseVisible || t.baseVisible, window.podOverride.waferVisible =
+        void 0 !== t.waferVisible && t.waferVisible;
+      const o = 148,
+        i = 680,
+        n = Math.max(o, Math.min(i, window.podOverride.podBottomZ || o)),
+        r = t.duration || 2e3,
+        a = ++podElevatorLoopToken,
+        d = "up" === e ? i - n : n - o,
+        s = d <= 0 ? 0 : r * (d / 532),
+        l = performance.now(),
+        c = t => {
+          if (a !== podElevatorLoopToken) return;
+          let d;
+          const p = t - l;
+          if (s > 0 && p < s) {
+            const t = mechanicalEase(p / s);
+            d = "up" === e ? n + (i - n) * t : n + (o - n) * t
+          } else {
+            const t = mechanicalEase(Math.max(0, p - s) % r / r);
+            d = "up" === e ? o + 532 * t : i - 532 * t
+          }
+          window.podOverride.podBottomZ = d, window.podOverride.frameZ = d, updateAll(), requestAnimationFrame(c)
+        };
+      requestAnimationFrame(c)
+    }
+
+    function animateValue(e, t, o, i, n, r, a, d) {
+      const s = performance.now(),
+        l = c => {
+          const p = Math.min(1, (c - s) / a);
+          e && (window.podOverride[e] = t + (o - t) * p), i && (window.podOverride[i] = n + (r - n) * p), updateAll(),
+            p < 1 ? requestAnimationFrame(l) : d && d()
+        };
+      requestAnimationFrame(l)
+    }
+
+    function animatePodElevator(e, t, o, i) {
+      stopPodElevatorLoop(), animateValue("podBottomZ", e, t, "frameZ", e, t, o, i)
+    }
+
+    function operatorPlacePod(e, t, o, i) {
+      stopPodElevatorLoop(), window.podOverride.active = !0, window.podOverride.coverVisible = e, window.podOverride
+        .baseVisible = t, window.podOverride.waferVisible = o, window.podOverride.podBottomZ = 148, window.podOverride
+        .frameZ = 148, window.podOverride.opPodZ = 200, window.podOverride.opPodY = -400, window.podOverride.opWaferY =
+        0, window.podOverride.opWaferZ = 0, animateValue("opPodY", -400, 0, null, 0, 0, 500, () => {
+          animateValue("opPodZ", 200, 0, null, 0, 0, 500, i)
+        })
+    }
+
+    function operatorRemovePod(e) {
+      stopPodElevatorLoop(), animateValue("opPodZ", 0, 200, null, 0, 0, 500, () => {
+        animateValue("opPodY", 0, -400, null, 0, 0, 500, () => {
+          window.podOverride.coverVisible = !1, window.podOverride.baseVisible = !1, window.podOverride
+            .waferVisible = !1, updateAll(), e && e()
+        })
+      })
+    }
+
+    function operatorPlaceWafer(e) {
+      stopPodElevatorLoop(), window.podOverride.waferVisible = !0, window.podOverride.opWaferY = -400, window
+        .podOverride.opWaferZ = 200, animateValue("opWaferY", -400, 0, null, 0, 0, 500, () => {
+          animateValue("opWaferZ", 200, 0, null, 0, 0, 500, e)
+        })
+    }
+
+    function operatorRemoveWafer(e) {
+      stopPodElevatorLoop(), animateValue("opWaferZ", 0, 200, null, 0, 0, 500, () => {
+        animateValue("opWaferY", 0, -400, null, 0, 0, 500, () => {
+          window.podOverride.waferVisible = !1, updateAll(), e && e()
+        })
+      })
+    }
+
+    function startPodMotion(e, t, o, i = !1) {
+      stopPodElevatorLoop(), podMotion = {
+        kind: e,
+        start: performance.now(),
+        duration: 8e3,
+        from: t,
+        to: o
+      }, manualPodProgress = i ? o : null
+    }
+
+    function syncPodMotionWithEvent() {
+      if (eventIndex === lastEventIndex) return;
+      lastEventIndex = eventIndex, manualPodProgress = null;
+      const e = events[eventIndex] || {},
+        t = e.event_type || "",
+        o = e.event_name || "" || t;
+      switch (stopPodElevatorLoop(), o) {
+        case "BATCH_START":
+          triggerLaptopEnterButtonClick(), podMotion = {
+            kind: null,
+            start: 0,
+            duration: 8e3,
+            from: podRestProgress(eventIndex),
+            to: podRestProgress(eventIndex)
+          };
+          break;
+        case "UI_CONFIRM":
+          triggerLaptopConfirmButtonClick(), podMotion = {
+            kind: null,
+            start: 0,
+            duration: 8e3,
+            from: podRestProgress(eventIndex),
+            to: podRestProgress(eventIndex)
+          };
+          break;
+        case "UI_DOUBLECHECK":
+          triggerScannerDoubleCheckAnimation(), podMotion = {
+            kind: null,
+            start: 0,
+            duration: 8e3,
+            from: podRestProgress(eventIndex),
+            to: podRestProgress(eventIndex)
+          };
+          break;
+        case "ATTACH_POD_PLACE":
+          window.cmd1_showEmptyPod();
+          break;
+        case "ATTACH_POD_UP":
+          window.cmd2_liftEmptyPod();
+          break;
+        case "ATTACH_CST_PLACE":
+          window.cmd3_showWafer();
+          break;
+        case "ATTACH_POD_DOWN":
+          window.cmd4_lowerEmptyPodOverWafer();
+          break;
+        case "ATTACH_POD_REACH_STAGE":
+          window.cmd15_showEmptyPodAtTop();
+          break;
+        case "ATTACH_POD_REACH_POS":
+          window.cmd16_showEmptyPodOverWaferAtBottom();
+          break;
+        case "ATTACH_POD_REMOVE":
+          window.cmd5_hideFullPod();
+          break;
+        case "DETACH_POD_PLACE":
+          window.cmd6_showFullPod();
+          break;
+        case "DETACH_POD_UP":
+          window.cmd7_liftEmptyPodLeaveWafer();
+          break;
+        case "DETACH_CST_REMOVE":
+          window.cmd8_hideWafer();
+          break;
+        case "DETACH_POD_DOWN":
+          window.cmd9_lowerEmptyPod();
+          break;
+        case "DETACH_POD_REACH_STAGE":
+          window.cmd17_showEmptyPodAtTopLeaveWafer();
+          break;
+        case "DETACH_POD_REACH_POS":
+          window.cmd18_showEmptyPodAtBottom();
+          break;
+        case "DETACH_POD_REMOVE":
+          window.cmd10_hideEmptyPod();
+          break;
+        case "POD_UNLOCK":
+          window.cmd12_unlockLatches();
+          break;
+        case "POD_LOCK":
+          window.cmd11_lockLatches();
+          break;
+        case "READ_TAG":
+          window.cmd13_scanTag();
+          break;
+        case "WRITE_TAG":
+          window.cmd14_signalWave();
+          break;
+        case "POD_ATTACH":
+          window.clearPodOverride(), startPodMotion("attach", podRestProgress(eventIndex - 1), 1);
+          break;
+        case "POD_DETACH":
+          window.clearPodOverride(), startPodMotion("detach", podRestProgress(eventIndex - 1), 0);
+          break;
+        default:
+          if ("POD_ATTACH" === t) {
+            window.clearPodOverride(), startPodMotion("attach", podRestProgress(eventIndex - 1), 1);
+            break
+          }
+          if ("POD_DETACH" === t) {
+            window.clearPodOverride(), startPodMotion("detach", podRestProgress(eventIndex - 1), 0);
+            break
+          }
+          podMotion = {
+            kind: null,
+            start: 0,
+            duration: 8e3,
+            from: podRestProgress(eventIndex),
+            to: podRestProgress(eventIndex)
+          }
+      }
+    }
+
+    function triggerManualPodMotion(e) {
+      stopPlay(), selectedBindingId = "bind_wafer_port";
+      const t = "attach" === e ? 1 : 0;
+      startPodMotion(e, currentPodProgress(), t, !0), updateAll()
+    }
+
+    function setEventIndex(e) {
+      eventIndex = (e + events.length) % events.length, selectedBindingId = null, manualPodProgress = null,
+        lastEventIndex = -1, updateAll()
+    }
+
+    function shouldShowPod(e = currentPodProgress()) {
+      return !(!podMotion.kind && null === manualPodProgress) || (e > .02 || isPodEvent(events[eventIndex] || {}))
+    }
+
+    function centerViewPan() {
+      const e = defaultView();
+      view.panX = e.panX, view.panY = e.panY
+    }
+
+    function waferPortSealCompression(e) {
+      return e <= .82 ? 0 : 18 * easeInOut((e - .82) / .18)
+    }
+
+    function waferPortLiftOffset2D(e) {
+      return 472 * e + .9 * waferPortSealCompression(e)
+    }
+
+    function waferPortLiftOffset3D(e) {
+      return -(512 * e + waferPortSealCompression(e))
+    }
+
+    function hexToRgba(e, t) {
+      const o = String(e || "#9CA3AF").replace("#", ""),
+        i = 3 === o.length ? o.split("").map(e => parseInt(e + e, 16)) : [parseInt(o.slice(0, 2), 16), parseInt(o.slice(
+          2, 4), 16), parseInt(o.slice(4, 6), 16)];
+      return `rgba(${i[0]||156}, ${i[1]||163}, ${i[2]||175}, ${t})`
+    }
+
+    function shadeColor(e, t) {
+      if (!e) return "rgb(170, 170, 170)";
+      if (e.startsWith("rgba(")) {
+        const o = e.replace("rgba(", "").replace(")", "").split(",").map(e => e.trim());
+        return `rgba(${clamp255(Number(o[0])*t)}, ${clamp255(Number(o[1])*t)}, ${clamp255(Number(o[2])*t)}, ${Math.max(.08,Math.min(1,Number(o[3]||1)))})`
+      }
+      const o = e.replace("#", ""),
+        i = 3 === o.length ? o.split("").map(e => parseInt(e + e, 16)) : [parseInt(o.slice(0, 2), 16), parseInt(o.slice(
+          2, 4), 16), parseInt(o.slice(4, 6), 16)];
+      return `rgb(${clamp255(i[0]*t)}, ${clamp255(i[1]*t)}, ${clamp255(i[2]*t)})`
+    }
+
+    function bindingById(e) {
+      return (mapping.bindings || []).find(t => t.binding_id === e)
+    }
+
+    function bindingByHotspot(e) {
+      return (mapping.bindings || []).find(t => t.view_2d && t.view_2d.hotspot_id === e)
+    }
+
+    function bindingsForEvent(e) {
+      const t = e.event_type || "STATE_CHANGE";
+      return (mapping.bindings || []).filter(o => {
+        const i = o.event_scope || [],
+          n = 0 === i.length || i.includes(t) || i.includes("STATE_CHANGE") && e.machine_state,
+          r = (o.tags || []).some(t => void 0 !== e[t] && null !== e[t]);
+        return n && r
+      })
+    }
+
+    function activeBindingIds() {
+      const e = new Set(bindingsForEvent(events[eventIndex] || {}).map(e => e.binding_id));
+      return selectedBindingId && e.add(selectedBindingId), hoveredBindingId && e.add(hoveredBindingId), e
+    }
+
+    function activePartIds() {
+      const e = new Set;
+      for (const t of activeBindingIds()) {
+        const o = bindingById(t);
+        for (const t of o && o.view_3d && o.view_3d.part_ids || []) e.add(t)
+      }
+      return e
+    }
+
+    function partIdsForBindings(e) {
+      const t = new Set;
+      for (const o of e)
+        for (const e of o && o.view_3d && o.view_3d.part_ids || []) t.add(e);
+      return t
+    }
+
+    function focusedPartIds() {
+      return partIdsForBindings([selectedBindingId, hoveredBindingId].filter(Boolean).map(bindingById).filter(Boolean))
+    }
+
+    function eventPartIdsFor3D(e) {
+      const t = bindingsForEvent(e);
+      return isAlarm(e) ? partIdsForBindings(t.filter(e => {
+        const t = e.view_3d && e.view_3d.style || {};
+        return Boolean(t.pulse_on_alarm)
+      })) : partIdsForBindings(t)
+    }
+
+    function centroid(e) {
+      const t = e.reduce((e, t) => ({
+        x: e.x + t[0],
+        y: e.y + t[1]
+      }), {
+        x: 0,
+        y: 0
+      });
+      return [t.x / e.length, t.y / e.length]
+    }
+
+    function labelForHotspot(e) {
+      return {
+        machine_body: "机身主体",
+        wafer_port_front: "Wafer入口",
+        operator_control_box: "控制盒",
+        comm_panel: "通信面板",
+        power_input: "电源输入",
+        mounting_points: "安装基准"
+      } [e.hotspot_id] || e.name || e.hotspot_id
+    }
+
+    function isPhotoAlignedModel(e) {
+      const t = String(e && e.model_id || ""),
+        o = e && e.parts || [];
+      return t.includes("photo-aligned") || o.some(e => "control_box_face" === e.id || "vent_slot_18" === e.id)
+    }
+
+    function accessoryParts3D() {
+      const e = currentScannerPose();
+      return [{
+        id: "accessory_hmi_panel_back",
+        type: "box",
+        size: [262, 18, 238],
+        position: [470, -254, 214],
+        rotation_deg: [-82, 0, -8],
+        color: "#111827"
+      }, {
+        id: "accessory_hmi_panel_frame_left",
+        type: "box",
+        size: [12, 8, 222],
+        position: [346, -254, 216],
+        rotation_deg: [-82, 0, -8],
+        color: "#dbe4ee"
+      }, {
+        id: "accessory_hmi_panel_frame_right",
+        type: "box",
+        size: [12, 8, 222],
+        position: [594, -254, 216],
+        rotation_deg: [-82, 0, -8],
+        color: "#dbe4ee"
+      }, {
+        id: "accessory_hmi_panel_screen",
+        type: "box",
+        size: [236, 4, 214],
+        position: [470, -254, 216],
+        rotation_deg: [-82, 0, -8],
+        color: "#dbeafe"
+      }, {
+        id: "accessory_hmi_panel_stem",
+        type: "box",
+        size: [16, 40, 110],
+        position: [470, -282, 86],
+        rotation_deg: [0, 0, 0],
+        color: "#64748b"
+      }, {
+        id: "accessory_hmi_panel_base",
+        type: "box",
+        size: [118, 86, 10],
+        position: [470, -286, 26],
+        rotation_deg: [0, 0, 0],
+        color: "#475569"
+      }, {
+        id: "accessory_scanner_handle",
+        type: "box",
+        size: [22, 24, 92],
+        position: [e.handle.x, e.handle.y, e.handle.z],
+        rotation_deg: [0, 0, 10],
+        color: "#111827"
+      }, {
+        id: "accessory_scanner_head",
+        type: "box",
+        size: [52, 34, 36],
+        position: [e.head.x, e.head.y, e.head.z],
+        rotation_deg: [-8, 0, 10],
+        color: "#1e293b"
+      }, {
+        id: "accessory_scanner_window",
+        type: "box",
+        size: [22, 4, 18],
+        position: [e.window.x, e.window.y, e.window.z],
+        rotation_deg: [-8, 0, 10],
+        color: "#38bdf8"
+      }, {
+        id: "accessory_scanner_trigger",
+        type: "box",
+        size: [10, 14, 22],
+        position: [e.trigger.x, e.trigger.y, e.trigger.z],
+        rotation_deg: [8, 0, 10],
+        color: "#ef4444"
+      }, {
+        id: "accessory_scanner_cable",
+        type: "cylinder",
+        size: [12, 12, 102],
+        position: [e.cable.x, e.cable.y, e.cable.z],
+        rotation_deg: [72, 0, -8],
+        color: "#334155"
+      }]
+    }
+
+    function enhanceModelForVisuals(e) {
+      const t = (e.parts || []).filter(e => {
+        const t = String(e.id || "");
+        return !t.startsWith("visual_") && !t.startsWith("accessory_")
+      });
+      if (isPhotoAlignedModel(e)) return {
+        ...e,
+        parts: t
+      };
+      const o = [{
+        id: "visual_left_front_edge",
+        type: "box",
+        size: [16, 30, 620],
+        position: [-203, -122, 360],
+        rotation_deg: [0, 0, 0],
+        color: "#39434d"
+      }, {
+        id: "visual_right_front_edge",
+        type: "box",
+        size: [16, 30, 620],
+        position: [203, -122, 360],
+        rotation_deg: [0, 0, 0],
+        color: "#39434d"
+      }, {
+        id: "visual_rear_panel_skin",
+        type: "box",
+        size: [270, 12, 486],
+        position: [0, 78, 354],
+        rotation_deg: [0, 0, 0],
+        color: "#dbe3ea"
+      }, {
+        id: "visual_front_lift_bar",
+        type: "box",
+        size: [352, 34, 34],
+        position: [0, -162, 658],
+        rotation_deg: [0, 0, 0],
+        color: "#171f29"
+      }, {
+        id: "visual_lift_block",
+        type: "box",
+        size: [130, 70, 62],
+        position: [0, -172, 620],
+        rotation_deg: [0, 0, 0],
+        color: "#d7dfe7"
+      }, {
+        id: "visual_stage_ring_outer",
+        type: "cylinder",
+        size: [230, 230, 14],
+        position: [0, -142, 130],
+        rotation_deg: [0, 0, 0],
+        color: "rgba(148, 163, 184, 0.5)"
+      }, {
+        id: "visual_stage_ring_inner",
+        type: "cylinder",
+        size: [150, 150, 18],
+        position: [0, -142, 140],
+        rotation_deg: [0, 0, 0],
+        color: "#f8fafc"
+      }, {
+        id: "visual_chamber_lip",
+        type: "box",
+        size: [346, 312, 22],
+        position: [0, 0, 954],
+        rotation_deg: [0, 0, 0],
+        color: "#17202a"
+      }, {
+        id: "visual_control_display",
+        type: "box",
+        size: [72, 10, 32],
+        position: [-366, -264, 64],
+        rotation_deg: [0, 0, -6],
+        color: "#e0f2fe"
+      }, {
+        id: "visual_control_button_1",
+        type: "cylinder",
+        size: [18, 18, 10],
+        position: [-298, -260, 68],
+        rotation_deg: [0, 0, 0],
+        color: "#22c55e"
+      }, {
+        id: "visual_control_button_2",
+        type: "cylinder",
+        size: [18, 18, 10],
+        position: [-274, -260, 68],
+        rotation_deg: [0, 0, 0],
+        color: "#ef4444"
+      }];
+      for (let e = 0; e < 16; e++) o.push({
+        id: `visual_vent_slot_${e}`,
+        type: "box",
+        size: [160, 8, 5],
+        position: [0, 68, 205 + 22 * e],
+        rotation_deg: [0, 0, 0],
+        color: "#7b8792"
+      });
+      for (const e of [-205, 205])
+        for (const t of [-315, 315]) o.push({
+          id: `visual_foot_${e}_${t}`,
+          type: "cylinder",
+          size: [48, 48, 18],
+          position: [e, t, 22],
+          rotation_deg: [0, 0, 0],
+          color: "#1f2937"
+        });
+      return {
+        ...e,
+        parts: [...t, ...o]
+      }
+    }
+
+    function svgElement(e, t, o, i) {
+      const n = document.createElementNS(e, t);
+      return Object.entries(o || {}).forEach(([e, t]) => n.setAttribute(e, String(t))), void 0 !== i && (n.textContent =
+        i), n
+    }
+
+    function appendSvg(e, t, o, i, n) {
+      const r = svgElement(t, o, i, n);
+      return e.appendChild(r), r
+    }
+
+    function addRoundedSlot(e, t, o, i, n, r) {
+      appendSvg(e, t, "rect", {
+        x: o,
+        y: i,
+        width: n,
+        height: r,
+        rx: r / 2,
+        fill: "#94a3b8",
+        opacity: "0.62"
+      }), appendSvg(e, t, "rect", {
+        x: o + 3,
+        y: i + 2,
+        width: Math.max(2, n - 6),
+        height: Math.max(2, r - 4),
+        rx: Math.max(1, r / 2 - 2),
+        fill: "#f8fafc",
+        opacity: "0.65"
+      })
+    }
+
+    function draw2DBase() {
+      const e = els.map2d;
+      e.innerHTML = "";
+      const t = "http://www.w3.org/2000/svg",
+        o = appendSvg(e, t, "defs", {}),
+        i = appendSvg(o, t, "linearGradient", {
+          id: "panelGradient",
+          x1: "0",
+          x2: "0",
+          y1: "0",
+          y2: "1"
+        });
+      appendSvg(i, t, "stop", {
+        offset: "0%",
+        "stop-color": "#8a929a"
+      }), appendSvg(i, t, "stop", {
+        offset: "100%",
+        "stop-color": "#6a727a"
+      });
+      const n = appendSvg(o, t, "linearGradient", {
+        id: "darkGradient",
+        x1: "0",
+        x2: "0",
+        y1: "0",
+        y2: "1"
+      });
+      appendSvg(n, t, "stop", {
+        offset: "0%",
+        "stop-color": "#2b333d"
+      }), appendSvg(n, t, "stop", {
+        offset: "100%",
+        "stop-color": "#111827"
+      });
+      const r = appendSvg(o, t, "linearGradient", {
+        id: "glassGradient",
+        x1: "0",
+        x2: "1",
+        y1: "0",
+        y2: "1"
+      });
+      appendSvg(r, t, "stop", {
+        offset: "0%",
+        "stop-color": "#eff6ff",
+        "stop-opacity": "0.78"
+      }), appendSvg(r, t, "stop", {
+        offset: "100%",
+        "stop-color": "#cbd5e1",
+        "stop-opacity": "0.34"
+      });
+      const a = appendSvg(o, t, "filter", {
+        id: "softShadow",
+        x: "-20%",
+        y: "-20%",
+        width: "140%",
+        height: "140%"
+      });
+      appendSvg(a, t, "feDropShadow", {
+        dx: "0",
+        dy: "16",
+        stdDeviation: "12",
+        "flood-color": "#0f172a",
+        "flood-opacity": "0.16"
+      });
+      const d = appendSvg(o, t, "pattern", {
+        id: "gridPattern",
+        width: "50",
+        height: "50",
+        patternUnits: "userSpaceOnUse"
+      });
+      appendSvg(d, t, "path", {
+        d: "M 50 0 L 0 0 0 50",
+        fill: "none",
+        class: "grid-line"
+      }), appendSvg(e, t, "rect", {
+        width: "1000",
+        height: "1000",
+        fill: "#f8fafc"
+      }), appendSvg(e, t, "rect", {
+        width: "1000",
+        height: "1000",
+        fill: "url(#gridPattern)",
+        opacity: "0.55"
+      }), appendSvg(e, t, "ellipse", {
+        cx: "505",
+        cy: "908",
+        rx: "390",
+        ry: "54",
+        fill: "#cbd5e1",
+        opacity: "0.5"
+      }), appendSvg(e, t, "text", {
+        x: "56",
+        y: "72",
+        class: "machine-label"
+      }, "VPO FRONT VIEW"), appendSvg(e, t, "text", {
+        x: "56",
+        y: "98",
+        fill: "#64748b",
+        "font-size": "13"
+      }, "2D/3D unified event view");
+      const s = appendSvg(e, t, "g", {
+        filter: "url(#softShadow)"
+      });
+      appendSvg(s, t, "rect", {
+        x: "296",
+        y: "812",
+        width: "424",
+        height: "76",
+        rx: "10",
+        fill: "url(#darkGradient)",
+        stroke: "#0f172a",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "320",
+        y: "785",
+        width: "376",
+        height: "38",
+        rx: "8",
+        fill: "#5f6b76",
+        stroke: "#334155",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "314",
+        y: "252",
+        width: "58",
+        height: "560",
+        rx: "8",
+        fill: "url(#panelGradient)",
+        stroke: "#475569",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "638",
+        y: "252",
+        width: "58",
+        height: "560",
+        rx: "8",
+        fill: "url(#panelGradient)",
+        stroke: "#475569",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "376",
+        y: "292",
+        width: "258",
+        height: "478",
+        rx: "12",
+        fill: "#e5ebf1",
+        stroke: "#64748b",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "394",
+        y: "314",
+        width: "222",
+        height: "418",
+        rx: "10",
+        fill: "#f8fafc",
+        stroke: "#cbd5e1",
+        "stroke-width": "1"
+      });
+      for (let e = 0; e < 16; e++) addRoundedSlot(s, t, 430, 340 + 22 * e, 150, 7);
+      appendSvg(s, t, "rect", {
+        x: "330",
+        y: "224",
+        width: "360",
+        height: "42",
+        rx: "7",
+        fill: "url(#darkGradient)",
+        stroke: "#111827",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "line", {
+        x1: "478",
+        y1: "300",
+        x2: "478",
+        y2: "768",
+        class: "detail-line"
+      }), appendSvg(s, t, "line", {
+        x1: "532",
+        y1: "300",
+        x2: "532",
+        y2: "768",
+        class: "detail-line"
+      }), appendSvg(s, t, "rect", {
+        x: "330",
+        y: "658",
+        width: "350",
+        height: "42",
+        rx: "9",
+        fill: "#25313d",
+        stroke: "#0f172a",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "420",
+        y: "628",
+        width: "172",
+        height: "92",
+        rx: "16",
+        fill: "#dce4ec",
+        stroke: "#64748b",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "446",
+        y: "650",
+        width: "120",
+        height: "42",
+        rx: "10",
+        fill: "#f8fafc",
+        stroke: "#94a3b8",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "rect", {
+        x: "373",
+        y: "728",
+        width: "266",
+        height: "38",
+        rx: "19",
+        fill: "#1f2937",
+        stroke: "#0f172a",
+        "stroke-width": "2"
+      }), appendSvg(s, t, "ellipse", {
+        cx: "506",
+        cy: "747",
+        rx: "94",
+        ry: "18",
+        fill: "#64748b",
+        opacity: "0.36"
+      });
+      const l = appendSvg(e, t, "g", {
+        filter: "url(#softShadow)"
+      });
+      appendSvg(l, t, "line", {
+        x1: "506",
+        y1: "818",
+        x2: "506",
+        y2: "856",
+        stroke: "#111827",
+        "stroke-width": "10",
+        "stroke-linecap": "round"
+      }), appendSvg(l, t, "rect", {
+        x: "406",
+        y: "852",
+        width: "200",
+        height: "108",
+        rx: "12",
+        fill: "#111827",
+        stroke: "#0f172a",
+        "stroke-width": "2"
+      }), appendSvg(l, t, "rect", {
+        x: "420",
+        y: "866",
+        width: "172",
+        height: "82",
+        rx: "8",
+        fill: "#17202a",
+        stroke: "#334155",
+        "stroke-width": "1.5"
+      }), appendSvg(l, t, "rect", {
+        x: "432",
+        y: "880",
+        width: "70",
+        height: "22",
+        rx: "4",
+        fill: "#f8fafc",
+        stroke: "#94a3b8"
+      }), appendSvg(l, t, "circle", {
+        cx: "506",
+        cy: "912",
+        r: "30",
+        fill: "#e8c547",
+        stroke: "#92400e",
+        "stroke-width": "3"
+      }), appendSvg(l, t, "circle", {
+        cx: "506",
+        cy: "912",
+        r: "20",
+        fill: "#b91c1c",
+        stroke: "#fee2e2",
+        "stroke-width": "3"
+      }), appendSvg(l, t, "circle", {
+        cx: "446",
+        cy: "930",
+        r: "8",
+        fill: "#22c55e",
+        stroke: "#14532d",
+        "stroke-width": "2"
+      }), appendSvg(l, t, "circle", {
+        cx: "566",
+        cy: "930",
+        r: "8",
+        fill: "#64748b",
+        stroke: "#1f2937",
+        "stroke-width": "2"
+      }), appendSvg(e, t, "text", {
+        x: "506",
+        y: "980",
+        fill: "#475569",
+        "font-size": "13",
+        "font-weight": "700",
+        "text-anchor": "middle"
+      }, "FRONT CONTROL BOX");
+      const c = appendSvg(e, t, "g", {});
+      for (let e = 0; e < 2; e++)
+        for (let o = 0; o < 12; o++) appendSvg(c, t, "circle", {
+          cx: 398 + 12 * o,
+          cy: 804 + 13 * e,
+          r: "3",
+          class: "port-pin"
+        });
+      appendSvg(c, t, "rect", {
+        x: "382",
+        y: "790",
+        width: "166",
+        height: "40",
+        rx: "6",
+        fill: "none",
+        stroke: "#475569",
+        "stroke-width": "2"
+      }), appendSvg(e, t, "text", {
+        x: "382",
+        y: "846",
+        fill: "#64748b",
+        "font-size": "12"
+      }, "COMM / SERVICE PORTS"), appendSvg(e, t, "g", {
+        id: "pod2dLayer"
+      }), appendSvg(e, t, "g", {
+        id: "waferPort2dLayer"
+      }), [
+        [319, 259],
+        [681, 259],
+        [319, 870],
+        [681, 870],
+        [348, 812],
+        [668, 812]
+      ].forEach(([o, i]) => {
+        appendSvg(e, t, "circle", {
+          cx: o,
+          cy: i,
+          r: "8",
+          fill: "#f8fafc",
+          stroke: "#334155",
+          "stroke-width": "2"
+        }), appendSvg(e, t, "circle", {
+          cx: o,
+          cy: i,
+          r: "3",
+          fill: "#334155"
+        })
+      }), appendSvg(e, t, "rect", {
+        x: "230",
+        y: "68",
+        width: "500",
+        height: "824",
+        class: "machine-outline"
+      }), [...hotspots.hotspots || []].sort((e, t) => (e.priority || 0) - (t.priority || 0)).forEach(o => {
+        const i = bindingByHotspot(o.hotspot_id),
+          n = appendSvg(e, t, "g", {
+            "data-binding-id": i ? i.binding_id : ""
+          });
+        appendSvg(n, t, "polygon", {
+          points: (o.points || []).map(e => e.join(",")).join(" "),
+          class: "hotspot"
+        });
+        const r = centroid(o.points || [
+          [0, 0]
+        ]);
+        appendSvg(n, t, "text", {
+          x: r[0],
+          y: r[1],
+          "text-anchor": "middle",
+          "dominant-baseline": "middle",
+          class: "hotspot-label"
+        }, labelForHotspot(o)), n.addEventListener("click", () => {
+          selectedBindingId = i ? i.binding_id : null, updateAll()
+        }), n.addEventListener("mouseenter", () => {
+          hoveredBindingId = i ? i.binding_id : null, updateAll(!1)
+        }), n.addEventListener("mouseleave", () => {
+          hoveredBindingId = null, updateAll(!1)
+        })
+      }), els.hotspotCount.textContent = `${(hotspots.hotspots||[]).length} 个热点`
+    }
+
+    function drawArrowHead2D(e, t, o, i, n) {
+      appendSvg(e, t, "polygon", {
+        points: ("attach" === n ? [
+          [o, i + 18],
+          [o - 12, i - 2],
+          [o + 12, i - 2]
+        ] : [
+          [o, i - 18],
+          [o - 12, i + 2],
+          [o + 12, i + 2]
+        ]).map(e => e.join(",")).join(" "),
+        fill: "#0f766e",
+        opacity: "0.86"
+      })
+    }
+
+    function drawWaferPortHead2D(e, t, o, i) {
+      i > .04 && appendSvg(e, t, "ellipse", {
+        cx: "506",
+        cy: "748",
+        rx: "112",
+        ry: "24",
+        fill: `rgba(15, 23, 42, ${.06+.16*i})`
+      }), appendSvg(e, t, "rect", {
+        x: "356",
+        y: 98 + o,
+        width: "298",
+        height: "176",
+        rx: "24",
+        fill: "url(#glassGradient)",
+        stroke: "#64748b",
+        "stroke-width": "2"
+      }), appendSvg(e, t, "rect", {
+        x: "408",
+        y: 134 + o,
+        width: "196",
+        height: "112",
+        rx: "20",
+        fill: "rgba(248, 250, 252, 0.72)",
+        stroke: "#94a3b8",
+        "stroke-width": "2"
+      }), appendSvg(e, t, "circle", {
+        cx: "506",
+        cy: 192 + o,
+        r: "54",
+        fill: "#f8fafc",
+        stroke: "#475569",
+        "stroke-width": "5"
+      }), appendSvg(e, t, "circle", {
+        cx: "506",
+        cy: 192 + o,
+        r: "34",
+        fill: "#dbe5ef",
+        stroke: "#94a3b8",
+        "stroke-width": "2"
+      }), appendSvg(e, t, "rect", {
+        x: "454",
+        y: 70 + o,
+        width: "104",
+        height: "20",
+        rx: "8",
+        fill: "url(#darkGradient)"
+      }), appendSvg(e, t, "rect", {
+        x: "424",
+        y: 248 + o,
+        width: "164",
+        height: "18",
+        rx: "9",
+        fill: `rgba(15, 118, 110, ${.12+.28*i})`,
+        stroke: `rgba(15, 118, 110, ${.18+.22*i})`,
+        "stroke-width": "1.2"
+      })
+    }
+
+    function drawPod2D() {
+      const e = document.getElementById("pod2dLayer"),
+        t = document.getElementById("waferPort2dLayer");
+      if (!e || !t) return;
+      e.innerHTML = "", t.innerHTML = "";
+      const o = "http://www.w3.org/2000/svg",
+        i = currentPodProgress(),
+        n = podDirection(),
+        r = 506,
+        a = 748,
+        d = waferPortLiftOffset2D(i);
+      const s = a - d;
+      s > 0 && (appendSvg(t, o, "line", {
+        x1: String(r),
+        y1: String(s),
+        x2: String(r),
+        y2: String("attach" === n ? 680 : 192),
+        stroke: "#0f766e",
+        "stroke-width": "10",
+        "stroke-linecap": "round",
+        opacity: "0.72"
+      }), drawArrowHead2D(t, o, r, "attach" === n ? 680 : 192, n)), shouldShowPod(i) && (appendSvg(e, o, "ellipse", {
+        cx: r,
+        cy: 786,
+        rx: "94",
+        ry: "20",
+        fill: "rgba(15, 23, 42, 0.16)"
+      }), appendSvg(e, o, "rect", {
+        x: 400,
+        y: 716,
+        width: "212",
+        height: "64",
+        rx: "12",
+        fill: "rgba(15, 118, 110, 0.2)",
+        stroke: "#0f766e",
+        "stroke-width": "3"
+      }), appendSvg(e, o, "rect", {
+        x: 428,
+        y: 729,
+        width: "156",
+        height: "38",
+        rx: "10",
+        fill: "rgba(240, 253, 250, 0.92)",
+        stroke: "#5eead4",
+        "stroke-width": "2"
+      }), appendSvg(e, o, "circle", {
+        cx: 450,
+        cy: a,
+        r: "7",
+        fill: "#0f766e",
+        opacity: "0.78"
+      }), appendSvg(e, o, "circle", {
+        cx: 562,
+        cy: a,
+        r: "7",
+        fill: "#0f766e",
+        opacity: "0.78"
+      }), appendSvg(e, o, "text", {
+        x: r,
+        y: 753,
+        "text-anchor": "middle",
+        "font-size": "15",
+        "font-weight": "800",
+        fill: "#0f172a"
+      }, "POD")), drawWaferPortHead2D(t, o, d, i)
+    }
+
+    function update2D() {
+      const e = events[eventIndex] || {},
+        t = new Set(bindingsForEvent(e).map(e => e.binding_id)),
+        o = colorForState(e.machine_state || "Idle"),
+        i = isAlarm(e);
+      els.map2d.querySelectorAll(".hotspot").forEach(e => {
+        const n = e.parentElement.getAttribute("data-binding-id"),
+          r = bindingById(n) || {},
+          a = r.view_2d && r.view_2d.style || {},
+          d = t.has(n),
+          s = selectedBindingId === n || hoveredBindingId === n,
+          l = i && (d || s) && (a.blink_on_alarm || a.border_highlight_on_alarm),
+          c = s ? i ? .18 : .24 : a.fill_by_state && d ? i ? .06 : .16 : .045;
+        e.classList.toggle("alarm-pulse", Boolean(l)), e.setAttribute("fill", a.fill_by_state || s ? hexToRgba(o,
+          c) : "rgba(148, 163, 184, 0.06)"), e.setAttribute("stroke", s ? "#2563eb" : i && d ? "#dc2626" : d ? o :
+          "#64748b"), e.setAttribute("stroke-width", s ? "5" : d ? i ? "3" : "2.4" : "1.5"), e.setAttribute(
+          "opacity", d || s ? "1" : "0.46")
+      }), drawPod2D()
+    }
+
+    function setActiveView(e) {
+      activeView = e, viewTabs.forEach(t => {
+        const o = t.dataset.view === e;
+        t.classList.toggle("active", o), t.setAttribute("aria-selected", o ? "true" : "false")
+      }), viewPanels.forEach(t => {
+        t.classList.toggle("hidden", t.dataset.viewPanel !== e)
+      }), updateStage3DCursor(), "svg3d" === e && render3D()
+    }
+
+    function drawTimeline() {
+      els.timeline.innerHTML = "", els.timeline.style.setProperty("--count", String(events.length || 1)), events
+        .forEach((e, t) => {
+          const o = document.createElement("button");
+          o.type = "button", o.className = "tick", o.style.setProperty("--state-color", colorForState(e
+              .machine_state)), o.innerHTML =
+            `<strong>${e.event_type||"EVENT"}</strong><span>${e.pod_action||e.machine_state||"-"}</span>`, o
+            .addEventListener("click", () => setEventIndex(t)), els.timeline.appendChild(o)
+        })
+    }
+
+    function updateTimeline() {
+      els.timeline.querySelectorAll(".tick").forEach((e, t) => {
+        e.classList.toggle("active", t === eventIndex)
+      });
+      const e = events[eventIndex] || {};
+      els.timelineSummary.textContent = `${eventIndex+1} / ${events.length} · ${e.event_ts_utc||"-"}`
+    }
+
+    function displayRunMode(e) {
+      const t = String(e || "").trim().toUpperCase();
+      return "PACK" === t ? "穿pod" : "UNPACK" === t ? "脱pod" : e || "-"
+    }
+
+    function currentLotDetailFields(e) {
+      return {
+        lotId: e.lot_id || "-",
+        batchId: e.batch_id || e.batchId || "-",
+        product: e.product || e.model_key || "-",
+        step: e.step || e.event_name || e.status || "-"
+      }
+    }
+
+    function setLotPopoverVisible(e) {
+      els.lotPopover.classList.toggle("hidden", !e), els.lotChip.classList.toggle("active", e), els.lotChip
+        .setAttribute("aria-expanded", e ? "true" : "false")
+    }
+
+    function updateLotWidget() {
+      const e = currentLotDetailFields(events[eventIndex] || {});
+      els.lotChipValue.textContent = e.lotId, els.lotPopoverTitle.textContent = "-" === e.lotId ? "LOT 详情" :
+        `LOT ${e.lotId}`, els.lotDetailBatchId.textContent = e.batchId, els.lotDetailProduct.textContent = e.product,
+        els.lotDetailStep.textContent = e.step, els.lotChip.title = "-" === e.lotId ? "暂无 Lot ID" : `Lot ID: ${e.lotId}`
+    }
+
+    function updateInspector() {
+      updateLotWidget()
+    }
+
+    function rotatePoint(e, t) {
+      let o = e.x,
+        i = e.y,
+        n = e.z;
+      const r = toRad(t[0]),
+        a = toRad(t[1]),
+        d = toRad(t[2]);
+      let s = i * Math.cos(r) - n * Math.sin(r),
+        l = i * Math.sin(r) + n * Math.cos(r);
+      i = s, n = l;
+      let c = o * Math.cos(a) + n * Math.sin(a),
+        p = -o * Math.sin(a) + n * Math.cos(a);
+      return o = c, n = p, {
+        x: o * Math.cos(d) - i * Math.sin(d),
+        y: o * Math.sin(d) + i * Math.cos(d),
+        z: n
+      }
+    }
+
+    function worldToView(e) {
+      let t = e.x,
+        o = e.y,
+        i = e.z;
+      const n = Math.cos(view.yaw),
+        r = Math.sin(view.yaw),
+        a = t * r + o * n;
+      t = t * n - o * r, o = a;
+      const d = Math.cos(view.pitch),
+        s = Math.sin(view.pitch);
+      return {
+        x: t,
+        y: o * d - i * s,
+        z: o * s + i * d
+      }
+    }
+
+    function project(e) {
+      const t = worldToView(e),
+        o = 1 / (1 + .65 * Math.max(-.85, t.z / 2200));
+      return {
+        x: .5 * els.stage3dCanvas.clientWidth + t.x * view.scale * o + view.panX,
+        y: .56 * els.stage3dCanvas.clientHeight - t.y * view.scale * o + view.panY,
+        z: t.z
+      }
+    }
+
+    function buildBoxFaces(e) {
+      const [t, o, i] = e.size, n = t / 2, r = o / 2, a = i / 2, d = [{
+        x: -n,
+        y: -r,
+        z: -a
+      }, {
+        x: n,
+        y: -r,
+        z: -a
+      }, {
+        x: n,
+        y: r,
+        z: -a
+      }, {
+        x: -n,
+        y: r,
+        z: -a
+      }, {
+        x: -n,
+        y: -r,
+        z: a
+      }, {
+        x: n,
+        y: -r,
+        z: a
+      }, {
+        x: n,
+        y: r,
+        z: a
+      }, {
+        x: -n,
+        y: r,
+        z: a
+      }].map(t => {
+        const o = rotatePoint(t, e.rotation_deg || [0, 0, 0]);
+        return {
+          x: o.x + e.position[0],
+          y: o.y + e.position[1],
+          z: o.z + e.position[2]
+        }
+      });
+      return [
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7]
+      ].map(e => e.map(e => d[e]))
+    }
+
+    function buildCylinderFaces(e) {
+      const t = e.size[0] / 2,
+        o = e.size[1] / 2,
+        i = e.size[2] / 2,
+        n = [],
+        r = [];
+      for (let e = 0; e < 24; e++) {
+        const a = 2 * Math.PI * e / 24;
+        n.push({
+          x: Math.cos(a) * t,
+          y: Math.sin(a) * t,
+          z: i
+        }), r.push({
+          x: Math.cos(a) * o,
+          y: Math.sin(a) * o,
+          z: -i
+        })
+      }
+      const a = [n, [...r].reverse()];
+      for (let e = 0; e < 24; e++) {
+        const t = (e + 1) % 24;
+        a.push([n[e], n[t], r[t], r[e]])
+      }
+      return a.map(t => t.map(t => {
+        const o = rotatePoint(t, e.rotation_deg || [0, 0, 0]);
+        return {
+          x: o.x + e.position[0],
+          y: o.y + e.position[1],
+          z: o.z + e.position[2]
+        }
+      }))
+    }
+    window.podOverride = {
+      active: !1,
+      coverVisible: !1,
+      waferVisible: !1,
+      baseVisible: !1,
+      podBottomZ: 148,
+      frameZ: 148,
+      opPodY: 0,
+      opPodZ: 0,
+      opWaferY: 0,
+      opWaferZ: 0,
+      latchLocked: !1,
+      scanActive: !1,
+      scanProgress: 0,
+      signalActive: !1
+    }, window.cmd1_showEmptyPod = function() {
+      operatorPlacePod(!0, !0, !1)
+    }, window.cmd2_liftEmptyPod = function() {
+      startRepeatingPodElevator("up", {
+        waferVisible: !1
+      })
+    }, window.cmd3_showWafer = function() {
+      operatorPlaceWafer()
+    }, window.cmd4_lowerEmptyPodOverWafer = function() {
+      startRepeatingPodElevator("down", {
+        waferVisible: !0
+      })
+    }, window.cmd5_hideFullPod = function() {
+      operatorRemovePod(() => {
+        window.cmd12_unlockLatches()
+      })
+    }, window.cmd6_showFullPod = function() {
+      operatorPlacePod(!0, !0, !0)
+    }, window.cmd7_liftEmptyPodLeaveWafer = function() {
+      startRepeatingPodElevator("up", {
+        waferVisible: !0
+      })
+    }, window.cmd8_hideWafer = function() {
+      operatorRemoveWafer()
+    }, window.cmd9_lowerEmptyPod = function() {
+      startRepeatingPodElevator("down", {
+        waferVisible: !1
+      })
+    }, window.cmd15_showEmptyPodAtTop = function() {
+      setPodElevatorPose(680, 680, {
+        waferVisible: !1
+      })
+    }, window.cmd16_showEmptyPodOverWaferAtBottom = function() {
+      setPodElevatorPose(148, 148, {
+        waferVisible: !0
+      })
+    }, window.cmd17_showEmptyPodAtTopLeaveWafer = function() {
+      setPodElevatorPose(680, 680, {
+        waferVisible: !0
+      })
+    }, window.cmd18_showEmptyPodAtBottom = function() {
+      setPodElevatorPose(148, 148, {
+        waferVisible: !1
+      })
+    }, window.cmd10_hideEmptyPod = function() {
+      operatorRemovePod(() => {
+        window.cmd12_unlockLatches()
+      })
+    }, window.cmd11_lockLatches = function() {
+      window.podOverride.active || (window.podOverride.active = !0, window.podOverride.coverVisible = !0, window
+          .podOverride.baseVisible = !0, window.podOverride.podBottomZ = 148, window.podOverride.frameZ = 148), window
+        .podOverride.latchLocked = !0, updateAll()
+    }, window.cmd12_unlockLatches = function() {
+      window.podOverride.active || (window.podOverride.active = !0, window.podOverride.coverVisible = !0, window
+          .podOverride.baseVisible = !0, window.podOverride.podBottomZ = 148, window.podOverride.frameZ = 148), window
+        .podOverride.latchLocked = !1, updateAll()
+    }, window.cmd13_scanTag = function() {
+      window.podOverride.active || shouldShowPod() || (window.podOverride.active = !0, window.podOverride
+          .coverVisible = !0, window.podOverride.baseVisible = !0, window.podOverride.podBottomZ = 148, window
+          .podOverride.frameZ = 148), window.podOverride.scanActive = !0, window.podOverride.scanProgress = 0,
+        animateValue("scanProgress", 0, 1, null, 0, 0, 1200, () => {
+          window.podOverride.scanActive = !1, updateAll()
+        })
+    }, window.cmd14_signalWave = function() {
+      window.podOverride.active || shouldShowPod() || (window.podOverride.active = !0, window.podOverride
+        .coverVisible = !0, window.podOverride.baseVisible = !0, window.podOverride.podBottomZ = 148, window
+        .podOverride.frameZ = 148), window.podOverride.signalActive = !0;
+      let e = performance.now(),
+        t = setInterval(() => {
+          (!window.podOverride.signalActive || performance.now() - e > 2e3) && (window.podOverride.signalActive = !
+            1, clearInterval(t), updateAll())
+        }, 50);
+      const o = () => {
+        window.podOverride.signalActive && (updateAll(), requestAnimationFrame(o))
+      };
+      requestAnimationFrame(o)
+    }, window.clearPodOverride = function() {
+      stopPodElevatorLoop(), window.podOverride.active = !1, window.podOverride.opPodY = 0, window.podOverride
+        .opPodZ = 0, window.podOverride.opWaferY = 0, window.podOverride.opWaferZ = 0, window.podOverride
+        .latchLocked = !1, window.podOverride.scanActive = !1, window.podOverride.scanProgress = 0, window.podOverride
+        .signalActive = !1, window.podOverride.coverVisible = !1, window.podOverride.baseVisible = !1, window
+        .podOverride.waferVisible = !1, window.podOverride.podBottomZ = 148, window.podOverride.frameZ = 148,
+        updateAll()
+    };
+    const waferPortLiftPartIds = new Set([]);
+
+    function partWithWaferPortMotion(e, t) {
+      return !waferPortLiftPartIds.has(e.id) || t <= .001 ? e : {
+        ...e,
+        position: [e.position[0], e.position[1], e.position[2] + waferPortLiftOffset3D(t)]
+      }
+    }
+
+    function podParts3D() {
+      const e = currentPodProgress();
+      let t = !0;
+      ("detach" === podMotion.kind || null === podMotion.kind && e < .5) && (t = !1);
+      const o = t ? e : 1 - e;
+
+      function i(e, t, o, i, n) {
+        return e <= t ? i : e >= o ? n : i + (n - i) * (e - t) / (o - t)
+      }
+      const n = 148,
+        r = 680,
+        a = -36;
+      let d = n,
+        s = n,
+        l = !1,
+        c = !1,
+        p = !1,
+        _ = 0,
+        f = 0,
+        v = 0,
+        u = 0;
+      window.podOverride && window.podOverride.active ? (l = window.podOverride.coverVisible, c = window.podOverride
+        .waferVisible, p = window.podOverride.baseVisible, d = window.podOverride.podBottomZ, s = void 0 !== window
+        .podOverride.frameZ ? window.podOverride.frameZ : window.podOverride.podBottomZ, _ = window.podOverride
+        .opPodY || 0, f = window.podOverride.opPodZ || 0, v = window.podOverride.opWaferY || 0, u = window.podOverride
+        .opWaferZ || 0) : o > .01 && o < .99 ? (t ? o < .2 ? (l = !0, c = !1, p = !0, d = n) : o < .4 ? (l = !0, c = !
+          1, p = !0, d = i(o, .2, .4, n, r)) : o < .6 ? (l = !0, c = !0, p = !0, d = r) : o < .8 ? (l = !0, c = !0,
+          p = !0, d = i(o, .6, .8, r, n)) : (l = !1, c = !1, p = !1, d = n) : o < .2 ? (l = !0, c = !0, p = !0, d =
+        n) : o < .4 ? (l = !0, c = !0, p = !0, d = i(o, .2, .4, n, r)) : o < .6 ? (l = !0, c = !1, p = !0, d = r) :
+        o < .8 ? (l = !0, c = !1, p = !0, d = i(o, .6, .8, r, n)) : (l = !1, c = !1, p = !1, d = n), s = d) : (l = !1,
+        c = !1, p = !1, d = n, s = n);
+      const g = [],
+        w = s + 9;
+      if (g.push({
+          id: "tray_frame_left",
+          type: "box",
+          size: [18, 240, 18],
+          position: [-141, a, w],
+          rotation_deg: [0, 0, 0],
+          color: "#000000",
+          force_black: !0
+        }), g.push({
+          id: "tray_frame_right",
+          type: "box",
+          size: [18, 240, 18],
+          position: [141, a, w],
+          rotation_deg: [0, 0, 0],
+          color: "#000000",
+          force_black: !0
+        }), g.push({
+          id: "tray_frame_front",
+          type: "box",
+          size: [300, 18, 18],
+          position: [0, -147, w],
+          rotation_deg: [0, 0, 0],
+          color: "#000000",
+          force_black: !0
+        }), g.push({
+          id: "tray_frame_back",
+          type: "box",
+          size: [300, 18, 18],
+          position: [0, 75, w],
+          rotation_deg: [0, 0, 0],
+          color: "#000000",
+          force_black: !0
+        }), p && g.push({
+          id: "pod_motion_base",
+          type: "box",
+          size: [300, 240, 16],
+          position: [0, a + _, 156 + f],
+          rotation_deg: [0, 0, 0],
+          color: "rgba(45, 55, 72, 0.88)"
+        }), l) {
+        if (g.push({
+            id: "pod_motion_body",
+            type: "box",
+            size: [300, 240, 300],
+            position: [0, a + _, d + 150 + f],
+            rotation_deg: [0, 0, 0],
+            color: "rgba(16, 185, 129, 0.45)"
+          }), g.push({
+            id: "pod_motion_handle",
+            type: "box",
+            size: [100, 30, 16],
+            position: [0, a + _, d + 308 + f],
+            rotation_deg: [0, 0, 0],
+            color: "rgba(4, 120, 87, 0.8)"
+          }), g.push({
+            id: "pod_motion_tag",
+            type: "box",
+            size: [80, 8, 40],
+            position: [0, -160 + _, d + 40 + f],
+            rotation_deg: [0, 0, 0],
+            color: "#ffffff"
+          }), window.podOverride && window.podOverride.scanActive) {
+          let e = d + 40 + f + 20 - 40 * window.podOverride.scanProgress;
+          g.push({
+            id: "pod_motion_tag_scan",
+            type: "box",
+            size: [84, 2, 2],
+            position: [0, -165 + _, e],
+            rotation_deg: [0, 0, 0],
+            color: "#ef4444"
+          })
+        }
+        if (window.podOverride && window.podOverride.signalActive) {
+          let e = performance.now() / 150,
+            t = 16,
+            o = 70,
+            i = -o / 2,
+            n = o / t;
+          for (let o = 0; o <= t; o++) {
+            let t = i + o * n,
+              r = 6 * Math.sin(.15 * t - e);
+            g.push({
+              id: `pod_motion_tag_signal_${o}`,
+              type: "box",
+              size: [n + 1, 2, 2],
+              position: [t, -165 + _, d + 40 + f + r],
+              rotation_deg: [0, 0, 45 * Math.cos(.15 * t - e)],
+              color: "#ef4444"
+            })
+          }
+        }
+      }
+      let h = !1;
+      window.podOverride && null !== window.podOverride.latchLocked && void 0 !== window.podOverride.latchLocked && (h =
+        window.podOverride.latchLocked);
+      const m = h ? "#10b981" : "#ef4444",
+        x = h ? 0 : 35;
+      if (g.push({
+          id: "pod_motion_latch_l1",
+          type: "box",
+          size: [12, 24, 30],
+          position: [-156, -96, 163],
+          rotation_deg: [0, -x, 0],
+          color: m
+        }), g.push({
+          id: "pod_motion_latch_l2",
+          type: "box",
+          size: [12, 24, 30],
+          position: [-156, 24, 163],
+          rotation_deg: [0, -x, 0],
+          color: m
+        }), g.push({
+          id: "pod_motion_latch_r1",
+          type: "box",
+          size: [12, 24, 30],
+          position: [156, -96, 163],
+          rotation_deg: [0, x, 0],
+          color: m
+        }), g.push({
+          id: "pod_motion_latch_r2",
+          type: "box",
+          size: [12, 24, 30],
+          position: [156, 24, 163],
+          rotation_deg: [0, x, 0],
+          color: m
+        }), c) {
+        let e = a + _ + v,
+          t = 257 + f + u;
+        const o = e + 6,
+          i = t + 166,
+          n = o - 48;
+        g.push({
+          id: "pod_motion_wafer_base",
+          type: "box",
+          size: [238, 124, 10],
+          position: [0, o + 18, t - 70],
+          rotation_deg: [0, 0, 0],
+          color: "#ffffff"
+        }), g.push({
+          id: "pod_motion_wafer_back",
+          type: "box",
+          size: [238, 12, 254],
+          position: [0, e + 68, t + 54],
+          rotation_deg: [0, 0, 0],
+          color: "#ffffff"
+        }), g.push({
+          id: "pod_motion_wafer_left",
+          type: "box",
+          size: [12, 124, 254],
+          position: [-113, o + 18, t + 54],
+          rotation_deg: [0, 0, 0],
+          color: "#ffffff"
+        }), g.push({
+          id: "pod_motion_wafer_right",
+          type: "box",
+          size: [12, 124, 254],
+          position: [113, o + 18, t + 54],
+          rotation_deg: [0, 0, 0],
+          color: "#ffffff"
+        }), g.push({
+          id: "pod_motion_wafer_top",
+          type: "box",
+          size: [238, 124, 10],
+          position: [0, o + 18, i],
+          rotation_deg: [0, 0, 0],
+          color: "#ffffff"
+        }), g.push({
+          id: "pod_motion_wafer_front_lip",
+          type: "box",
+          size: [238, 8, 42],
+          position: [0, n - 2, i - 14],
+          rotation_deg: [0, 0, 0],
+          color: "#ffffff"
+        }), g.push({
+          id: "pod_motion_barcode_border_top",
+          type: "box",
+          size: [118, 2, 2.4],
+          position: [0, o + 34, i + 6.9],
+          rotation_deg: [0, 0, 0],
+          color: "#000000"
+        }), g.push({
+          id: "pod_motion_barcode_border_bottom",
+          type: "box",
+          size: [118, 2, 2.4],
+          position: [0, o + 2, i + 6.9],
+          rotation_deg: [0, 0, 0],
+          color: "#000000"
+        }), g.push({
+          id: "pod_motion_barcode_border_left",
+          type: "box",
+          size: [2, 34, 2.4],
+          position: [-58, o + 18, i + 6.9],
+          rotation_deg: [0, 0, 0],
+          color: "#000000"
+        }), g.push({
+          id: "pod_motion_barcode_border_right",
+          type: "box",
+          size: [2, 34, 2.4],
+          position: [58, o + 18, i + 6.9],
+          rotation_deg: [0, 0, 0],
+          color: "#000000"
+        });
+        const r = [-48, -40, -34, -29, -22, -16, -10, -5, 2, 8, 13, 18, 24, 31, 37, 44],
+          d = [2, 4, 2, 3, 5, 2, 4, 2, 6, 3, 2, 5, 2, 4, 3, 2];
+        for (let e = 0; e < r.length; e++) g.push({
+          id: `pod_motion_barcode_bar_${e}`,
+          type: "box",
+          size: [d[e], 24, 2.5],
+          position: [r[e], o + 18, i + 7.1],
+          rotation_deg: [0, 0, 0],
+          color: "#000000"
+        });
+        const s = 25,
+          l = t - 44,
+          c = (i - 28 - l) / (s - 1);
+        for (let e = 0; e < s; e++) {
+          const t = l + e * c;
+          g.push({
+            id: `pod_motion_wafer_slot_left_${e}`,
+            type: "box",
+            size: [6, 74, 2],
+            position: [-98, o + 10, t],
+            rotation_deg: [0, 0, 0],
+            color: "#94a3b8"
+          }), g.push({
+            id: `pod_motion_wafer_slot_right_${e}`,
+            type: "box",
+            size: [6, 74, 2],
+            position: [98, o + 10, t],
+            rotation_deg: [0, 0, 0],
+            color: "#94a3b8"
+          })
+        }
+        for (let e = 0; e < s; e++) {
+          const t = l + e * c,
+            o = 14 + e % 3 * 2;
+          g.push({
+            id: `wafer_${e}`,
+            type: "cylinder",
+            size: [214, 214, 4],
+            position: [0, n - o, t],
+            rotation_deg: [0, 0, 0],
+            color: "#4b5563"
+          })
+        }
+      }
+      return g
+    }
+
+    function drawArrowHead3D(e, t, o) {
+      const i = Math.atan2(t.y - e.y, t.x - e.x);
+      ctx.beginPath(), ctx.moveTo(t.x, t.y), ctx.lineTo(t.x - 11 * Math.cos(i - .62), t.y - 11 * Math.sin(i - .62)), ctx
+        .lineTo(t.x - 11 * Math.cos(i + .62), t.y - 11 * Math.sin(i + .62)), ctx.closePath(), ctx.fillStyle = o, ctx
+        .fill()
+    }
+
+    function drawPodPath3D() {
+      if (!podMotion.kind) return;
+      currentPodProgress();
+      const e = podDirection();
+      if (!e) return;
+      const t = project({
+          x: 0,
+          y: -44,
+          z: 976
+        }),
+        o = project({
+          x: 0,
+          y: -44,
+          z: 332
+        });
+      ctx.save(), ctx.setLineDash([9, 8]), ctx.lineWidth = 2.2, ctx.strokeStyle = "rgba(15, 118, 110, 0.76)", ctx
+        .beginPath(), ctx.moveTo(t.x, t.y), ctx.lineTo(o.x, o.y), ctx.stroke(), ctx.setLineDash([]), drawArrowHead3D(
+          "attach" === e ? t : o, "attach" === e ? o : t, "rgba(15, 118, 110, 0.9)"), ctx.restore()
+    }
+
+    function visualAnchorPart(e) {
+      return "visual_left_front_edge" === e ? "left_column" : "visual_right_front_edge" === e ? "right_column" :
+        "visual_rear_panel_skin" === e ? "rear_panel" : e.startsWith("visual_vent_slot_") ? "vent_panel" :
+        "visual_front_lift_bar" === e || "visual_lift_block" === e ? "mid_crossbar" : "visual_stage_ring_outer" === e ||
+        "visual_stage_ring_inner" === e ? "front_stage" : "visual_chamber_lip" === e ? "top_chamber_outer" : e
+        .startsWith("visual_control_") ? "operator_control_box" : e.startsWith("visual_foot_") ? "base_plate" : e
+    }
+
+    function drawGrid3D() {
+      const e = els.stage3dCanvas ? els.stage3dCanvas.clientWidth : 0,
+        t = els.stage3dCanvas ? els.stage3dCanvas.clientHeight : 0,
+        o = ctx.createLinearGradient(0, 0, 0, t);
+      o.addColorStop(0, "#f8fafc"), o.addColorStop(.56, "#edf3f8"), o.addColorStop(1, "#dbe5ef"), ctx.fillStyle = o, ctx
+        .fillRect(0, 0, e, t);
+      const i = [project({
+        x: -780,
+        y: -660,
+        z: 0
+      }), project({
+        x: 780,
+        y: -660,
+        z: 0
+      }), project({
+        x: 940,
+        y: 740,
+        z: 0
+      }), project({
+        x: -940,
+        y: 740,
+        z: 0
+      })];
+      ctx.fillStyle = "rgba(226, 232, 240, 0.64)", ctx.strokeStyle = "rgba(148, 163, 184, 0.45)", ctx.lineWidth = 1, ctx
+        .beginPath(), ctx.moveTo(i[0].x, i[0].y);
+      for (let e = 1; e < i.length; e++) ctx.lineTo(i[e].x, i[e].y);
+      ctx.closePath(), ctx.fill(), ctx.stroke();
+      const n = project({
+        x: 0,
+        y: 0,
+        z: 0
+      });
+      ctx.save(), ctx.translate(n.x, n.y + 24), ctx.rotate(.28 * -view.yaw);
+      const r = ctx.createRadialGradient(0, 0, 20, 0, 0, 360 * view.scale);
+      r.addColorStop(0, "rgba(15, 23, 42, 0.18)"), r.addColorStop(.65, "rgba(15, 23, 42, 0.08)"), r.addColorStop(1,
+        "rgba(15, 23, 42, 0)"), ctx.fillStyle = r, ctx.beginPath(), ctx.ellipse(0, 0, 360 * view.scale, 96 * view
+        .scale, 0, 0, 2 * Math.PI), ctx.fill(), ctx.restore();
+      const a = 1200;
+      ctx.lineWidth = 1;
+      for (let e = -1200; e <= a; e += 240) {
+        const t = project({
+            x: -1200,
+            y: e,
+            z: 0
+          }),
+          o = project({
+            x: a,
+            y: e,
+            z: 0
+          }),
+          i = project({
+            x: e,
+            y: -1200,
+            z: 0
+          }),
+          n = project({
+            x: e,
+            y: a,
+            z: 0
+          });
+        ctx.strokeStyle = 0 === e ? "rgba(100, 116, 139, 0.34)" : "rgba(148, 163, 184, 0.18)", ctx.beginPath(), ctx
+          .moveTo(t.x, t.y), ctx.lineTo(o.x, o.y), ctx.stroke(), ctx.beginPath(), ctx.moveTo(i.x, i.y), ctx.lineTo(n.x,
+            n.y), ctx.stroke()
+      }
+    }
+
+    function partStyle(e) {
+      const t = events[eventIndex] || {},
+        o = eventPartIdsFor3D(t),
+        i = focusedPartIds(),
+        n = visualAnchorPart(e),
+        r = o.has(e) || o.has(n),
+        a = i.has(e) || i.has(n),
+        d = e.startsWith("wafer_");
+      if ("pod_motion_tag" === e) return {
+        color: "#ffffff",
+        stroke: "#000000",
+        lineWidth: 1.5,
+        glow: a
+      };
+      const s = e.startsWith("tray_frame_");
+      if (!r && !a) return {
+        color: s ? "#000000" : null,
+        stroke: d ? "rgba(226, 232, 240, 0.42)" : "rgba(15, 23, 42, 0.2)",
+        lineWidth: d ? 1.15 : .85,
+        glow: !1
+      };
+      const l = isAlarm(t);
+      return a ? {
+        color: s ? "#000000" : null,
+        stroke: d ? "rgba(191, 219, 254, 0.96)" : "rgba(37, 99, 235, 0.86)",
+        lineWidth: d ? 1.8 : 2.2,
+        glow: !0
+      } : l && r ? {
+        color: s ? "#000000" : null,
+        stroke: d ? "rgba(248, 113, 113, 0.78)" : "rgba(220, 38, 38, 0.58)",
+        lineWidth: d ? 1.5 : 1.4,
+        glow: !1
+      } : {
+        color: s ? "#000000" : null,
+        stroke: d ? "rgba(203, 213, 225, 0.52)" : "rgba(15, 23, 42, 0.2)",
+        lineWidth: d ? 1.2 : .85,
+        glow: !1
+      }
+    }
+
+    function drawModel3D() {
+      const e = [],
+        t = currentPodProgress();
+      [...(model.parts || []).map(e => partWithWaferPortMotion(e, t)), ...accessoryParts3D(), ...podParts3D()].forEach(
+        t => {
+          const o = partStyle(t.id),
+            i = t.id.startsWith("wafer_");
+          ("cylinder" === t.type ? buildCylinderFaces(t) : buildBoxFaces(t)).forEach(n => {
+            const r = n.map(project);
+            let a = r.reduce((e, t) => e + t.z, 0) / r.length;
+            t.id.startsWith("pod_motion_tag") && (a += 1e4), e.push({
+              projected: r,
+              depth: a,
+              color: o.color || t.color || "#aaaaaa",
+              stroke: o.stroke,
+              lineWidth: o.lineWidth,
+              glow: o.glow,
+              isWaferPart: i
+            })
+          })
+        }), e.sort((e, t) => e.depth - t.depth), e.forEach(e => {
+        const t = e.projected[0],
+          o = e.projected[1],
+          i = e.projected[2],
+          n = o.x - t.x,
+          r = o.y - t.y,
+          a = i.x - t.x,
+          d = n * (i.y - t.y) - r * a > 0 ? 1.06 : .82;
+        ctx.save(), ctx.lineJoin = "round", ctx.lineCap = "round", e.glow && (ctx.shadowColor = isAlarm(events[
+            eventIndex] || {}) ? "rgba(220, 38, 38, 0.42)" : "rgba(37, 99, 235, 0.24)", ctx.shadowBlur = isAlarm(
+            events[eventIndex] || {}) ? 18 : 10), ctx.fillStyle = shadeColor(e.color, d), ctx.strokeStyle = e
+          .stroke, ctx.lineWidth = e.lineWidth, ctx.beginPath(), ctx.moveTo(e.projected[0].x, e.projected[0].y);
+        for (let t = 1; t < e.projected.length; t++) ctx.lineTo(e.projected[t].x, e.projected[t].y);
+        ctx.closePath(), ctx.fill(), ctx.stroke(), e.isWaferPart && (ctx.strokeStyle = "rgba(255, 255, 255, 0.24)",
+          ctx.lineWidth = .7, ctx.stroke()), d > 1 && !e.glow && (ctx.shadowBlur = 0, ctx.strokeStyle = e
+          .isWaferPart ? "rgba(255, 255, 255, 0.34)" : "rgba(255, 255, 255, 0.28)", ctx.lineWidth = e
+          .isWaferPart ? .95 : .75, ctx.stroke()), ctx.restore()
+      })
+    }
+
+    function drawAccessoryLabels() {
+      const e = project({
+          x: 470,
+          y: -236,
+          z: 206
+        }),
+        t = {
+          x: e.x,
+          y: e.y - 18
+        },
+        o = {
+          x: e.x,
+          y: e.y + 18
+        },
+        i = currentLaptopUiAnimation();
+      if (ctx.save(), ctx.font = "bold 18px 'Segoe UI', sans-serif", ctx.textAlign = "center", ctx.textBaseline =
+        "middle", ctx.fillStyle = "#ffffff", ctx.fillText("进站", t.x, t.y), ctx.fillText("确定", o.x, o.y), i.active) {
+        const e = "confirm" === i.kind ? o : t,
+          n = {
+            x: e.x + 76,
+            y: e.y - 72
+          },
+          r = {
+            x: e.x + 12,
+            y: e.y + 8
+          },
+          a = {
+            x: lerpValue(n.x, r.x, i.cursorProgress),
+            y: lerpValue(n.y, r.y, i.cursorProgress)
+          };
+        ctx.save(), ctx.translate(a.x, a.y), ctx.rotate(-.22), ctx.beginPath(), ctx.moveTo(0, 0), ctx.lineTo(0, 28), ctx
+          .lineTo(8, 21), ctx.lineTo(14, 36), ctx.lineTo(20, 33), ctx.lineTo(14, 18), ctx.lineTo(26, 18), ctx
+          .closePath(), ctx.fillStyle = "#ffffff", ctx.strokeStyle = "rgba(15, 23, 42, 0.45)", ctx.lineWidth = 2, ctx
+          .fill(), ctx.stroke(), ctx.restore(), i.clickStrength > 0 && (ctx.strokeStyle =
+            `rgba(255, 255, 255, ${.75-.3*i.clickStrength})`, ctx.lineWidth = 2.2, ctx.beginPath(), ctx.arc(e.x, e.y,
+              16 + 14 * i.clickStrength, 0, 2 * Math.PI), ctx.stroke())
+      }
+      ctx.restore()
+    }
+
+    function scannerBarcodeTargetWorldPoint() {
+      const e = window.podOverride || {},
+        t = e.active && e.opPodY || 0,
+        o = e.active && e.opPodZ || 0;
+      return {
+        x: 0,
+        y: -36 + t + (e.active && e.opWaferY || 0) + 6 + 18,
+        z: 257 + o + (e.active && e.opWaferZ || 0) + 166 + 7.1
+      }
+    }
+
+    function drawAccessoryEffects() {
+      const e = currentScannerPose();
+      if (!e.scanning) return;
+      const t = project(e.window),
+        o = project(scannerBarcodeTargetWorldPoint()),
+        i = o.x - t.x,
+        n = o.y - t.y,
+        r = Math.hypot(i, n) || 1,
+        a = -(n / r),
+        d = i / r,
+        s = 18 + 18 * e.scanStrength,
+        l = .22 + .26 * e.scanStrength;
+      ctx.save(), ctx.fillStyle = `rgba(239, 68, 68, ${l})`, ctx.beginPath(), ctx.moveTo(t.x, t.y), ctx.lineTo(o.x + a *
+          s, o.y + d * s), ctx.lineTo(o.x - a * s, o.y - d * s), ctx.closePath(), ctx.fill(), ctx.strokeStyle =
+        `rgba(248, 113, 113, ${.55+.25*e.scanStrength})`, ctx.lineWidth = 2, ctx.beginPath(), ctx.arc(o.x, o.y, 24 +
+          10 * e.scanStrength, 0, 2 * Math.PI), ctx.stroke(), ctx.strokeStyle =
+        `rgba(254, 202, 202, ${.42+.28*e.scanStrength})`, ctx.setLineDash([7, 5]), ctx.beginPath(), ctx.arc(o.x, o.y,
+          38 + 16 * e.scanStrength, 0, 2 * Math.PI), ctx.stroke(), ctx.setLineDash([]), ctx.restore()
+    }
+
+    function render3D() {
+      const e = els.stage3dCanvas.clientWidth,
+        t = els.stage3dCanvas.clientHeight;
+      ctx.clearRect(0, 0, e, t), drawGrid3D(), drawPodPath3D(), drawModel3D(), drawAccessoryLabels(),
+        drawAccessoryEffects()
+    }
+
+    function resize3D() {
+      const e = window.devicePixelRatio || 1;
+      els.stage3dCanvas.width = Math.max(1, Math.floor(els.stage3dCanvas.clientWidth * e)), els.stage3dCanvas.height =
+        Math.max(1, Math.floor(els.stage3dCanvas.clientHeight * e)), ctx.setTransform(e, 0, 0, e, 0, 0), "svg3d" ===
+        activeView && render3D()
+    }
+
+    function updateAll(e = !0) {
+      syncPodMotionWithEvent(), "svg3d" === activeView && render3D(), updateTimeline(), e && updateInspector()
+    }
+
+    function nextEvent() {
+      setEventIndex(eventIndex + 1)
+    }
+
+    function prevEvent() {
+      setEventIndex(eventIndex - 1)
+    }
+
+    function stopPlay() {
+      playTimer && clearInterval(playTimer), playTimer = null, els.playBtn.textContent = "播放"
+    }
+
+    function togglePlay() {
+      playTimer ? stopPlay() : (els.playBtn.textContent = "暂停", playTimer = setInterval(nextEvent, Number(els
+        .speedSelect.value)))
+    }
+
+    function resetView() {
+      view = defaultView(), selectedBindingId = null, updateAll()
+    }
+
+    function resetViewOrientation() {
+      const e = defaultView();
+      view.yaw = e.yaw, view.pitch = e.pitch, view.panX = e.panX, view.panY = e.panY, "svg3d" === activeView &&
+        render3D()
+    }
+
+    function updateStage3DCursor() {
+      els.stage3dCanvas && (els.stage3dCanvas.style.cursor = "orbit" !== dragMode ? "grab" : "grabbing")
+    }
+
+    function nudgeViewPan(e, t) {
+      view.panX += e, view.panY += t, "svg3d" === activeView && render3D()
+    }
+
+    function initControls() {
+      viewTabs.forEach(e => {
+          e.addEventListener("click", () => setActiveView(e.dataset.view))
+        }), els.prevBtn.addEventListener("click", prevEvent), els.nextBtn.addEventListener("click", nextEvent), els
+        .playBtn.addEventListener("click", togglePlay), els.podAttachBtn.addEventListener("click", () =>
+          triggerManualPodMotion("attach")), els.podDetachBtn.addEventListener("click", () => triggerManualPodMotion(
+          "detach")), els.resetViewBtn.addEventListener("click", resetView), els.speedSelect.addEventListener("change",
+          () => {
+            playTimer && (stopPlay(), togglePlay())
+          }), window.addEventListener("resize", resize3D), els.stage3dCanvas.addEventListener("mousedown", e => {
+          0 === e.button && (e.preventDefault(), dragMode = "orbit", lastX = e.clientX, lastY = e.clientY,
+            updateStage3DCursor())
+        }), els.stage3dCanvas.addEventListener("dblclick", e => {
+          e.preventDefault(), resetViewOrientation()
+        }), window.addEventListener("mouseup", () => {
+          dragMode = null, updateStage3DCursor()
+        }), window.addEventListener("blur", () => {
+          dragMode = null, updateStage3DCursor()
+        }), window.addEventListener("mousemove", e => {
+          if (!dragMode) return;
+          const t = e.clientX - lastX,
+            o = e.clientY - lastY;
+          lastX = e.clientX, lastY = e.clientY, view.yaw += .006 * t, view.pitch = Math.max(-1.2, Math.min(1.2, view
+            .pitch + .006 * o)), "svg3d" === activeView && render3D()
+        }), window.addEventListener("keydown", e => {
+          if (e.defaultPrevented) return;
+          const t = e.target;
+          return t && t instanceof HTMLElement && t.closest("input, textarea, select") ? void 0 : "ArrowLeft" === e
+            .key ? (e.preventDefault(), void nudgeViewPan(-48, 0)) : "ArrowRight" === e.key ? (e.preventDefault(),
+              void nudgeViewPan(48, 0)) : "ArrowUp" === e.key ? (e.preventDefault(), void nudgeViewPan(0, -48)) :
+            void("ArrowDown" === e.key && (e.preventDefault(), nudgeViewPan(0, 48)))
+        }), els.stage3dCanvas.addEventListener("wheel", e => {
+          e.preventDefault(), view.scale = Math.max(.2, Math.min(4, view.scale * (e.deltaY > 0 ? .92 : 1.08))),
+            centerViewPan(), "svg3d" === activeView && render3D()
+        }, {
+          passive: !1
+        });
+      let e = !1,
+        t = !1;
+      const o = () => {
+          t = !0, setLotPopoverVisible(!0)
+        },
+        i = () => {
+          t = !1, e || setLotPopoverVisible(!1)
+        };
+      els.lotChip.addEventListener("mouseenter", o), els.lotChip.addEventListener("mouseleave", i), els.lotChip
+        .addEventListener("click", o => {
+          o.stopPropagation(), e = !e, setLotPopoverVisible(e || t)
+        }), els.lotPopover.addEventListener("mouseenter", o), els.lotPopover.addEventListener("mouseleave", i), document
+        .addEventListener("click", () => {
+          e = !1, t || setLotPopoverVisible(!1)
+        }), updateStage3DCursor()
+    }
+
+    function renderLegend() {
+      els.legend.innerHTML = "", ["Idle", "Running", "Hold", "Alarm", "Maintenance"].forEach(e => {
+        const t = document.createElement("span");
+        t.className = "legend-item", t.innerHTML =
+          `<span class="dot" style="background:${colorForState(e)}"></span>${e}`, els.legend.appendChild(t)
+      })
+    }
+
+    function animate() {
+      "svg3d" === activeView && (isAlarm(events[eventIndex] || {}) || podMotion.kind || isAccessoryAnimationActive()) &&
+        render3D(), requestAnimationFrame(animate)
+    }
+    async function init() {
+      events = fallbackEvents, hotspots = fallbackHotspots, mapping = fallbackMapping, model = enhanceModelForVisuals(
+        fallbackModel);
+      const e = resolveToolId(events);
+      activeToolId = e, activeSessionId = getOrCreateSessionId(), document.title = model.model_id || document.title,
+        els.partCount.textContent = `${(model.parts||[]).length+accessoryParts3D().length} 个部件`, eventIndex = events
+        .length > 0 ? events.length - 1 : 0, els.loadStatus.textContent = "本地画面已就绪，正在后台载入真实资源...", drawTimeline(),
+        resize3D(), updateAll(), initControls(), animate(), setActiveView(activeView), (async () => {
+          const [t, o, i] = await Promise.all([loadJson("../index.json", {
+            assets_index: "assets/index.json",
+            config_index: "config/index.json"
+          }), loadJson("../assets/index.json", {
+            folders: {
+              "2d": "assets/2d/index.json",
+              "3d": "assets/3d/index.json",
+              samples: "assets/samples/index.json"
+            }
+          }), loadJson("../config/index.json", {
+            files: {
+              interface_field_mapping: "config/vpo_interface_field_mapping_template.csv"
+            }
+          })]), n = t.data || {
+            assets_index: "assets/index.json",
+            config_index: "config/index.json"
+          }, r = o.data || {
+            folders: {
+              "2d": "assets/2d/index.json",
+              "3d": "assets/3d/index.json",
+              samples: "assets/samples/index.json"
+            }
+          };
+          i.data;
+          document.title = n.model_name || document.title;
+          const [a, d] = await Promise.all([loadJson(resolveModelPath(r.folders?.samples ||
+            "assets/samples/index.json"), {
+            files: {
+              mock_events: "assets/samples/vpo_mock_events.json",
+              standard_event: "assets/samples/vpo_standard_event_template.json"
+            }
+          }), loadJson(resolveModelPath(r.folders?.["3d"] || "assets/3d/index.json"), {
+            files: {
+              model: "assets/3d/vpo_light_3d_model_template.json",
+              preview: "assets/3d/vpo_light_3d_preview.html"
+            }
+          })]), s = a.data || {
+            files: {
+              mock_events: "assets/samples/vpo_mock_events.json",
+              standard_event: "assets/samples/vpo_standard_event_template.json"
+            }
+          }, l = d.data || {
+            files: {
+              model: "assets/3d/vpo_light_3d_model_template.json",
+              preview: "assets/3d/vpo_light_3d_preview.html"
+            }
+          }, [c, p, _] = await Promise.all([loadJson(resolveModelPath(s.files?.mock_events ||
+            "assets/samples/vpo_mock_events.json"), fallbackEvents), loadJson(resolveModelPath(r.folders?.[
+            "2d"
+          ] || "assets/2d/index.json"), {
+            files: {
+              mapping: "assets/2d/vpo_2d_3d_unified_mapping.json",
+              hotspots: "assets/2d/vpo_2d_hotspots_template.json",
+              preview: "assets/2d/vpo_2d_preview.html"
+            }
+          }), loadJson(resolveModelPath(l.files?.model || "assets/3d/vpo_light_3d_model_template.json"),
+            fallbackModel)]), f = p.data || {
+            files: {
+              mapping: "assets/2d/vpo_2d_3d_unified_mapping.json"
+            }
+          };
+          events = Array.isArray(c.data) ? c.data : fallbackEvents, mapping = (await loadJson(resolveModelPath(f
+              .files?.mapping || "assets/2d/vpo_2d_3d_unified_mapping.json"), fallbackMapping)).data ||
+            fallbackMapping, model = enhanceModelForVisuals(_.data || fallbackModel), els.partCount.textContent =
+            `${(model.parts||[]).length+accessoryParts3D().length} 个部件`, eventIndex = events.length > 0 ? events
+            .length - 1 : 0, updateAll();
+          const v = await loadLatestDbEvent(e);
+          if (v) {
+            const e = mergeLatestEvent(events, v);
+            events = e.events, eventIndex = e.index, updateAll()
+          }
+          const u = await bindSession(e);
+          u && u.binding ? (els.loadStatus.textContent = `已绑定 ${e} / 会话 ${activeSessionId}`, connectRVBridge(e,
+            activeSessionId)) : els.loadStatus.textContent = `已加载 ${e} 本地画面，等待网桥绑定`
+        })(), window.addEventListener("pagehide", unbindSession), window.addEventListener("beforeunload",
+          unbindSession)
+    }
+
+    function connectRVBridge(e, t) {
+      rvSource && rvSource.close();
+      const o = new URLSearchParams({
+        tool_id: e,
+        session_id: t
+      });
+      rvSource = new EventSource(`${RV_BRIDGE_BASE_URL}/events?${o.toString()}`), rvSource.onmessage = function(t) {
+        try {
+          const o = JSON.parse(t.data);
+          if (console.log("[孪生前端接收RV]", o), "CONNECTED" === o.event_type) els.loadStatus.textContent =
+            `已连接 ${o.tool_id||e} 实时网桥!`, els.loadStatus.style.color = "var(--running)";
+          else {
+            if (o.tool_id && o.tool_id !== e) return;
+            events.push(o), eventIndex = events.length - 1, drawTimeline(), updateAll()
+          }
+        } catch (e) {}
+      }, rvSource.onerror = function() {
+        console.warn("RV 网桥未启动或会话未绑定，继续使用本地预设流")
+      }
+    }
+    init()
+  </script>
+</body>
+
+</html>

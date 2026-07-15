@@ -3,6 +3,37 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { useModelStore } from '../stores/model'
+
+const modelStore = useModelStore()
+
+// 简易提示
+function showToast(msg, type = 'info') {
+  const el = document.createElement('div')
+  el.textContent = msg
+  const colors = {
+    info: '#3b82f6',
+    success: '#10b981',
+    warning: '#f59e0b',
+    error: '#ef4444',
+  }
+  el.style.cssText = `
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: ${colors[type] || colors.info}; color: #fff; padding: 8px 16px;
+    border-radius: 4px; font-size: 13px; z-index: 99999; opacity: 0;
+    transition: opacity 0.2s, top 0.2s;
+  `
+  document.body.appendChild(el)
+  requestAnimationFrame(() => {
+    el.style.opacity = '1'
+    el.style.top = '30px'
+  })
+  setTimeout(() => {
+    el.style.opacity = '0'
+    el.style.top = '20px'
+    setTimeout(() => el.remove(), 200)
+  }, 2000)
+}
 
 // ======================== 部件初始数据 ========================
 const initialPartsData = [
@@ -43,6 +74,152 @@ const parts = ref(makeParts(initialPartsData))
 const selectedId = ref(null)
 const transformMode = ref('translate')
 const previewing = ref(false)
+
+// ======================== 型号管理 ========================
+const currentModelId = ref('TEL-DRM-UNIT')
+const showNewModelDialog = ref(false)
+const newModelForm = ref({ model_id: '', model_name: '', view_mode: 'threejs', vendor: '', process_type: 'ETCH' })
+const rightTab = ref('part')
+const eventActionList = ref([])
+const selectedEventIdx = ref(-1)
+
+const selectedEventAction = computed(() =>
+  selectedEventIdx.value >= 0 ? eventActionList.value[selectedEventIdx.value] : null
+)
+
+function addEventAction() {
+  eventActionList.value.push({
+    event_name: '新事件',
+    event_code: '',
+    trigger_type: 'state',
+    trigger_params: {},
+    action_sequence: [],
+    rollback_sequence: [],
+  })
+  selectedEventIdx.value = eventActionList.value.length - 1
+}
+
+function removeEventAction(idx) {
+  eventActionList.value.splice(idx, 1)
+  if (selectedEventIdx.value >= eventActionList.value.length) {
+    selectedEventIdx.value = eventActionList.value.length - 1
+  }
+}
+
+function addActionStep() {
+  if (!selectedEventAction.value) return
+  selectedEventAction.value.action_sequence.push({
+    part_id: parts.value[0]?.id || '',
+    action_type: 'rotate',
+    duration: 1.0,
+    easing: 'easeInOut',
+    params: {},
+  })
+}
+
+function removeActionStep(idx) {
+  if (!selectedEventAction.value) return
+  selectedEventAction.value.action_sequence.splice(idx, 1)
+}
+
+const currentModelConfig = computed(() => modelStore.getModelById(currentModelId.value))
+
+const viewModeLabel = computed(() => {
+  const vm = currentModelConfig.value?.view_mode || 'threejs'
+  const map = { threejs: '3D模型', isometric: '2.5D等角', svg: '2D SVG', hybrid: '2D/3D混合' }
+  return map[vm] || vm
+})
+
+async function loadModels() {
+  await modelStore.loadModels()
+  if (modelStore.models.length > 0 && !currentModelId.value) {
+    currentModelId.value = modelStore.models[0].model_id
+  }
+}
+
+function switchModel(modelId) {
+  currentModelId.value = modelId
+  const cfg = modelStore.getModelById(modelId)
+  if (cfg?.parts_config?.length) {
+    parts.value = cfg.parts_config.map(p => ({
+      id: p.part_id,
+      name: p.part_name,
+      type: p.view_3d?.type || 'box',
+      position: p.view_3d?.position || [0, 0, 0],
+      size: p.view_3d?.size || [1, 1, 1],
+      color: parseInt((p.view_3d?.color || '#4a5568').replace('#', ''), 16),
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      eventConfig: {
+        stateEvent: 'run',
+        actionType: 'rotate',
+        rotateAngle: 90,
+        moveTarget: [0, 2, 0],
+        colorTarget: 0x00ff00,
+        visibleTarget: false,
+        duration: 1.0,
+        easing: 'easeInOut',
+      },
+      keyframes: [],
+    }))
+  }
+  showToast(`已切换到型号：${cfg?.model_name || modelId}`, 'info')
+}
+
+async function createNewModel() {
+  if (!newModelForm.value.model_id) {
+    showToast('请输入型号ID', 'warning')
+    return
+  }
+  try {
+    await modelStore.createModel({
+      model_id: newModelForm.value.model_id,
+      model_name: newModelForm.value.model_name || newModelForm.value.model_id,
+      vendor: newModelForm.value.vendor,
+      process_type: newModelForm.value.process_type,
+      view_mode: newModelForm.value.view_mode,
+      views_config: { view_3d: { type: 'threejs', model_source: 'procedural' } },
+      parts_config: [],
+      state_mapping: [],
+      hotspots_config: [],
+    })
+    currentModelId.value = newModelForm.value.model_id
+    showNewModelDialog.value = false
+    newModelForm.value = { model_id: '', model_name: '', view_mode: 'threejs', vendor: '', process_type: 'ETCH' }
+    showToast('型号创建成功', 'success')
+  } catch (e) {
+    showToast('创建失败: ' + e.message, 'error')
+  }
+}
+
+async function duplicateCurrentModel() {
+  const newId = prompt('请输入新型号ID:', currentModelId.value + '-COPY')
+  if (!newId) return
+  try {
+    await modelStore.duplicateModel(currentModelId.value, {
+      new_model_id: newId,
+      new_model_name: currentModelConfig.value?.model_name + ' (副本)',
+    })
+    currentModelId.value = newId
+    showToast('复制成功', 'success')
+  } catch (e) {
+    showToast('复制失败: ' + e.message, 'error')
+  }
+}
+
+async function deleteCurrentModel() {
+  if (modelStore.models.length <= 1) {
+    showToast('至少保留一个型号', 'warning')
+    return
+  }
+  try {
+    const ok = confirm(`确定删除型号 ${currentModelId.value}？此操作不可恢复。`)
+    if (!ok) return
+    await modelStore.deleteModel(currentModelId.value)
+    currentModelId.value = modelStore.models[0]?.model_id || ''
+    showToast('已删除', 'success')
+  } catch { /* 用户取消 */ }
+}
 
 // ======================== 选项常量 ========================
 const stateEventOptions = [
@@ -869,6 +1046,7 @@ watch(selectedId, (newId) => {
 // ======================== 生命周期 ========================
 onMounted(() => {
   nextTick(() => {
+    loadModels()
     setTimeout(() => initScene(), 50)
   })
 })
@@ -891,8 +1069,44 @@ onUnmounted(() => {
 
 <template>
   <div class="model-editor">
-    <!-- ===== 左侧面板：部件列表 ===== -->
+    <!-- ===== 左侧面板：型号管理 + 部件列表 ===== -->
     <aside class="left-panel">
+      <!-- 型号选择器 -->
+      <div class="panel-section">
+        <div class="panel-header">
+          <span class="header-icon">⚙</span>
+          机台型号
+        </div>
+        <div class="model-selector">
+          <select
+            class="model-select"
+            :value="currentModelId"
+            @change="switchModel($event.target.value)"
+          >
+            <option v-for="m in modelStore.models" :key="m.model_id" :value="m.model_id">
+              {{ m.model_name }} ({{ m.model_id }})
+            </option>
+          </select>
+          <div class="model-actions">
+            <button class="mini-btn" @click="showNewModelDialog = true" title="新建型号">+ 新建</button>
+            <button class="mini-btn" @click="duplicateCurrentModel" title="复制型号">复制</button>
+            <button class="mini-btn danger" @click="deleteCurrentModel" title="删除型号">删</button>
+          </div>
+        </div>
+        <div class="model-info" v-if="currentModelConfig">
+          <div class="model-info-row">
+            <span class="info-label">视图模式</span>
+            <span class="info-tag">{{ viewModeLabel }}</span>
+          </div>
+          <div class="model-info-row">
+            <span class="info-label">部件数</span>
+            <span class="info-value">{{ parts.length }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
       <div class="panel-header">
         <span class="header-icon">◆</span>
         部件列表
@@ -953,6 +1167,22 @@ onUnmounted(() => {
 
     <!-- ===== 右侧面板：属性编辑器 ===== -->
     <aside class="right-panel">
+      <!-- Tab 切换 -->
+      <div class="right-tabs">
+        <button
+          class="right-tab"
+          :class="{ active: rightTab === 'part' }"
+          @click="rightTab = 'part'"
+        >部件属性</button>
+        <button
+          class="right-tab"
+          :class="{ active: rightTab === 'event' }"
+          @click="rightTab = 'event'"
+        >事件动作</button>
+      </div>
+
+      <!-- ===== 部件属性 Tab ===== -->
+      <div v-show="rightTab === 'part'" class="tab-content">
       <template v-if="selectedPart">
         <!-- 变换属性 -->
         <div class="panel-section">
@@ -1237,6 +1467,114 @@ onUnmounted(() => {
         <div class="empty-icon">⬡</div>
         <div>请从左侧列表或3D视图中选择一个部件</div>
       </div>
+      </div>
+
+      <!-- ===== 事件动作配置 Tab ===== -->
+      <div v-show="rightTab === 'event'" class="tab-content">
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="header-icon">⚡</span>
+            事件动作映射
+            <button class="mini-btn right" @click="addEventAction">+ 新增</button>
+          </div>
+          <div class="event-list">
+            <div
+              v-for="(ea, idx) in eventActionList"
+              :key="idx"
+              class="event-item"
+              :class="{ active: selectedEventIdx === idx }"
+              @click="selectedEventIdx = idx"
+            >
+              <div class="event-item-header">
+                <span class="event-name">{{ ea.event_name || '未命名事件' }}</span>
+                <button class="icon-btn" @click.stop="removeEventAction(idx)">×</button>
+              </div>
+              <div class="event-item-meta">
+                <span class="meta-tag">{{ ea.event_code || '-' }}</span>
+                <span class="meta-tag">{{ ea.action_sequence?.length || 0 }}个动作</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedEventAction" class="panel-section">
+          <div class="panel-header">
+            <span class="header-icon">▶</span>
+            事件详情
+          </div>
+          <div class="prop-group">
+            <div class="prop-row">
+              <label>事件名称</label>
+              <input type="text" class="prop-input full" v-model="selectedEventAction.event_name" />
+            </div>
+            <div class="prop-row">
+              <label>事件代码</label>
+              <input type="text" class="prop-input full" v-model="selectedEventAction.event_code" placeholder="如: wafer_load_start" />
+            </div>
+            <div class="prop-row">
+              <label>触发条件</label>
+              <select class="prop-select full" v-model="selectedEventAction.trigger_type">
+                <option value="state">状态变化</option>
+                <option value="event">事件触发</option>
+                <option value="timer">定时触发</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedEventAction" class="panel-section">
+          <div class="panel-header">
+            <span class="header-icon">♦</span>
+            动作序列
+            <button class="mini-btn right" @click="addActionStep">+ 动作</button>
+          </div>
+          <div class="action-steps">
+            <div
+              v-for="(step, sIdx) in selectedEventAction.action_sequence"
+              :key="sIdx"
+              class="action-step"
+            >
+              <div class="step-header">
+                <span class="step-index">{{ sIdx + 1 }}</span>
+                <select class="prop-select sm" v-model="step.part_id">
+                  <option value="">-- 选择部件 --</option>
+                  <option v-for="p in parts" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+                <button class="icon-btn" @click="removeActionStep(sIdx)">×</button>
+              </div>
+              <div class="step-body">
+                <div class="prop-row">
+                  <label>动作</label>
+                  <select class="prop-select" v-model="step.action_type">
+                    <option value="rotate">旋转</option>
+                    <option value="move">移动</option>
+                    <option value="color">变色</option>
+                    <option value="visibility">显示/隐藏</option>
+                    <option value="keyframes">关键帧</option>
+                  </select>
+                </div>
+                <div class="prop-row">
+                  <label>时长(s)</label>
+                  <input type="number" step="0.1" class="prop-input xs" v-model.number="step.duration" />
+                </div>
+                <div class="prop-row">
+                  <label>缓动</label>
+                  <select class="prop-select" v-model="step.easing">
+                    <option v-for="opt in easingOptions" :key="opt.value" :value="opt.value">
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!selectedEventAction" class="empty-hint">
+          <div class="empty-icon">⚡</div>
+          <div>选择或新增一个事件动作映射</div>
+        </div>
+      </div>
     </aside>
 
     <!-- ===== 底部工具栏 ===== -->
@@ -1256,6 +1594,52 @@ onUnmounted(() => {
         @change="loadConfig"
       />
     </footer>
+
+    <!-- 新建型号对话框 -->
+    <div v-if="showNewModelDialog" class="dialog-overlay" @click.self="showNewModelDialog = false">
+      <div class="dialog">
+        <div class="dialog-header">新建机台型号</div>
+        <div class="dialog-body">
+          <div class="form-item">
+            <label>型号ID *</label>
+            <input v-model="newModelForm.model_id" type="text" placeholder="如: OXE-300, VPO-2200" />
+          </div>
+          <div class="form-item">
+            <label>型号名称</label>
+            <input v-model="newModelForm.model_name" type="text" placeholder="如: OXE刻蚀机" />
+          </div>
+          <div class="form-item">
+            <label>厂商</label>
+            <input v-model="newModelForm.vendor" type="text" placeholder="TEL / AMAT / Lam..." />
+          </div>
+          <div class="form-item">
+            <label>工艺类型</label>
+            <select v-model="newModelForm.process_type">
+              <option value="ETCH">刻蚀 ETCH</option>
+              <option value="OXIDE">氧化 OXIDE</option>
+              <option value="CMP">化学机械抛光 CMP</option>
+              <option value="PVD">物理气相沉积 PVD</option>
+              <option value="CVD">化学气相沉积 CVD</option>
+              <option value="LITHO">光刻 LITHO</option>
+              <option value="WAT">晶圆测试 WAT</option>
+            </select>
+          </div>
+          <div class="form-item">
+            <label>默认视图模式</label>
+            <select v-model="newModelForm.view_mode">
+              <option value="threejs">3D模型 (Three.js)</option>
+              <option value="isometric">2.5D等角视图</option>
+              <option value="svg">2D SVG视图</option>
+              <option value="hybrid">2D/3D混合</option>
+            </select>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn" @click="showNewModelDialog = false">取消</button>
+          <button class="btn primary" @click="createNewModel">创建</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1757,5 +2141,296 @@ onUnmounted(() => {
   .model-editor {
     grid-template-columns: 200px 1fr 280px;
   }
+}
+
+/* ===== 型号管理 ===== */
+.panel-section {
+  padding: 0 12px;
+}
+.panel-divider {
+  height: 1px;
+  background: #1e2d44;
+  margin: 8px 0;
+}
+.model-selector {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.model-select {
+  width: 100%;
+  background: #0a1120;
+  border: 1px solid #1e2d44;
+  border-radius: 4px;
+  color: #e5e7eb;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.model-actions {
+  display: flex;
+  gap: 4px;
+}
+.mini-btn {
+  flex: 1;
+  padding: 4px 6px;
+  background: #1e2d44;
+  border: 1px solid #2a4060;
+  border-radius: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mini-btn:hover {
+  background: #2a4060;
+  color: #e5e7eb;
+}
+.mini-btn.danger:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
+.model-info {
+  margin-top: 10px;
+  background: #0a1120;
+  border: 1px solid #1e2d44;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.model-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 2px 0;
+}
+.info-tag {
+  background: #0a2030;
+  color: #38bdf8;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+/* ===== 对话框 ===== */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.dialog {
+  background: #0f1a2e;
+  border: 1px solid #1e2d44;
+  border-radius: 8px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.dialog-header {
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e5e7eb;
+  border-bottom: 1px solid #1e2d44;
+}
+.dialog-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dialog-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #1e2d44;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.form-item label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.form-item input,
+.form-item select {
+  background: #0a1120;
+  border: 1px solid #1e2d44;
+  border-radius: 4px;
+  color: #e5e7eb;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.form-item input:focus,
+.form-item select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+.btn {
+  padding: 6px 16px;
+  background: #1e2d44;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+  color: #e5e7eb;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover {
+  background: #2a4060;
+}
+.btn.primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+.btn.primary:hover {
+  background: #2563eb;
+}
+
+/* ===== 右侧Tab ===== */
+.right-tabs {
+  display: flex;
+  border-bottom: 1px solid #1e2d44;
+  background: #0f1a2e;
+}
+.right-tab {
+  flex: 1;
+  padding: 10px 0;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.right-tab:hover {
+  color: #94a3b8;
+}
+.right-tab.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+}
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+.panel-header .right {
+  margin-left: auto;
+}
+.panel-header .mini-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+/* ===== 事件列表 ===== */
+.event-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.event-item {
+  background: #0a1120;
+  border: 1px solid #1e2d44;
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.event-item:hover {
+  border-color: #2a4060;
+}
+.event-item.active {
+  border-color: #3b82f6;
+  background: #0a1628;
+}
+.event-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.event-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.icon-btn:hover {
+  color: #ef4444;
+}
+.event-item-meta {
+  display: flex;
+  gap: 6px;
+}
+.meta-tag {
+  background: #0f1a2e;
+  color: #64748b;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+/* ===== 动作步骤 ===== */
+.action-steps {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 350px;
+  overflow-y: auto;
+}
+.action-step {
+  background: #0a1120;
+  border: 1px solid #1e2d44;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #0f1a2e;
+  border-bottom: 1px solid #1e2d44;
+}
+.step-index {
+  background: #3b82f6;
+  color: #fff;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.step-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 </style>

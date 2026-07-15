@@ -1,16 +1,17 @@
-"""SQLite 数据库初始化与连接管理"""
+"""数据库初始化与连接管理（支持 SQLite / Oracle 一键切换）"""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-from config import DATABASE_URL
+from config import DATABASE_URL, DB_IS_SQLITE
 
-# 创建引擎；check_same_thread=False 允许在 FastAPI 异步上下文 / 后台线程中使用
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+_connect_args = {}
+if DB_IS_SQLITE:
+    _connect_args["check_same_thread"] = False
 
-# 会话工厂
+engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# ORM 声明式基类
 Base = declarative_base()
 
 

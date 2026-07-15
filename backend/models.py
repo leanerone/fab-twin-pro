@@ -274,3 +274,51 @@ class Vehicle(Base):
     target_machine_id = Column(String, nullable=True)  # 目标机台
     speed = Column(Float, default=1.0)                 # 运行速度
     updated_at = Column(String)
+
+
+# ========== 机台型号配置表（核心：建模规范 + 动作匹配）==========
+
+class MachineModelConfig(Base):
+    """机台型号配置：定义一种机型的2D/3D视图、部件、事件动作映射
+    新机台型号接入无需改代码，通过配置完成
+    """
+    __tablename__ = "machine_model_configs"
+
+    model_id = Column(String, primary_key=True)
+    model_name = Column(String, nullable=False)
+    vendor = Column(String, default="")
+    process_type = Column(String, default="ETCH")
+    version = Column(String, default="1.0")
+    view_mode = Column(String, default="threejs")
+    description = Column(Text, default="")
+
+    views_config_json = Column(Text, default="{}")
+    parts_config_json = Column(Text, default="[]")
+    state_mapping_json = Column(Text, default="[]")
+    hotspots_config_json = Column(Text, default="[]")
+
+    created_at = Column(String)
+    updated_at = Column(String)
+
+
+class EventActionMapping(Base):
+    """事件动作映射：半导体事件 → 部件动作序列
+    配置化实现事件驱动的可视化动画
+    """
+    __tablename__ = "event_action_mappings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    model_id = Column(String, nullable=False, index=True)
+    mapping_id = Column(String, nullable=False)
+    description = Column(String, default="")
+
+    trigger_event_type = Column(String, default="STATE_CHANGE")
+    trigger_event_code = Column(String, default="")
+    trigger_condition_json = Column(Text, default="{}")
+
+    action_sequence_json = Column(Text, default="[]")
+    rollback_event_type = Column(String, default="")
+    rollback_event_code = Column(String, default="")
+
+    created_at = Column(String)
+    updated_at = Column(String)

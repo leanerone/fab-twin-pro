@@ -9,7 +9,7 @@ from config import API_HOST, API_PORT, CORS_ORIGINS, SIMULATION_ENABLED
 from database import init_db, SessionLocal
 from models import Machine
 from seed_data import init_seed_data
-from routers import machines, events, lots, alarms, ai, oht, recipes, floors
+from routers import machines, events, lots, alarms, ai, oht, recipes, floors, models, history
 from services.realtime import ConnectionManager
 from services.simulator import start_simulator
 from services.cache import cache
@@ -35,6 +35,8 @@ app.include_router(ai.router, tags=["ai"])
 app.include_router(oht.router, tags=["oht"])
 app.include_router(recipes.router, tags=["recipes"])
 app.include_router(floors.router, tags=["floors"])
+app.include_router(models.router, tags=["machine models"])
+app.include_router(history.router, tags=["history"])
 
 # WebSocket 管理器
 manager = ConnectionManager()

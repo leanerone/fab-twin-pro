@@ -2,15 +2,19 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
+import { useModelStore } from '../stores/model'
 import { api } from '../api'
 import { stateLabels } from '../composables/useThree'
 import MachineModel3D from '../components/MachineModel3D.vue'
 import MachineModel2D from '../components/MachineModel2D.vue'
+import MachineIsoView from '../components/MachineIsoView.vue'
+import MachineVpoView from '../components/MachineVpoView.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
 import AlarmStats from '../components/AlarmStats.vue'
 import EventList from '../components/EventList.vue'
 import LotList from '../components/LotList.vue'
 import AiAssistant from '../components/AiAssistant.vue'
+import HistoryReplay from '../components/HistoryReplay.vue'
 
 // 机台详情：3D 模型 + 2D原理图 + 回放 + 右侧 Tab（告警/事件/Lot/AI）
 const props = defineProps({
@@ -19,6 +23,7 @@ const props = defineProps({
 
 const router = useRouter()
 const appStore = useAppStore()
+const modelStore = useModelStore()
 
 // === 状态 ===
 const machine = ref(null)
@@ -40,8 +45,38 @@ const alarmStats = ref({ total: 0, crit: 0, warn: 0, temperature: 0, pressure: 0
 const selectedLotId = ref('')
 const transferTrigger = ref(0)
 
-// === 新增：视图模式切换 ===
-const viewMode = ref('3d')                // 3d / 2d
+// === 视图模式（根据机台型号自动选择） ===
+const viewMode = ref('3d')                // 3d / 2d / iso / hybrid
+const currentModelConfig = ref(null)
+
+function resolveViewMode(machineModel) {
+  const vm = modelStore.getViewMode(machineModel)
+  if (vm === 'isometric' || vm === 'iso') return 'iso'
+  if (vm === 'vpo' || vm === 'svg-vpo') return 'vpo'
+  if (vm === 'hybrid') return '2d'
+  if (vm === 'svg') return '2d'
+  return '3d'
+}
+
+const availableViews = computed(() => {
+  const cfg = currentModelConfig.value
+  if (!cfg) return [{ key: '3d', label: '🎯 3D模型' }, { key: '2d', label: '📐 2D原理图' }]
+  const views = []
+  if (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid') {
+    views.push({ key: '3d', label: '🎯 3D模型' })
+  }
+  if (cfg.view_mode === 'isometric' || cfg.view_mode === 'iso' || cfg.views_config?.view_2d?.type === 'isometric') {
+    views.push({ key: 'iso', label: '📐 2.5D等角' })
+  }
+  if (cfg.view_mode === 'vpo' || cfg.view_mode === 'svg-vpo' || cfg.views_config?.view_2d?.type === 'vpo') {
+    views.push({ key: 'vpo', label: '📋 VPO 2D' })
+  }
+  if (cfg.views_config?.view_2d?.type === 'svg' || cfg.view_mode === 'svg' || cfg.view_mode === 'hybrid') {
+    views.push({ key: '2d', label: '📋 2D视图' })
+  }
+  if (views.length === 0) views.push({ key: '3d', label: '🎯 3D模型' })
+  return views
+})
 
 // ===== Run货动画状态（2D/3D共用） =====
 const TOTAL_WAFERS = 25
@@ -438,6 +473,14 @@ async function loadMachine() {
     metrics.rf = machine.value.rf_power
     metrics.waferCount = machine.value.wafer_count
     appStore.selectMachine(machineId.value)
+
+    const modelId = modelStore.resolveModelId(machine.value.model)
+    if (modelId && modelStore.models.length === 0) {
+      await modelStore.loadModels()
+    }
+    const cfg = modelStore.getModelById(modelId)
+    currentModelConfig.value = cfg
+    viewMode.value = resolveViewMode(machine.value.model)
   }
   // 并行加载右侧面板数据
   loadAlarms()
@@ -666,6 +709,19 @@ function doJump(ts) {
   seek(pct)
 }
 
+// 回放历史事件（从历史回放面板触发）
+function onReplayEvent(ev) {
+  if (!ev || !ev.timestamp) return
+  // 切换到回放模式
+  if (mode.value !== 'playback') {
+    switchToPlayback().then(() => {
+      doJump(ev.timestamp)
+    })
+  } else {
+    doJump(ev.timestamp)
+  }
+}
+
 // 返回看板
 function goBack() {
   router.push('/')
@@ -686,22 +742,17 @@ onMounted(() => {
 <template>
   <div class="detail-page">
     <!-- 左侧视图区 -->
-    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' }">
-      <!-- 2D/3D视图切换按钮 -->
+    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo', 'is-vpo': viewMode === 'vpo' }">
+      <!-- 视图模式切换按钮（根据机台型号动态显示） -->
       <div class="view-mode-switcher">
-        <button 
-          class="vms-btn" 
-          :class="{ active: viewMode === '3d' }"
-          @click="viewMode = '3d'"
+        <button
+          v-for="v in availableViews"
+          :key="v.key"
+          class="vms-btn"
+          :class="{ active: viewMode === v.key }"
+          @click="viewMode = v.key"
         >
-          🎯 3D模型
-        </button>
-        <button 
-          class="vms-btn" 
-          :class="{ active: viewMode === '2d' }"
-          @click="viewMode = '2d'"
-        >
-          📐 2D原理图
+          {{ v.label }}
         </button>
       </div>
 
@@ -718,12 +769,33 @@ onMounted(() => {
 
       <!-- 2D原理图视图 -->
       <MachineModel2D
-        v-else
+        v-else-if="viewMode === '2d'"
         :machine="machine"
         :current-state="currentState"
         :metrics="metrics"
         :process-step="processStep"
         :run-state="runState"
+      />
+
+      <!-- 2.5D等角视图（OXE/DRM专用） -->
+      <MachineIsoView
+        v-else-if="viewMode === 'iso'"
+        :machine="machine"
+        :model-config="currentModelConfig"
+        :current-state="currentState"
+        :metrics="metrics"
+        :run-state="runState"
+      />
+
+      <!-- VPO 2D视图 -->
+      <MachineVpoView
+        v-else-if="viewMode === 'vpo'"
+        :machine="machine"
+        :model-config="currentModelConfig"
+        :current-state="currentState"
+        :metrics="metrics"
+        :run-state="runState"
+        :events="displayEvents"
       />
 
       <button class="back-btn" @click="goBack">← 返回看板</button>
@@ -783,6 +855,7 @@ onMounted(() => {
       <div class="dr-tabs">
         <button class="dr-tab" :class="{ active: rightTab === 'alarms' }" @click="rightTab = 'alarms'">告警</button>
         <button class="dr-tab" :class="{ active: rightTab === 'events' }" @click="rightTab = 'events'">事件</button>
+        <button class="dr-tab" :class="{ active: rightTab === 'replay' }" @click="rightTab = 'replay'">回放</button>
         <button class="dr-tab" :class="{ active: rightTab === 'lots' }" @click="rightTab = 'lots'">Lot</button>
         <button class="dr-tab" :class="{ active: rightTab === 'ai' }" @click="rightTab = 'ai'">AI</button>
       </div>
@@ -795,6 +868,16 @@ onMounted(() => {
       <!-- 事件 Tab -->
       <div v-show="rightTab === 'events'" class="dr-section">
         <EventList :events="displayEvents" />
+      </div>
+
+      <!-- 回放 Tab -->
+      <div v-show="rightTab === 'replay'" class="dr-section">
+        <HistoryReplay
+          :machine-id="machineId"
+          :machine-state="machine?.state"
+          @jump="jumpToTime"
+          @replay-event="onReplayEvent"
+        />
       </div>
 
       <!-- Lot Tab -->
@@ -844,6 +927,30 @@ onMounted(() => {
 .detail-viewer.is-2d .vms-btn {
   padding: 6px 12px;
   font-size: 11px;
+}
+
+/* VPO视图专用样式：按钮移到顶部两侧，避免遮挡PORT2和机台主体 */
+.detail-viewer.is-vpo .view-mode-switcher {
+  left: 14px;
+  right: auto;
+  transform: none;
+  top: 14px;
+  z-index: 20;
+}
+
+.detail-viewer.is-vpo .vms-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  background: rgba(13, 20, 36, 0.9);
+}
+
+.detail-viewer.is-vpo .back-btn {
+  top: 14px;
+  right: 14px;
+  padding: 6px 12px;
+  font-size: 11px;
+  z-index: 20;
+  background: rgba(13, 20, 36, 0.9);
 }
 
 .vms-btn {

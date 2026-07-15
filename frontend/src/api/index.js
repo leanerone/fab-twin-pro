@@ -63,6 +63,31 @@ export const api = {
   addVehicle: (floorId, data) => request('POST', `/floors/${floorId}/vehicles`, data),
   updateVehicle: (floorId, vehicleId, data) => request('PUT', `/floors/${floorId}/vehicles/${vehicleId}`, data),
   deleteVehicle: (floorId, vehicleId) => request('DELETE', `/floors/${floorId}/vehicles/${vehicleId}`),
+
+  // 机台型号配置API
+  getModels: () => request('GET', '/models'),
+  getModel: (modelId) => request('GET', `/models/${modelId}`),
+  createModel: (data) => request('POST', '/models', data),
+  updateModel: (modelId, data) => request('PUT', `/models/${modelId}`, data),
+  deleteModel: (modelId) => request('DELETE', `/models/${modelId}`),
+  duplicateModel: (modelId, data) => request('POST', `/models/${modelId}/duplicate`, data),
+  // 事件动作映射
+  getEventActions: (modelId) => request('GET', `/models/${modelId}/event-actions`),
+  createEventAction: (modelId, data) => request('POST', `/models/${modelId}/event-actions`, data),
+  updateEventAction: (modelId, mappingId, data) => request('PUT', `/models/${modelId}/event-actions/${mappingId}`, data),
+  deleteEventAction: (modelId, mappingId) => request('DELETE', `/models/${modelId}/event-actions/${mappingId}`),
+
+  // 历史回放API
+  getHistory: (toolId, params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request('GET', `/history/${toolId}?${qs}`);
+  },
+  getHistoryTimeline: (toolId, date) => request('GET', `/history/${toolId}/timeline?date=${date}`),
+  getAlarmHistory: (toolId, params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request('GET', `/history/${toolId}/alarms?${qs}`);
+  },
+  getEventDetail: (toolId, rawId) => request('GET', `/history/${toolId}/events/${rawId}`),
 };
 
 export default api;

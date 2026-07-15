@@ -3,7 +3,7 @@ import random
 import json
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from models import Machine, Lot, Recipe, ChamberSnapshot, OHTPosition, Floor, FloorArea
+from models import Machine, Lot, Recipe, ChamberSnapshot, OHTPosition, Floor, FloorArea, MachineModelConfig, EventActionMapping, DT_EVENT_RAW
 from services.ods import seed_ods_data
 
 product_names = ["DRAM-1X", "NAND-3D", "Logic-7nm", "Logic-5nm", "CMOS-Image", "Power-IC"]
@@ -46,6 +46,7 @@ def create_machines(db: Session):
         {"id": "T18", "name": "刻蚀机 T18", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -6, "floor_x": 74, "floor_y": 55},
         {"id": "T19", "name": "刻蚀机 T19", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -6, "floor_x": 81, "floor_y": 55},
         {"id": "T20", "name": "刻蚀机 T20", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -6, "floor_x": 88, "floor_y": 55},
+        {"id": "VPO-01", "name": "VPO氧化炉 VPO-01", "line": 1, "floor": 3, "has_smif": True, "x_pos": 16, "y_pos": 0, "floor_x": 40, "floor_y": 8, "process_type": "OXIDE", "model": "VPO-2200"},
         {"id": "STK-3F", "name": "STK传输机 3F", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 47, "floor_y": 38, "process_type": "STK"},
 
         # === 4F: 刻蚀区扩展 ===
@@ -62,9 +63,10 @@ def create_machines(db: Session):
     machines = []
     for m in machines_data:
         ptype = m.get("process_type", "ETCH") if m.get("process_type") else "ETCH"
+        default_model = m.get("model") or ("TEL DRM UNITY" if ptype == "ETCH" else ptype)
         machine = Machine(
             id=m["id"],
-            model="TEL DRM UNITY" if ptype == "ETCH" else ptype,
+            model=default_model,
             name=m["name"],
             line=m["line"],
             floor=m["floor"],
@@ -119,12 +121,14 @@ def create_recipes(db: Session, machines):
 
 def create_lots(db: Session, machines):
     today = datetime.now().strftime("%Y-%m-%d")
+    lot_counter = 100000
     for m in machines:
         lot_count = 5 + random.randint(0, 3)
         start_time = datetime.fromisoformat(f"{today}T08:00:00")
 
         for i in range(lot_count):
-            lot_id = f"LOT{random.randint(100000, 999999)}"
+            lot_id = f"LOT{lot_counter}"
+            lot_counter += 1
             cycle_duration = (20 + random.random() * 8) * 60
             end_time = start_time + timedelta(seconds=cycle_duration)
 
@@ -290,6 +294,500 @@ def create_floor_areas(db: Session):
     db.commit()
 
 
+def create_machine_model_configs(db: Session):
+    """创建机台型号配置（VPO、OXE/DRM等）和事件动作映射"""
+    now = datetime.now(timezone.utc).isoformat() if hasattr(datetime, 'now') and False else "2026-07-14T00:00:00Z"
+    from datetime import timezone
+    now = datetime.now(timezone.utc).isoformat()
+
+    existing = db.query(MachineModelConfig).count()
+    if existing > 0:
+        print(f"[Seed] 机台型号配置已存在 ({existing} 个)，跳过")
+        return
+
+    vpo_parts = [
+        {"part_id": "base_plate", "part_name": "底座底板", "part_type": "structure",
+         "view_3d": {"type": "box", "size": [520, 680, 38], "position": [0, -10, 19], "color": "#4b535c"}},
+        {"part_id": "front_stage", "part_name": "前载台", "part_type": "stage",
+         "view_3d": {"type": "box", "size": [300, 240, 48], "position": [0, -36, 124], "color": "#cbd5e1"}},
+        {"part_id": "left_rail", "part_name": "左侧导轨", "part_type": "rail",
+         "view_3d": {"type": "box", "size": [18, 306, 760], "position": [-181, -22, 484], "color": "#5f6972"}},
+        {"part_id": "right_rail", "part_name": "右侧导轨", "part_type": "rail",
+         "view_3d": {"type": "box", "size": [18, 306, 760], "position": [181, -22, 484], "color": "#5f6972"}},
+        {"part_id": "rear_panel", "part_name": "后面板", "part_type": "panel",
+         "view_3d": {"type": "box", "size": [330, 32, 690], "position": [0, 112, 444], "color": "#b7ad99"}},
+        {"part_id": "wafer_port", "part_name": "Wafer入口", "part_type": "port",
+         "view_3d": {"type": "cylinder", "size": [230, 230, 14], "position": [0, -142, 130], "color": "#94a3b8"},
+         "hotspots": [{"hotspot_id": "wafer_port_front", "name": "晶圆入口", "position_3d": [0, -180, 130]}]},
+        {"part_id": "chamber", "part_name": "工艺腔体", "part_type": "chamber",
+         "view_3d": {"type": "cylinder", "size": [200, 200, 50], "position": [0, 0, 900], "color": "#17202a"}},
+        {"part_id": "control_box", "part_name": "操作控制盒", "part_type": "control",
+         "view_3d": {"type": "box", "size": [198, 92, 112], "position": [0, -472, 76], "color": "#111827"},
+         "hotspots": [{"hotspot_id": "operator_control", "name": "控制盒", "position_3d": [0, -500, 76]}]},
+        {"part_id": "pod", "part_name": "POD/晶舟", "part_type": "pod",
+         "view_3d": {"type": "cylinder", "size": [150, 150, 300], "position": [0, -300, 200], "color": "#f59e0b"},
+         "animated": True},
+    ]
+
+    vpo_hotspots = [
+        {"hotspot_id": "machine_body", "name": "机身主体", "part_ids": ["left_rail", "right_rail", "rear_panel"]},
+        {"hotspot_id": "wafer_port_front", "name": "Wafer入口", "part_ids": ["wafer_port"]},
+        {"hotspot_id": "operator_control", "name": "控制盒", "part_ids": ["control_box"]},
+    ]
+
+    vpo_states = [
+        {"state_id": "idle", "state_name": "待机", "color": "#9ca3af",
+         "part_overrides": [{"part_id": "chamber", "emissive_intensity": 0}]},
+        {"state_id": "running", "state_name": "运行", "color": "#22c55e",
+         "part_overrides": [{"part_id": "chamber", "emissive": "#22c55e", "emissive_intensity": 0.5}]},
+        {"state_id": "hold", "state_name": "暂停", "color": "#f59e0b",
+         "part_overrides": [{"part_id": "wafer_port", "emissive": "#f59e0b", "emissive_intensity": 0.3}]},
+        {"state_id": "alarm", "state_name": "告警", "color": "#ef4444",
+         "part_overrides": [{"part_id": "chamber", "emissive": "#ef4444", "emissive_intensity": 0.8, "pulse": True}]},
+    ]
+
+    vpo_views = {
+        "view_3d": {"type": "threejs", "model_source": "procedural",
+                    "default_camera": {"position": [700, -300, 400], "target": [0, 0, 400]}},
+        "view_2d": {"type": "svg", "svg_source": "procedural",
+                    "view_label": "正视图"},
+    }
+
+    vpo_model = MachineModelConfig(
+        model_id="VPO-2200",
+        model_name="VPO 立式氧化炉",
+        vendor="TEL",
+        process_type="OXIDE",
+        version="1.0",
+        view_mode="vpo",
+        description="VPO 立式氧化炉 2D/3D 统一视图，支持POD穿入脱出动画",
+        views_config_json=json.dumps(vpo_views, ensure_ascii=False),
+        parts_config_json=json.dumps(vpo_parts, ensure_ascii=False),
+        state_mapping_json=json.dumps(vpo_states, ensure_ascii=False),
+        hotspots_config_json=json.dumps(vpo_hotspots, ensure_ascii=False),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(vpo_model)
+
+    oxe_parts = [
+        {"part_id": "loadport_1", "part_name": "Load Port 1", "part_type": "loadport",
+         "view_3d": {"type": "box", "size": [120, 180, 60], "position": [-285, -80, 180], "color": "#2a3a5a"},
+         "view_2d_iso": {"x": 100, "y": 50, "width": 60, "height": 40, "isometric_depth": 20}},
+        {"part_id": "loadport_2", "part_name": "Load Port 2", "part_type": "loadport",
+         "view_3d": {"type": "box", "size": [120, 180, 60], "position": [-285, 80, 180], "color": "#2a3a5a"},
+         "view_2d_iso": {"x": 100, "y": 150, "width": 60, "height": 40, "isometric_depth": 20}},
+        {"part_id": "efem", "part_name": "EFEM 传输腔", "part_type": "efem",
+         "view_3d": {"type": "box", "size": [200, 300, 200], "position": [-150, 0, 200], "color": "#374151"},
+         "view_2d_iso": {"x": 200, "y": 100, "width": 100, "height": 120, "isometric_depth": 30}},
+        {"part_id": "efem_robot", "part_name": "EFEM 机械臂", "part_type": "robot",
+         "view_3d": {"type": "cylinder", "size": [30, 30, 120], "position": [-150, 0, 220], "color": "#60a5fa"},
+         "animated": True},
+        {"part_id": "aligner", "part_name": "Aligner 对中器", "part_type": "aligner",
+         "view_3d": {"type": "cylinder", "size": [50, 50, 40], "position": [-150, -100, 180], "color": "#94a3b8"}},
+        {"part_id": "vacuum_lock_1", "part_name": "真空锁 1", "part_type": "vacuum_lock",
+         "view_3d": {"type": "box", "size": [100, 120, 80], "position": [-20, -80, 200], "color": "#475569"}},
+        {"part_id": "vacuum_lock_2", "part_name": "真空锁 2", "part_type": "vacuum_lock",
+         "view_3d": {"type": "box", "size": [100, 120, 80], "position": [-20, 80, 200], "color": "#475569"}},
+        {"part_id": "transfer_chamber", "part_name": "传输腔 (VTM)", "part_type": "vtm",
+         "view_3d": {"type": "cylinder", "size": [220, 220, 180], "position": [120, 0, 220], "color": "#1e293b"},
+         "view_2d_iso": {"x": 350, "y": 100, "width": 100, "height": 120, "isometric_depth": 30}},
+        {"part_id": "vtm_robot", "part_name": "VTM 机械臂", "part_type": "robot",
+         "view_3d": {"type": "cylinder", "size": [25, 25, 100], "position": [120, 0, 230], "color": "#f59e0b"},
+         "animated": True},
+        {"part_id": "chamber_1", "part_name": "工艺腔 PM1", "part_type": "chamber",
+         "view_3d": {"type": "cylinder", "size": [120, 120, 150], "position": [250, -150, 230], "color": "#1e3a5f"},
+         "view_2d_iso": {"x": 480, "y": 40, "width": 60, "height": 60, "isometric_depth": 25}},
+        {"part_id": "chamber_2", "part_name": "工艺腔 PM2", "part_type": "chamber",
+         "view_3d": {"type": "cylinder", "size": [120, 120, 150], "position": [250, 150, 230], "color": "#1e3a5f"},
+         "view_2d_iso": {"x": 480, "y": 170, "width": 60, "height": 60, "isometric_depth": 25}},
+        {"part_id": "wafer", "part_name": "晶圆", "part_type": "wafer",
+         "view_3d": {"type": "cylinder", "size": [50, 50, 3], "position": [-150, 0, 280], "color": "#60a5fa"},
+         "animated": True},
+    ]
+
+    oxe_hotspots = [
+        {"hotspot_id": "lp1", "name": "Load Port 1", "part_ids": ["loadport_1"]},
+        {"hotspot_id": "lp2", "name": "Load Port 2", "part_ids": ["loadport_2"]},
+        {"hotspot_id": "efem", "name": "EFEM", "part_ids": ["efem", "efem_robot"]},
+        {"hotspot_id": "vtm", "name": "传输腔", "part_ids": ["transfer_chamber", "vtm_robot"]},
+        {"hotspot_id": "pm1", "name": "工艺腔 1", "part_ids": ["chamber_1"]},
+        {"hotspot_id": "pm2", "name": "工艺腔 2", "part_ids": ["chamber_2"]},
+    ]
+
+    oxe_states = [
+        {"state_id": "idle", "state_name": "待机", "color": "#9ca3af"},
+        {"state_id": "running", "state_name": "运行", "color": "#22c55e",
+         "part_overrides": [
+             {"part_id": "chamber_1", "emissive": "#22c55e", "emissive_intensity": 0.5},
+             {"part_id": "chamber_2", "emissive": "#22c55e", "emissive_intensity": 0.5},
+         ]},
+        {"state_id": "hold", "state_name": "暂停", "color": "#f59e0b"},
+        {"state_id": "alarm", "state_name": "告警", "color": "#ef4444",
+         "part_overrides": [
+             {"part_id": "transfer_chamber", "emissive": "#ef4444", "emissive_intensity": 0.8, "pulse": True},
+         ]},
+    ]
+
+    oxe_views = {
+        "view_3d": {"type": "threejs", "model_source": "procedural",
+                    "default_camera": {"position": [7, 5, 8], "target": [0, 1.8, 0]}},
+        "view_2d": {"type": "isometric",
+                    "projection": {"scale": 30, "angle_x": 30, "angle_y": 45},
+                    "view_label": "等角 2.5D 视图"},
+    }
+
+    oxe_model = MachineModelConfig(
+        model_id="TEL-DRM-UNIT",
+        model_name="TEL DRM UNITY 刻蚀机",
+        vendor="TEL",
+        process_type="ETCH",
+        version="1.0",
+        view_mode="isometric",
+        description="OXE 刻蚀机 2.5D 等角视图，匹配 OXE_2D.html 的 Canvas 渲染布局",
+        views_config_json=json.dumps(oxe_views, ensure_ascii=False),
+        parts_config_json=json.dumps(oxe_parts, ensure_ascii=False),
+        state_mapping_json=json.dumps(oxe_states, ensure_ascii=False),
+        hotspots_config_json=json.dumps(oxe_hotspots, ensure_ascii=False),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(oxe_model)
+
+    generic_parts = [
+        {"part_id": "main_body", "part_name": "机身主体", "part_type": "structure",
+         "view_3d": {"type": "box", "size": [4, 3, 3], "position": [0, 1.5, 0], "color": "#374151"}},
+        {"part_id": "top_section", "part_name": "顶部", "part_type": "structure",
+         "view_3d": {"type": "box", "size": [3.5, 2.5, 1], "position": [0, 4.25, 0], "color": "#1f2937"}},
+        {"part_id": "status_light", "part_name": "状态灯", "part_type": "indicator",
+         "view_3d": {"type": "cylinder", "size": [0.15, 0.15, 0.4], "position": [0, 5.7, 0], "color": "#22c55e"},
+         "animated": True},
+    ]
+
+    generic_states = [
+        {"state_id": "idle", "state_name": "待机", "color": "#9ca3af",
+         "part_overrides": [{"part_id": "status_light", "color": "#9ca3af"}]},
+        {"state_id": "run", "state_name": "运行", "color": "#22c55e",
+         "part_overrides": [{"part_id": "status_light", "color": "#22c55e"}]},
+        {"state_id": "error", "state_name": "故障", "color": "#ef4444",
+         "part_overrides": [{"part_id": "status_light", "color": "#ef4444", "pulse": True}]},
+        {"state_id": "maint", "state_name": "维护", "color": "#3b82f6",
+         "part_overrides": [{"part_id": "status_light", "color": "#3b82f6"}]},
+    ]
+
+    generic_views = {
+        "view_3d": {"type": "threejs", "model_source": "procedural",
+                    "default_camera": {"position": [7, 5, 8], "target": [0, 1.8, 0]}},
+    }
+
+    generic_model = MachineModelConfig(
+        model_id="GENERIC-ETCH",
+        model_name="通用刻蚀机 (默认)",
+        vendor="Generic",
+        process_type="ETCH",
+        version="1.0",
+        view_mode="threejs",
+        description="通用刻蚀机模型，用于未配置专用型号的机台",
+        views_config_json=json.dumps(generic_views, ensure_ascii=False),
+        parts_config_json=json.dumps(generic_parts, ensure_ascii=False),
+        state_mapping_json=json.dumps(generic_states, ensure_ascii=False),
+        hotspots_config_json=json.dumps([], ensure_ascii=False),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(generic_model)
+
+    vpo_mappings = [
+        {
+            "mapping_id": "pod_attach",
+            "description": "POD 穿入",
+            "trigger_event_type": "POD_ATTACH",
+            "trigger_event_code": "",
+            "trigger_condition": {},
+            "action_sequence": [
+                {"step": 1, "part_id": "pod", "action": "move_linear",
+                 "params": {"from": [0, -600, 200], "to": [0, -300, 200], "duration": 2.0, "easing": "easeInOut"}},
+                {"step": 2, "part_id": "pod", "action": "move_linear",
+                 "params": {"from": [0, -300, 200], "to": [0, -100, 300], "duration": 1.5, "easing": "easeInOut"}, "wait_for_step": 1},
+            ],
+            "rollback_event_type": "POD_DETACH",
+            "rollback_event_code": "",
+        },
+        {
+            "mapping_id": "pod_detach",
+            "description": "POD 脱出",
+            "trigger_event_type": "POD_DETACH",
+            "trigger_event_code": "",
+            "trigger_condition": {},
+            "action_sequence": [
+                {"step": 1, "part_id": "pod", "action": "move_linear",
+                 "params": {"from": [0, -100, 300], "to": [0, -300, 200], "duration": 1.5, "easing": "easeInOut"}},
+                {"step": 2, "part_id": "pod", "action": "move_linear",
+                 "params": {"from": [0, -300, 200], "to": [0, -600, 200], "duration": 2.0, "easing": "easeInOut"}, "wait_for_step": 1},
+            ],
+            "rollback_event_type": "POD_ATTACH",
+            "rollback_event_code": "",
+        },
+    ]
+
+    for mp in vpo_mappings:
+        db.add(EventActionMapping(
+            model_id="VPO-2200",
+            mapping_id=mp["mapping_id"],
+            description=mp["description"],
+            trigger_event_type=mp["trigger_event_type"],
+            trigger_event_code=mp["trigger_event_code"],
+            trigger_condition_json=json.dumps(mp["trigger_condition"], ensure_ascii=False),
+            action_sequence_json=json.dumps(mp["action_sequence"], ensure_ascii=False),
+            rollback_event_type=mp["rollback_event_type"],
+            rollback_event_code=mp["rollback_event_code"],
+            created_at=now,
+            updated_at=now,
+        ))
+
+    oxe_mappings = [
+        {
+            "mapping_id": "wafer_load_lp_to_chamber",
+            "description": "晶圆装载：Load Port → EFEM → 工艺腔",
+            "trigger_event_type": "TRANSFER",
+            "trigger_event_code": "WaferLoad",
+            "trigger_condition": {"from": "loadport", "to": "chamber"},
+            "action_sequence": [
+                {"step": 1, "part_id": "wafer", "action": "move_linear",
+                 "params": {"from": [-285, -80, 280], "to": [-150, 0, 280], "duration": 1.5, "easing": "easeInOut"}},
+                {"step": 2, "part_id": "efem_robot", "action": "rotate",
+                 "params": {"axis": "z", "angle": 90, "duration": 1.0, "easing": "easeInOut"}, "wait_for_step": 1},
+                {"step": 3, "part_id": "wafer", "action": "move_linear",
+                 "params": {"from": [-150, 0, 280], "to": [120, 0, 280], "duration": 2.0, "easing": "easeInOut"}, "wait_for_step": 2},
+                {"step": 4, "part_id": "vtm_robot", "action": "rotate",
+                 "params": {"axis": "z", "angle": -45, "duration": 1.0, "easing": "easeInOut"}, "wait_for_step": 3},
+                {"step": 5, "part_id": "wafer", "action": "move_linear",
+                 "params": {"from": [120, 0, 280], "to": [250, -150, 280], "duration": 1.5, "easing": "easeInOut"}, "wait_for_step": 4},
+            ],
+            "rollback_event_type": "TRANSFER",
+            "rollback_event_code": "WaferUnload",
+        },
+    ]
+
+    for mp in oxe_mappings:
+        db.add(EventActionMapping(
+            model_id="TEL-DRM-UNIT",
+            mapping_id=mp["mapping_id"],
+            description=mp["description"],
+            trigger_event_type=mp["trigger_event_type"],
+            trigger_event_code=mp["trigger_event_code"],
+            trigger_condition_json=json.dumps(mp["trigger_condition"], ensure_ascii=False),
+            action_sequence_json=json.dumps(mp["action_sequence"], ensure_ascii=False),
+            rollback_event_type=mp["rollback_event_type"],
+            rollback_event_code=mp["rollback_event_code"],
+            created_at=now,
+            updated_at=now,
+        ))
+
+    db.commit()
+
+
+def create_dt_event_raw_samples(db: Session):
+    """从alarm.docx样例生成DT_EVENT_RAW模拟数据（VPO-1机台真实事件模板）"""
+    existing = db.query(DT_EVENT_RAW).count()
+    if existing > 0:
+        print(f"[Seed] DT_EVENT_RAW已存在 ({existing}条)，跳过")
+        return
+
+    # VFEI事件样例数据（基于alarm.docx解析的真实模板）
+    base_time = datetime(2026, 6, 14, 7, 50, 0)
+    events = []
+
+    # Alarm事件模板
+    alarm_templates = [
+        {"alarm_id": "9003", "alarm_text": "測机時間快到了!LAST_TEST is out of Warning SPEC :: LastTime:2026-06-12 07:42:44", "severity": "warn"},
+        {"alarm_id": "9004", "alarm_text": "超過測机限Run 產品批數, 需等待測机結果! :: LAST_TEST(NULL). 目前已Run批數(0).", "severity": "crit"},
+        {"alarm_id": "20011", "alarm_text": "Pod DirtyBit <> Cassette DirtyBit! :: PodDirtyBit:0CassetteDirtyBit=2", "severity": "warn"},
+        {"alarm_id": "0201", "alarm_text": "SERIAL_ID=328201,電池電壓异常！ :: 此POD即將沒電，請盡快送至W/S處理，謝謝！", "severity": "crit"},
+        {"alarm_id": "0411", "alarm_text": "此POD尚余3天到清洗日期，請盡速更換新POD, Pod Clean Due Date=2026-06-18 :: No Alarm Description", "severity": "warn"},
+    ]
+
+    # 生成连续多天的alarm事件
+    tid = 21000
+    for day_offset in range(5):
+        day_base = base_time + timedelta(days=day_offset)
+        for i in range(20):
+            tpl = alarm_templates[i % len(alarm_templates)]
+            ts = day_base + timedelta(minutes=i * 15 + random.randint(0, 10))
+            lot_ids = ["V3NL8", "V394K", "PG0R3", "V39S5", "V3QS6", None]
+            lot_id = lot_ids[i % len(lot_ids)]
+            payload = {
+                "lot_id": lot_id or "NULL",
+                "run_mode": "NULL",
+                "event_type": "VFEI",
+                "event_name": "EC_ALARM_REPORT",
+                "port_id": "1",
+                "cassette_id": f"EMPTY{random.randint(10000,99999)}{random.choice(['A','B'])}",
+                "chamber_id": "1",
+                "smif_id": "1",
+                "batch_id": lot_id or "NULL",
+                "unit_id": "1",
+                "slot_id": "NULL",
+                "alarm_id": tpl["alarm_id"],
+                "alarm_text": tpl["alarm_text"],
+            }
+            events.append(DT_EVENT_RAW(
+                raw_id=f"RV-{tid}",
+                tool_id="VPO-01",
+                source_system="RV",
+                source_message_id=f"TID.{tid}",
+                received_ts_utc=ts.isoformat(),
+                event_ts_utc=ts.isoformat(),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+                parse_status="PARSED",
+                error_message=None,
+            ))
+            tid += 1
+
+    # 生成DETACH_POD_PLACE事件（Pod放置/分离）
+    lot_list = ["PG0R3", "V39S5", "V3NL8", "V394K", "V3QS6"]
+    for i, lot_id in enumerate(lot_list):
+        ts = base_time + timedelta(hours=i * 3 + 1)
+        payload = {
+            "lot_id": lot_id,
+            "run_mode": "UNPACK",
+            "event_type": "VFEI",
+            "event_name": "DETACH_POD_PLACE",
+            "port_id": "1",
+            "cassette_id": f"{random.randint(10000,99999)}{random.choice(['A','B','P','S','K'])}",
+            "chamber_id": "1",
+            "smif_id": "1",
+            "batch_id": lot_id,
+            "unit_id": "1",
+            "slot_id": "NULL",
+            "alarm_id": "NULL",
+            "alarm_text": "NULL",
+        }
+        events.append(DT_EVENT_RAW(
+            raw_id=f"RV-{tid}",
+            tool_id="VPO-1",
+            source_system="RV",
+            source_message_id=f"TID.{tid}",
+            received_ts_utc=ts.isoformat(),
+            event_ts_utc=ts.isoformat(),
+            payload_json=json.dumps(payload, ensure_ascii=False),
+            parse_status="PARSED",
+            error_message=None,
+        ))
+        tid += 1
+
+    # 生成T01、T09、T11、T15刻蚀机的丰富VFEI事件（支持回放）
+    oxe_machines = ["T01", "T09", "T11", "T15"]
+    for m_idx, m_id in enumerate(oxe_machines):
+        lot_id = f"LOT{100000 + m_idx * 1000 + random.randint(100, 999)}"
+        recipe = f"REC-ETCH-{chr(65 + m_idx % 2)}"
+        day_base = base_time + timedelta(days=m_idx % 3)
+        
+        # 生成一个完整的Lot处理流程（约2小时）
+        flow_events = [
+            ("POD_PLACED", 0, "pod", {"port": "1", "smif_id": "SMIF1", "cst_id": f"CS{random.randint(10000,99999)}K", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("LOCK_PORT_COMPLETED", 1, "pod", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("MVIN", 20, "pod", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("DOOR_OPEN", 180, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("LOAD_CYCLE_STARTED", 181, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "duration_sec": 60}),
+            ("LOAD_CYCLE_COMPLETED", 240, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("DOOR_CLOSE", 258, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("StartMapping_LEFT", 259, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "duration_sec": 120}),
+            ("EndMapping", 380, "process", {"port_id": "PORT1", "WAFERMAP": "1111111111111111111111111", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("Start", 380, "process", {"chamber_id": "CHAMBER_A", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("PS", 382, "process", {"chamber_id": "CHAMBER_A", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+        ]
+        
+        # 添加25片晶圆的WaferLoaded/WaferUnloaded事件
+        for wafer_idx in range(25):
+            load_offset = 430 + wafer_idx * 300
+            unload_offset = load_offset + 280
+            flow_events.append((
+                "WaferLoaded", load_offset, "process",
+                {"port_id": "PORT1", "chamber_id": "CHAMBER_A", "wafer_id": wafer_idx + 1, "slot": wafer_idx + 1,
+                 "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "duration_sec": 6}
+            ))
+            flow_events.append((
+                "WaferUnloaded", unload_offset, "process",
+                {"port_id": "PORT1", "chamber_id": "CHAMBER_A", "wafer_id": wafer_idx + 1, "slot": wafer_idx + 1,
+                 "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "duration_sec": 5}
+            ))
+        
+        # Lot结束事件
+        flow_events.extend([
+            ("LotEnd", 430 + 25 * 300 + 60, "process", {"port": "1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "QTY": 25}),
+            ("JobEnd", 430 + 25 * 300 + 61, "process", {"port": "1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("PE", 430 + 25 * 300 + 180, "process", {"chamber_id": "CHAMBER_A", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("ReadyToUnload", 430 + 25 * 300 + 181, "process", {"chamber_id": "CHAMBER_A", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "duration_sec": 10}),
+            ("DOOR_OPEN", 430 + 25 * 300 + 182, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("UNLOAD_CYCLE_COMPLETED", 430 + 25 * 300 + 183, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running", "duration_sec": 60}),
+            ("DOOR_CLOSE", 430 + 25 * 300 + 244, "process", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("MVOU", 430 + 25 * 300 + 245, "pod", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("UNLOCK_PORT_COMPLETED", 430 + 25 * 300 + 246, "pod", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Running"}),
+            ("POD_REMOVED", 430 + 25 * 300 + 255, "pod", {"port": "1", "smif_id": "SMIF1", "lot_id": lot_id, "recipe": recipe, "machine_state": "Idle"}),
+        ])
+        
+        # 生成事件
+        for ename, offset_min, cat, extra in flow_events:
+            ts = day_base + timedelta(minutes=offset_min)
+            payload = {
+                "event_type": "VFEI",
+                "event_name": ename,
+                "machine_id": m_id,
+                **extra
+            }
+            events.append(DT_EVENT_RAW(
+                raw_id=f"RV-{tid}",
+                tool_id=m_id,
+                source_system="RV",
+                source_message_id=f"TID.{tid}",
+                received_ts_utc=ts.isoformat(),
+                event_ts_utc=ts.isoformat(),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+                parse_status="PARSED",
+                error_message=None,
+            ))
+            tid += 1
+        
+        # 添加一些告警事件
+        for alarm_i in range(5):
+            ts = day_base + timedelta(minutes=60 + alarm_i * 45)
+            alarm_templates = [
+                ("9003", "測机時間快到了!LAST_TEST is out of Warning SPEC", "warn"),
+                ("20011", "Pod DirtyBit <> Cassette DirtyBit!", "warn"),
+                ("0411", "此POD尚余3天到清洗日期", "warn"),
+            ]
+            aid, atxt, sev = alarm_templates[alarm_i % len(alarm_templates)]
+            payload = {
+                "event_type": "VFEI",
+                "event_name": "EC_ALARM_REPORT",
+                "machine_id": m_id,
+                "lot_id": lot_id,
+                "port_id": "1",
+                "chamber_id": "1",
+                "alarm_id": aid,
+                "alarm_text": atxt,
+                "severity": sev,
+            }
+            events.append(DT_EVENT_RAW(
+                raw_id=f"RV-{tid}",
+                tool_id=m_id,
+                source_system="RV",
+                source_message_id=f"TID.{tid}",
+                received_ts_utc=ts.isoformat(),
+                event_ts_utc=ts.isoformat(),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+                parse_status="PARSED",
+                error_message=None,
+            ))
+            tid += 1
+
+    for ev in events:
+        db.add(ev)
+    db.commit()
+    print(f"[Seed] DT_EVENT_RAW样例数据生成完成 ({len(events)}条)")
+
+
 def init_seed_data(db: Session):
     print("[Seed] 开始生成模拟数据...")
 
@@ -316,5 +814,10 @@ def init_seed_data(db: Session):
 
     seed_ods_data(db, machines)
     print("[Seed] ODS数据生成完成")
+
+    create_machine_model_configs(db)
+    print("[Seed] 机台型号配置数据生成完成")
+
+    create_dt_event_raw_samples(db)
 
     print("[Seed] 所有模拟数据生成完成！")

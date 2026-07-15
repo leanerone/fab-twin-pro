@@ -80,8 +80,8 @@ function initScene() {
   controls.target.set(0, 0, 0)
 
   // 灯光
-  scene.add(new THREE.AmbientLight(0x3a4a6a, 0.5))
-  const sun = new THREE.DirectionalLight(0xffffff, 0.7)
+  scene.add(new THREE.AmbientLight(0xb0c4de, 1.2))
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5)
   sun.position.set(20, 35, 15)
   sun.castShadow = true
   sun.shadow.mapSize.set(2048, 2048)
@@ -90,10 +90,13 @@ function initScene() {
   sun.shadow.camera.top = 30
   sun.shadow.camera.bottom = -30
   scene.add(sun)
-  const fill = new THREE.DirectionalLight(0x5a7aaa, 0.3)
+  const fill = new THREE.DirectionalLight(0x8ab4f8, 0.8)
   fill.position.set(-15, 15, -15)
   scene.add(fill)
-  const pt = new THREE.PointLight(0x00d4ff, 0.5, 50)
+  const fill2 = new THREE.DirectionalLight(0xffffff, 0.6)
+  fill2.position.set(0, 10, 20)
+  scene.add(fill2)
+  const pt = new THREE.PointLight(0x00d4ff, 1.0, 80)
   pt.position.set(0, 10, 0)
   scene.add(pt)
 

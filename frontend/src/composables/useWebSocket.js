@@ -1,10 +1,76 @@
-// WebSocket 连接管理：实时事件推送 + 自动重连
+// WebSocket 连接管理：实时事件推送 + 自动重连 + VFEI事件解析
 import { ref } from 'vue'
 
 let wsInstance = null
 let reconnectTimer = null
 let reconnectAttempts = 0
 const MAX_RECONNECT_DELAY = 8000
+
+// VFEI事件类型映射
+const VFEI_EVENT_TYPES = {
+  'EC_ALARM_REPORT': 'alarm',
+  'STATE_CHANGE': 'state',
+  'POD_ATTACH': 'pod',
+  'POD_DETACH': 'pod',
+  'ATTACH_POD_PLACE': 'pod',
+  'ATTACH_POD_UP': 'pod',
+  'ATTACH_CST_PLACE': 'pod',
+  'ATTACH_POD_DOWN': 'pod',
+  'ATTACH_POD_REMOVE': 'pod',
+  'DETACH_POD_PLACE': 'pod',
+  'DETACH_POD_UP': 'pod',
+  'DETACH_CST_REMOVE': 'pod',
+  'DETACH_POD_DOWN': 'pod',
+  'DETACH_POD_REMOVE': 'pod',
+  'POD_LOCK': 'pod',
+  'POD_UNLOCK': 'pod',
+  'READ_TAG': 'pod',
+  'WRITE_TAG': 'pod',
+  'BATCH_START': 'process',
+  'UI_CONFIRM': 'process',
+  'UI_DOUBLECHECK': 'process',
+  'WaferLoaded': 'transfer',
+  'WaferUnloaded': 'transfer',
+  'PS': 'process',
+  'PE': 'process',
+}
+
+// 解析VFEI事件
+function parseVfeiEvent(rawEvent) {
+  const event = { ...rawEvent }
+  
+  // 标准化事件类型
+  const evtName = (event.event_name || event.event_type || '').toUpperCase()
+  event.event_category = VFEI_EVENT_TYPES[evtName] || 'other'
+  
+  // 解析告警
+  if (evtName === 'EC_ALARM_REPORT' || event.event_type === 'ALARM') {
+    event.is_alarm = true
+    event.alarm_id = event.alarm_id || event.alarm_code || ''
+    event.alarm_text = event.alarm_text || event.description || ''
+    event.alarm_severity = event.alarm_severity || 'warn'
+    if (['9004', '0201'].includes(event.alarm_id)) event.alarm_severity = 'crit'
+  }
+  
+  // 解析Pod动作
+  if (evtName.includes('ATTACH')) {
+    event.pod_action = 'attach'
+  } else if (evtName.includes('DETACH')) {
+    event.pod_action = 'detach'
+  }
+  
+  // 解析状态
+  if (event.machine_state) {
+    event.machine_state = event.machine_state.toLowerCase()
+  }
+  
+  // 时间戳标准化
+  if (!event.timestamp && event.event_ts_utc) {
+    event.timestamp = event.event_ts_utc
+  }
+  
+  return event
+}
 
 // 单例：返回 WebSocket 管理对象
 export function useWebSocket() {
@@ -38,10 +104,16 @@ export function useWebSocket() {
           const msg = JSON.parse(evt.data)
           // 消息格式: { type: "event" | "machines", data: {...} }
           if (msg.type === 'event' && msg.data) {
-            store.applyRealtimeEvent(msg.data)
+            // 解析VFEI事件
+            const parsedEvent = parseVfeiEvent(msg.data)
+            store.applyRealtimeEvent(parsedEvent)
           } else if (msg.type === 'machines' && Array.isArray(msg.data)) {
             // 批量机台状态更新
             store.machines = msg.data
+          } else if (msg.type === 'vfei_event' && msg.data) {
+            // VFEI事件流
+            const parsedEvent = parseVfeiEvent(msg.data)
+            store.applyRealtimeEvent(parsedEvent)
           }
         } catch (e) {
           console.warn('[WS] 消息解析失败:', e)
@@ -56,6 +128,13 @@ export function useWebSocket() {
         store.wsConnected = false
         console.log('[WS] 连接关闭，准备重连...')
         this._scheduleReconnect(store)
+      }
+    },
+
+    // 发送事件（用于RV Bridge模拟）
+    send(event) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(event))
       }
     },
 
