@@ -50,14 +50,14 @@ class AIMCP:
             answer += "• 产品型号: DRAM-1X\n"
             answer += "• 晶圆数量: 25片\n"
             answer += "• 当前状态: 加工中\n"
-            answer += "• 机台: ETCH-201\n"
+            answer += "• 机台: OXE-01\n"
             answer += "• 开始时间: 10:30:00\n"
             answer += "• 预计完成: 10:55:00"
             sql = f"SELECT * FROM lots WHERE lot_id = '{lot_match}'"
             jump_timestamp = "2026-07-11T10:30:00"
 
         elif "报警" in question or "告警" in question:
-            answer = f"[本地AI] 机台 {machine_id or 'ETCH-201'} 告警统计\n"
+            answer = f"[本地AI] 机台 {machine_id or 'OXE-01'} 告警统计\n"
             answer += "• 今日告警: 15次\n"
             answer += "• 严重告警: 3次\n"
             answer += "• 警告: 12次\n"
@@ -74,7 +74,7 @@ class AIMCP:
             sql = "SELECT event_time, temperature FROM dt_event_std WHERE tool_id = :machine_id AND metric = 'temperature'"
 
         elif "状态" in question or "现状" in question:
-            answer = f"[本地AI] 机台 {machine_id or 'ETCH-201'} 当前状态\n"
+            answer = f"[本地AI] 机台 {machine_id or 'OXE-01'} 当前状态\n"
             answer += "• 状态: RUNNING\n"
             answer += "• 工艺步骤: 刻蚀工艺 #2\n"
             answer += "• 温度: 68.5°C\n"

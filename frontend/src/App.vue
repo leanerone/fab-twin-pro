@@ -1,10 +1,13 @@
 <script setup>
 import AppHeader from './components/AppHeader.vue'
 import { useAppStore } from './stores/app'
+import { useModelStore } from './stores/model'
 
-// 全局 store：启动时连接 WebSocket
+// 全局 store：启动时连接 WebSocket 并预加载机台型号配置与模型资源
 const appStore = useAppStore()
+const modelStore = useModelStore()
 appStore.connectWs()
+modelStore.loadModels()
 </script>
 
 <template>

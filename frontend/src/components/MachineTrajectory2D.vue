@@ -7,7 +7,7 @@ import { api } from '../api'
  * 显示机台在工厂楼层平面图上的位置和Lot批次的移动轨迹
  */
 const props = defineProps({
-  machineId: { type: String, default: 'ETCH-201' },
+  machineId: { type: String, default: 'OXE-01' },
   floorId: { type: Number, default: 3 },
   lots: { type: Array, default: () => [] },
   selectedLotId: { type: String, default: '' },

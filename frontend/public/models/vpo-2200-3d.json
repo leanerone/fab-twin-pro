@@ -1,0 +1,812 @@
+{
+  "version": "3.0.0",
+  "model_id": "VPO-2200-01-photo-aligned-light-3d-v3.0",
+  "units": "mm",
+  "envelope": {
+    "width": 540,
+    "depth": 760,
+    "height": 1030
+  },
+  "parts": [
+    {
+      "id": "base_plate",
+      "type": "box",
+      "size": [
+        520,
+        680,
+        38
+      ],
+      "position": [
+        0,
+        -10,
+        19
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#4b535c"
+    },
+    {
+      "id": "base_top_trim",
+      "type": "box",
+      "size": [
+        454,
+        600,
+        18
+      ],
+      "position": [
+        0,
+        -18,
+        54
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#707982"
+    },
+    {
+      "id": "base_front_panel",
+      "type": "box",
+      "size": [
+        500,
+        72,
+        72
+      ],
+      "position": [
+        0,
+        -352,
+        74
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#111827"
+    },
+    {
+      "id": "mounting_foot_fl",
+      "type": "cylinder",
+      "size": [
+        54,
+        54,
+        22
+      ],
+      "position": [
+        -214,
+        -298,
+        20
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#2f343a"
+    },
+    {
+      "id": "mounting_foot_fr",
+      "type": "cylinder",
+      "size": [
+        54,
+        54,
+        22
+      ],
+      "position": [
+        214,
+        -298,
+        20
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#2f343a"
+    },
+    {
+      "id": "mounting_foot_rl",
+      "type": "cylinder",
+      "size": [
+        54,
+        54,
+        22
+      ],
+      "position": [
+        -214,
+        288,
+        20
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#2f343a"
+    },
+    {
+      "id": "mounting_foot_rr",
+      "type": "cylinder",
+      "size": [
+        54,
+        54,
+        22
+      ],
+      "position": [
+        214,
+        288,
+        20
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#2f343a"
+    },
+    {
+      "id": "front_stage",
+      "type": "box",
+      "size": [
+        300,
+        240,
+        48
+      ],
+      "position": [
+        0,
+        -36,
+        124
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#cbd5e1"
+    },
+    {
+      "id": "left_inner_rail",
+      "type": "box",
+      "size": [
+        18,
+        306,
+        760
+      ],
+      "position": [
+        -181,
+        -22,
+        484
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#5f6972"
+    },
+    {
+      "id": "right_inner_rail",
+      "type": "box",
+      "size": [
+        18,
+        306,
+        760
+      ],
+      "position": [
+        181,
+        -22,
+        484
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#5f6972"
+    },
+    {
+      "id": "rear_panel",
+      "type": "box",
+      "size": [
+        330,
+        32,
+        690
+      ],
+      "position": [
+        0,
+        112,
+        444
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#b7ad99"
+    },
+    {
+      "id": "back_plate_top_cap",
+      "type": "box",
+      "size": [
+        382,
+        44,
+        42
+      ],
+      "position": [
+        0,
+        108,
+        802
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8f8778"
+    },
+    {
+      "id": "vent_panel",
+      "type": "box",
+      "size": [
+        246,
+        14,
+        520
+      ],
+      "position": [
+        0,
+        91,
+        390
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#8e969a"
+    },
+    {
+      "id": "vent_slot_01",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        174
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_02",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        198
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_03",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        222
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_04",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        246
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_05",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        270
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_06",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        294
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_07",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        318
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_08",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        342
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_09",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        366
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_10",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        390
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_11",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        414
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_12",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        438
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_13",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        462
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_14",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        486
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_15",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        510
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_16",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        534
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_17",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        558
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "vent_slot_18",
+      "type": "box",
+      "size": [
+        172,
+        10,
+        5
+      ],
+      "position": [
+        0,
+        80,
+        582
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#374151"
+    },
+    {
+      "id": "operator_control_box",
+      "type": "box",
+      "size": [
+        198,
+        92,
+        112
+      ],
+      "position": [
+        0,
+        -472,
+        76
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#111827"
+    },
+    {
+      "id": "control_box_face",
+      "type": "box",
+      "size": [
+        178,
+        8,
+        88
+      ],
+      "position": [
+        0,
+        -522,
+        80
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#17202a"
+    },
+    {
+      "id": "control_box_display",
+      "type": "box",
+      "size": [
+        74,
+        6,
+        22
+      ],
+      "position": [
+        -54,
+        -528,
+        106
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#e0f2fe"
+    },
+    {
+      "id": "control_box_knob_ring",
+      "type": "cylinder",
+      "size": [
+        64,
+        64,
+        8
+      ],
+      "position": [
+        0,
+        -530,
+        78
+      ],
+      "rotation_deg": [
+        90,
+        0,
+        0
+      ],
+      "color": "#e8c547"
+    },
+    {
+      "id": "control_box_knob",
+      "type": "cylinder",
+      "size": [
+        42,
+        42,
+        16
+      ],
+      "position": [
+        0,
+        -536,
+        78
+      ],
+      "rotation_deg": [
+        90,
+        0,
+        0
+      ],
+      "color": "#c81e2d"
+    },
+    {
+      "id": "control_box_start_button",
+      "type": "cylinder",
+      "size": [
+        18,
+        18,
+        8
+      ],
+      "position": [
+        -58,
+        -532,
+        58
+      ],
+      "rotation_deg": [
+        90,
+        0,
+        0
+      ],
+      "color": "#22c55e"
+    },
+    {
+      "id": "control_box_reset_button",
+      "type": "cylinder",
+      "size": [
+        18,
+        18,
+        8
+      ],
+      "position": [
+        58,
+        -532,
+        58
+      ],
+      "rotation_deg": [
+        90,
+        0,
+        0
+      ],
+      "color": "#64748b"
+    },
+    {
+      "id": "control_box_arm",
+      "type": "box",
+      "size": [
+        210,
+        16,
+        16
+      ],
+      "position": [
+        0,
+        -414,
+        128
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#111827"
+    },
+    {
+      "id": "control_box_cable",
+      "type": "box",
+      "size": [
+        8,
+        82,
+        8
+      ],
+      "position": [
+        0,
+        -434,
+        50
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "color": "#111827"
+    }
+  ]
+}

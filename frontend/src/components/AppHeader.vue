@@ -22,7 +22,7 @@ function goDashboard() {
 }
 function goDetail() {
   // 若有选中机台则跳转，否则跳转默认
-  const id = appStore.selectedMachineId || 'ETCH-201'
+  const id = appStore.selectedMachineId || 'OXE-01'
   router.push(`/machine/${id}`)
 }
 

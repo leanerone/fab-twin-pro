@@ -9,6 +9,7 @@ import MachineModel3D from '../components/MachineModel3D.vue'
 import MachineModel2D from '../components/MachineModel2D.vue'
 import MachineIsoView from '../components/MachineIsoView.vue'
 import MachineVpoView from '../components/MachineVpoView.vue'
+import MachineVpo3DView from '../components/MachineVpo3DView.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
 import AlarmStats from '../components/AlarmStats.vue'
 import EventList from '../components/EventList.vue'
@@ -28,7 +29,7 @@ const modelStore = useModelStore()
 // === 状态 ===
 const machine = ref(null)
 const mode = ref('realtime')              // realtime / playback
-const playing = ref(false)
+const playing = ref(true)
 const speed = ref(2)
 const playbackDate = ref(new Date().toISOString().slice(0, 10))
 const cursor = ref(0)                     // 回放游标时间戳
@@ -52,6 +53,7 @@ const currentModelConfig = ref(null)
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
   if (vm === 'isometric' || vm === 'iso') return 'iso'
+  if (vm === 'vpo3d' || vm === 'vpo-3d') return 'vpo3d'
   if (vm === 'vpo' || vm === 'svg-vpo') return 'vpo'
   if (vm === 'hybrid') return '2d'
   if (vm === 'svg') return '2d'
@@ -62,7 +64,9 @@ const availableViews = computed(() => {
   const cfg = currentModelConfig.value
   if (!cfg) return [{ key: '3d', label: '🎯 3D模型' }, { key: '2d', label: '📐 2D原理图' }]
   const views = []
-  if (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid') {
+  const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' || 
+                 cfg.views_config?.view_2d?.type === 'vpo' || cfg.views_config?.view_3d?.type === 'vpo'
+  if (!isVpo && (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid')) {
     views.push({ key: '3d', label: '🎯 3D模型' })
   }
   if (cfg.view_mode === 'isometric' || cfg.view_mode === 'iso' || cfg.views_config?.view_2d?.type === 'isometric') {
@@ -71,7 +75,10 @@ const availableViews = computed(() => {
   if (cfg.view_mode === 'vpo' || cfg.view_mode === 'svg-vpo' || cfg.views_config?.view_2d?.type === 'vpo') {
     views.push({ key: 'vpo', label: '📋 VPO 2D' })
   }
-  if (cfg.views_config?.view_2d?.type === 'svg' || cfg.view_mode === 'svg' || cfg.view_mode === 'hybrid') {
+  if (cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' || cfg.views_config?.view_3d?.type === 'vpo') {
+    views.push({ key: 'vpo3d', label: '🎯 VPO 3D' })
+  }
+  if (!isVpo && (cfg.views_config?.view_2d?.type === 'svg' || cfg.view_mode === 'svg' || cfg.view_mode === 'hybrid')) {
     views.push({ key: '2d', label: '📋 2D视图' })
   }
   if (views.length === 0) views.push({ key: '3d', label: '🎯 3D模型' })
@@ -443,7 +450,7 @@ let playbackTimer = null
 let realtimeTimer = null
 
 // 当前机台
-const machineId = computed(() => props.id || appStore.selectedMachineId || 'ETCH-201')
+const machineId = computed(() => props.id || appStore.selectedMachineId || 'OXE-01')
 
 // 温度告警等级
 const tempClass = computed(() => {
@@ -565,6 +572,7 @@ function applyEventData(ev) {
 async function switchToPlayback() {
   mode.value = 'playback'
   stopPlayback()
+  playing.value = false
   events.value = []
   alarms.value = []
   // 加载历史事件
@@ -590,6 +598,7 @@ async function switchToPlayback() {
 function switchToRealtime() {
   mode.value = 'realtime'
   stopPlayback()
+  playing.value = true
   events.value = []
   alarms.value = []
   loadLatestEvents()
@@ -742,7 +751,7 @@ onMounted(() => {
 <template>
   <div class="detail-page">
     <!-- 左侧视图区 -->
-    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo', 'is-vpo': viewMode === 'vpo' }">
+    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso', 'is-vpo': viewMode === 'vpo' }">
       <!-- 视图模式切换按钮（根据机台型号动态显示） -->
       <div class="view-mode-switcher">
         <button
@@ -785,6 +794,7 @@ onMounted(() => {
         :current-state="currentState"
         :metrics="metrics"
         :run-state="runState"
+        :events="displayEvents"
       />
 
       <!-- VPO 2D视图 -->
@@ -798,12 +808,23 @@ onMounted(() => {
         :events="displayEvents"
       />
 
+      <!-- VPO 3D视图 -->
+      <MachineVpo3DView
+        v-else-if="viewMode === 'vpo3d'"
+        :machine="machine"
+        :model-config="currentModelConfig"
+        :current-state="currentState"
+        :metrics="metrics"
+        :run-state="runState"
+        :events="displayEvents"
+      />
+
       <button class="back-btn" @click="goBack">← 返回看板</button>
 
       <!-- 悬浮信息面板（2D模式下隐藏，避免遮挡） -->
       <div v-show="viewMode === '3d'" class="detail-left-panel glass-panel">
         <div class="detail-mid">{{ machineId }}</div>
-        <div class="detail-model">{{ machine?.model || 'TEL DRM UNITY' }} · 刻蚀机</div>
+        <div class="detail-model">{{ machine?.name || (machine?.model === 'TEL-DRM-UNIT' ? 'TEL DRM UNITY' : machine?.model) || 'TEL DRM UNITY' }} · 刻蚀机</div>
         <div class="state-badge" :class="currentState">{{ stateLabels[currentState] || currentState }}</div>
         <div class="detail-metrics">
           <div class="dm">
@@ -916,12 +937,15 @@ onMounted(() => {
   z-index: 15;
 }
 
-/* 2D模式下，切换按钮移到右上角（与返回按钮并排），避免遮挡2D内容 */
+/* 2D模式下，切换按钮移到右下角，避免遮挡PORT1/PORT2看板 */
 .detail-viewer.is-2d .view-mode-switcher {
   left: auto;
-  right: 120px;
+  right: 14px;
+  bottom: 14px;
+  top: auto;
   transform: none;
-  top: 10px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .detail-viewer.is-2d .vms-btn {

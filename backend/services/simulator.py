@@ -146,6 +146,37 @@ async def run_simulator():
                 db.add(sensor_event)
                 events_to_push.append(sensor_event)
 
+                # VPO机台：每5个周期生成一次POD穿入/脱出事件（用于动画演示）
+                if m.process_type == "OXIDE" or m.id.startswith("VPO"):
+                    if next_step == 0:
+                        pod_event = MachineEvent(
+                            machine_id=m.id,
+                            timestamp=m.updated_at,
+                            event_type="POD_ATTACH",
+                            event_code="POD_ATTACH",
+                            description=f"{m.id} POD穿入",
+                            level="info",
+                            metric=None,
+                            value=None,
+                            lot_id=None,
+                        )
+                        db.add(pod_event)
+                        events_to_push.append(pod_event)
+                    elif next_step == 5:
+                        pod_event = MachineEvent(
+                            machine_id=m.id,
+                            timestamp=m.updated_at,
+                            event_type="POD_DETACH",
+                            event_code="POD_DETACH",
+                            description=f"{m.id} POD脱出",
+                            level="info",
+                            metric=None,
+                            value=None,
+                            lot_id=None,
+                        )
+                        db.add(pod_event)
+                        events_to_push.append(pod_event)
+
                 machines_to_push.append(_machine_to_dict(m))
 
             db.commit()

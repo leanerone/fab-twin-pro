@@ -46,11 +46,27 @@ export const useModelStore = defineStore('model', () => {
     try {
       const data = await api.getModels()
       models.value = data || []
+      preloadModelAssets(data || [])
     } catch (e) {
       console.error('[modelStore] 加载机台型号失败:', e)
     } finally {
       loading.value = false
     }
+  }
+
+  function preloadModelAssets(modelList) {
+    const urls = new Set()
+    modelList.forEach(m => {
+      let cfg = m.views_config
+      if (typeof cfg === 'string') {
+        try { cfg = JSON.parse(cfg) } catch (e) { cfg = null }
+      }
+      const src = cfg?.view_3d?.model_source || cfg?.view_3d?.model_url
+      if (src && !src.startsWith('http')) urls.add(src)
+    })
+    urls.forEach(url => {
+      fetch(url).catch(e => console.warn('[modelStore] 预加载模型资源失败:', url, e))
+    })
   }
 
   async function loadModelDetail(modelId) {

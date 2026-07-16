@@ -8,7 +8,7 @@ import json
 from database import get_db
 from models import DT_EVENT_RAW
 
-router = APIRouter(prefix="/history", tags=["history"])
+router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
@@ -99,7 +99,7 @@ def get_history(
     获取指定机台的历史事件时间轴
 
     参数:
-    - tool_id: 机台ID (如 VPO-1, T01)
+    - tool_id: 机台ID (如 VPO-01, OXE-01)
     - start_time: 开始时间 (ISO格式, 如 2026-06-14T00:00:00)
     - end_time: 结束时间
     - event_category: 过滤事件类型 alarm/pod/process
@@ -181,13 +181,14 @@ def get_timeline(
     timeline = []
     for h in range(24):
         d = hours[h]
+        total = d["alarm"] + d["pod"] + d["process"] + d["other"]
         timeline.append({
             "hour": h,
             "alarm_count": d["alarm"],
             "pod_count": d["pod"],
             "process_count": d["process"],
-            "total_count": d["alarm"] + d["pod"] + d["process"] + d["other"],
-            "has_events": d["total_count"] > 0,
+            "total_count": total,
+            "has_events": total > 0,
         })
 
     return {

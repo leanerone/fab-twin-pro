@@ -3647,30 +3647,43 @@
             : normalizedStateText === "IDLE"
               ? "var(--muted)"
               : "var(--running)";
-        els.toolIdText.textContent = evt.tool_id || "-";
-        els.topToolIdText.textContent = evt.tool_id || "-";
-        els.runModeText.textContent = runModeText;
-        els.topRunModeText.textContent = runModeText;
-        els.runModeText.style.color = "var(--maintenance)";
-        els.topRunModeText.style.color = "var(--maintenance)";
-        els.stateText.textContent = stateText;
-        els.topStateText.textContent = stateText;
-        els.stateText.style.color = stateColor;
-        els.topStateText.style.color = stateColor;
-        els.nextStateText.textContent = nextStateDisplayText(eventIndex);
-        els.batchIdText.textContent = evt.batch_id || "-";
-        els.lotIdText.textContent = evt.lot_id || "-";
-        els.topLotIdText.textContent = evt.lot_id || "-";
-        els.cassetteIdText.textContent = evt.cassette_id || evt.pod_id || "-";
-        els.slotIdText.textContent = evt.slot_id || evt.wafer_id || "-";
-        els.portIdText.textContent = evt.port_id || "-";
-        els.smifIdText.textContent = evt.smif_id || "-";
-        els.chamberIdText.textContent = evt.chamber_id || "-";
-        els.unitIdText.textContent = evt.unit_id || "-";
-        els.alarmTextText.textContent = normalizedEventName === "ALARM" ? evt.alarm_text || "-" : "-";
-        els.alarmTextText.style.color = normalizedEventName === "ALARM" ? "var(--alarm)" : "var(--ink)";
-        els.eventTsText.textContent = eventTsText;
-        els.topEventTsText.textContent = eventTsText;
+        const setText = (el, value) => {
+          if (el) el.textContent = value;
+        };
+        const setStyle = (el, prop, value) => {
+          if (el) el.style[prop] = value;
+        };
+        setText(els.toolIdText, evt.tool_id || "-");
+        setText(els.topToolIdText, evt.tool_id || "-");
+        setText(els.runModeText, runModeText);
+        setText(els.topRunModeText, runModeText);
+        setStyle(els.runModeText, "color", "var(--maintenance)");
+        setStyle(els.topRunModeText, "color", "var(--maintenance)");
+        setText(els.stateText, stateText);
+        setText(els.topStateText, stateText);
+        setStyle(els.stateText, "color", stateColor);
+        setStyle(els.topStateText, "color", stateColor);
+        setText(els.nextStateText, nextStateDisplayText(eventIndex));
+        setText(els.batchIdText, evt.batch_id || "-");
+        setText(els.lotIdText, evt.lot_id || "-");
+        setText(els.topLotIdText, evt.lot_id || "-");
+        setText(els.cassetteIdText, evt.cassette_id || evt.pod_id || "-");
+        setText(els.slotIdText, evt.slot_id || evt.wafer_id || "-");
+        setText(els.portIdText, evt.port_id || "-");
+        setText(els.smifIdText, evt.smif_id || "-");
+        setText(els.chamberIdText, evt.chamber_id || "-");
+        setText(els.unitIdText, evt.unit_id || "-");
+        setText(
+          els.alarmTextText,
+          normalizedEventName === "ALARM" ? evt.alarm_text || "-" : "-",
+        );
+        setStyle(
+          els.alarmTextText,
+          "color",
+          normalizedEventName === "ALARM" ? "var(--alarm)" : "var(--ink)",
+        );
+        setText(els.eventTsText, eventTsText);
+        setText(els.topEventTsText, eventTsText);
       }
       function rotatePoint(p, rot) {
         let x = p.x,

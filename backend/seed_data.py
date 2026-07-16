@@ -25,45 +25,45 @@ def create_machines(db: Session):
 
         # === 3F: 主生产楼层 ===
         # Line 1 (无SMIF)
-        {"id": "T01", "name": "刻蚀机 T01", "line": 1, "floor": 3, "has_smif": False, "x_pos": -8, "y_pos": 0, "floor_x": 5, "floor_y": 20},
-        {"id": "T02", "name": "刻蚀机 T02", "line": 1, "floor": 3, "has_smif": False, "x_pos": -4, "y_pos": 0, "floor_x": 12, "floor_y": 20},
-        {"id": "T03", "name": "刻蚀机 T03", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 19, "floor_y": 20},
-        {"id": "T04", "name": "刻蚀机 T04", "line": 1, "floor": 3, "has_smif": False, "x_pos": 4, "y_pos": 0, "floor_x": 26, "floor_y": 20},
-        {"id": "T05", "name": "刻蚀机 T05", "line": 1, "floor": 3, "has_smif": False, "x_pos": 8, "y_pos": 0, "floor_x": 33, "floor_y": 20},
-        {"id": "T06", "name": "刻蚀机 T06", "line": 1, "floor": 3, "has_smif": False, "x_pos": 12, "y_pos": 0, "floor_x": 5, "floor_y": 55},
-        {"id": "T07", "name": "刻蚀机 T07", "line": 1, "floor": 3, "has_smif": False, "x_pos": -8, "y_pos": 3, "floor_x": 12, "floor_y": 55},
-        {"id": "T08", "name": "刻蚀机 T08", "line": 1, "floor": 3, "has_smif": False, "x_pos": -4, "y_pos": 3, "floor_x": 19, "floor_y": 55},
-        {"id": "T09", "name": "刻蚀机 T09", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 3, "floor_x": 26, "floor_y": 55},
-        {"id": "T10", "name": "刻蚀机 T10", "line": 1, "floor": 3, "has_smif": False, "x_pos": 4, "y_pos": 3, "floor_x": 33, "floor_y": 55},
+        {"id": "OXE-01", "name": "刻蚀机 OXE-01", "line": 1, "floor": 3, "has_smif": False, "x_pos": -8, "y_pos": 0, "floor_x": 5, "floor_y": 20},
+        {"id": "OXE-02", "name": "刻蚀机 OXE-02", "line": 1, "floor": 3, "has_smif": False, "x_pos": -4, "y_pos": 0, "floor_x": 12, "floor_y": 20},
+        {"id": "OXE-03", "name": "刻蚀机 OXE-03", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 19, "floor_y": 20},
+        {"id": "OXE-04", "name": "刻蚀机 OXE-04", "line": 1, "floor": 3, "has_smif": False, "x_pos": 4, "y_pos": 0, "floor_x": 26, "floor_y": 20},
+        {"id": "OXE-05", "name": "刻蚀机 OXE-05", "line": 1, "floor": 3, "has_smif": False, "x_pos": 8, "y_pos": 0, "floor_x": 33, "floor_y": 20},
+        {"id": "OXE-06", "name": "刻蚀机 OXE-06", "line": 1, "floor": 3, "has_smif": False, "x_pos": 12, "y_pos": 0, "floor_x": 5, "floor_y": 55},
+        {"id": "OXE-07", "name": "刻蚀机 OXE-07", "line": 1, "floor": 3, "has_smif": False, "x_pos": -8, "y_pos": 3, "floor_x": 12, "floor_y": 55},
+        {"id": "OXE-08", "name": "刻蚀机 OXE-08", "line": 1, "floor": 3, "has_smif": False, "x_pos": -4, "y_pos": 3, "floor_x": 19, "floor_y": 55},
+        {"id": "OXE-09", "name": "刻蚀机 OXE-09", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 3, "floor_x": 26, "floor_y": 55},
+        {"id": "OXE-10", "name": "刻蚀机 OXE-10", "line": 1, "floor": 3, "has_smif": False, "x_pos": 4, "y_pos": 3, "floor_x": 33, "floor_y": 55},
         # Line 2 (有SMIF)
-        {"id": "T11", "name": "刻蚀机 T11", "line": 2, "floor": 3, "has_smif": True, "x_pos": -8, "y_pos": -3, "floor_x": 60, "floor_y": 20},
-        {"id": "T12", "name": "刻蚀机 T12", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -3, "floor_x": 67, "floor_y": 20},
-        {"id": "T13", "name": "刻蚀机 T13", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -3, "floor_x": 74, "floor_y": 20},
-        {"id": "T14", "name": "刻蚀机 T14", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -3, "floor_x": 81, "floor_y": 20},
-        {"id": "T15", "name": "刻蚀机 T15", "line": 2, "floor": 3, "has_smif": True, "x_pos": 8, "y_pos": -3, "floor_x": 88, "floor_y": 20},
-        {"id": "T16", "name": "刻蚀机 T16", "line": 2, "floor": 3, "has_smif": True, "x_pos": 12, "y_pos": -3, "floor_x": 60, "floor_y": 55},
-        {"id": "T17", "name": "刻蚀机 T17", "line": 2, "floor": 3, "has_smif": True, "x_pos": -8, "y_pos": -6, "floor_x": 67, "floor_y": 55},
-        {"id": "T18", "name": "刻蚀机 T18", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -6, "floor_x": 74, "floor_y": 55},
-        {"id": "T19", "name": "刻蚀机 T19", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -6, "floor_x": 81, "floor_y": 55},
-        {"id": "T20", "name": "刻蚀机 T20", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -6, "floor_x": 88, "floor_y": 55},
+        {"id": "OXE-11", "name": "刻蚀机 OXE-11", "line": 2, "floor": 3, "has_smif": True, "x_pos": -8, "y_pos": -3, "floor_x": 60, "floor_y": 20},
+        {"id": "OXE-12", "name": "刻蚀机 OXE-12", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -3, "floor_x": 67, "floor_y": 20},
+        {"id": "OXE-13", "name": "刻蚀机 OXE-13", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -3, "floor_x": 74, "floor_y": 20},
+        {"id": "OXE-14", "name": "刻蚀机 OXE-14", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -3, "floor_x": 81, "floor_y": 20},
+        {"id": "OXE-15", "name": "刻蚀机 OXE-15", "line": 2, "floor": 3, "has_smif": True, "x_pos": 8, "y_pos": -3, "floor_x": 88, "floor_y": 20},
+        {"id": "OXE-16", "name": "刻蚀机 OXE-16", "line": 2, "floor": 3, "has_smif": True, "x_pos": 12, "y_pos": -3, "floor_x": 60, "floor_y": 55},
+        {"id": "OXE-17", "name": "刻蚀机 OXE-17", "line": 2, "floor": 3, "has_smif": True, "x_pos": -8, "y_pos": -6, "floor_x": 67, "floor_y": 55},
+        {"id": "OXE-18", "name": "刻蚀机 OXE-18", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -6, "floor_x": 74, "floor_y": 55},
+        {"id": "OXE-19", "name": "刻蚀机 OXE-19", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -6, "floor_x": 81, "floor_y": 55},
+        {"id": "OXE-20", "name": "刻蚀机 OXE-20", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -6, "floor_x": 88, "floor_y": 55},
         {"id": "VPO-01", "name": "VPO氧化炉 VPO-01", "line": 1, "floor": 3, "has_smif": True, "x_pos": 16, "y_pos": 0, "floor_x": 40, "floor_y": 8, "process_type": "OXIDE", "model": "VPO-2200"},
         {"id": "STK-3F", "name": "STK传输机 3F", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 47, "floor_y": 38, "process_type": "STK"},
 
         # === 4F: 刻蚀区扩展 ===
-        {"id": "T51", "name": "刻蚀机 T51", "line": 1, "floor": 4, "has_smif": False, "x_pos": -8, "y_pos": 0, "floor_x": 10, "floor_y": 20},
-        {"id": "T52", "name": "刻蚀机 T52", "line": 1, "floor": 4, "has_smif": False, "x_pos": -4, "y_pos": 0, "floor_x": 25, "floor_y": 20},
-        {"id": "T53", "name": "刻蚀机 T53", "line": 1, "floor": 4, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 35, "floor_y": 50},
-        {"id": "T61", "name": "刻蚀机 T61", "line": 2, "floor": 4, "has_smif": True, "x_pos": 4, "y_pos": 0, "floor_x": 60, "floor_y": 20},
-        {"id": "T62", "name": "刻蚀机 T62", "line": 2, "floor": 4, "has_smif": True, "x_pos": 8, "y_pos": 0, "floor_x": 75, "floor_y": 20},
-        {"id": "T63", "name": "刻蚀机 T63", "line": 2, "floor": 4, "has_smif": True, "x_pos": 12, "y_pos": 0, "floor_x": 85, "floor_y": 45},
-        {"id": "T64", "name": "刻蚀机 T64", "line": 2, "floor": 4, "has_smif": True, "x_pos": 12, "y_pos": 3, "floor_x": 55, "floor_y": 50},
+        {"id": "OXE-51", "name": "刻蚀机 OXE-51", "line": 1, "floor": 4, "has_smif": False, "x_pos": -8, "y_pos": 0, "floor_x": 10, "floor_y": 20},
+        {"id": "OXE-52", "name": "刻蚀机 OXE-52", "line": 1, "floor": 4, "has_smif": False, "x_pos": -4, "y_pos": 0, "floor_x": 25, "floor_y": 20},
+        {"id": "OXE-53", "name": "刻蚀机 OXE-53", "line": 1, "floor": 4, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 35, "floor_y": 50},
+        {"id": "OXE-61", "name": "刻蚀机 OXE-61", "line": 2, "floor": 4, "has_smif": True, "x_pos": 4, "y_pos": 0, "floor_x": 60, "floor_y": 20},
+        {"id": "OXE-62", "name": "刻蚀机 OXE-62", "line": 2, "floor": 4, "has_smif": True, "x_pos": 8, "y_pos": 0, "floor_x": 75, "floor_y": 20},
+        {"id": "OXE-63", "name": "刻蚀机 OXE-63", "line": 2, "floor": 4, "has_smif": True, "x_pos": 12, "y_pos": 0, "floor_x": 85, "floor_y": 45},
+        {"id": "OXE-64", "name": "刻蚀机 OXE-64", "line": 2, "floor": 4, "has_smif": True, "x_pos": 12, "y_pos": 3, "floor_x": 55, "floor_y": 50},
         {"id": "STK-4F", "name": "STK传输机 4F", "line": 1, "floor": 4, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 47, "floor_y": 35, "process_type": "STK"},
     ]
 
     machines = []
     for m in machines_data:
         ptype = m.get("process_type", "ETCH") if m.get("process_type") else "ETCH"
-        default_model = m.get("model") or ("TEL DRM UNITY" if ptype == "ETCH" else ptype)
+        default_model = m.get("model") or ("TEL-DRM-UNIT" if ptype == "ETCH" else ptype)
         machine = Machine(
             id=m["id"],
             model=default_model,
@@ -195,7 +195,7 @@ def create_oht_positions(db: Session):
                 y_pos=3.0,
                 z_pos=0.0,
                 status="moving" if random.random() > 0.2 else "idle",
-                target_machine_id=f"ETCH-20{random.randint(1, 3)}" if random.random() > 0.3 else None,
+                target_machine_id=f"OXE-{random.randint(1, 20):02d}" if random.random() > 0.3 else None,
                 timestamp=(start_time + timedelta(seconds=i * 60)).isoformat(),
             )
             db.add(position)
@@ -347,9 +347,9 @@ def create_machine_model_configs(db: Session):
     ]
 
     vpo_views = {
-        "view_3d": {"type": "threejs", "model_source": "procedural",
+        "view_3d": {"type": "vpo", "model_source": "/models/vpo-2200-3d.json",
                     "default_camera": {"position": [700, -300, 400], "target": [0, 0, 400]}},
-        "view_2d": {"type": "svg", "svg_source": "procedural",
+        "view_2d": {"type": "vpo", "svg_source": "procedural",
                     "view_label": "正视图"},
     }
 
@@ -588,7 +588,7 @@ def create_machine_model_configs(db: Session):
 
 
 def create_dt_event_raw_samples(db: Session):
-    """从alarm.docx样例生成DT_EVENT_RAW模拟数据（VPO-1机台真实事件模板）"""
+    """从alarm.docx样例生成DT_EVENT_RAW模拟数据（VPO-01机台真实事件模板）"""
     existing = db.query(DT_EVENT_RAW).count()
     if existing > 0:
         print(f"[Seed] DT_EVENT_RAW已存在 ({existing}条)，跳过")
@@ -664,8 +664,8 @@ def create_dt_event_raw_samples(db: Session):
             "alarm_text": "NULL",
         }
         events.append(DT_EVENT_RAW(
-            raw_id=f"RV-{tid}",
-            tool_id="VPO-1",
+                raw_id=f"RV-{tid}",
+                tool_id="VPO-01",
             source_system="RV",
             source_message_id=f"TID.{tid}",
             received_ts_utc=ts.isoformat(),
@@ -676,8 +676,8 @@ def create_dt_event_raw_samples(db: Session):
         ))
         tid += 1
 
-    # 生成T01、T09、T11、T15刻蚀机的丰富VFEI事件（支持回放）
-    oxe_machines = ["T01", "T09", "T11", "T15"]
+    # 生成OXE-01、OXE-09、OXE-11、OXE-15刻蚀机的丰富VFEI事件（支持回放）
+    oxe_machines = ["OXE-01", "OXE-09", "OXE-11", "OXE-15"]
     for m_idx, m_id in enumerate(oxe_machines):
         lot_id = f"LOT{100000 + m_idx * 1000 + random.randint(100, 999)}"
         recipe = f"REC-ETCH-{chr(65 + m_idx % 2)}"
