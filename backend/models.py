@@ -183,7 +183,7 @@ class MachineEvent(Base):
     event_type = Column(String)                        # STATE/SENSOR/ALARM/TRANSFER
     event_code = Column(String)                        # 事件代码
     description = Column(Text)                         # 事件描述
-    level = Column(String, default="info")             # warn/crit/info
+    level = Column("LEVEL", String, default="info")    # warn/crit/info (Oracle reserved word)
     metric = Column(String, nullable=True)             # temperature/pressure/gasflow/rf
     value = Column(Float, nullable=True)               # 传感器数值
     lot_id = Column(String, nullable=True)             # 关联的 Lot
@@ -198,7 +198,7 @@ class Alarm(Base):
     timestamp = Column(String, index=True)
     alarm_code = Column(String)                        # TEMP_OVER/RF_DRIFT/PRESS_UNSTABLE/GAS_LEAK
     description = Column(Text)
-    level = Column(String, default="warn")             # crit/warn
+    level = Column("LEVEL", String, default="warn")    # crit/warn (Oracle reserved word)
     resolved = Column(Boolean, default=False)          # 是否已解决
     lot_id = Column(String, nullable=True)
 
@@ -274,6 +274,64 @@ class Vehicle(Base):
     target_machine_id = Column(String, nullable=True)  # 目标机台
     speed = Column(Float, default=1.0)                 # 运行速度
     updated_at = Column(String)
+
+
+# ========== 用户与权限表 ==========
+
+class User(Base):
+    """用户表"""
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True)
+    username = Column(String, nullable=False, unique=True)
+    display_name = Column(String, nullable=False)
+    email = Column(String)
+    department = Column(String)
+    role = Column(String, default="user")
+    windows_sid = Column(String, nullable=True, unique=True)
+    last_login_at = Column(String)
+    created_at = Column(String)
+    updated_at = Column(String)
+
+
+class Role(Base):
+    """角色表"""
+    __tablename__ = "roles"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+
+
+class Permission(Base):
+    """权限表"""
+    __tablename__ = "perm_data"
+
+    id = Column(String, primary_key=True)
+    name = Column("perm_name", String, nullable=False)
+    description = Column("perm_desc", String)
+    resource = Column("res_col", String)
+    action = Column("act_col", String)
+
+
+class RolePermission(Base):
+    """角色权限关联表"""
+    __tablename__ = "role_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_id = Column(String, index=True)
+    permission_id = Column(String, index=True)
+
+
+class MachineToolMapping(Base):
+    """机台ID与Tool ID映射表"""
+    __tablename__ = "machine_tool_mappings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    machine_id = Column(String, nullable=False, index=True)
+    tool_id = Column(String, nullable=False, index=True)
+    description = Column(String)
+    is_primary = Column(Boolean, default=True)
 
 
 # ========== 机台型号配置表（核心：建模规范 + 动作匹配）==========

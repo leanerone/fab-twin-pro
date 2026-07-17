@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
 const props = defineProps({
   machine: { type: Object, default: () => null },
@@ -911,10 +911,85 @@ function animate(now) {
 onMounted(async () => {
   await nextTick()
   draw2DBase()
-  currentPhaseLabel.value = ATTACH_FLOW[0].label
-  cycleTypeLabel.value = 'ATTACH'
-  animationFrameId = requestAnimationFrame(animate)
+  currentPhaseLabel.value = '待机'
+  cycleTypeLabel.value = 'IDLE'
+  // 初始不自动播放，先画一帧待机状态
+  if (svgRef.value) {
+    const idleState = computeAnimationState(performance.now())
+    drawAnimation(idleState, performance.now())
+  }
+  // 等待新事件驱动，不在加载时立即触发
 })
+
+// 监听事件，驱动动画
+let lastProcessedTs = ''
+let isInitialLoad = true
+watch(() => props.events, (evs) => {
+  if (evs && evs.length) {
+    if (isInitialLoad) {
+      // 首次加载：仅设置最新事件时间戳，不触发动画
+      isInitialLoad = false
+      const latest = evs[evs.length - 1]
+      lastProcessedTs = latest?.timestamp || latest?.event_ts_utc || ''
+      return
+    }
+    handleEventsUpdate(evs)
+  }
+}, { deep: true })
+
+function handleEventsUpdate(evs) {
+  if (!Array.isArray(evs) || !evs.length) return
+  const latest = evs[evs.length - 1]
+  const ts = latest?.timestamp || latest?.event_ts_utc || ''
+  if (ts === lastProcessedTs) return
+  lastProcessedTs = ts
+  const code = (latest?.event_code || latest?.event_name || '').toUpperCase()
+  if (/ATTACH_POD_PLACE|POD_LOAD|LOAD_POD/.test(code)) {
+    setCycleType('attach')
+    jumpToPhase('ATTACH_POD_PLACE')
+  } else if (/DETACH_POD_PLACE|POD_UNLOAD|UNLOAD_POD/.test(code)) {
+    setCycleType('detach')
+    jumpToPhase('DETACH_POD_PLACE')
+  } else if (/ATTACH_POD_UP|POD_UP/.test(code)) {
+    setCycleType('attach')
+    jumpToPhase('ATTACH_POD_UP')
+  } else if (/ATTACH_POD_DOWN|POD_DOWN/.test(code)) {
+    setCycleType('attach')
+    jumpToPhase('ATTACH_POD_DOWN')
+  } else if (/DETACH_POD_UP/.test(code)) {
+    setCycleType('detach')
+    jumpToPhase('DETACH_POD_UP')
+  } else if (/SCAN|READ_TAG|WRITE_TAG/.test(code)) {
+    jumpToPhase('READ_TAG')
+  } else if (/POD_LOCK|POD_UNLOCK|LATCH/.test(code)) {
+    jumpToPhase('POD_LOCK')
+  } else if (/ALARM|ABORT|ERROR/.test(code)) {
+    cycleTypeLabel.value = 'ALARM'
+    currentPhaseLabel.value = '报警'
+  } else {
+    return
+  }
+  if (animationFrameId == null) {
+    animationFrameId = requestAnimationFrame(animate)
+  }
+}
+
+function setCycleType(type) {
+  if (currentCycleType !== type) {
+    currentCycleType = type
+    cycleTypeLabel.value = type === 'attach' ? 'ATTACH' : 'DETACH'
+  }
+}
+
+function jumpToPhase(phaseKey) {
+  const flow = getCurrentFlow()
+  const idx = flow.findIndex(p => p.key === phaseKey)
+  if (idx >= 0) {
+    currentPhaseIndex = idx
+    phaseStartTime = performance.now()
+    currentPhaseLabel.value = flow[idx].label
+  }
+}
 
 onUnmounted(() => {
   if (animationFrameId) {

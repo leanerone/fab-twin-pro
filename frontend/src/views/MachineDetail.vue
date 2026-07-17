@@ -47,14 +47,20 @@ const selectedLotId = ref('')
 const transferTrigger = ref(0)
 
 // === 视图模式（根据机台型号自动选择） ===
-const viewMode = ref('3d')                // 3d / 2d / iso / hybrid
+const viewMode = ref('loading')           // loading / 3d / 2d / iso / vpo / vpo3d
 const currentModelConfig = ref(null)
+const modelConfigReady = ref(false)
 
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
+  // VPO机台：如果view_3d.type=vpo则优先显示3D，否则显示2D
+  if (vm === 'vpo' || vm === 'svg-vpo' || vm === 'vpo3d' || vm === 'vpo-3d') {
+    // 默认优先展示 3D 视图（更具沉浸感）
+    const cfg = modelStore.getModelById(modelStore.resolveModelId(machineModel))
+    if (cfg?.views_config?.view_3d?.type === 'vpo') return 'vpo3d'
+    return 'vpo'
+  }
   if (vm === 'isometric' || vm === 'iso') return 'iso'
-  if (vm === 'vpo3d' || vm === 'vpo-3d') return 'vpo3d'
-  if (vm === 'vpo' || vm === 'svg-vpo') return 'vpo'
   if (vm === 'hybrid') return '2d'
   if (vm === 'svg') return '2d'
   return '3d'
@@ -62,9 +68,9 @@ function resolveViewMode(machineModel) {
 
 const availableViews = computed(() => {
   const cfg = currentModelConfig.value
-  if (!cfg) return [{ key: '3d', label: '🎯 3D模型' }, { key: '2d', label: '📐 2D原理图' }]
+  if (!cfg) return []
   const views = []
-  const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' || 
+  const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' ||
                  cfg.views_config?.view_2d?.type === 'vpo' || cfg.views_config?.view_3d?.type === 'vpo'
   if (!isVpo && (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid')) {
     views.push({ key: '3d', label: '🎯 3D模型' })
@@ -470,6 +476,11 @@ const displayEvents = computed(() => events.value.slice(-60).reverse())
 
 // === 加载数据 ===
 async function loadMachine() {
+  // 加载时先清空视图，避免闪现ETCH模型
+  modelConfigReady.value = false
+  currentModelConfig.value = null
+  viewMode.value = 'loading'
+
   machine.value = await api.getMachine(machineId.value)
   if (machine.value) {
     currentState.value = machine.value.state
@@ -481,13 +492,15 @@ async function loadMachine() {
     metrics.waferCount = machine.value.wafer_count
     appStore.selectMachine(machineId.value)
 
-    const modelId = modelStore.resolveModelId(machine.value.model)
-    if (modelId && modelStore.models.length === 0) {
+    if (modelStore.models.length === 0) {
       await modelStore.loadModels()
     }
+    const modelId = modelStore.resolveModelId(machine.value.model)
     const cfg = modelStore.getModelById(modelId)
     currentModelConfig.value = cfg
-    viewMode.value = resolveViewMode(machine.value.model)
+    const resolved = resolveViewMode(machine.value.model)
+    viewMode.value = resolved
+    modelConfigReady.value = !!cfg
   }
   // 并行加载右侧面板数据
   loadAlarms()
@@ -676,7 +689,11 @@ function seek(pct) {
 
 // 日期变化
 function onDateChange(newDate) {
+  if (!newDate) return
   playbackDate.value = newDate
+  // 实时模式：根据日期重新加载告警/Lot
+  loadAlarms()
+  loadLots()
   if (mode.value === 'playback') {
     switchToPlayback()
   }
@@ -753,7 +770,7 @@ onMounted(() => {
     <!-- 左侧视图区 -->
     <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso', 'is-vpo': viewMode === 'vpo' }">
       <!-- 视图模式切换按钮（根据机台型号动态显示） -->
-      <div class="view-mode-switcher">
+      <div v-if="modelConfigReady" class="view-mode-switcher">
         <button
           v-for="v in availableViews"
           :key="v.key"
@@ -765,9 +782,15 @@ onMounted(() => {
         </button>
       </div>
 
+      <!-- 加载占位（避免闪现ETCH模型） -->
+      <div v-if="!modelConfigReady" class="model-loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">加载机台模型配置...</div>
+      </div>
+
       <!-- 3D模型视图 -->
       <MachineModel3D
-        v-if="viewMode === '3d'"
+        v-else-if="viewMode === '3d'"
         :machine="machine"
         :current-state="currentState"
         :metrics="metrics"
@@ -873,6 +896,18 @@ onMounted(() => {
 
     <!-- 右侧面板 -->
     <div class="detail-right">
+      <!-- 全局日期选择器（实时/回放都可见） -->
+      <div class="dr-date-bar">
+        <span class="dr-date-label">数据日期</span>
+        <input
+          type="date"
+          class="dr-date-input"
+          :value="playbackDate"
+          @change="onDateChange($event.target.value)"
+        />
+        <button class="dr-date-refresh" @click="onDateChange(playbackDate)" title="刷新数据">↻</button>
+      </div>
+
       <div class="dr-tabs">
         <button class="dr-tab" :class="{ active: rightTab === 'alarms' }" @click="rightTab = 'alarms'">告警</button>
         <button class="dr-tab" :class="{ active: rightTab === 'events' }" @click="rightTab = 'events'">事件</button>
@@ -924,6 +959,32 @@ onMounted(() => {
   position: relative;
   background: #040712;
   overflow: hidden;
+}
+
+/* 加载占位 */
+.model-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 5;
+  color: #94a3b8;
+  font-size: 13px;
+  pointer-events: none;
+}
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(0, 212, 255, 0.2);
+  border-top-color: #00d4ff;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 新增：视图模式切换按钮 */
@@ -1088,6 +1149,53 @@ onMounted(() => {
 .dr-tabs {
   display: flex;
   border-bottom: 1px solid var(--border);
+}
+
+/* 全局日期选择器 */
+.dr-date-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+}
+.dr-date-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.dr-date-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: monospace;
+  color-scheme: dark;
+}
+.dr-date-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.dr-date-refresh {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dr-date-refresh:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .dr-tab {
   flex: 1;

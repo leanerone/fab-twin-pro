@@ -1067,6 +1067,38 @@ watch(() => props.currentState, (state) => {
   chamberState.value = (state || 'idle').toLowerCase()
 })
 
+// 监听事件，驱动动画
+let lastEventTs = ''
+let isInitialLoad = true
+watch(() => props.events, (evs) => {
+  if (!Array.isArray(evs) || evs.length === 0) return
+  const latest = evs[evs.length - 1]
+  const latestTs = latest?.timestamp || latest?.event_ts_utc || ''
+  if (isInitialLoad) {
+    // 首次加载：仅设置最新事件时间戳，不触发动画
+    isInitialLoad = false
+    lastEventTs = latestTs
+    return
+  }
+  if (latestTs === lastEventTs) return
+  lastEventTs = latestTs
+  const code = (latest?.event_code || latest?.event_name || '').toUpperCase()
+  if (/POD_LOAD|ATTACH|DETACH_POD_PLACE|LOAD_POD|PLACE_POD/.test(code)) {
+    triggerAttach()
+  } else if (/POD_UNLOAD|DETACH|UNLOAD_POD|REMOVE_POD/.test(code)) {
+    triggerDetach()
+  }
+  if (/SCAN/.test(code)) {
+    scanActive.value = true
+  }
+  if (/ALARM|ABORT|ERROR/.test(code)) {
+    chamberState.value = 'alarm'
+  }
+  if (/COMPLETE|END|UNLOCK|FINISH/.test(code)) {
+    chamberState.value = 'running'
+  }
+}, { deep: true })
+
 onMounted(async () => {
   await nextTick()
   initScene()
@@ -1077,10 +1109,7 @@ onMounted(async () => {
   resizeHandler = () => onResize()
   window.addEventListener('resize', resizeHandler)
   onResize()
-
-  setTimeout(() => {
-    startAutoLoop()
-  }, 500)
+  // 不再自动播放，动画由 props.events 驱动
 })
 
 onUnmounted(() => {

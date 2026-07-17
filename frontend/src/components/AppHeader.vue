@@ -2,40 +2,62 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '../stores/auth'
 
-// 顶部导航栏：Logo + 导航 + 实时状态
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const clock = ref('')
+const showUserMenu = ref(false)
+const userMenuRef = ref(null)
 let clockTimer = null
 
-// 实时时钟
 function updateClock() {
   clock.value = new Date().toTimeString().slice(0, 8)
 }
 
-// 导航到页面
 function goDashboard() {
   router.push('/')
 }
 function goDetail() {
-  // 若有选中机台则跳转，否则跳转默认
   const id = appStore.selectedMachineId || 'OXE-01'
   router.push(`/machine/${id}`)
 }
 
-// 是否当前页
+function goModelEditor() {
+  router.push('/model-editor')
+}
+
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value
+}
+
+function handleLogout() {
+  authStore.logout()
+  window.location.hash = '#/login'
+}
+
+// 点击外部关闭菜单
+function onDocClick(e) {
+  if (userMenuRef.value && !userMenuRef.value.contains(e.target)) {
+    showUserMenu.value = false
+  }
+}
+
 const isDashboard = computed(() => route.name === 'dashboard')
 const isDetail = computed(() => route.name === 'machine-detail')
+const isModelEditor = computed(() => route.name === 'model-editor')
 
 onMounted(() => {
   updateClock()
   clockTimer = setInterval(updateClock, 1000)
+  document.addEventListener('click', onDocClick)
 })
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
+  document.removeEventListener('click', onDocClick)
 })
 </script>
 
@@ -48,6 +70,14 @@ onUnmounted(() => {
     <nav class="nav-tabs">
       <button class="nav-tab" :class="{ active: isDashboard }" @click="goDashboard">主页看板</button>
       <button class="nav-tab" :class="{ active: isDetail }" @click="goDetail">机台详情</button>
+      <button
+        v-if="authStore.hasPermission('model_edit')"
+        class="nav-tab"
+        :class="{ active: isModelEditor }"
+        @click="goModelEditor"
+      >
+        模型管理
+      </button>
     </nav>
     <div class="header-right">
       <div class="header-item">
@@ -58,6 +88,31 @@ onUnmounted(() => {
       <div class="header-item">机台总数 <b>{{ appStore.totalMachines }}</b></div>
       <div class="header-item">事件 <b>{{ appStore.totalEvents }}</b></div>
       <div class="header-item"><b>{{ clock }}</b></div>
+      <div ref="userMenuRef" class="user-menu-wrapper">
+        <button class="user-btn" @click="toggleUserMenu">
+          <span class="user-icon">👤</span>
+          <span class="user-name">{{ authStore.user?.display_name || '未登录' }}</span>
+          <span class="user-role">[{{ authStore.user?.role || '-' }}]</span>
+        </button>
+        <div v-if="showUserMenu" class="user-dropdown">
+          <div class="dropdown-item">
+            <span class="item-label">用户名</span>
+            <span class="item-value">{{ authStore.user?.username }}</span>
+          </div>
+          <div class="dropdown-item">
+            <span class="item-label">角色</span>
+            <span class="item-value">{{ authStore.user?.role }}</span>
+          </div>
+          <div class="dropdown-item">
+            <span class="item-label">部门</span>
+            <span class="item-value">{{ authStore.user?.department || '-' }}</span>
+          </div>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item logout-btn" @click="handleLogout">
+            <span>🚪</span> 退出登录
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 </template>
@@ -136,5 +191,81 @@ onUnmounted(() => {
 .header-item b {
   color: var(--text);
   font-weight: 600;
+}
+.user-menu-wrapper {
+  position: relative;
+}
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: rgba(0, 212, 255, 0.1);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.user-btn:hover {
+  background: rgba(0, 212, 255, 0.2);
+}
+.user-icon {
+  font-size: 14px;
+}
+.user-name {
+  font-weight: 600;
+}
+.user-role {
+  color: var(--accent);
+  font-size: 11px;
+}
+.user-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 200;
+}
+.dropdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dropdown-item:hover {
+  background: rgba(0, 212, 255, 0.1);
+}
+.item-label {
+  color: var(--text-dim);
+}
+.item-value {
+  color: var(--text);
+  font-weight: 600;
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+.logout-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  justify-content: center;
+  gap: 6px;
+}
+.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
 }
 </style>

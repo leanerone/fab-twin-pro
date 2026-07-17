@@ -82,15 +82,15 @@ function formatTime(ts) {
       <button class="pb-mode-btn" :class="{ active: mode === 'playback' }" @click="switchMode('playback')">回放</button>
     </div>
     <input type="date" class="pb-date" :value="date" @change="onDateChange" />
-    <button class="pb-play" @click="togglePlay">{{ playing ? '⏸' : '▶' }}</button>
-    <div class="pb-speeds">
+    <button v-if="mode === 'playback'" class="pb-play" @click="togglePlay">{{ playing ? '⏸' : '▶' }}</button>
+    <div v-if="mode === 'playback'" class="pb-speeds">
       <button v-for="s in speeds" :key="s" :class="{ active: speed === s }" @click="selectSpeed(s)">{{ s }}x</button>
     </div>
-    <div class="pb-track" @click="onTrackClick" @mousemove="onTrackDrag">
+    <div v-if="mode === 'playback'" class="pb-track" @click="onTrackClick" @mousemove="onTrackDrag">
       <div class="fill" :style="{ width: progress + '%' }"></div>
       <div class="knob" :style="{ left: progress + '%' }"></div>
     </div>
-    <div class="pb-time">{{ formatTime(cursor) }} / {{ formatTime(end) }}</div>
+    <div v-if="mode === 'playback'" class="pb-time">{{ formatTime(cursor) }} / {{ formatTime(end) }}</div>
   </div>
 </template>
 

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '../stores/auth'
 import KpiCards from '../components/KpiCards.vue'
 import MachineList from '../components/MachineList.vue'
 import FloorView3D from '../components/FloorView3D.vue'
@@ -10,6 +11,7 @@ import { api } from '../api'
 
 const appStore = useAppStore()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const floors = ref([])
 const currentFloor = ref(3)  // 默认主生产楼层
@@ -87,7 +89,11 @@ onMounted(async () => {
             <button class="view-toggle" @click="toggleViewMode">
               {{ viewMode === '3d' ? '📋 平面图' : '🎯 3D视图' }}
             </button>
-            <button class="view-toggle editor-btn" @click="router.push('/model-editor')">
+            <button
+              v-if="authStore.hasPermission('model_edit')"
+              class="view-toggle editor-btn"
+              @click="router.push('/model-editor')"
+            >
               🔧 模型编辑器
             </button>
           </div>

@@ -3,7 +3,9 @@ import random
 import json
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from models import Machine, Lot, Recipe, ChamberSnapshot, OHTPosition, Floor, FloorArea, MachineModelConfig, EventActionMapping, DT_EVENT_RAW
+import uuid
+
+from models import Machine, Lot, Recipe, ChamberSnapshot, OHTPosition, Floor, FloorArea, MachineModelConfig, EventActionMapping, DT_EVENT_RAW, User, Role, Permission, RolePermission, MachineToolMapping, Alarm, MachineEvent
 from services.ods import seed_ods_data
 
 product_names = ["DRAM-1X", "NAND-3D", "Logic-7nm", "Logic-5nm", "CMOS-Image", "Power-IC"]
@@ -46,7 +48,7 @@ def create_machines(db: Session):
         {"id": "OXE-18", "name": "刻蚀机 OXE-18", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -6, "floor_x": 74, "floor_y": 55},
         {"id": "OXE-19", "name": "刻蚀机 OXE-19", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -6, "floor_x": 81, "floor_y": 55},
         {"id": "OXE-20", "name": "刻蚀机 OXE-20", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -6, "floor_x": 88, "floor_y": 55},
-        {"id": "VPO-01", "name": "VPO氧化炉 VPO-01", "line": 1, "floor": 3, "has_smif": True, "x_pos": 16, "y_pos": 0, "floor_x": 40, "floor_y": 8, "process_type": "OXIDE", "model": "VPO-2200"},
+        {"id": "VPO-01", "name": "POD开盖机 PODOPENER-1", "line": 1, "floor": 3, "has_smif": True, "x_pos": 16, "y_pos": 0, "floor_x": 40, "floor_y": 8, "process_type": "PODOPENER", "model": "VPO-2200"},
         {"id": "STK-3F", "name": "STK传输机 3F", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 47, "floor_y": 38, "process_type": "STK"},
 
         # === 4F: 刻蚀区扩展 ===
@@ -120,42 +122,116 @@ def create_recipes(db: Session, machines):
 
 
 def create_lots(db: Session, machines):
-    today = datetime.now().strftime("%Y-%m-%d")
+    """创建Lot批次：覆盖过去5天 + 当天，确保历史回放可选日期"""
     lot_counter = 100000
+    base_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    vpo_lot_pool = ["V3NL8", "V394K", "PG0R3", "V39S5", "V3QS6", "PG0R4", "V394L"]
+
     for m in machines:
-        lot_count = 5 + random.randint(0, 3)
-        start_time = datetime.fromisoformat(f"{today}T08:00:00")
+        # 每台机台每天生成 5-8 个 Lot，覆盖过去5天到今天
+        for day_offset in range(5, -1, -1):
+            day_base = base_day - timedelta(days=day_offset)
+            lot_count = 5 + random.randint(0, 3)
+            start_time = day_base + timedelta(hours=8, minutes=random.randint(0, 30))
 
-        for i in range(lot_count):
-            lot_id = f"LOT{lot_counter}"
-            lot_counter += 1
-            cycle_duration = (20 + random.random() * 8) * 60
-            end_time = start_time + timedelta(seconds=cycle_duration)
+            for i in range(lot_count):
+                # VPO机台用特殊lot_id格式（带日期后缀确保唯一性）
+                if m.id.startswith("VPO") or m.process_type == "PODOPENER":
+                    base_lot = random.choice(vpo_lot_pool)
+                    actual_lot_id = f"{base_lot}-D{day_offset}-{i}"
+                else:
+                    actual_lot_id = f"LOT{lot_counter}"
+                    lot_counter += 1
 
-            status_roll = random.random()
-            status = "done"
-            if status_roll > 0.85:
-                status = "hold"
-            elif status_roll > 0.7:
-                status = "run"
-            elif status_roll > 0.6:
-                status = "pending"
+                cycle_duration = (20 + random.random() * 8) * 60
+                end_time = start_time + timedelta(seconds=cycle_duration)
 
-            lot = Lot(
-                id=lot_id,
-                machine_id=m.id,
-                product=product_names[random.randint(0, len(product_names)-1)],
-                wafer_count=24 + random.randint(0, 2),
-                status=status,
-                start_time=start_time.isoformat(),
-                end_time=end_time.isoformat(),
-                recipe_id=f"REC-ETCH-{chr(65 + random.randint(0, 1))}-{m.id}",
-            )
-            db.add(lot)
+                # 状态分布：当天部分为run/pending，过去日期为done/hold
+                if day_offset == 0:
+                    status_roll = random.random()
+                    if status_roll > 0.85:
+                        status = "hold"
+                    elif status_roll > 0.7:
+                        status = "run"
+                    elif status_roll > 0.6:
+                        status = "pending"
+                    else:
+                        status = "done"
+                else:
+                    status_roll = random.random()
+                    if status_roll > 0.92:
+                        status = "hold"
+                    else:
+                        status = "done"
 
-            start_time = end_time + timedelta(seconds=random.randint(-120, 300))
+                lot = Lot(
+                    id=actual_lot_id,
+                    machine_id=m.id,
+                    product=product_names[random.randint(0, len(product_names)-1)],
+                    wafer_count=24 + random.randint(0, 2),
+                    status=status,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat(),
+                    recipe_id=f"REC-ETCH-{chr(65 + random.randint(0, 1))}-{m.id}",
+                )
+                db.add(lot)
+
+                start_time = end_time + timedelta(seconds=random.randint(-120, 300))
 
     db.commit()
+    print(f"[Seed] Lot数据生成完成 ({lot_counter - 100000 + sum(1 for m in machines if m.id.startswith('VPO') or m.process_type == 'PODOPENER' for _ in range(6) for _ in range(5))} 条)")
+
+
+def create_alarms(db: Session, machines):
+    """创建告警数据：每台机台每天 2-3 条告警，覆盖过去5天+今天"""
+    # 告警模板（与DT_EVENT_RAW的alarm templates保持一致）
+    alarm_templates = [
+        {"alarm_code": "TEMP_OVER", "level": "warn", "description": "腔体温度超过阈值", "lot_id": None},
+        {"alarm_code": "RF_DRIFT", "level": "warn", "description": "RF功率漂移", "lot_id": None},
+        {"alarm_code": "PRESS_UNSTABLE", "level": "crit", "description": "腔体压力不稳定", "lot_id": None},
+        {"alarm_code": "GAS_LEAK", "level": "crit", "description": "气体流量异常", "lot_id": None},
+        {"alarm_code": "9003", "level": "warn", "description": "测试时间快到警告", "lot_id": "V3NL8"},
+        {"alarm_code": "9004", "level": "crit", "description": "超过测试限Run产品批数", "lot_id": "PG0R3"},
+        {"alarm_code": "20011", "level": "warn", "description": "Pod DirtyBit异常", "lot_id": "V39S5"},
+        {"alarm_code": "0201", "level": "crit", "description": "POD电池电压异常", "lot_id": None},
+        {"alarm_code": "0411", "level": "warn", "description": "POD清洗日期快到", "lot_id": None},
+    ]
+
+    base_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    count = 0
+    vpo_lot_pool = ["V3NL8", "V394K", "PG0R3", "V39S5", "V3QS6", "PG0R4", "V394L"]
+    for m in machines:
+        for day_offset in range(5, -1, -1):
+            day_base = base_day - timedelta(days=day_offset)
+            # 每台机台每天 1-3 条告警
+            alarm_count = 1 + random.randint(0, 2)
+            for i in range(alarm_count):
+                tpl = alarm_templates[(hash(m.id + str(day_offset)) + i) % len(alarm_templates)]
+                # 告警时间在工作时段 8:00-20:00
+                hour = 8 + random.randint(0, 11)
+                minute = random.randint(0, 59)
+                ts = day_base + timedelta(hours=hour, minutes=minute)
+                # VPO/PODOPENER 使用固定lot_id池
+                if m.id.startswith("VPO") or m.process_type == "PODOPENER":
+                    base_lot = tpl["lot_id"] or random.choice(vpo_lot_pool)
+                    tpl_lot = f"{base_lot}-D{day_offset}-{i}"
+                else:
+                    tpl_lot = tpl["lot_id"] or f"LOT{100000 + random.randint(0, 5000)}"
+
+                alarm = Alarm(
+                    machine_id=m.id,
+                    timestamp=ts.isoformat(),
+                    alarm_code=tpl["alarm_code"],
+                    description=tpl["description"],
+                    level=tpl["level"],
+                    resolved=day_offset > 0,  # 过去的告警标记为已解决
+                    lot_id=tpl_lot,
+                )
+                db.add(alarm)
+                count += 1
+
+    db.commit()
+    print(f"[Seed] 告警数据生成完成 ({count} 条)")
 
 
 def create_chamber_snapshots(db: Session, machines):
@@ -633,7 +709,7 @@ def create_dt_event_raw_samples(db: Session):
             }
             events.append(DT_EVENT_RAW(
                 raw_id=f"RV-{tid}",
-                tool_id="VPO-01",
+                tool_id="PODOPENER-1",
                 source_system="RV",
                 source_message_id=f"TID.{tid}",
                 received_ts_utc=ts.isoformat(),
@@ -665,7 +741,7 @@ def create_dt_event_raw_samples(db: Session):
         }
         events.append(DT_EVENT_RAW(
                 raw_id=f"RV-{tid}",
-                tool_id="VPO-01",
+                tool_id="PODOPENER-1",
             source_system="RV",
             source_message_id=f"TID.{tid}",
             received_ts_utc=ts.isoformat(),
@@ -806,6 +882,9 @@ def init_seed_data(db: Session):
     create_lots(db, machines)
     print("[Seed] Lot数据生成完成")
 
+    create_alarms(db, machines)
+    print("[Seed] 告警数据生成完成")
+
     create_chamber_snapshots(db, machines)
     print("[Seed] 腔体快照生成完成")
 
@@ -820,4 +899,148 @@ def init_seed_data(db: Session):
 
     create_dt_event_raw_samples(db)
 
+    create_roles_and_permissions(db)
+    print("[Seed] 角色权限数据生成完成")
+
+    create_users(db)
+    print("[Seed] 用户数据生成完成")
+
+    create_machine_tool_mappings(db)
+    print("[Seed] 机台Tool映射数据生成完成")
+
     print("[Seed] 所有模拟数据生成完成！")
+
+
+def create_roles_and_permissions(db: Session):
+    """创建角色和权限数据"""
+    existing = db.query(Role).count()
+    if existing > 0:
+        print(f"[Seed] 角色权限已存在 ({existing} 个)，跳过")
+        return
+
+    roles = [
+        {"id": "admin", "name": "管理员", "description": "系统管理员，拥有所有权限"},
+        {"id": "engineer", "name": "工程师", "description": "设备工程师，可查看和编辑模型"},
+        {"id": "user", "name": "普通用户", "description": "普通用户，只能使用基础功能"},
+    ]
+
+    for r in roles:
+        db.add(Role(id=r["id"], name=r["name"], description=r["description"]))
+
+    permissions = [
+        {"id": "machine_view", "name": "查看机台", "description": "查看机台状态和模型", "resource": "machine", "action": "view"},
+        {"id": "machine_edit", "name": "编辑机台", "description": "编辑机台配置和模型", "resource": "machine", "action": "edit"},
+        {"id": "floor_view", "name": "查看平面图", "description": "查看楼层平面图", "resource": "floor", "action": "view"},
+        {"id": "floor_edit", "name": "编辑平面图", "description": "编辑楼层平面图", "resource": "floor", "action": "edit"},
+        {"id": "model_view", "name": "查看模型", "description": "查看机台3D/2D模型", "resource": "model", "action": "view"},
+        {"id": "model_edit", "name": "编辑模型", "description": "编辑机台模型配置", "resource": "model", "action": "edit"},
+        {"id": "history_view", "name": "查看历史", "description": "查看历史数据和回放", "resource": "history", "action": "view"},
+        {"id": "ai_analysis", "name": "AI分析", "description": "使用AI分析功能", "resource": "ai", "action": "use"},
+        {"id": "alarm_view", "name": "查看告警", "description": "查看告警信息", "resource": "alarm", "action": "view"},
+        {"id": "user_manage", "name": "用户管理", "description": "管理用户和权限", "resource": "user", "action": "manage"},
+    ]
+
+    for p in permissions:
+        db.add(Permission(id=p["id"], name=p["name"], description=p["description"],
+                          resource=p["resource"], action=p["action"]))
+
+    role_permissions = [
+        ("admin", ["machine_view", "machine_edit", "floor_view", "floor_edit", 
+                   "model_view", "model_edit", "history_view", "ai_analysis", 
+                   "alarm_view", "user_manage"]),
+        ("engineer", ["machine_view", "machine_edit", "floor_view", "floor_edit", 
+                      "model_view", "model_edit", "history_view", "ai_analysis", "alarm_view"]),
+        ("user", ["machine_view", "floor_view", "model_view", "history_view", "alarm_view"]),
+    ]
+
+    for role_id, perm_ids in role_permissions:
+        for perm_id in perm_ids:
+            db.add(RolePermission(role_id=role_id, permission_id=perm_id))
+
+    db.commit()
+
+
+def create_users(db: Session):
+    """创建默认用户"""
+    existing = db.query(User).count()
+    if existing > 0:
+        print(f"[Seed] 用户已存在 ({existing} 个)，跳过")
+        return
+
+    users = [
+        {
+            "id": str(uuid.uuid4()),
+            "username": "admin",
+            "display_name": "管理员",
+            "email": "admin@fab-twin.com",
+            "department": "IT",
+            "role": "admin",
+            "windows_sid": "S-1-5-21-0000000000-0000000000-0000000001",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "username": "engineer",
+            "display_name": "设备工程师",
+            "email": "engineer@fab-twin.com",
+            "department": "设备部",
+            "role": "engineer",
+            "windows_sid": "S-1-5-21-0000000000-0000000000-0000000002",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "username": "user",
+            "display_name": "普通用户",
+            "email": "user@fab-twin.com",
+            "department": "生产部",
+            "role": "user",
+            "windows_sid": "S-1-5-21-0000000000-0000000000-0000000003",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "username": "default",
+            "display_name": "默认用户",
+            "email": "",
+            "department": "",
+            "role": "user",
+            "windows_sid": "S-1-5-21-0000000000-0000000000-0000000004",
+        },
+    ]
+
+    now = datetime.now().isoformat()
+    for u in users:
+        db.add(User(
+            id=u["id"],
+            username=u["username"],
+            display_name=u["display_name"],
+            email=u["email"],
+            department=u["department"],
+            role=u["role"],
+            windows_sid=u["windows_sid"],
+            last_login_at=now,
+            created_at=now,
+            updated_at=now,
+        ))
+
+    db.commit()
+
+
+def create_machine_tool_mappings(db: Session):
+    """创建机台与Tool ID映射（VPO→PODOPENER）"""
+    existing = db.query(MachineToolMapping).count()
+    if existing > 0:
+        print(f"[Seed] 机台映射已存在 ({existing} 个)，跳过")
+        return
+
+    mappings = [
+        {"machine_id": "VPO-01", "tool_id": "PODOPENER-1", "description": "VPO-01对应Tool ID PODOPENER-1", "is_primary": True},
+    ]
+
+    for m in mappings:
+        db.add(MachineToolMapping(
+            machine_id=m["machine_id"],
+            tool_id=m["tool_id"],
+            description=m["description"],
+            is_primary=m["is_primary"],
+        ))
+
+    db.commit()

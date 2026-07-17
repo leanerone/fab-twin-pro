@@ -1,14 +1,30 @@
 // API请求封装
 const BASE = '/api';
 
-async function request(method, path, data = null) {
+function getToken() {
+  return localStorage.getItem('fabtwin_token');
+}
+
+async function request(method, path, data = null, requireAuth = true) {
   const opts = {
     method,
     headers: { 'Content-Type': 'application/json' },
   };
+  if (requireAuth) {
+    const token = getToken();
+    if (token) {
+      opts.headers.Authorization = `Bearer ${token}`;
+    }
+  }
   if (data && method !== 'GET' && method !== 'DELETE') opts.body = JSON.stringify(data);
   const res = await fetch(BASE + path, opts);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('fabtwin_token');
+      window.location.hash = '#/login';
+    }
+    throw new Error(`API error: ${res.status}`);
+  }
   return res.json();
 }
 
@@ -88,6 +104,14 @@ export const api = {
     return request('GET', `/history/${toolId}/alarms?${qs}`);
   },
   getEventDetail: (toolId, rawId) => request('GET', `/history/${toolId}/events/${rawId}`),
+
+  // 认证API
+  login: () => request('POST', '/auth/login', null, false),
+  loginWithPassword: (username, password) => request('POST', '/auth/login-password', { username, password }, false),
+  getUserInfo: () => request('GET', '/auth/user'),
+  getPermissions: () => request('GET', '/auth/permissions'),
+  checkPermission: (permId) => request('GET', `/auth/check/${permId}`),
+  getMachineMapping: (machineId) => request('GET', `/auth/machine/${machineId}`),
 };
 
 export default api;

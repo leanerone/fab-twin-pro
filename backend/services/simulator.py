@@ -8,11 +8,22 @@
 """
 import asyncio
 import random
+import threading
 from datetime import datetime
 
 from database import SessionLocal
 from models import Machine, MachineEvent
 from services.realtime import manager
+
+# Oracle 自增 ID 生成器（替代 autoincrement）
+_simulator_id_counter = 0
+_simulator_id_lock = threading.Lock()
+
+def _next_event_id() -> int:
+    global _simulator_id_counter
+    with _simulator_id_lock:
+        _simulator_id_counter += 1
+        return 100000000 + _simulator_id_counter  # 大数字避免与现有数据冲突
 
 # 工艺周期（与 seed_data 保持一致）
 PROCESS_STEPS = [
@@ -55,6 +66,7 @@ def _make_sensor_event(machine_id: str, step: dict, lot_id=None) -> MachineEvent
     value = _noise(base, METRIC_AMP[metric])
     now = datetime.now().isoformat()
     return MachineEvent(
+        id=_next_event_id(),
         machine_id=machine_id,
         timestamp=now,
         event_type="SENSOR",
@@ -129,6 +141,7 @@ async def run_simulator():
                 m.updated_at = datetime.now().isoformat()
 
                 state_event = MachineEvent(
+                    id=_next_event_id(),
                     machine_id=m.id,
                     timestamp=m.updated_at,
                     event_type="STATE",
@@ -146,10 +159,17 @@ async def run_simulator():
                 db.add(sensor_event)
                 events_to_push.append(sensor_event)
 
-                # VPO机台：每5个周期生成一次POD穿入/脱出事件（用于动画演示）
-                if m.process_type == "OXIDE" or m.id.startswith("VPO"):
+                # VPO/PODOPENER机台：每5个周期生成一次POD穿入/脱出事件（用于动画演示）
+                if m.process_type == "PODOPENER" or m.process_type == "OXIDE" or m.id.startswith("VPO"):
+                    # VPO机台的POD事件关联VPO lot_id池
+                    vpo_pod_lot = None
+                    if m.id.startswith("VPO") or m.process_type == "PODOPENER":
+                        import random as _r
+                        _pool = ["V3NL8", "V394K", "PG0R3", "V39S5", "V3QS6", "PG0R4", "V394L"]
+                        vpo_pod_lot = f"{_r.choice(_pool)}-D0-{_r.randint(0, 6)}"
                     if next_step == 0:
                         pod_event = MachineEvent(
+                            id=_next_event_id(),
                             machine_id=m.id,
                             timestamp=m.updated_at,
                             event_type="POD_ATTACH",
@@ -158,12 +178,13 @@ async def run_simulator():
                             level="info",
                             metric=None,
                             value=None,
-                            lot_id=None,
+                            lot_id=vpo_pod_lot,
                         )
                         db.add(pod_event)
                         events_to_push.append(pod_event)
                     elif next_step == 5:
                         pod_event = MachineEvent(
+                            id=_next_event_id(),
                             machine_id=m.id,
                             timestamp=m.updated_at,
                             event_type="POD_DETACH",
@@ -172,7 +193,7 @@ async def run_simulator():
                             level="info",
                             metric=None,
                             value=None,
-                            lot_id=None,
+                            lot_id=vpo_pod_lot,
                         )
                         db.add(pod_event)
                         events_to_push.append(pod_event)
