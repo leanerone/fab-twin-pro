@@ -16,6 +16,19 @@ import EventList from '../components/EventList.vue'
 import LotList from '../components/LotList.vue'
 import AiAssistant from '../components/AiAssistant.vue'
 import HistoryReplay from '../components/HistoryReplay.vue'
+import { parseEventAction } from '../composables/useEventActionMapping'
+
+// 时间戳解析：统一处理东八区时间
+// 后端返回的时间戳已去掉Z后缀，但需兼容历史数据可能带Z的情况
+// 带Z的时间戳实际上是东八区时间被误标为UTC，需要去掉Z后按本地时间解析
+function parseTs(ts) {
+  if (!ts) return 0
+  const str = String(ts).trim()
+  // 去掉Z后缀和时区偏移，按本地时间（东八区）解析
+  const localStr = str.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '')
+  const d = new Date(localStr)
+  return isNaN(d.getTime()) ? 0 : d.getTime()
+}
 
 // 机台详情：3D 模型 + 2D原理图 + 回放 + 右侧 Tab（告警/事件/Lot/AI）
 const props = defineProps({
@@ -31,7 +44,8 @@ const machine = ref(null)
 const mode = ref('realtime')              // realtime / playback
 const playing = ref(true)
 const speed = ref(2)
-const playbackDate = ref(new Date().toISOString().slice(0, 10))
+const today = new Date()
+const playbackDate = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)
 const cursor = ref(0)                     // 回放游标时间戳
 const playbackStart = ref(0)
 const playbackEnd = ref(0)
@@ -53,7 +67,7 @@ const modelConfigReady = ref(false)
 
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
-  // VPO机台：如果view_3d.type=vpo则优先显示3D，否则显示2D
+  // PODOPENER机台：如果view_3d.type=vpo则优先显示3D，否则显示2D
   if (vm === 'vpo' || vm === 'svg-vpo' || vm === 'vpo3d' || vm === 'vpo-3d') {
     // 默认优先展示 3D 视图（更具沉浸感）
     const cfg = modelStore.getModelById(modelStore.resolveModelId(machineModel))
@@ -79,10 +93,10 @@ const availableViews = computed(() => {
     views.push({ key: 'iso', label: '📐 2.5D等角' })
   }
   if (cfg.view_mode === 'vpo' || cfg.view_mode === 'svg-vpo' || cfg.views_config?.view_2d?.type === 'vpo') {
-    views.push({ key: 'vpo', label: '📋 VPO 2D' })
+    views.push({ key: 'vpo', label: '📋 PODOPENER 2D' })
   }
   if (cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' || cfg.views_config?.view_3d?.type === 'vpo') {
-    views.push({ key: 'vpo3d', label: '🎯 VPO 3D' })
+    views.push({ key: 'vpo3d', label: '🎯 PODOPENER 3D' })
   }
   if (!isVpo && (cfg.views_config?.view_2d?.type === 'svg' || cfg.view_mode === 'svg' || cfg.view_mode === 'hybrid')) {
     views.push({ key: '2d', label: '📋 2D视图' })
@@ -510,12 +524,25 @@ async function loadMachine() {
 
 // 加载告警
 async function loadAlarms() {
-  const [list, stats] = await Promise.all([
-    api.getAlarms(machineId.value, playbackDate.value),
-    api.getAlarmStats(machineId.value, playbackDate.value),
-  ])
-  alarms.value = list || []
-  alarmStats.value = stats || alarmStats.value
+  // 使用历史告警API（DT_EVENT_RAW表中的EC_ALARM_REPORT事件）
+  const data = await api.getAlarmHistory(machineId.value, { limit: 100 })
+  const alarmList = data?.alarms || []
+  alarms.value = alarmList.map(a => ({
+    id: a.raw_id,
+    description: a.alarm_text,
+    level: a.severity || 'warn',
+    timestamp: a.timestamp,
+    alarm_code: a.alarm_id,
+  }))
+  // 统计
+  alarmStats.value = {
+    total: alarmList.length,
+    crit: alarmList.filter(a => a.severity === 'crit').length,
+    warn: alarmList.filter(a => a.severity === 'warn').length,
+    info: alarmList.filter(a => a.severity === 'info').length,
+    resolved: 0,
+    unresolved: alarmList.length,
+  }
 }
 
 // 加载 Lot
@@ -523,61 +550,99 @@ async function loadLots() {
   lots.value = (await api.getLots(machineId.value, playbackDate.value)) || []
 }
 
-// 加载最新事件
+// 加载最新事件（从DT_EVENT_RAW表获取）
 async function loadLatestEvents() {
-  const data = await api.getLatestEvents(machineId.value, 60)
-  if (data) {
-    events.value = data.reverse()
-    // 应用最新事件到模型
-    if (data.length) {
-      const latest = data[data.length - 1]
-      applyEventData(latest)
+  const resp = await api.getHistory(machineId.value, { limit: 60 })
+  const data = (resp?.events || []).map(e => ({
+    ...e,
+    machine_id: e.tool_id || machineId.value,
+    event_code: e.event_name,
+    description: e.event_name,
+  }))
+  if (data.length) {
+    if (mode.value === 'playback') {
+      events.value = data
+    }
+    applyEventData(data[data.length - 1])
+    // 记录初始最新时间戳，用于实时模式下判断新事件
+    const latestTs = data[data.length - 1]?.timestamp || data[data.length - 1]?.event_ts_utc || ''
+    if (latestTs && latestTs > lastProcessedRealtimeTs) {
+      lastProcessedRealtimeTs = latestTs
     }
   }
 }
 
 // === 实时模式：从 store 接收事件 ===
+let lastProcessedRealtimeTs = ''
+let realtimeEventsInitialized = false
 watch(() => appStore.recentEvents, (evs) => {
   if (mode.value !== 'realtime') return
   if (!evs.length) return
-  // 找到当前机台的事件
   const myEvents = evs.filter(e => e.machine_id === machineId.value)
-  myEvents.forEach(ev => {
+  if (!myEvents.length) return
+  // 首次接收事件时，只初始化时间戳，不处理历史事件
+  if (!realtimeEventsInitialized) {
+    realtimeEventsInitialized = true
+    const latestTs = myEvents[0]?.timestamp || myEvents[0]?.event_ts_utc || ''
+    if (latestTs && latestTs > lastProcessedRealtimeTs) {
+      lastProcessedRealtimeTs = latestTs
+    }
+    console.log('[MachineDetail] 实时事件初始化, lastProcessedRealtimeTs=', lastProcessedRealtimeTs)
+    return
+  }
+  // 只处理比上次更新的事件
+  const newEvents = myEvents.filter(e => {
+    const ts = e.timestamp || e.event_ts_utc || ''
+    return ts > lastProcessedRealtimeTs
+  })
+  if (!newEvents.length) return
+  console.log('[MachineDetail] 收到新实时事件:', newEvents.length, '个')
+  newEvents.forEach(ev => {
     events.value.push(ev)
     if (events.value.length > 200) events.value.shift()
     applyEventData(ev)
+    const ts = ev.timestamp || ev.event_ts_utc || ''
+    if (ts > lastProcessedRealtimeTs) lastProcessedRealtimeTs = ts
   })
 }, { deep: true })
 
 // 应用事件数据到模型
 function applyEventData(ev) {
   if (!ev) return
-  if (ev.event_type === 'STATE') {
+  const evtName = (ev.event_name || ev.event_code || '').toUpperCase()
+  const evtType = (ev.event_type || '').toUpperCase()
+
+  if (evtType === 'STATE') {
     currentState.value = ev.event_code || currentState.value
     processStep.value = ev.description || processStep.value
-  } else if (ev.event_type === 'SENSOR') {
+  } else if (evtType === 'SENSOR') {
     if (ev.metric === 'temperature') metrics.temp = ev.value
     if (ev.metric === 'pressure') metrics.pressure = ev.value
     if (ev.metric === 'gasflow') metrics.gas = ev.value
     if (ev.metric === 'rf') metrics.rf = ev.value
-  } else if (ev.event_type === 'ALARM') {
+  } else if (evtType === 'ALARM' || evtName === 'EC_ALARM_REPORT') {
     // 加入告警列表
-    if (!alarms.value.find(a => a.id === ev.id)) {
+    const alarmId = ev.alarm_id || ev.event_code || ev.id
+    if (!alarms.value.find(a => a.id === alarmId)) {
       alarms.value.unshift({
-        id: ev.id,
-        description: ev.description,
-        level: ev.level || 'warn',
+        id: alarmId,
+        description: ev.alarm_text || ev.description || ev.event_name,
+        level: ev.alarm_severity || ev.level || 'warn',
         timestamp: ev.timestamp,
-        alarm_code: ev.event_code,
+        alarm_code: ev.alarm_id || ev.event_code,
       })
       if (alarms.value.length > 30) alarms.value.pop()
     }
-  } else if (ev.event_type === 'TRANSFER') {
+  } else if (evtType === 'TRANSFER') {
     // 触发 3D 门/机械臂动画
     transferTrigger.value++
     if (/unload|卸载/i.test(ev.event_code + ev.description)) {
       metrics.waferCount++
     }
+  } else if (evtType === 'VFEI' || evtType === 'HOST') {
+    // PODOPENER 穿脱流程事件 - 更新状态（动画由3D组件通过watch events自动驱动）
+    currentState.value = evtName
+    processStep.value = ev.description || evtName
   }
 }
 
@@ -588,16 +653,21 @@ async function switchToPlayback() {
   playing.value = false
   events.value = []
   alarms.value = []
-  // 加载历史事件
-  historyData = (await api.getEvents(machineId.value, playbackDate.value)) || []
+  // 根据当前选择的日期加载该日历史事件
+  const start = `${playbackDate.value}T00:00:00`
+  const end = `${playbackDate.value}T23:59:59.999`
+  const resp = await api.getHistory(machineId.value, { start_time: start, end_time: end, limit: 5000 })
+  historyData = (resp?.events || []).map(e => ({
+    ...e,
+    machine_id: e.tool_id || machineId.value,
+    event_code: e.event_name,
+    description: e.event_name,
+    _ts: parseTs(e.timestamp),
+  }))
   if (!historyData.length) {
     console.warn('无历史数据')
     return
   }
-  // 解析时间戳
-  historyData.forEach(e => {
-    e._ts = new Date(e.timestamp).getTime()
-  })
   playbackStart.value = historyData[0]._ts
   playbackEnd.value = historyData[historyData.length - 1]._ts
   cursor.value = playbackStart.value
@@ -611,9 +681,18 @@ async function switchToPlayback() {
 function switchToRealtime() {
   mode.value = 'realtime'
   stopPlayback()
-  playing.value = true
+  playing.value = false
   events.value = []
   alarms.value = []
+  // 重置回放状态
+  cursor.value = 0
+  playbackStart.value = 0
+  playbackEnd.value = 0
+  historyData = []
+  playbackIdx = 0
+  // 重置实时事件初始化标记
+  realtimeEventsInitialized = false
+  lastProcessedRealtimeTs = ''
   loadLatestEvents()
   loadAlarms()
 }
@@ -668,23 +747,53 @@ function stopPlayback() {
 }
 
 // 时间轴跳转
+let seekDebounceTimer = null
 function seek(pct) {
   if (!historyData.length) return
-  const targetTime = playbackStart.value + pct * (playbackEnd.value - playbackStart.value)
-  cursor.value = targetTime
-  playbackIdx = historyData.findIndex(e => e._ts >= targetTime)
-  if (playbackIdx < 0) playbackIdx = historyData.length
-  // 重放到此点
-  events.value = []
-  alarms.value = []
-  let i = 0
-  while (i < historyData.length && historyData[i]._ts <= targetTime) {
-    applyEventData(historyData[i])
-    events.value.push(historyData[i])
-    if (events.value.length > 200) events.value.shift()
-    i++
+
+  // 跳转时暂停播放，避免自动开始播放
+  if (playing.value) {
+    playing.value = false
+    stopPlayback()
   }
-  playbackIdx = i
+
+  clearTimeout(seekDebounceTimer)
+  seekDebounceTimer = setTimeout(() => {
+    const targetTime = playbackStart.value + pct * (playbackEnd.value - playbackStart.value)
+    cursor.value = targetTime
+
+    const idx = bisectLeft(historyData, targetTime, (e) => e._ts)
+    playbackIdx = idx >= 0 ? idx : historyData.length
+
+    events.value = []
+    alarms.value = []
+
+    const batchSize = 50
+    let i = 0
+    while (i < historyData.length && historyData[i]._ts <= targetTime) {
+      applyEventData(historyData[i])
+      events.value.push(historyData[i])
+      i++
+      if (i % batchSize === 0) {
+        if (events.value.length > 200) events.value = events.value.slice(-200)
+      }
+    }
+    if (events.value.length > 200) events.value = events.value.slice(-200)
+    playbackIdx = i
+  }, 30)
+}
+
+function bisectLeft(arr, target, getKey) {
+  let low = 0, high = arr.length
+  while (low < high) {
+    const mid = (low + high) >> 1
+    if (getKey(arr[mid]) < target) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+  return low
 }
 
 // 日期变化
@@ -728,10 +837,13 @@ function jumpToTime(ts) {
 
 function doJump(ts) {
   if (!historyData.length) return
-  const target = new Date(ts).getTime()
-  if (isNaN(target)) return
+  const target = parseTs(ts)
+  if (!target) return
   const clamped = Math.max(playbackStart.value, Math.min(playbackEnd.value, target))
   const pct = (clamped - playbackStart.value) / (playbackEnd.value - playbackStart.value)
+  // 跳转前确保暂停
+  playing.value = false
+  stopPlayback()
   seek(pct)
 }
 
@@ -820,7 +932,7 @@ onMounted(() => {
         :events="displayEvents"
       />
 
-      <!-- VPO 2D视图 -->
+      <!-- PODOPENER 2D视图 -->
       <MachineVpoView
         v-else-if="viewMode === 'vpo'"
         :machine="machine"
@@ -829,9 +941,11 @@ onMounted(() => {
         :metrics="metrics"
         :run-state="runState"
         :events="displayEvents"
+        :paused="mode === 'playback' && !playing"
+        :mode="mode"
       />
 
-      <!-- VPO 3D视图 -->
+      <!-- PODOPENER 3D视图 -->
       <MachineVpo3DView
         v-else-if="viewMode === 'vpo3d'"
         :machine="machine"
@@ -840,6 +954,8 @@ onMounted(() => {
         :metrics="metrics"
         :run-state="runState"
         :events="displayEvents"
+        :paused="mode === 'playback' && !playing"
+        :mode="mode"
       />
 
       <button class="back-btn" @click="goBack">← 返回看板</button>
@@ -931,8 +1047,10 @@ onMounted(() => {
         <HistoryReplay
           :machine-id="machineId"
           :machine-state="machine?.state"
+          :external-date="playbackDate"
           @jump="jumpToTime"
           @replay-event="onReplayEvent"
+          @date-change="onDateChange"
         />
       </div>
 

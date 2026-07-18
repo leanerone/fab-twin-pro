@@ -67,9 +67,9 @@ const guideSections = [
     title: '🤖 第二步：AI辅助生成代码',
     content: `使用 GitHub Copilot 生成模型代码，参考以下提示词模板：
 
-【VPO 3D模型提示词】
-\`\`\`
-帮我生成一个Vue3 + Three.js的VPO（真空预对准）设备3D模型组件。
+【PODOPENER 3D模型提示词】
+```
+帮我生成一个Vue3 + Three.js的PODOPENER（POD开盖机）设备3D模型组件。
 要求：
 1. 包含以下部件：Base底座、ARM手臂、POD托架、Sensor传感器、ScanLine扫描线
 2. ARM手臂支持旋转和平移运动
@@ -112,8 +112,8 @@ const guideSections = [
 
 \`\`\`json
 {
-  "model_id": "VPO-01",
-  "model_name": "真空预对准机",
+  "model_id": "PODOPENER-1",
+  "model_name": "POD开盖机",
   "view_mode": "vpo3d",
   "state_mapping": [
     { "event_code": "POD_LOAD", "state": "loading", "color": "#22c55e" },
@@ -259,7 +259,7 @@ const eventCodeReference = [
         <div class="form-grid">
           <div class="form-item">
             <label>型号ID *</label>
-            <input v-model="newModel.model_id" placeholder="如：VPO-01" />
+            <input v-model="newModel.model_id" placeholder="如：PODOPENER-1" />
           </div>
           <div class="form-item">
             <label>型号名称</label>
@@ -288,8 +288,8 @@ const eventCodeReference = [
               <option value="threejs">Three.js 3D</option>
               <option value="svg">SVG 2D</option>
               <option value="isometric">2.5D 等角</option>
-              <option value="vpo">VPO 2D</option>
-              <option value="vpo3d">VPO 3D</option>
+              <option value="vpo">PODOPENER 2D</option>
+              <option value="vpo3d">PODOPENER 3D</option>
               <option value="hybrid">混合模式</option>
             </select>
           </div>

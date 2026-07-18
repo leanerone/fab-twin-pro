@@ -83,8 +83,8 @@ export function useWebSocket() {
       if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
         return
       }
-      // 通过 Vite proxy 代理 ws，或直连后端
-      const wsUrl = `ws://${location.hostname}:8001/ws/realtime`
+      // 通过 Vite proxy 代理 ws（避免直连后端跨端口被浏览器阻止）
+      const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/realtime`
       try {
         this.ws = new WebSocket(wsUrl)
       } catch (e) {
@@ -102,7 +102,7 @@ export function useWebSocket() {
       this.ws.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data)
-          // 消息格式: { type: "event" | "machines", data: {...} }
+          // 消息格式: { type: "event" | "machines" | "raw_event" | "cur_status", data: {...} }
           if (msg.type === 'event' && msg.data) {
             // 解析VFEI事件
             const parsedEvent = parseVfeiEvent(msg.data)
@@ -114,6 +114,33 @@ export function useWebSocket() {
             // VFEI事件流
             const parsedEvent = parseVfeiEvent(msg.data)
             store.applyRealtimeEvent(parsedEvent)
+          } else if (msg.type === 'raw_event' && msg.data) {
+            // DB轮询推送的原始事件（db_poller）
+            const raw = msg.data
+            console.log('[WS] 收到DB轮询事件:', raw.event_name, 'tool_id=', raw.tool_id, 'ts=', raw.timestamp)
+            const parsedEvent = parseVfeiEvent({
+              ...raw.payload,
+              machine_id: raw.tool_id,
+              tool_id: raw.tool_id,
+              event_name: raw.event_name,
+              event_type: raw.event_type || 'VFEI',
+              event_category: raw.category || 'other',
+              timestamp: raw.timestamp,
+              raw_id: raw.raw_id,
+              lot_id: raw.lot_id,
+              cassette_id: raw.cassette_id,
+              alarm_info: raw.alarm_info,
+            })
+            store.applyRealtimeEvent(parsedEvent)
+          } else if (msg.type === 'cur_status' && Array.isArray(msg.data)) {
+            // 当前状态更新（CUR表）
+            msg.data.forEach(cur => {
+              const m = store.machines.find(x => x.id === cur.tool_id)
+              if (m) {
+                m.updated_at = cur.timestamp || new Date().toISOString()
+                if (cur.event_name) m.process_step = cur.event_name
+              }
+            })
           }
         } catch (e) {
           console.warn('[WS] 消息解析失败:', e)

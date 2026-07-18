@@ -5,11 +5,32 @@ import api from '@/api'
 const props = defineProps({
   machineId: { type: String, required: true },
   machineState: { type: String, default: 'idle' },
+  externalDate: { type: String, default: '' },
 })
 
-const emit = defineEmits(['jump', 'replay-event'])
+const emit = defineEmits(['jump', 'replay-event', 'date-change'])
 
-const selectedDate = ref(getToday())
+// 时间戳解析：统一处理东八区时间，去掉Z后缀按本地时间解析
+function parseTs(ts) {
+  if (!ts) return 0
+  const str = String(ts).trim().replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '')
+  const d = new Date(str)
+  return isNaN(d.getTime()) ? 0 : d.getTime()
+}
+
+const selectedDate = ref(props.externalDate || getToday())
+
+// 外部日期变化时同步
+watch(() => props.externalDate, (newDate) => {
+  if (newDate && newDate !== selectedDate.value) {
+    selectedDate.value = newDate
+  }
+})
+
+// 内部日期变化时通知外部
+watch(selectedDate, (newDate) => {
+  emit('date-change', newDate)
+})
 const timeline = ref([])
 const events = ref([])
 const loading = ref(false)
@@ -37,7 +58,7 @@ async function loadEvents() {
   loading.value = true
   try {
     const start = `${selectedDate.value}T00:00:00`
-    const end = `${selectedDate.value}T23:59:59`
+    const end = `${selectedDate.value}T23:59:59.999`
     const params = { start_time: start, end_time: end, limit: 500 }
     if (filterCategory.value) {
       params.event_category = filterCategory.value
@@ -63,7 +84,7 @@ function selectEvent(ev) {
 }
 
 function jumpToHour(hour) {
-  const ts = `${selectedDate.value}T${String(hour).padStart(2, '0')}:00:00`
+  const ts = `${selectedDate.value}T${String(hour).padStart(2, '0')}:00:00.000`
   emit('jump', ts)
 }
 
@@ -94,8 +115,9 @@ function getSeverityColor(sev) {
 
 function formatTime(ts) {
   if (!ts) return '--:--'
-  const d = new Date(ts)
-  if (isNaN(d)) return ts.slice(11, 16)
+  const ms = parseTs(ts)
+  if (!ms) return String(ts).slice(11, 16) || '--:--'
+  const d = new Date(ms)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
@@ -124,12 +146,6 @@ watch(filterCategory, loadEvents)
 
 <template>
   <div class="history-replay">
-    <!-- 日期选择 -->
-    <div class="hr-header">
-      <input type="date" class="hr-date" v-model="selectedDate" />
-      <button class="hr-refresh" @click="refresh" title="刷新">↻</button>
-    </div>
-
     <!-- 事件统计 -->
     <div class="hr-stats">
       <div class="hr-stat" :class="{ active: filterCategory === '' }" @click="filterCategory = ''">

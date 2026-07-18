@@ -4,11 +4,27 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
 import json
+import re
 
 from database import get_db
 from models import DT_EVENT_RAW
 
 router = APIRouter(prefix="/api/history", tags=["history"])
+
+
+def _normalize_ts(ts: str) -> str:
+    """标准化时间戳：去掉Z后缀和时区信息，统一为东八区本地时间格式
+    数据库中存在两种格式：
+    1. 2026-07-12T08:00:00.000Z （本地时间被错误标记为UTC）
+    2. 2026-07-18T20:25:00.054573 （本地时间无后缀）
+    统一返回: 2026-07-12T08:00:00.000 （无时区后缀，前端按本地时间解析）
+    """
+    if not ts:
+        return ""
+    ts = str(ts).strip()
+    # 去掉Z后缀和时区偏移（+08:00等），因为数据本身就是东八区时间
+    ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
+    return ts
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
@@ -30,7 +46,9 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
         event_category = "alarm"
     elif event_name in ("DETACH_POD_PLACE", "ATTACH_POD_PLACE", "POD_PLACED", "POD_REMOVED", 
                         "LOCK_PORT_COMPLETED", "UNLOCK_PORT_COMPLETED", "MVIN", "MVOU",
-                        "POD_LOCK", "POD_UNLOCK", "READ_TAG", "WRITE_TAG"):
+                        "POD_LOCK", "POD_UNLOCK", "READ_TAG", "WRITE_TAG",
+                        "COMPLETED_PORT_LOCK", "COMPLETED_PORT_UNLOCK",
+                        "READ_BATTERY", "OPEN_POD", "CLOSE_POD"):
         event_category = "pod"
     elif event_name in ("STATE_CHANGE", "PROCESS_START", "PROCESS_END", 
                         "DOOR_OPEN", "DOOR_CLOSE", "LOAD_CYCLE_STARTED", "LOAD_CYCLE_COMPLETED",
@@ -41,7 +59,9 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
                         "ATTACH_POD_DOWN", "ATTACH_POD_REACH_POS", "UI_DOUBLECHECK",
                         "DETACH_POD_UP", "DETACH_POD_REACH_STAGE", "DETACH_CST_REMOVE",
                         "DETACH_POD_DOWN", "DETACH_POD_REACH_POS", "ATTACH_POD_REMOVE",
-                        "DETACH_POD_REMOVE"):
+                        "DETACH_POD_REMOVE",
+                        "BATCH_INFO_FROM_ECUI", "REACH_STAGE", "REACH_POS",
+                        "ACK_UI_DOUBLECHECK"):
         event_category = "process"
 
     # 提取alarm信息
@@ -70,7 +90,7 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
         "tool_id": row.tool_id,
         "source_system": row.source_system,
         "source_message_id": row.source_message_id,
-        "timestamp": row.event_ts_utc or row.received_ts_utc,
+        "timestamp": _normalize_ts(row.event_ts_utc or row.received_ts_utc),
         "parse_status": row.parse_status,
         "event_category": event_category,
         "event_name": event_name,
@@ -109,9 +129,9 @@ def get_history(
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
     if start_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc >= start_time)
+        query = query.filter(DT_EVENT_RAW.event_ts_utc >= _normalize_ts(start_time))
     if end_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc <= end_time)
+        query = query.filter(DT_EVENT_RAW.event_ts_utc <= _normalize_ts(end_time))
 
     query = query.order_by(DT_EVENT_RAW.event_ts_utc.asc())
     total = query.count()
@@ -146,7 +166,7 @@ def get_timeline(
         date = datetime.now().strftime("%Y-%m-%d")
 
     start = f"{date}T00:00:00"
-    end = f"{date}T23:59:59"
+    end = f"{date}T23:59:59.999999"
 
     rows = (
         db.query(DT_EVENT_RAW)
@@ -211,9 +231,9 @@ def get_alarm_history(
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
     if start_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc >= start_time)
+        query = query.filter(DT_EVENT_RAW.event_ts_utc >= _normalize_ts(start_time))
     if end_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc <= end_time)
+        query = query.filter(DT_EVENT_RAW.event_ts_utc <= _normalize_ts(end_time))
 
     query = query.order_by(DT_EVENT_RAW.event_ts_utc.desc())
     rows = query.limit(limit * 3).all()  # 多取一些用于过滤
@@ -280,7 +300,7 @@ def get_event_detail(
 
     ev["prev_event_id"] = prev_row.raw_id if prev_row else None
     ev["next_event_id"] = next_row.raw_id if next_row else None
-    ev["prev_timestamp"] = prev_row.event_ts_utc if prev_row else None
-    ev["next_timestamp"] = next_row.event_ts_utc if next_row else None
+    ev["prev_timestamp"] = _normalize_ts(prev_row.event_ts_utc) if prev_row else None
+    ev["next_timestamp"] = _normalize_ts(next_row.event_ts_utc) if next_row else None
 
     return ev

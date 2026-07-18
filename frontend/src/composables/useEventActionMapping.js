@@ -33,6 +33,22 @@ const EVENT_ACTION_DEFAULTS = {
   'DETACH_POD_REACH_POS': { action: 'podMove', params: { direction: 'detach', progress: 0.15 } },
   'DETACH_POD_REMOVE': { action: 'podMove', params: { direction: 'detach', progress: 0 } },
 
+  // PODOPENER 穿入流程（PACKING）
+  'POD_PLACED': { action: 'podPlace', params: { placed: true } },
+  'COMPLETED_PORT_LOCK': { action: 'podLock', params: { locked: true } },
+  'READ_BATTERY': { action: 'signalBlink', params: { type: 'battery' } },
+  'READ_TAG': { action: 'tagScan', params: { scan: true } },
+  'BATCH_INFO_FROM_ECUI': { action: 'uiConfirm', params: { type: 'batch_info' } },
+  'OPEN_POD': { action: 'podDoor', params: { open: true } },
+  'REACH_STAGE': { action: 'robotMove', params: { stage: true } },
+  'UI_CONFIRM': { action: 'uiConfirm', params: { type: 'confirm' } },
+  'CLOSE_POD': { action: 'podDoor', params: { open: false } },
+  'ACK_UI_DOUBLECHECK': { action: 'uiDoubleCheck', params: { scanner: true } },
+  'REACH_POS': { action: 'robotMove', params: { stage: false } },
+  'WRITE_TAG': { action: 'tagWrite', params: { signal: true } },
+  'COMPLETED_PORT_UNLOCK': { action: 'podLock', params: { locked: false } },
+  'POD_REMOVED': { action: 'podPlace', params: { placed: false } },
+
   // 锁定/解锁
   'POD_LOCK': { action: 'podLock', params: { locked: true } },
   'LOCK_PORT_COMPLETED': { action: 'podLock', params: { locked: true } },
@@ -199,6 +215,9 @@ export function useEventActionMapping(props) {
   const podLocked = ref(false)
   const scanActive = ref(false)
   const signalActive = ref(false)
+  const podDoorOpen = ref(false)
+  const robotAtStage = ref(false)
+  const currentPhase = ref('IDLE')
 
   // 处理单个事件
   function processEvent(event) {
@@ -226,10 +245,29 @@ export function useEventActionMapping(props) {
     }
 
     // 解析Pod锁定
-    if (evtName === 'POD_LOCK' || evtName === 'LOCK_PORT_COMPLETED') {
+    if (evtName === 'POD_LOCK' || evtName === 'LOCK_PORT_COMPLETED' || evtName === 'COMPLETED_PORT_LOCK') {
       podLocked.value = true
-    } else if (evtName === 'POD_UNLOCK' || evtName === 'UNLOCK_PORT_COMPLETED') {
+    } else if (evtName === 'POD_UNLOCK' || evtName === 'UNLOCK_PORT_COMPLETED' || evtName === 'COMPLETED_PORT_UNLOCK') {
       podLocked.value = false
+    }
+
+    // POD盖开关
+    if (evtName === 'OPEN_POD') {
+      podDoorOpen.value = true
+    } else if (evtName === 'CLOSE_POD') {
+      podDoorOpen.value = false
+    }
+
+    // 机械臂位置
+    if (evtName === 'REACH_STAGE') {
+      robotAtStage.value = true
+    } else if (evtName === 'REACH_POS') {
+      robotAtStage.value = false
+    }
+
+    // 更新当前阶段（来自mode）
+    if (event.mode || event.run_mode) {
+      currentPhase.value = event.mode || event.run_mode
     }
 
     // 解析Tag扫描
@@ -293,6 +331,9 @@ export function useEventActionMapping(props) {
     podLocked.value = false
     scanActive.value = false
     signalActive.value = false
+    podDoorOpen.value = false
+    robotAtStage.value = false
+    currentPhase.value = 'IDLE'
 
     // 按时间顺序处理所有事件
     events.forEach(event => processEvent(event))
@@ -308,6 +349,10 @@ export function useEventActionMapping(props) {
     podLocked,
     scanActive,
     signalActive,
+    podDoorOpen,
+    robotAtStage,
+    currentPhase,
+    phaseProgress: podProgress,
     processEvent,
     processEvents,
     parseEventAction,

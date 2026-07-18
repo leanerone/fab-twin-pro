@@ -1,17 +1,27 @@
 """FabTwin 半导体厂数字孪生 - FastAPI 入口"""
 import os
 import asyncio
+import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from config import API_HOST, API_PORT, CORS_ORIGINS, SIMULATION_ENABLED
+# 配置日志：确保db_poller等模块的logger.info能输出到控制台
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S'
+)
+
+from config import API_HOST, API_PORT, CORS_ORIGINS, SIMULATION_ENABLED, DB_POLLER_ENABLED
 from database import init_db, SessionLocal
 from models import Machine
 from seed_data import init_seed_data
 from routers import machines, events, lots, alarms, ai, oht, recipes, floors, models, history, auth
-from services.realtime import ConnectionManager
+from routers.rvmessages import router as rv_router
+from services.realtime import manager
 from services.simulator import start_simulator
+from services.db_poller import start_db_poller
 from services.cache import cache
 from services.ai_mcp import ai_mcp
 
@@ -38,9 +48,7 @@ app.include_router(floors.router, tags=["floors"])
 app.include_router(models.router, tags=["machine models"])
 app.include_router(history.router, tags=["history"])
 app.include_router(auth.router, tags=["auth"])
-
-# WebSocket 管理器
-manager = ConnectionManager()
+app.include_router(rv_router, tags=["rv"])
 
 # ========== WebSocket 端点 ==========
 @app.websocket("/ws/realtime")
@@ -74,6 +82,10 @@ def on_startup():
     if SIMULATION_ENABLED:
         asyncio.create_task(start_simulator(manager, cache))
         print("[Simulator] 模拟器已启动")
+
+    if DB_POLLER_ENABLED:
+        asyncio.create_task(start_db_poller())
+        print("[DB Poller] DB事件轮询服务已启动")
 
     print(f"[API] 服务运行在 http://{API_HOST}:{API_PORT}")
     print(f"[API] 文档地址: http://{API_HOST}:{API_PORT}/docs")

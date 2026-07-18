@@ -36,8 +36,10 @@ API_PORT = 8002
 CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
 
 # ========== 模拟配置 ==========
-SIMULATION_ENABLED = True        # 是否启用模拟器（Demo用）
+SIMULATION_ENABLED = False       # 是否启用模拟器（Demo用）
 SIMULATION_INTERVAL_MS = 2000    # 模拟器事件间隔（毫秒）
+DB_POLLER_ENABLED = True         # 是否启用DB事件轮询（WinForm/外部系统写入DB时用）
+DB_POLLER_INTERVAL_MS = 1000     # DB轮询间隔（毫秒）
 HISTORY_START_HOUR = 8           # 历史数据开始时间（小时）
 HISTORY_END_HOUR = 20            # 历史数据结束时间（小时）
 

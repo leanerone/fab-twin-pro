@@ -51,7 +51,7 @@ class LotOut(BaseModel):
     wafer_count: int
     status: str
     start_time: str
-    end_time: str
+    end_time: Optional[str] = None
 
 
 class AlarmOut(BaseModel):

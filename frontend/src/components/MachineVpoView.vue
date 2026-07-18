@@ -8,6 +8,8 @@ const props = defineProps({
   metrics: { type: Object, default: () => ({}) },
   runState: { type: Object, default: null },
   events: { type: Array, default: () => [] },
+  paused: { type: Boolean, default: false },
+  mode: { type: String, default: 'realtime' },  // realtime / playback
 })
 
 const containerRef = ref(null)
@@ -57,6 +59,40 @@ let phaseStartTime = 0
 
 const currentPhaseLabel = ref('待机')
 const cycleTypeLabel = ref('ATTACH')
+
+const EVENT_TO_ATTACH_PHASE = {
+  'POD_PLACED': 'ATTACH_POD_PLACE',
+  'COMPLETED_PORT_LOCK': 'POD_LOCK',
+  'READ_BATTERY': 'READ_TAG',
+  'READ_TAG': 'READ_TAG',
+  'BATCH_INFO_FROM_ECUI': 'BATCH_START',
+  'OPEN_POD': 'ATTACH_POD_UP',
+  'REACH_STAGE': 'ATTACH_POD_REACH_STAGE',
+  'UI_CONFIRM': 'UI_CONFIRM',
+  'CLOSE_POD': 'ATTACH_POD_DOWN',
+  'ACK_UI_DOUBLECHECK': 'UI_DOUBLECHECK',
+  'REACH_POS': 'ATTACH_POD_REACH_POS',
+  'WRITE_TAG': 'WRITE_TAG',
+  'COMPLETED_PORT_UNLOCK': 'POD_UNLOCK',
+  'POD_REMOVED': 'ATTACH_POD_REMOVE',
+}
+
+const EVENT_TO_DETACH_PHASE = {
+  'POD_PLACED': 'DETACH_POD_PLACE',
+  'COMPLETED_PORT_LOCK': 'POD_LOCK',
+  'READ_BATTERY': 'READ_TAG',
+  'READ_TAG': 'READ_TAG',
+  'BATCH_INFO_FROM_ECUI': 'BATCH_START',
+  'OPEN_POD': 'DETACH_POD_UP',
+  'REACH_STAGE': 'DETACH_POD_REACH_STAGE',
+  'UI_CONFIRM': 'DETACH_CST_REMOVE',
+  'CLOSE_POD': 'DETACH_POD_DOWN',
+  'ACK_UI_DOUBLECHECK': 'DETACH_POD_REACH_POS',
+  'REACH_POS': 'DETACH_POD_REACH_POS',
+  'WRITE_TAG': 'WRITE_TAG',
+  'COMPLETED_PORT_UNLOCK': 'POD_UNLOCK',
+  'POD_REMOVED': 'DETACH_POD_REMOVE',
+}
 
 function easeInOut(t) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
@@ -127,7 +163,7 @@ function draw2DBase() {
   }))
 
   const titleText = createSvgElement('text', { x: '56', y: '72', class: 'machine-label' })
-  titleText.textContent = 'VPO FRONT VIEW'
+  titleText.textContent = 'PODOPENER FRONT VIEW'
   svg.appendChild(titleText)
 
   const subtitleText = createSvgElement('text', { x: '56', y: '98', fill: '#64748b', 'font-size': '13' })
@@ -603,7 +639,7 @@ function drawAnimation(state, now) {
   const podOffsetX = state.podOffsetX
   const podOffsetY = state.podOffsetY
 
-  const latchColor = state.latchLocked ? '#16a34a' : '#dc2626'
+  const latchColor = state.latchLocked ? '#dc2626' : '#16a34a'
   const latchPositions = [
     { x: 348, y: 650, dx: -12 },
     { x: 348, y: 718, dx: -12 },
@@ -879,6 +915,12 @@ function drawAnimation(state, now) {
 }
 
 function animate(now) {
+  // 暂停时停止动画循环
+  if (props.paused) {
+    animationFrameId = null
+    return
+  }
+
   if (!startTime) {
     startTime = now
     phaseStartTime = now
@@ -889,6 +931,24 @@ function animate(now) {
   const phaseElapsed = now - phaseStartTime
 
   if (phaseElapsed >= phase.duration) {
+    // 实时模式：阶段完成后停止动画，等待下一个事件
+    if (props.mode === 'realtime') {
+      currentPhaseIndex++
+      if (currentPhaseIndex >= flow.length) {
+        currentPhaseIndex = 0
+        currentCycleType = currentCycleType === 'attach' ? 'detach' : 'attach'
+        cycleTypeLabel.value = currentCycleType === 'attach' ? 'ATTACH' : 'DETACH'
+      }
+      const newFlow = getCurrentFlow()
+      currentPhaseLabel.value = newFlow[currentPhaseIndex].label
+      // 绘制最后一帧然后停止
+      const state = computeAnimationState(phaseStartTime + phase.duration)
+      drawAnimation(state, phaseStartTime + phase.duration)
+      animationFrameId = null
+      return
+    }
+
+    // 回放模式：自动推进到下一个阶段
     currentPhaseIndex++
     phaseStartTime = now
 
@@ -923,53 +983,105 @@ onMounted(async () => {
 
 // 监听事件，驱动动画
 let lastProcessedTs = ''
-let isInitialLoad = true
+// mode切换时重置lastProcessedTs，避免历史事件触发动画
+// 实时模式下，events由MachineDetail保证只包含新事件
+watch(() => props.mode, () => {
+  lastProcessedTs = ''
+  // 停止当前动画
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
+  }
+  currentPhaseLabel.value = '待机'
+  cycleTypeLabel.value = 'IDLE'
+})
+
 watch(() => props.events, (evs) => {
   if (evs && evs.length) {
-    if (isInitialLoad) {
-      // 首次加载：仅设置最新事件时间戳，不触发动画
-      isInitialLoad = false
-      const latest = evs[evs.length - 1]
-      lastProcessedTs = latest?.timestamp || latest?.event_ts_utc || ''
-      return
+    // displayEvents 是倒序的，最新的在 index 0
+    const latest = evs[0]
+    const latestTs = latest?.timestamp || latest?.event_ts_utc || ''
+    // 实时模式下，如果lastProcessedTs为空（初始状态），且事件时间比当前时间早很多，说明是历史数据，不触发动画
+    if (props.mode === 'realtime' && lastProcessedTs === '') {
+      const eventTime = new Date(latestTs.replace(/Z$/, '')).getTime()
+      const now = Date.now()
+      // 如果事件时间早于5分钟前，认为是历史数据，不触发动画
+      if (now - eventTime > 5 * 60 * 1000) {
+        console.log('[VPO2D] 实时模式下跳过历史事件，时间差=', (now - eventTime) / 1000, '秒')
+        lastProcessedTs = latestTs
+        return
+      }
     }
+    if (latestTs === lastProcessedTs) return
     handleEventsUpdate(evs)
   }
 }, { deep: true })
 
+// 监听暂停状态
+watch(() => props.paused, (isPaused) => {
+  if (isPaused) {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId)
+      animationFrameId = null
+    }
+  } else {
+    // 实时模式下不自动启动循环，由事件驱动
+    // 回放模式下且非待机状态时恢复动画
+    if (props.mode === 'playback' && animationFrameId == null && currentPhaseLabel.value !== '待机') {
+      animationFrameId = requestAnimationFrame(animate)
+    }
+  }
+})
+
+function triggerEventPhase(code) {
+  if (EVENT_TO_ATTACH_PHASE.hasOwnProperty(code)) {
+    const phaseKey = EVENT_TO_ATTACH_PHASE[code]
+    setCycleType('attach')
+    jumpToPhase(phaseKey)
+    console.log('[VPO2D] 事件匹配(穿入):', code, '->', phaseKey)
+    return true
+  }
+  if (EVENT_TO_DETACH_PHASE.hasOwnProperty(code)) {
+    const phaseKey = EVENT_TO_DETACH_PHASE[code]
+    setCycleType('detach')
+    jumpToPhase(phaseKey)
+    console.log('[VPO2D] 事件匹配(脱出):', code, '->', phaseKey)
+    return true
+  }
+  console.log('[VPO2D] 事件未匹配到动画阶段:', code)
+  return false
+}
+
 function handleEventsUpdate(evs) {
   if (!Array.isArray(evs) || !evs.length) return
-  const latest = evs[evs.length - 1]
+  const latest = evs[0]
   const ts = latest?.timestamp || latest?.event_ts_utc || ''
   if (ts === lastProcessedTs) return
   lastProcessedTs = ts
   const code = (latest?.event_code || latest?.event_name || '').toUpperCase()
-  if (/ATTACH_POD_PLACE|POD_LOAD|LOAD_POD/.test(code)) {
-    setCycleType('attach')
-    jumpToPhase('ATTACH_POD_PLACE')
-  } else if (/DETACH_POD_PLACE|POD_UNLOAD|UNLOAD_POD/.test(code)) {
-    setCycleType('detach')
-    jumpToPhase('DETACH_POD_PLACE')
-  } else if (/ATTACH_POD_UP|POD_UP/.test(code)) {
-    setCycleType('attach')
-    jumpToPhase('ATTACH_POD_UP')
-  } else if (/ATTACH_POD_DOWN|POD_DOWN/.test(code)) {
-    setCycleType('attach')
-    jumpToPhase('ATTACH_POD_DOWN')
-  } else if (/DETACH_POD_UP/.test(code)) {
-    setCycleType('detach')
-    jumpToPhase('DETACH_POD_UP')
-  } else if (/SCAN|READ_TAG|WRITE_TAG/.test(code)) {
-    jumpToPhase('READ_TAG')
-  } else if (/POD_LOCK|POD_UNLOCK|LATCH/.test(code)) {
-    jumpToPhase('POD_LOCK')
-  } else if (/ALARM|ABORT|ERROR/.test(code)) {
+  console.log('[VPO2D] 处理事件 code=', code, 'mode=', props.mode, 'paused=', props.paused)
+
+  if (/ALARM|ABORT|ERROR/.test(code)) {
     cycleTypeLabel.value = 'ALARM'
     currentPhaseLabel.value = '报警'
-  } else {
     return
   }
+
+  const triggered = triggerEventPhase(code)
+  if (!triggered) return
+
+  if (props.paused) {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId)
+      animationFrameId = null
+    }
+    const state = computeAnimationState(performance.now())
+    drawAnimation(state, performance.now())
+    return
+  }
+
   if (animationFrameId == null) {
+    phaseStartTime = performance.now()
     animationFrameId = requestAnimationFrame(animate)
   }
 }
@@ -1000,7 +1112,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="containerRef" class="vpo-viewer">
-    <svg ref="svgRef" class="vpo-svg" viewBox="0 0 1000 1000" role="img" aria-label="VPO 2D 视图"></svg>
+    <svg ref="svgRef" class="vpo-svg" viewBox="0 0 1000 1000" role="img" aria-label="PODOPENER 2D 视图"></svg>
 
     <div class="vpo-status-bar">
       <div class="status-item">
@@ -1014,8 +1126,8 @@ onUnmounted(() => {
     </div>
 
     <div class="vpo-legend">
-      <div class="legend-item"><span class="dot" style="background:#22c55e"></span><span>锁定</span></div>
-      <div class="legend-item"><span class="dot" style="background:#ef4444"></span><span>解锁</span></div>
+      <div class="legend-item"><span class="dot" style="background:#ef4444"></span><span>锁定</span></div>
+      <div class="legend-item"><span class="dot" style="background:#22c55e"></span><span>解锁</span></div>
       <div class="legend-item"><span class="dot" style="background:#3b82f6"></span><span>晶圆</span></div>
       <div class="legend-item"><span class="dot" style="background:#f59e0b"></span><span>扫描/信号</span></div>
     </div>
@@ -1085,8 +1197,8 @@ onUnmounted(() => {
 
 .vpo-legend {
   position: absolute;
-  left: 12px;
-  bottom: 12px;
+  right: 12px;
+  top: 120px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

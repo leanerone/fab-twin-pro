@@ -11,6 +11,8 @@ const props = defineProps({
   metrics: { type: Object, default: () => ({}) },
   runState: { type: Object, default: null },
   events: { type: Array, default: () => [] },
+  paused: { type: Boolean, default: false },
+  mode: { type: String, default: 'realtime' },  // realtime / playback
 })
 
 const containerRef = ref(null)
@@ -549,7 +551,7 @@ function createSignalGroup() {
 function updateLatchState(locked) {
   if (!latchGroup) return
 
-  const color = locked ? new THREE.Color(0x10b981) : new THREE.Color(0xef4444)
+  const color = locked ? new THREE.Color(0xef4444) : new THREE.Color(0x10b981)
   const angle = locked ? 0 : 35 * Math.PI / 180
 
   latchGroup.children.forEach(child => {
@@ -636,6 +638,34 @@ const DETACH_PHASES = [
   { name: 'DETACH_POD_REMOVE', duration: 2500, desc: '空POD移走' },
 ]
 
+// 事件代码 -> 动画阶段映射 (PACKING穿入流程)
+const EVENT_TO_ATTACH_PHASE = {
+  'POD_PLACED': 0,
+  'COMPLETED_PORT_LOCK': 1,
+  'READ_BATTERY': 2,
+  'READ_TAG': 2,
+  'BATCH_INFO_FROM_ECUI': 2,
+  'OPEN_POD': 3,
+  'REACH_STAGE': 3,
+  'UI_CONFIRM': 4,
+  'CLOSE_POD': 4,
+  'ACK_UI_DOUBLECHECK': 4,
+  'REACH_POS': 5,
+  'WRITE_TAG': 5,
+  'COMPLETED_PORT_UNLOCK': 6,
+  'POD_REMOVED': 7,
+}
+
+// 事件代码 -> 动画阶段映射 (UNPACKING脱出流程)
+const EVENT_TO_DETACH_PHASE = {
+  'UI_CONFIRM': 0,
+  'CLOSE_POD': 1,
+  'REACH_POS': 2,
+  'WRITE_TAG': 5,
+  'COMPLETED_PORT_UNLOCK': 6,
+  'POD_REMOVED': 7,
+}
+
 let currentPhaseIndex = 0
 let phaseStartTime = 0
 let lastFrameTime = 0
@@ -656,6 +686,11 @@ function lerp(a, b, t) {
 
 function updatePodAnimation(time) {
   if (!autoLoopRunning.value) return
+  // 暂停时停止动画推进
+  if (props.paused) {
+    autoLoopRunning.value = false
+    return
+  }
 
   const deltaTime = time - lastFrameTime
   lastFrameTime = time
@@ -672,6 +707,12 @@ function updatePodAnimation(time) {
   updateVisualsByPhase(phase.name, easedProgress)
 
   if (progress >= 1) {
+    // 实时模式：阶段完成后停止动画，等待下一个事件
+    if (props.mode === 'realtime') {
+      autoLoopRunning.value = false
+      return
+    }
+    // 回放模式：自动推进到下一个阶段
     currentPhaseIndex++
     phaseStartTime = time
 
@@ -937,6 +978,35 @@ function triggerDetach() {
   autoLoopRunning.value = true
 }
 
+// 跳转到指定阶段并播放（实时模式用）
+function jumpToPhase(flowType, phaseIndex) {
+  stopAutoLoop()
+  currentFlowType.value = flowType
+  currentPhaseIndex = phaseIndex
+  phaseStartTime = performance.now()
+  lastFrameTime = performance.now()
+  autoLoopRunning.value = true
+  console.log('[VPO3D] 跳转到阶段:', flowType, phaseIndex, 
+    flowType === 'attach' ? ATTACH_PHASES[phaseIndex]?.name : DETACH_PHASES[phaseIndex]?.name)
+}
+
+// 根据事件代码触发对应阶段动画
+function triggerEventPhase(code) {
+  // 先尝试穿入流程映射
+  if (EVENT_TO_ATTACH_PHASE.hasOwnProperty(code)) {
+    const phaseIndex = EVENT_TO_ATTACH_PHASE[code]
+    jumpToPhase('attach', phaseIndex)
+    return true
+  }
+  // 再尝试脱出流程映射
+  if (EVENT_TO_DETACH_PHASE.hasOwnProperty(code)) {
+    const phaseIndex = EVENT_TO_DETACH_PHASE[code]
+    jumpToPhase('detach', phaseIndex)
+    return true
+  }
+  return false
+}
+
 function initScene() {
   if (!containerRef.value) return
 
@@ -1069,35 +1139,97 @@ watch(() => props.currentState, (state) => {
 
 // 监听事件，驱动动画
 let lastEventTs = ''
-let isInitialLoad = true
+// mode切换时重置lastEventTs，避免历史事件触发动画
+// 实时模式下，events由MachineDetail保证只包含新事件
+watch(() => props.mode, () => {
+  lastEventTs = ''
+  // 停止当前动画
+  stopAutoLoop()
+  currentPhase.value = 'IDLE'
+})
+
 watch(() => props.events, (evs) => {
   if (!Array.isArray(evs) || evs.length === 0) return
-  const latest = evs[evs.length - 1]
+  // displayEvents 是倒序的，最新的在 index 0
+  const latest = evs[0]
   const latestTs = latest?.timestamp || latest?.event_ts_utc || ''
-  if (isInitialLoad) {
-    // 首次加载：仅设置最新事件时间戳，不触发动画
-    isInitialLoad = false
-    lastEventTs = latestTs
-    return
-  }
+  console.log('[VPO3D] events变化, mode=', props.mode, 'latestTs=', latestTs, 'lastEventTs=', lastEventTs, 'paused=', props.paused)
   if (latestTs === lastEventTs) return
+  // 实时模式下，如果lastEventTs为空（初始状态），且事件时间比当前时间早很多，说明是历史数据，不触发动画
+  if (props.mode === 'realtime' && lastEventTs === '') {
+    const eventTime = new Date(latestTs.replace(/Z$/, '')).getTime()
+    const now = Date.now()
+    // 如果事件时间早于5分钟前，认为是历史数据，不触发动画
+    if (now - eventTime > 5 * 60 * 1000) {
+      console.log('[VPO3D] 实时模式下跳过历史事件，时间差=', (now - eventTime) / 1000, '秒')
+      lastEventTs = latestTs
+      return
+    }
+  }
   lastEventTs = latestTs
   const code = (latest?.event_code || latest?.event_name || '').toUpperCase()
-  if (/POD_LOAD|ATTACH|DETACH_POD_PLACE|LOAD_POD|PLACE_POD/.test(code)) {
-    triggerAttach()
-  } else if (/POD_UNLOAD|DETACH|UNLOAD_POD|REMOVE_POD/.test(code)) {
-    triggerDetach()
+  console.log('[VPO3D] 处理事件 code=', code, 'event_code=', latest?.event_code, 'event_name=', latest?.event_name)
+  // 实时模式和回放模式都使用事件-阶段映射
+  const triggered = triggerEventPhase(code)
+  if (!triggered) {
+    console.log('[VPO3D] 事件未匹配到动画阶段:', code)
   }
-  if (/SCAN/.test(code)) {
+  // 暂停状态下，跳转到阶段后停止动画，只显示静态画面
+  if (props.paused) {
+    if (triggered) {
+      stopAutoLoop()
+      // 手动更新一帧画面
+      const phases = currentFlowType.value === 'attach' ? ATTACH_PHASES : DETACH_PHASES
+      const phase = phases[currentPhaseIndex]
+      if (phase) {
+        updateVisualsByPhase(phase.name, 0)
+      }
+    }
+    return
+  }
+  // 回放模式下，确保自动循环播放已启动
+  if (props.mode === 'playback' && triggered) {
+    if (!autoLoopRunning.value) {
+      autoLoopRunning.value = true
+    }
+  }
+  // 扫描/读取标签效果
+  if (/SCAN|READ_TAG|READ_BATTERY/.test(code)) {
     scanActive.value = true
+    setTimeout(() => { scanActive.value = false }, 1500)
   }
+  // 写入标签效果
+  if (/WRITE_TAG/.test(code)) {
+    signalActive.value = true
+    setTimeout(() => { signalActive.value = false }, 2000)
+  }
+  // 告警
   if (/ALARM|ABORT|ERROR/.test(code)) {
     chamberState.value = 'alarm'
   }
-  if (/COMPLETE|END|UNLOCK|FINISH/.test(code)) {
+  // 端口锁定
+  if (/LOCK|COMPLETED_PORT_LOCK/.test(code) && !/UNLOCK/.test(code)) {
+    // 锁定状态由 processEvent 处理
+  }
+  // 解锁/完成
+  if (/UNLOCK|COMPLETED_PORT_UNLOCK|COMPLETE|END|FINISH/.test(code)) {
     chamberState.value = 'running'
   }
+  // 打开/关闭POD盖
+  if (/OPEN_POD/.test(code)) {
+    // 盖子打开动画由 processEvent 处理
+  }
 }, { deep: true })
+
+// 监听暂停状态
+watch(() => props.paused, (isPaused) => {
+  if (isPaused) {
+    stopAutoLoop()
+  } else if (props.mode === 'playback') {
+    // 回放模式下恢复动画
+    // 实时模式下由事件驱动，不自动启动
+  }
+})
 
 onMounted(async () => {
   await nextTick()
@@ -1136,17 +1268,7 @@ defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })
 
 <template>
   <div ref="containerRef" class="vpo3d-viewer">
-    <div class="vpo3d-controls">
-      <button class="ctrl-btn attach-btn" @click="triggerAttach">
-        POD穿入
-      </button>
-      <button class="ctrl-btn detach-btn" @click="triggerDetach">
-        POD脱出
-      </button>
-      <button class="ctrl-btn loop-btn" @click="autoLoopRunning ? stopAutoLoop() : startAutoLoop()">
-        {{ autoLoopRunning ? '停止循环' : '开始循环' }}
-      </button>
-    </div>
+
 
     <div class="vpo3d-status">
       <div class="status-indicator" :style="{ background: currentColor }"></div>
@@ -1158,14 +1280,7 @@ defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })
       <span v-if="signalActive" class="signal-indicator">信号</span>
     </div>
 
-    <div class="vpo3d-label">VPO-2200 3D View</div>
-
-    <div class="vpo3d-info">
-      <div class="info-row">
-        <span class="info-label">流程:</span>
-        <span class="info-value">{{ currentFlowType === 'attach' ? '穿入 (Attach)' : '脱出 (Detach)' }}</span>
-      </div>
-    </div>
+    <div class="vpo3d-label">PODOPENER-1 3D View</div>
   </div>
 </template>
 
@@ -1177,58 +1292,6 @@ defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })
   background: #2d3436;
   border-radius: 8px;
   overflow: hidden;
-}
-
-.vpo3d-controls {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  z-index: 10;
-}
-
-.ctrl-btn {
-  padding: 10px 24px;
-  border: none;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: rgba(13, 20, 36, 0.9);
-  color: #e5e7eb;
-  backdrop-filter: blur(8px);
-}
-
-.ctrl-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.attach-btn {
-  border: 1px solid #22c55e;
-}
-
-.attach-btn:hover {
-  background: rgba(34, 197, 94, 0.2);
-}
-
-.detach-btn {
-  border: 1px solid #f59e0b;
-}
-
-.detach-btn:hover {
-  background: rgba(245, 158, 11, 0.2);
-}
-
-.loop-btn {
-  border: 1px solid #3b82f6;
-}
-
-.loop-btn:hover {
-  background: rgba(59, 130, 246, 0.2);
 }
 
 .vpo3d-status {
@@ -1270,7 +1333,7 @@ defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })
 }
 
 .lock-indicator {
-  color: #22c55e;
+  color: #ef4444;
 }
 
 .scan-indicator {
@@ -1296,32 +1359,5 @@ defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })
   font-weight: 700;
   color: #e5e7eb;
   z-index: 10;
-}
-
-.vpo3d-info {
-  position: absolute;
-  bottom: 80px;
-  left: 14px;
-  background: rgba(13, 20, 36, 0.9);
-  backdrop-filter: blur(8px);
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  z-index: 10;
-}
-
-.info-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.info-label {
-  color: #64748b;
-}
-
-.info-value {
-  color: #e5e7eb;
-  font-weight: 600;
 }
 </style>

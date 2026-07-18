@@ -41,7 +41,7 @@ function handleLogout() {
 
 // 点击外部关闭菜单
 function onDocClick(e) {
-  if (userMenuRef.value && !userMenuRef.value.contains(e.target)) {
+  if (showUserMenu.value && userMenuRef.value && !userMenuRef.value.contains(e.target)) {
     showUserMenu.value = false
   }
 }
@@ -194,6 +194,7 @@ onUnmounted(() => {
 }
 .user-menu-wrapper {
   position: relative;
+  max-width: 200px;
 }
 .user-btn {
   display: flex;
@@ -207,19 +208,28 @@ onUnmounted(() => {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  max-width: 200px;
+  overflow: hidden;
 }
 .user-btn:hover {
   background: rgba(0, 212, 255, 0.2);
 }
 .user-icon {
   font-size: 14px;
+  flex-shrink: 0;
 }
 .user-name {
   font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .user-role {
   color: var(--accent);
   font-size: 11px;
+  flex-shrink: 0;
 }
 .user-dropdown {
   position: absolute;

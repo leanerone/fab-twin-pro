@@ -11,19 +11,34 @@ import random
 import threading
 from datetime import datetime
 
+import json
+
 from database import SessionLocal
-from models import Machine, MachineEvent
+from models import Machine, MachineEvent, DT_EVENT_RAW, DT_EVENT_RAW_CUR
 from services.realtime import manager
 
 # Oracle 自增 ID 生成器（替代 autoincrement）
 _simulator_id_counter = 0
 _simulator_id_lock = threading.Lock()
 
+def _init_id_counter():
+    """从数据库查询最大ID，初始化计数器"""
+    global _simulator_id_counter
+    try:
+        db = SessionLocal()
+        max_id = db.query(MachineEvent.id).order_by(MachineEvent.id.desc()).first()
+        db.close()
+        if max_id and max_id[0]:
+            _simulator_id_counter = max_id[0]
+            print(f"[Simulator] ID计数器初始化为: {_simulator_id_counter}")
+    except Exception as e:
+        print(f"[Simulator] ID计数器初始化失败: {e}")
+
 def _next_event_id() -> int:
     global _simulator_id_counter
     with _simulator_id_lock:
         _simulator_id_counter += 1
-        return 100000000 + _simulator_id_counter  # 大数字避免与现有数据冲突
+        return _simulator_id_counter
 
 # 工艺周期（与 seed_data 保持一致）
 PROCESS_STEPS = [
@@ -38,6 +53,144 @@ PROCESS_STEPS = [
 
 # 各 metric 的噪声幅度
 METRIC_AMP = {"temperature": 2.0, "pressure": 1.0, "gasflow": 5.0, "rf": 20.0}
+
+# PODOPENER 穿入流程（PACKING） - 14个事件
+PACKING_EVENTS = [
+    {"event_name": "POD_PLACED", "event_type": "VFEI", "mode": "PACKING", "has_lot": False, "desc": "POD放置到位"},
+    {"event_name": "COMPLETED_PORT_LOCK", "event_type": "VFEI", "mode": "PACKING", "has_lot": False, "desc": "端口锁定完成"},
+    {"event_name": "READ_BATTERY", "event_type": "VFEI", "mode": None, "has_lot": False, "desc": "读取电池状态"},
+    {"event_name": "READ_TAG", "event_type": "VFEI", "mode": "PACKING", "has_lot": False, "desc": "读取RFID标签"},
+    {"event_name": "BATCH_INFO_FROM_ECUI", "event_type": "HOST", "mode": "PACKING", "has_lot": True, "desc": "获取批次信息"},
+    {"event_name": "OPEN_POD", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "打开POD盖"},
+    {"event_name": "REACH_STAGE", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "机械臂到达平台"},
+    {"event_name": "UI_CONFIRM", "event_type": "HOST", "mode": "PACKING", "has_lot": True, "desc": "操作员确认"},
+    {"event_name": "CLOSE_POD", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "关闭POD盖"},
+    {"event_name": "ACK_UI_DOUBLECHECK", "event_type": "HOST", "mode": "PACKING", "has_lot": True, "desc": "二次确认"},
+    {"event_name": "REACH_POS", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "机械臂到位"},
+    {"event_name": "WRITE_TAG", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "写入RFID标签"},
+    {"event_name": "COMPLETED_PORT_UNLOCK", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "端口解锁完成"},
+    {"event_name": "POD_REMOVED", "event_type": "VFEI", "mode": "PACKING", "has_lot": True, "desc": "POD移走"},
+]
+
+# PODOPENER 脱出流程（UNPACKING） - 6个事件
+UNPACKING_EVENTS = [
+    {"event_name": "UI_CONFIRM", "event_type": "HOST", "mode": "UNPACKING", "has_lot": True, "desc": "操作员确认"},
+    {"event_name": "CLOSE_POD", "event_type": "VFEI", "mode": "UNPACKING", "has_lot": True, "desc": "关闭POD盖"},
+    {"event_name": "REACH_POS", "event_type": "VFEI", "mode": "UNPACKING", "has_lot": True, "desc": "机械臂到位"},
+    {"event_name": "WRITE_TAG", "event_type": "VFEI", "mode": "UNPACKING", "has_lot": True, "desc": "写入RFID标签"},
+    {"event_name": "COMPLETED_PORT_UNLOCK", "event_type": "VFEI", "mode": "UNPACKING", "has_lot": True, "desc": "端口解锁完成"},
+    {"event_name": "POD_REMOVED", "event_type": "VFEI", "mode": "UNPACKING", "has_lot": True, "desc": "POD移走"},
+]
+
+LOT_POOL = ["V3NL8", "V394K", "PG0R3", "V39S5", "V3QS6", "PG0R4", "V394L"]
+
+_podopener_state = {}
+
+
+def _gen_cassette_id():
+    return f"{random.randint(10000, 99999)}{random.choice('ABCDEF')}"
+
+
+def _write_raw_event(db, machine_id, event_def, lot_id, cassette_id, timestamp):
+    """写入一条DT_EVENT_RAW和DT_EVENT_RAW_CUR"""
+    payload = {
+        "tool_id": machine_id,
+        "lot_id": lot_id if event_def["has_lot"] else "NULL",
+        "run_mode": event_def["mode"] if event_def["mode"] else "NULL",
+        "event_type": event_def["event_type"],
+        "event_name": event_def["event_name"],
+        "event_value": event_def["event_name"],
+        "status": event_def["event_name"],
+        "machine_state": event_def["event_name"],
+        "machine_mode": event_def["mode"] if event_def["mode"] else "NULL",
+        "alarm_code": None,
+        "alarm_id": None,
+        "alarm_text": event_def["event_name"],
+        "source_system": "RV",
+        "port_id": "1",
+        "cassette_id": cassette_id,
+        "pod_id": cassette_id,
+        "smif_id": "1",
+        "chamber_id": "NULL",
+        "batch_id": f"BT_{cassette_id}" if event_def["has_lot"] else "NULL",
+        "unit_id": "NULL",
+        "slot_id": "NULL",
+    }
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    raw_id = f"TID.{_next_event_id()}"
+
+    raw_event = DT_EVENT_RAW(
+        raw_id=raw_id,
+        tool_id=machine_id,
+        source_system="RV",
+        source_message_id=raw_id,
+        received_ts_utc=timestamp,
+        event_ts_utc=timestamp,
+        payload_json=payload_json,
+        parse_status="PARSED",
+    )
+    db.add(raw_event)
+
+    cur_event = DT_EVENT_RAW_CUR(
+        tool_id=machine_id,
+        raw_id=raw_id,
+        source_system="RV",
+        source_message_id=raw_id,
+        received_ts_utc=timestamp,
+        event_ts_utc=timestamp,
+        payload_json=payload_json,
+        parse_status="PARSED",
+    )
+    db.merge(cur_event)
+
+    return raw_event
+
+
+def _gen_podopener_events(db, machine, events_to_push, next_step):
+    """生成PODOPENER机台的业务流程事件"""
+    global _podopener_state
+
+    mid = machine.id
+    if mid not in _podopener_state:
+        _podopener_state[mid] = {
+            "phase": "PACKING",
+            "step": 0,
+            "lot_id": random.choice(LOT_POOL),
+            "cassette_id": _gen_cassette_id(),
+        }
+
+    state = _podopener_state[mid]
+    events = PACKING_EVENTS if state["phase"] == "PACKING" else UNPACKING_EVENTS
+
+    ev_def = events[state["step"]]
+    timestamp = machine.updated_at.isoformat() if hasattr(machine.updated_at, 'isoformat') else str(machine.updated_at)
+
+    raw_event = _write_raw_event(
+        db, mid, ev_def, state["lot_id"], state["cassette_id"], timestamp
+    )
+
+    mevent = MachineEvent(
+        id=_next_event_id(),
+        machine_id=mid,
+        timestamp=machine.updated_at,
+        event_type=ev_def["event_type"],
+        event_code=ev_def["event_name"],
+        description=ev_def["desc"],
+        level="info",
+        metric=None,
+        value=None,
+        lot_id=state["lot_id"] if ev_def["has_lot"] else None,
+    )
+    db.add(mevent)
+    events_to_push.append(mevent)
+
+    state["step"] += 1
+    if state["step"] >= len(events):
+        state["step"] = 0
+        state["phase"] = "UNPACKING" if state["phase"] == "PACKING" else "PACKING"
+        if state["phase"] == "PACKING":
+            state["lot_id"] = random.choice(LOT_POOL)
+            state["cassette_id"] = _gen_cassette_id()
 
 
 def _noise(base: float, amp: float) -> float:
@@ -140,63 +293,27 @@ async def run_simulator():
                 m.rf_power = _noise(step["rf_power"], METRIC_AMP["rf"])
                 m.updated_at = datetime.now().isoformat()
 
-                state_event = MachineEvent(
-                    id=_next_event_id(),
-                    machine_id=m.id,
-                    timestamp=m.updated_at,
-                    event_type="STATE",
-                    event_code=step["code"],
-                    description=f"{m.id} 进入「{step['name']}」步骤",
-                    level="info",
-                    metric=None,
-                    value=None,
-                    lot_id=None,
-                )
-                db.add(state_event)
-                events_to_push.append(state_event)
+                if m.process_type == "PODOPENER":
+                    _gen_podopener_events(db, m, events_to_push, next_step)
+                else:
+                    state_event = MachineEvent(
+                        id=_next_event_id(),
+                        machine_id=m.id,
+                        timestamp=m.updated_at,
+                        event_type="STATE",
+                        event_code=step["code"],
+                        description=f"{m.id} 进入「{step['name']}」步骤",
+                        level="info",
+                        metric=None,
+                        value=None,
+                        lot_id=None,
+                    )
+                    db.add(state_event)
+                    events_to_push.append(state_event)
 
-                sensor_event = _make_sensor_event(m.id, step)
-                db.add(sensor_event)
-                events_to_push.append(sensor_event)
-
-                # VPO/PODOPENER机台：每5个周期生成一次POD穿入/脱出事件（用于动画演示）
-                if m.process_type == "PODOPENER" or m.process_type == "OXIDE" or m.id.startswith("VPO"):
-                    # VPO机台的POD事件关联VPO lot_id池
-                    vpo_pod_lot = None
-                    if m.id.startswith("VPO") or m.process_type == "PODOPENER":
-                        import random as _r
-                        _pool = ["V3NL8", "V394K", "PG0R3", "V39S5", "V3QS6", "PG0R4", "V394L"]
-                        vpo_pod_lot = f"{_r.choice(_pool)}-D0-{_r.randint(0, 6)}"
-                    if next_step == 0:
-                        pod_event = MachineEvent(
-                            id=_next_event_id(),
-                            machine_id=m.id,
-                            timestamp=m.updated_at,
-                            event_type="POD_ATTACH",
-                            event_code="POD_ATTACH",
-                            description=f"{m.id} POD穿入",
-                            level="info",
-                            metric=None,
-                            value=None,
-                            lot_id=vpo_pod_lot,
-                        )
-                        db.add(pod_event)
-                        events_to_push.append(pod_event)
-                    elif next_step == 5:
-                        pod_event = MachineEvent(
-                            id=_next_event_id(),
-                            machine_id=m.id,
-                            timestamp=m.updated_at,
-                            event_type="POD_DETACH",
-                            event_code="POD_DETACH",
-                            description=f"{m.id} POD脱出",
-                            level="info",
-                            metric=None,
-                            value=None,
-                            lot_id=vpo_pod_lot,
-                        )
-                        db.add(pod_event)
-                        events_to_push.append(pod_event)
+                    sensor_event = _make_sensor_event(m.id, step)
+                    db.add(sensor_event)
+                    events_to_push.append(sensor_event)
 
                 machines_to_push.append(_machine_to_dict(m))
 
@@ -216,9 +333,10 @@ async def run_simulator():
                 except Exception:
                     pass
 
-        await asyncio.sleep(random.uniform(2, 3))
+        await asyncio.sleep(random.uniform(5, 15))
 
 
 async def start_simulator(manager_instance, cache_instance):
     """启动模拟器（兼容外部调用）"""
+    _init_id_counter()
     await run_simulator()

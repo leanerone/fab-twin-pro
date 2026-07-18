@@ -57,18 +57,30 @@ function onTrackClick(e) {
   emit('seek', pct)
 }
 
-// 时间轴拖拽
-function onTrackDrag(e) {
-  if (e.buttons !== 1) return
+// 时间轴拖拽：仅在按住鼠标键时触发
+let isDragging = false
+function onTrackMouseDown(e) {
+  isDragging = true
   onTrackClick(e)
 }
+function onTrackMouseMove(e) {
+  if (!isDragging) return
+  onTrackClick(e)
+}
+function onTrackMouseUp() {
+  isDragging = false
+}
+function onTrackMouseLeave() {
+  isDragging = false
+}
 
-// 格式化时间显示
+// 格式化时间显示（ts为毫秒时间戳）
 function formatTime(ts) {
   if (!ts) return '--:--:--'
   try {
     const d = new Date(ts)
-    return d.toTimeString().slice(0, 8)
+    if (isNaN(d.getTime())) return '--:--:--'
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
   } catch {
     return '--:--:--'
   }
@@ -86,7 +98,7 @@ function formatTime(ts) {
     <div v-if="mode === 'playback'" class="pb-speeds">
       <button v-for="s in speeds" :key="s" :class="{ active: speed === s }" @click="selectSpeed(s)">{{ s }}x</button>
     </div>
-    <div v-if="mode === 'playback'" class="pb-track" @click="onTrackClick" @mousemove="onTrackDrag">
+    <div v-if="mode === 'playback'" class="pb-track" @mousedown="onTrackMouseDown" @mousemove="onTrackMouseMove" @mouseup="onTrackMouseUp" @mouseleave="onTrackMouseLeave">
       <div class="fill" :style="{ width: progress + '%' }"></div>
       <div class="knob" :style="{ left: progress + '%' }"></div>
     </div>
@@ -108,7 +120,7 @@ function formatTime(ts) {
   display: none;
   align-items: center;
   gap: 14px;
-  z-index: 10;
+  z-index: 50;
 }
 .playback-bar.show {
   display: flex;
