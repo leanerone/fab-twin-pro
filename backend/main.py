@@ -65,27 +65,37 @@ async def websocket_realtime(websocket: WebSocket):
 def on_startup():
     print("========== FabTwin 启动 ==========")
 
-    init_db()
-    print("[DB] 数据库初始化完成")
-
-    db = SessionLocal()
     try:
-        machine_count = db.query(Machine).count()
-        if machine_count == 0:
-            print("[Seed] 首次启动，生成种子数据...")
-            init_seed_data(db)
-        else:
-            print("[Seed] 数据库已有数据，跳过种子数据生成")
-    finally:
-        db.close()
+        init_db()
+        print("[DB] 数据库初始化完成")
 
-    if SIMULATION_ENABLED:
-        asyncio.create_task(start_simulator(manager, cache))
-        print("[Simulator] 模拟器已启动")
+        db = SessionLocal()
+        try:
+            machine_count = db.query(Machine).count()
+            if machine_count == 0:
+                print("[Seed] 首次启动，生成种子数据...")
+                init_seed_data(db)
+            else:
+                print("[Seed] 数据库已有数据，跳过种子数据生成")
+        finally:
+            db.close()
 
-    if DB_POLLER_ENABLED:
-        asyncio.create_task(start_db_poller())
-        print("[DB Poller] DB事件轮询服务已启动")
+        if SIMULATION_ENABLED:
+            asyncio.create_task(start_simulator(manager, cache))
+            print("[Simulator] 模拟器已启动")
+
+        if DB_POLLER_ENABLED:
+            asyncio.create_task(start_db_poller())
+            print("[DB Poller] DB事件轮询服务已启动")
+    except Exception as e:
+        print(f"[WARN] 数据库初始化失败: {e}")
+        print("[WARN] 将以降级模式启动，部分功能可能不可用")
+        try:
+            if SIMULATION_ENABLED:
+                asyncio.create_task(start_simulator(manager, cache))
+                print("[Simulator] 模拟器已启动")
+        except Exception as e2:
+            print(f"[WARN] 模拟器启动失败: {e2}")
 
     print(f"[API] 服务运行在 http://{API_HOST}:{API_PORT}")
     print(f"[API] 文档地址: http://{API_HOST}:{API_PORT}/docs")

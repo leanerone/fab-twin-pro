@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FabTwin 机台动画统一配置",
+  "description": "定义 2D/3D 视图共用的事件-阶段-动画映射配置",
+  "type": "object",
+  "required": ["machine_type", "version", "flows", "animations", "targets"],
+  "properties": {
+    "machine_type": {
+      "type": "string",
+      "description": "机台类型标识，必须与 machine_models 表的 model_id 前缀一致"
+    },
+    "version": {
+      "type": "string",
+      "description": "配置版本号，语义化版本"
+    },
+    "description": { "type": "string" },
+    "flows": {
+      "type": "object",
+      "description": "流程定义，每个流程包含一组阶段和事件映射",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["phases", "event_to_phase"],
+        "properties": {
+          "phases": {
+            "type": "array",
+            "description": "阶段序列，按时间顺序排列",
+            "items": {
+              "type": "object",
+              "required": ["key", "label", "duration_ms"],
+              "properties": {
+                "key": { "type": "string", "description": "阶段唯一键" },
+                "label": { "type": "string", "description": "中文显示名" },
+                "duration_ms": { "type": "integer", "minimum": 100 },
+                "easing": {
+                  "type": "string",
+                  "enum": ["linear", "easeInOut", "mechanical", "easeOut", "easeIn"]
+                }
+              }
+            }
+          },
+          "event_to_phase": {
+            "type": "object",
+            "description": "事件名 → 阶段映射；多个事件可映射到同一阶段",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["phase"],
+              "properties": {
+                "phase": { "type": "string", "description": "目标阶段 key" },
+                "anim": { "type": "string", "description": "动画原语 key（引用 animations）" },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "animations": {
+      "type": "object",
+      "description": "动画原语库，参数化定义",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["target", "action"],
+        "properties": {
+          "target": { "type": "string", "description": "目标部件 key（引用 targets）" },
+          "action": {
+            "type": "string",
+            "enum": ["translate", "rotate", "scale", "flash", "visibility", "color", "scan", "signal"]
+          },
+          "axis": { "type": "string", "enum": ["x", "y", "z"] },
+          "from": { "type": "number" },
+          "to": { "type": "number" },
+          "color": { "type": "string" },
+          "duration_ms": { "type": "integer" },
+          "easing": { "type": "string" },
+          "sub_phase": {
+            "type": "string",
+            "description": "阶段内分段，用于复杂动画（如 POD 进入分两段）"
+          }
+        }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "description": "部件目标绑定，2D 选择器和 3D 对象名共用一个 key",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "view_2d": { "type": "string", "description": "SVG 元素 id（不带 #）" },
+          "view_3d": { "type": "string", "description": "Three.js Group userData 标识" },
+          "desc": { "type": "string" }
+        }
+      }
+    }
+  }
+}

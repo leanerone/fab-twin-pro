@@ -1,5 +1,5 @@
 """Pydantic 请求/响应模型"""
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from pydantic import BaseModel, ConfigDict
 
 
@@ -69,13 +69,96 @@ class AlarmOut(BaseModel):
 
 
 class AIQueryRequest(BaseModel):
-    """AI 查询请求"""
+    """AI 查询请求（旧版兼容）"""
     question: str
     machine_id: Optional[str] = None
 
 
 class AIQueryResponse(BaseModel):
-    """AI 查询响应"""
+    """AI 查询响应（旧版兼容）"""
     answer: str
     sql: str
     jump_timestamp: Optional[str] = None
+
+
+# ========== 新版统一AI接口 ==========
+
+class AIChatRequest(BaseModel):
+    """AI 聊天请求（统一接口）"""
+    question: str
+    session_id: Optional[str] = None
+    machine_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+    user_role: Optional[str] = "user"  # user / admin
+    stream: Optional[bool] = False
+
+
+class AITableData(BaseModel):
+    """表格数据结构"""
+    headers: List[str] = []
+    rows: List[List[Any]] = []
+
+
+class AIToolCall(BaseModel):
+    """工具调用记录"""
+    tool: str
+    workflow: Optional[str] = None
+    status: str  # success / failed / pending
+    error: Optional[str] = None
+
+
+class AISource(BaseModel):
+    """参考来源"""
+    type: str  # llm / dify / n8n / db
+    model: Optional[str] = None
+    app_id: Optional[str] = None
+    workflow: Optional[str] = None
+
+
+class AIChatResponse(BaseModel):
+    """AI 聊天响应（统一接口）"""
+    answer: str
+    sql: Optional[str] = ""
+    jump_timestamp: Optional[str] = None
+    table_data: Optional[AITableData] = None
+    tool_calls: Optional[List[AIToolCall]] = []
+    sources: Optional[List[AISource]] = []
+    session_id: Optional[str] = None
+    provider: Optional[str] = None
+
+
+class AIConfigUpdate(BaseModel):
+    """AI 配置更新请求"""
+    provider: Optional[str] = None  # local / openai / dify / hybrid
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    dify_enabled: Optional[bool] = None
+    dify_base_url: Optional[str] = None
+    dify_api_key: Optional[str] = None
+    dify_app_id: Optional[str] = None
+    n8n_enabled: Optional[bool] = None
+    n8n_base_url: Optional[str] = None
+    n8n_webhook_secret: Optional[str] = None
+
+
+class AIConfigOut(BaseModel):
+    """AI 配置输出（脱敏）"""
+    provider: str
+    model: str
+    base_url_masked: str
+    temperature: float
+    max_tokens: int
+    dify_enabled: bool
+    dify_base_url_masked: str
+    dify_app_id_masked: str
+    n8n_enabled: bool
+    n8n_base_url_masked: str
+
+
+class AIConnectionTest(BaseModel):
+    """连接测试请求"""
+    provider_type: str  # openai / dify / n8n
+    config: Dict[str, Any]

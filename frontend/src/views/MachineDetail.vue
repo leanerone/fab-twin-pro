@@ -860,6 +860,7 @@ function onReplayEvent(ev) {
   }
 }
 
+
 // 返回看板
 function goBack() {
   router.push('/')
@@ -1030,6 +1031,7 @@ onMounted(() => {
         <button class="dr-tab" :class="{ active: rightTab === 'replay' }" @click="rightTab = 'replay'">回放</button>
         <button class="dr-tab" :class="{ active: rightTab === 'lots' }" @click="rightTab = 'lots'">Lot</button>
         <button class="dr-tab" :class="{ active: rightTab === 'ai' }" @click="rightTab = 'ai'">AI</button>
+
       </div>
 
       <!-- 告警 Tab -->
@@ -1063,6 +1065,8 @@ onMounted(() => {
       <div v-show="rightTab === 'ai'" class="dr-section">
         <AiAssistant :machine-id="machineId" @jump="jumpToTime" />
       </div>
+
+
     </div>
   </div>
 </template>

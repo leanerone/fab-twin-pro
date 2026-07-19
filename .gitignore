@@ -59,6 +59,7 @@ dist/
 Thumbs.db
 *.tmp
 *.bak
+~$*
 
 # Frontend build
 frontend/dist/

@@ -47,6 +47,8 @@ export const useAuthStore = defineStore('auth', () => {
   const hasPermission = computed(() => (permId) => {
     if (!isLoggedIn.value) return false
     if (user.value?.role === 'admin') return true
+    // 支持 * 通配符（admin 默认全权限）
+    if (permissions.value.includes('*')) return true
     return permissions.value.includes(permId)
   })
 

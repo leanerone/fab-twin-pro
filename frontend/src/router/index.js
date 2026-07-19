@@ -49,7 +49,7 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requirePermission && isLoggedIn()) {
     const perms = JSON.parse(localStorage.getItem('fabtwin_permissions') || '[]')
-    if (!perms.includes(to.meta.requirePermission)) {
+    if (!perms.includes('*') && !perms.includes(to.meta.requirePermission)) {
       next('/')
       return
     }

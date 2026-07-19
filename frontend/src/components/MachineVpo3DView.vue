@@ -3,6 +3,46 @@ import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { useEventActionMapping } from '../composables/useEventActionMapping.js'
+import { useAnimationConfig } from '../composables/useAnimationConfig.js'
+
+// === 统一动画配置（M1 配置层）===
+// 加载 /configs/machine-animations/podopener.json，2D/3D 共用
+const animConfig = useAnimationConfig('podopener')
+const animConfigReady = ref(false)
+// 配置里的 phase key 到旧渲染分支 key 的映射（PACKING）
+const PACKING_KEY_MAP = {
+  'POD_PLACE': 'ATTACH_POD_PLACE',
+  'POD_UP': 'POD_UP',
+  'POD_DOWN': 'POD_DOWN',
+  'POD_REACH_STAGE': 'ATTACH_POD_REACH_STAGE',
+  'CST_PLACE': 'ATTACH_CST_PLACE',
+  'POD_REACH_POS': 'ATTACH_POD_REACH_POS',
+  'POD_REMOVE': 'ATTACH_POD_REMOVE',
+  // 通用阶段保持不变
+  'POD_LOCK': 'POD_LOCK',
+  'READ_TAG': 'READ_TAG',
+  'BATCH_CONFIRM': 'BATCH_CONFIRM',
+  'UI_CONFIRM': 'UI_CONFIRM',
+  'UI_DOUBLECHECK': 'UI_DOUBLECHECK',
+  'WRITE_TAG': 'WRITE_TAG',
+  'POD_UNLOCK': 'POD_UNLOCK',
+}
+const UNPACKING_KEY_MAP = {
+  'POD_PLACE': 'DETACH_POD_PLACE',
+  'POD_UP': 'DETACH_POD_UP',
+  'POD_DOWN': 'DETACH_POD_DOWN',
+  'POD_REACH_STAGE': 'DETACH_POD_REACH_STAGE',
+  'CST_REMOVE': 'DETACH_CST_REMOVE',
+  'POD_REACH_POS': 'DETACH_POD_REACH_POS',
+  'POD_REMOVE': 'DETACH_POD_REMOVE',
+  'POD_LOCK': 'POD_LOCK',
+  'READ_TAG': 'READ_TAG',
+  'BATCH_CONFIRM': 'BATCH_CONFIRM',
+  'UI_CONFIRM': 'DETACH_CST_REMOVE',
+  'UI_DOUBLECHECK': 'DETACH_POD_REACH_POS',
+  'WRITE_TAG': 'WRITE_TAG',
+  'POD_UNLOCK': 'POD_UNLOCK',
+}
 
 const props = defineProps({
   machine: { type: Object, default: () => null },
@@ -616,7 +656,9 @@ function updateSignalAnimation(time) {
   }
 }
 
-const ATTACH_PHASES = [
+// === 阶段定义：默认硬编码作为 fallback，配置加载后覆盖 ===
+// 配置加载后这些变量会被替换为来自 podopener.json 的阶段定义
+let ATTACH_PHASES = [
   { name: 'ATTACH_POD_PLACE', duration: 2500, desc: '空POD放置' },
   { name: 'POD_LOCK', duration: 1200, desc: '锁定' },
   { name: 'READ_TAG', duration: 2000, desc: '扫描' },
@@ -627,7 +669,7 @@ const ATTACH_PHASES = [
   { name: 'ATTACH_POD_REMOVE', duration: 2500, desc: '满POD移走' },
 ]
 
-const DETACH_PHASES = [
+let DETACH_PHASES = [
   { name: 'DETACH_POD_PLACE', duration: 2500, desc: '满POD放置' },
   { name: 'POD_LOCK', duration: 1200, desc: '锁定' },
   { name: 'READ_TAG', duration: 2000, desc: '扫描' },
@@ -638,8 +680,8 @@ const DETACH_PHASES = [
   { name: 'DETACH_POD_REMOVE', duration: 2500, desc: '空POD移走' },
 ]
 
-// 事件代码 -> 动画阶段映射 (PACKING穿入流程)
-const EVENT_TO_ATTACH_PHASE = {
+// 事件代码 -> 动画阶段索引映射 (PACKING穿入流程)
+let EVENT_TO_ATTACH_PHASE = {
   'POD_PLACED': 0,
   'COMPLETED_PORT_LOCK': 1,
   'READ_BATTERY': 2,
@@ -656,14 +698,60 @@ const EVENT_TO_ATTACH_PHASE = {
   'POD_REMOVED': 7,
 }
 
-// 事件代码 -> 动画阶段映射 (UNPACKING脱出流程)
-const EVENT_TO_DETACH_PHASE = {
+// 事件代码 -> 动画阶段索引映射 (UNPACKING脱出流程)
+let EVENT_TO_DETACH_PHASE = {
   'UI_CONFIRM': 0,
   'CLOSE_POD': 1,
   'REACH_POS': 2,
   'WRITE_TAG': 5,
   'COMPLETED_PORT_UNLOCK': 6,
   'POD_REMOVED': 7,
+}
+
+/**
+ * 从统一配置构建本组件使用的阶段/事件映射格式
+ * 把配置的 phase key 通过 KEY_MAP 转成渲染函数能识别的旧 key
+ */
+function applyConfigToPhases() {
+  const cfg = animConfig.config.value
+  if (!cfg) return
+  const packingPhases = cfg.flows?.PACKING?.phases || []
+  const unpackingPhases = cfg.flows?.UNPACKING?.phases || []
+  const packingEvtMap = cfg.flows?.PACKING?.event_to_phase || {}
+  const unpackingEvtMap = cfg.flows?.UNPACKING?.event_to_phase || {}
+
+  if (packingPhases.length) {
+    ATTACH_PHASES = packingPhases.map(p => ({
+      name: PACKING_KEY_MAP[p.key] || p.key,
+      duration: p.duration_ms,
+      desc: p.label,
+      _configKey: p.key,
+    }))
+    EVENT_TO_ATTACH_PHASE = {}
+    for (const [evt, def] of Object.entries(packingEvtMap)) {
+      const idx = packingPhases.findIndex(p => p.key === def.phase)
+      if (idx >= 0) EVENT_TO_ATTACH_PHASE[evt] = idx
+    }
+  }
+  if (unpackingPhases.length) {
+    DETACH_PHASES = unpackingPhases.map(p => ({
+      name: UNPACKING_KEY_MAP[p.key] || p.key,
+      duration: p.duration_ms,
+      desc: p.label,
+      _configKey: p.key,
+    }))
+    EVENT_TO_DETACH_PHASE = {}
+    for (const [evt, def] of Object.entries(unpackingEvtMap)) {
+      const idx = unpackingPhases.findIndex(p => p.key === def.phase)
+      if (idx >= 0) EVENT_TO_DETACH_PHASE[evt] = idx
+    }
+  }
+  animConfigReady.value = true
+  console.log('[VPO3D] 统一配置已加载', {
+    attach: ATTACH_PHASES.length, detach: DETACH_PHASES.length,
+    attachEvt: Object.keys(EVENT_TO_ATTACH_PHASE).length,
+    detachEvt: Object.keys(EVENT_TO_DETACH_PHASE).length,
+  })
 }
 
 let currentPhaseIndex = 0
@@ -806,6 +894,89 @@ function updateVisualsByPhase(phaseName, progress) {
       scanOn = true
       scanProgress = progress
       signalOn = progress > 0.3
+      break
+
+    // === 配置驱动新增阶段（PACKING）===
+    case 'BATCH_CONFIRM':
+      // 信号确认：保持锁定状态，信号闪烁
+      podVisible = true
+      cassetteVisible = false
+      podBottomZ = POD_BOTTOM_Z_BASE
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      signalOn = true
+      break
+
+    case 'ATTACH_POD_REACH_STAGE':
+      // POD 到顶：保持顶端，晶舟已可见
+      podVisible = true
+      cassetteVisible = true
+      podBottomZ = POD_TOP_Z
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      break
+
+    case 'ATTACH_CST_PLACE':
+      // 放入晶舟：POD 在顶，晶舟显示
+      podVisible = true
+      cassetteVisible = true
+      podBottomZ = POD_TOP_Z
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      break
+
+    case 'UI_CONFIRM':
+    case 'UI_DOUBLECHECK':
+      // UI 确认：保持当前状态（POD 在底，锁定）
+      podVisible = true
+      cassetteVisible = true
+      podBottomZ = POD_BOTTOM_Z_BASE
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      signalOn = progress > 0.3
+      break
+
+    case 'ATTACH_POD_REACH_POS':
+      // POD 到底：保持底端
+      podVisible = true
+      cassetteVisible = true
+      podBottomZ = POD_BOTTOM_Z_BASE
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      break
+
+    // === 配置驱动新增阶段（UNPACKING）===
+    case 'DETACH_POD_REACH_STAGE':
+      podVisible = true
+      cassetteVisible = true
+      podBottomZ = POD_TOP_Z
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      break
+
+    case 'DETACH_CST_REMOVE':
+      // 移走晶舟：POD 在顶，晶舟渐隐
+      podVisible = true
+      cassetteVisible = progress < 0.5
+      podBottomZ = POD_TOP_Z
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
+      break
+
+    case 'DETACH_POD_REACH_POS':
+      podVisible = true
+      cassetteVisible = false
+      podBottomZ = POD_BOTTOM_Z_BASE
+      opPodY = 0
+      opPodZ = 0
+      latchLocked = true
       break
 
     case 'POD_UNLOCK':
@@ -1233,6 +1404,9 @@ watch(() => props.paused, (isPaused) => {
 
 onMounted(async () => {
   await nextTick()
+  // 加载统一动画配置（M1 配置层）
+  await animConfig.loadConfig()
+  applyConfigToPhases()
   initScene()
   await loadAndBuildMachine()
   setupCamera()

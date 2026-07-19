@@ -48,7 +48,37 @@ ODS_SYNC_ENABLED = False         # 是否启用ODS同步（连接真实Oracle时
 ODS_SYNC_INTERVAL_SEC = 30       # ODS同步间隔（秒）
 ODS_ORACLE_URL = ""              # ODS Oracle连接串
 
-# ========== AI MCP 配置 ==========
+# ========== 语音识别（ASR）配置 ==========
+# 使用 HuggingFace 国内镜像下载 whisper 模型（避免 huggingface.co 被墙）
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
+# Whisper 模型配置（环境变量优先）
+WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "tiny")  # tiny/base/small/medium/large-v3
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")            # cpu/cuda
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+
+# ========== AI 中间适配层配置 ==========
 AI_MCP_ENABLED = False           # 是否启用AI MCP（连接Dify/n8n时启用）
-AI_MCP_URL = ""                  # Dify/n8n API地址
-AI_MCP_API_KEY = ""              # API Key
+AI_MCP_URL = ""                  # Dify/n8n API地址（旧版兼容）
+AI_MCP_API_KEY = ""              # API Key（旧版兼容）
+
+# AI Provider: local / openai / dify / hybrid
+AI_PROVIDER = os.getenv("AI_PROVIDER", "local")
+
+# ========== OpenAI 兼容模型配置（GLM-5.2、GPT系列、本地私有化模型） ==========
+AI_BASE_URL = os.getenv("AI_BASE_URL", "")       # 如：https://open.bigmodel.cn/api/paas/v4
+AI_API_KEY = os.getenv("AI_API_KEY", "")         # API Key
+AI_MODEL = os.getenv("AI_MODEL", "glm-5.2")      # 模型名称
+AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.7"))
+AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "2048"))
+
+# ========== Dify 配置 ==========
+DIFY_ENABLED = os.getenv("DIFY_ENABLED", "False").lower() == "true"
+DIFY_BASE_URL = os.getenv("DIFY_BASE_URL", "")   # Dify API地址
+DIFY_API_KEY = os.getenv("DIFY_API_KEY", "")     # Dify API Key
+DIFY_APP_ID = os.getenv("DIFY_APP_ID", "")       # Dify应用ID
+
+# ========== N8N 配置 ==========
+N8N_ENABLED = os.getenv("N8N_ENABLED", "False").lower() == "true"
+N8N_BASE_URL = os.getenv("N8N_BASE_URL", "")     # N8N服务地址
+N8N_WEBHOOK_SECRET = os.getenv("N8N_WEBHOOK_SECRET", "")  # Webhook密钥

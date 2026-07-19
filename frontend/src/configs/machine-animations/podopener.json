@@ -1,0 +1,238 @@
+{
+  "machine_type": "PODOPENER",
+  "version": "1.0.0",
+  "description": "VPO 2200 PODOPENER 穿入/脱出流程统一动画配置（2D/3D 共用）",
+  "flows": {
+    "PACKING": {
+      "phases": [
+        { "key": "POD_PLACE",         "label": "空POD放置",   "duration_ms": 1600, "easing": "mechanical" },
+        { "key": "POD_LOCK",          "label": "POD锁定",     "duration_ms": 960,  "easing": "mechanical" },
+        { "key": "READ_TAG",          "label": "扫描标签",    "duration_ms": 1920, "easing": "linear" },
+        { "key": "BATCH_CONFIRM",     "label": "信号确认",    "duration_ms": 1280, "easing": "linear" },
+        { "key": "POD_UP",            "label": "POD上升",     "duration_ms": 2240, "easing": "mechanical" },
+        { "key": "POD_REACH_STAGE",   "label": "POD到顶",     "duration_ms": 640,  "easing": "linear" },
+        { "key": "CST_PLACE",         "label": "放入晶舟",    "duration_ms": 1920, "easing": "mechanical" },
+        { "key": "UI_CONFIRM",        "label": "UI确认",      "duration_ms": 800,  "easing": "linear" },
+        { "key": "POD_DOWN",          "label": "POD下降",     "duration_ms": 2240, "easing": "mechanical" },
+        { "key": "POD_REACH_POS",     "label": "POD到底",     "duration_ms": 640,  "easing": "linear" },
+        { "key": "UI_DOUBLECHECK",    "label": "二次确认",    "duration_ms": 800,  "easing": "linear" },
+        { "key": "WRITE_TAG",         "label": "写入标签",    "duration_ms": 1600, "easing": "linear" },
+        { "key": "POD_UNLOCK",        "label": "POD解锁",     "duration_ms": 960,  "easing": "mechanical" },
+        { "key": "POD_REMOVE",        "label": "满POD移走",   "duration_ms": 1600, "easing": "mechanical" }
+      ],
+      "event_to_phase": {
+        "POD_PLACED":            { "phase": "POD_PLACE",        "anim": "pod.enter",         "note": "空POD放入" },
+        "COMPLETED_PORT_LOCK":   { "phase": "POD_LOCK",         "anim": "latch.lock",        "note": "POD锁定完成" },
+        "READ_BATTERY":          { "phase": "READ_TAG",         "anim": "scan.blink",        "note": "读取RFID电池" },
+        "READ_TAG":              { "phase": "READ_TAG",         "anim": "scan.blink",        "note": "扫描标签" },
+        "BATCH_INFO_FROM_ECUI":  { "phase": "BATCH_CONFIRM",    "anim": "signal.flash",      "note": "批次信息确认" },
+        "OPEN_POD":              { "phase": "POD_UP",           "anim": "pod.up",            "note": "POD门打开，POD上升" },
+        "REACH_STAGE":           { "phase": "POD_REACH_STAGE",  "anim": "pod.hold_top",      "note": "POD到达顶端" },
+        "UI_CONFIRM":            { "phase": "UI_CONFIRM",       "anim": "ui.blink",          "note": "操作员UI确认" },
+        "CLOSE_POD":             { "phase": "POD_DOWN",         "anim": "pod.down",          "note": "POD门关闭，POD下降罩住" },
+        "ACK_UI_DOUBLECHECK":    { "phase": "UI_DOUBLECHECK",   "anim": "ui.blink",          "note": "二次确认" },
+        "REACH_POS":             { "phase": "POD_REACH_POS",    "anim": "pod.hold_bottom",   "note": "POD到达底端" },
+        "WRITE_TAG":             { "phase": "WRITE_TAG",        "anim": "signal.write",      "note": "写入RFID标签" },
+        "COMPLETED_PORT_UNLOCK": { "phase": "POD_UNLOCK",       "anim": "latch.unlock",      "note": "POD解锁完成" },
+        "POD_REMOVED":           { "phase": "POD_REMOVE",       "anim": "pod.exit",          "note": "满POD移走" }
+      }
+    },
+    "UNPACKING": {
+      "phases": [
+        { "key": "POD_PLACE",         "label": "满POD放置",   "duration_ms": 1600, "easing": "mechanical" },
+        { "key": "POD_LOCK",          "label": "POD锁定",     "duration_ms": 960,  "easing": "mechanical" },
+        { "key": "READ_TAG",          "label": "扫描标签",    "duration_ms": 1920, "easing": "linear" },
+        { "key": "BATCH_CONFIRM",     "label": "信号确认",    "duration_ms": 1280, "easing": "linear" },
+        { "key": "POD_UP",            "label": "POD上升",     "duration_ms": 2240, "easing": "mechanical" },
+        { "key": "POD_REACH_STAGE",   "label": "POD到顶",     "duration_ms": 640,  "easing": "linear" },
+        { "key": "CST_REMOVE",        "label": "移走晶舟",    "duration_ms": 1920, "easing": "mechanical" },
+        { "key": "POD_DOWN",          "label": "POD下降",     "duration_ms": 2240, "easing": "mechanical" },
+        { "key": "POD_REACH_POS",     "label": "POD到底",     "duration_ms": 640,  "easing": "linear" },
+        { "key": "WRITE_TAG",         "label": "写入标签",    "duration_ms": 1600, "easing": "linear" },
+        { "key": "POD_UNLOCK",        "label": "POD解锁",     "duration_ms": 960,  "easing": "mechanical" },
+        { "key": "POD_REMOVE",        "label": "空POD移走",   "duration_ms": 1600, "easing": "mechanical" }
+      ],
+      "event_to_phase": {
+        "POD_PLACED":            { "phase": "POD_PLACE",        "anim": "pod.enter",         "note": "满POD放入" },
+        "COMPLETED_PORT_LOCK":   { "phase": "POD_LOCK",         "anim": "latch.lock",        "note": "POD锁定完成" },
+        "READ_BATTERY":          { "phase": "READ_TAG",         "anim": "scan.blink",        "note": "读取RFID电池" },
+        "READ_TAG":              { "phase": "READ_TAG",         "anim": "scan.blink",        "note": "扫描标签" },
+        "BATCH_INFO_FROM_ECUI":  { "phase": "BATCH_CONFIRM",    "anim": "signal.flash",      "note": "批次信息确认" },
+        "OPEN_POD":              { "phase": "POD_UP",           "anim": "pod.up",            "note": "POD上升" },
+        "REACH_STAGE":           { "phase": "POD_REACH_STAGE",  "anim": "pod.hold_top",      "note": "POD到达顶端" },
+        "UI_CONFIRM":            { "phase": "CST_REMOVE",       "anim": "cassette.hide",     "note": "移走晶舟" },
+        "CLOSE_POD":             { "phase": "POD_DOWN",         "anim": "pod.down",          "note": "POD下降" },
+        "ACK_UI_DOUBLECHECK":    { "phase": "POD_REACH_POS",    "anim": "pod.hold_bottom",   "note": "POD到底" },
+        "REACH_POS":             { "phase": "POD_REACH_POS",    "anim": "pod.hold_bottom",   "note": "POD到底" },
+        "WRITE_TAG":             { "phase": "WRITE_TAG",        "anim": "signal.write",      "note": "写入RFID标签" },
+        "COMPLETED_PORT_UNLOCK": { "phase": "POD_UNLOCK",       "anim": "latch.unlock",      "note": "POD解锁完成" },
+        "POD_REMOVED":           { "phase": "POD_REMOVE",       "anim": "pod.exit",          "note": "空POD移走" }
+      }
+    }
+  },
+  "animations": {
+    "pod.enter": {
+      "target": "podShell",
+      "action": "translate",
+      "sub_phase": "enter",
+      "axis": "y",
+      "from": -400,
+      "to": 0,
+      "easing": "mechanical",
+      "note": "POD从入口移动到工作位（前半段Y轴，后半段Z轴）"
+    },
+    "pod.exit": {
+      "target": "podShell",
+      "action": "translate",
+      "sub_phase": "exit",
+      "axis": "y",
+      "from": 0,
+      "to": -400,
+      "easing": "mechanical",
+      "note": "POD从工作位移出到入口"
+    },
+    "pod.up": {
+      "target": "podShell",
+      "action": "translate",
+      "axis": "z",
+      "from": 148,
+      "to": 680,
+      "easing": "mechanical",
+      "note": "POD沿Z轴上升罩住腔体"
+    },
+    "pod.down": {
+      "target": "podShell",
+      "action": "translate",
+      "axis": "z",
+      "from": 680,
+      "to": 148,
+      "easing": "mechanical",
+      "note": "POD沿Z轴下降"
+    },
+    "pod.hold_top": {
+      "target": "podShell",
+      "action": "translate",
+      "axis": "z",
+      "from": 680,
+      "to": 680,
+      "easing": "linear",
+      "note": "POD保持在顶端"
+    },
+    "pod.hold_bottom": {
+      "target": "podShell",
+      "action": "translate",
+      "axis": "z",
+      "from": 148,
+      "to": 148,
+      "easing": "linear",
+      "note": "POD保持在底端"
+    },
+    "latch.lock": {
+      "target": "latch",
+      "action": "rotate",
+      "axis": "y",
+      "from": 35,
+      "to": 0,
+      "color": "#ef4444",
+      "easing": "mechanical",
+      "note": "锁扣旋转锁定，颜色变红"
+    },
+    "latch.unlock": {
+      "target": "latch",
+      "action": "rotate",
+      "axis": "y",
+      "from": 0,
+      "to": 35,
+      "color": "#10b981",
+      "easing": "mechanical",
+      "note": "锁扣旋转解锁，颜色变绿"
+    },
+    "scan.blink": {
+      "target": "scanLine",
+      "action": "scan",
+      "axis": "y",
+      "from": 20,
+      "to": -20,
+      "color": "#ef4444",
+      "duration_ms": 1920,
+      "note": "扫描线在POD标签处上下移动"
+    },
+    "signal.flash": {
+      "target": "signalGroup",
+      "action": "flash",
+      "color": "#ef4444",
+      "duration_ms": 1280,
+      "note": "信号灯闪烁（批次确认）"
+    },
+    "signal.write": {
+      "target": "signalGroup",
+      "action": "signal",
+      "color": "#ef4444",
+      "duration_ms": 1600,
+      "note": "信号条波动（写入RFID）"
+    },
+    "cassette.show": {
+      "target": "cassette",
+      "action": "visibility",
+      "from": 0,
+      "to": 1,
+      "note": "显示晶舟"
+    },
+    "cassette.hide": {
+      "target": "cassette",
+      "action": "visibility",
+      "from": 1,
+      "to": 0,
+      "note": "隐藏晶舟"
+    },
+    "ui.blink": {
+      "target": "uiPanel",
+      "action": "flash",
+      "color": "#3b82f6",
+      "duration_ms": 800,
+      "note": "UI面板闪烁确认"
+    }
+  },
+  "targets": {
+    "podShell": {
+      "view_2d": "pod2dLayer",
+      "view_3d": "podShellGroup",
+      "desc": "POD外壳（可移动）"
+    },
+    "latch": {
+      "view_2d": "latch2d",
+      "view_3d": "latchGroup",
+      "desc": "锁扣（旋转锁定/解锁）"
+    },
+    "cassette": {
+      "view_2d": "cassette2d",
+      "view_3d": "cassetteGroup",
+      "desc": "晶舟（显隐）"
+    },
+    "scanLine": {
+      "view_2d": "scanLine2d",
+      "view_3d": "scanLine",
+      "desc": "扫描线"
+    },
+    "signalGroup": {
+      "view_2d": "signal2d",
+      "view_3d": "signalGroup",
+      "desc": "信号灯/信号条"
+    },
+    "uiPanel": {
+      "view_2d": "uiPanel2d",
+      "view_3d": "uiPanel",
+      "desc": "UI操作面板"
+    },
+    "leftHand": {
+      "view_2d": "leftHand2d",
+      "view_3d": "leftHandGroup",
+      "desc": "左手模型（POD移动时显示）"
+    },
+    "rightHand": {
+      "view_2d": "rightHand2d",
+      "view_3d": "rightHandGroup",
+      "desc": "右手模型（POD移动时显示）"
+    }
+  }
+}

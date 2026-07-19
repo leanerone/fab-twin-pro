@@ -50,6 +50,34 @@ export const api = {
   
   // AI API
   aiQuery: (question, machineId) => request('POST', '/ai/query', { question, machine_id: machineId }),
+  // AI 统一聊天接口
+  aiChat: (data) => request('POST', '/ai/chat', data),
+  // AI 配置管理
+  aiGetConfig: () => request('GET', '/ai/config'),
+  aiUpdateConfig: (config) => request('PUT', '/ai/config', config),
+  aiTestConnection: (providerType, config) => request('POST', '/ai/config/test', { provider_type: providerType, config }),
+  // AI 会话管理
+  aiListSessions: (limit = 20) => request('GET', `/ai/sessions?limit=${limit}`),
+  aiGetSession: (sessionId) => request('GET', `/ai/sessions/${sessionId}`),
+  aiClearSession: (sessionId) => request('DELETE', `/ai/sessions/${sessionId}`),
+  // AI 语音识别（本地 Whisper，上传音频返回文本）
+  aiSpeechToText: async (audioBlob, language = 'zh') => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'speech.webm');
+    formData.append('language', language);
+    const token = getToken();
+    const res = await fetch(BASE + '/ai/speech-to-text', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+  aiSpeechStatus: () => request('GET', '/ai/speech/status'),
   
   // OHT API
   getOHTPositions: () => request('GET', '/oht'),

@@ -1,5 +1,6 @@
 <script setup>
 import AppHeader from './components/AppHeader.vue'
+import AIFloatingBall from './components/AIFloatingBall.vue'
 import { useAppStore } from './stores/app'
 import { useModelStore } from './stores/model'
 
@@ -16,6 +17,8 @@ modelStore.loadModels()
     <main class="app-main">
       <router-view />
     </main>
+    <!-- 全局悬浮AI球 -->
+    <AIFloatingBall />
   </div>
 </template>
 

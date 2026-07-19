@@ -1,5 +1,44 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useAnimationConfig } from '../composables/useAnimationConfig.js'
+
+// === 统一动画配置（M1 配置层）===
+// 加载 /configs/machine-animations/podopener.json，2D/3D 共用
+const animConfig = useAnimationConfig('podopener')
+const animConfigReady = ref(false)
+// 配置 phase key → 2D 视图阶段 key 的映射（PACKING）
+const PACKING_KEY_MAP_2D = {
+  'POD_PLACE': 'ATTACH_POD_PLACE',
+  'POD_UP': 'ATTACH_POD_UP',
+  'POD_DOWN': 'ATTACH_POD_DOWN',
+  'POD_REACH_STAGE': 'ATTACH_POD_REACH_STAGE',
+  'CST_PLACE': 'ATTACH_CST_PLACE',
+  'POD_REACH_POS': 'ATTACH_POD_REACH_POS',
+  'POD_REMOVE': 'ATTACH_POD_REMOVE',
+  'POD_LOCK': 'POD_LOCK',
+  'READ_TAG': 'READ_TAG',
+  'BATCH_CONFIRM': 'BATCH_START',
+  'UI_CONFIRM': 'UI_CONFIRM',
+  'UI_DOUBLECHECK': 'UI_DOUBLECHECK',
+  'WRITE_TAG': 'WRITE_TAG',
+  'POD_UNLOCK': 'POD_UNLOCK',
+}
+const UNPACKING_KEY_MAP_2D = {
+  'POD_PLACE': 'DETACH_POD_PLACE',
+  'POD_UP': 'DETACH_POD_UP',
+  'POD_DOWN': 'DETACH_POD_DOWN',
+  'POD_REACH_STAGE': 'DETACH_POD_REACH_STAGE',
+  'CST_REMOVE': 'DETACH_CST_REMOVE',
+  'POD_REACH_POS': 'DETACH_POD_REACH_POS',
+  'POD_REMOVE': 'DETACH_POD_REMOVE',
+  'POD_LOCK': 'POD_LOCK',
+  'READ_TAG': 'READ_TAG',
+  'BATCH_CONFIRM': 'BATCH_START',
+  'UI_CONFIRM': 'DETACH_CST_REMOVE',
+  'UI_DOUBLECHECK': 'DETACH_POD_REACH_POS',
+  'WRITE_TAG': 'WRITE_TAG',
+  'POD_UNLOCK': 'POD_UNLOCK',
+}
 
 const props = defineProps({
   machine: { type: Object, default: () => null },
@@ -17,7 +56,8 @@ const svgRef = ref(null)
 
 const PHASE_DURATION = 1600
 
-const ATTACH_FLOW = [
+// === 阶段定义：默认硬编码作为 fallback，配置加载后覆盖 ===
+let ATTACH_FLOW = [
   { key: 'ATTACH_POD_PLACE', label: '空POD放置', duration: PHASE_DURATION },
   { key: 'POD_LOCK', label: 'POD锁定', duration: PHASE_DURATION * 0.6 },
   { key: 'READ_TAG', label: '扫描标签', duration: PHASE_DURATION * 1.2 },
@@ -35,7 +75,7 @@ const ATTACH_FLOW = [
   { key: 'IDLE_ATTACH', label: '待机', duration: PHASE_DURATION * 0.6 },
 ]
 
-const DETACH_FLOW = [
+let DETACH_FLOW = [
   { key: 'DETACH_POD_PLACE', label: '满POD放置', duration: PHASE_DURATION },
   { key: 'POD_LOCK', label: 'POD锁定', duration: PHASE_DURATION * 0.6 },
   { key: 'READ_TAG', label: '扫描标签', duration: PHASE_DURATION * 1.2 },
@@ -51,6 +91,54 @@ const DETACH_FLOW = [
   { key: 'IDLE_DETACH', label: '待机', duration: PHASE_DURATION * 0.6 },
 ]
 
+/**
+ * 从统一配置构建本组件使用的阶段/事件映射格式
+ */
+function applyConfigToPhases() {
+  const cfg = animConfig.config.value
+  if (!cfg) return
+  const packingPhases = cfg.flows?.PACKING?.phases || []
+  const unpackingPhases = cfg.flows?.UNPACKING?.phases || []
+  const packingEvtMap = cfg.flows?.PACKING?.event_to_phase || {}
+  const unpackingEvtMap = cfg.flows?.UNPACKING?.event_to_phase || {}
+
+  if (packingPhases.length) {
+    ATTACH_FLOW = packingPhases.map(p => ({
+      key: PACKING_KEY_MAP_2D[p.key] || p.key,
+      label: p.label,
+      duration: p.duration_ms,
+      _configKey: p.key,
+    }))
+    // 追加 IDLE 阶段
+    ATTACH_FLOW.push({ key: 'IDLE_ATTACH', label: '待机', duration: PHASE_DURATION * 0.6 })
+    EVENT_TO_ATTACH_PHASE = {}
+    for (const [evt, def] of Object.entries(packingEvtMap)) {
+      const phaseKey = PACKING_KEY_MAP_2D[def.phase] || def.phase
+      EVENT_TO_ATTACH_PHASE[evt] = phaseKey
+    }
+  }
+  if (unpackingPhases.length) {
+    DETACH_FLOW = unpackingPhases.map(p => ({
+      key: UNPACKING_KEY_MAP_2D[p.key] || p.key,
+      label: p.label,
+      duration: p.duration_ms,
+      _configKey: p.key,
+    }))
+    DETACH_FLOW.push({ key: 'IDLE_DETACH', label: '待机', duration: PHASE_DURATION * 0.6 })
+    EVENT_TO_DETACH_PHASE = {}
+    for (const [evt, def] of Object.entries(unpackingEvtMap)) {
+      const phaseKey = UNPACKING_KEY_MAP_2D[def.phase] || def.phase
+      EVENT_TO_DETACH_PHASE[evt] = phaseKey
+    }
+  }
+  animConfigReady.value = true
+  console.log('[VPO2D] 统一配置已加载', {
+    attach: ATTACH_FLOW.length, detach: DETACH_FLOW.length,
+    attachEvt: Object.keys(EVENT_TO_ATTACH_PHASE).length,
+    detachEvt: Object.keys(EVENT_TO_DETACH_PHASE).length,
+  })
+}
+
 let animationFrameId = null
 let startTime = 0
 let currentCycleType = 'attach'
@@ -60,7 +148,7 @@ let phaseStartTime = 0
 const currentPhaseLabel = ref('待机')
 const cycleTypeLabel = ref('ATTACH')
 
-const EVENT_TO_ATTACH_PHASE = {
+let EVENT_TO_ATTACH_PHASE = {
   'POD_PLACED': 'ATTACH_POD_PLACE',
   'COMPLETED_PORT_LOCK': 'POD_LOCK',
   'READ_BATTERY': 'READ_TAG',
@@ -77,7 +165,7 @@ const EVENT_TO_ATTACH_PHASE = {
   'POD_REMOVED': 'ATTACH_POD_REMOVE',
 }
 
-const EVENT_TO_DETACH_PHASE = {
+let EVENT_TO_DETACH_PHASE = {
   'POD_PLACED': 'DETACH_POD_PLACE',
   'COMPLETED_PORT_LOCK': 'POD_LOCK',
   'READ_BATTERY': 'READ_TAG',
@@ -970,6 +1058,9 @@ function animate(now) {
 
 onMounted(async () => {
   await nextTick()
+  // 加载统一动画配置（M1 配置层）
+  await animConfig.loadConfig()
+  applyConfigToPhases()
   draw2DBase()
   currentPhaseLabel.value = '待机'
   cycleTypeLabel.value = 'IDLE'
