@@ -1,6 +1,6 @@
 # FabTwin Pro - 半导体工厂数字孪生平台
 
-半导体工厂数字孪生平台，支持机台实时监控、历史数据回放、楼层平面图编辑、OHT天车调度可视化及AI辅助查询。
+半导体工厂数字孪生平台，支持机台实时监控、历史数据回放、楼层平面图编辑、OHT天车调度可视化、AI辅助查询、语音识别及统一动画配置管理。
 
 **当前版本**：ver2（2026-07-19）
 
@@ -13,13 +13,15 @@
 - Oracle 19c（生产）/ SQLite（Demo）
 - Redis（可选，缓存）
 - WebSocket - 实时推送
+- faster-whisper - 本地语音识别（CPU/int8离线）
+- imageio-ffmpeg - 音频解码
 
 ### 前端
 - Vue 3.4 + Vite 5
 - Pinia - 状态管理
 - Vue Router 4 - 路由
 - Three.js 0.160 - 3D可视化
-- Element Plus - UI组件库
+- 原生HTML/CSS - UI组件（替代Element Plus）
 
 ## 功能特性
 
@@ -30,9 +32,14 @@
 - ✅ PODOPENER 完整业务流程 - 14步穿入 + 6步脱出 + 报警事件
 - ✅ 历史回放 - 实时/回放双模式 + 6档倍速 + 时间轴拖拽
 - ✅ WebSocket实时推送 - DB轮询 + 模拟器双模式驱动
-- ✅ 事件-阶段映射 - 14个事件全部匹配2D/3D动画阶段
+- ✅ 统一动画配置层 - podopener.json + useAnimationConfig.js，2D/3D视图共用配置消除偏差
+- ✅ 模型编辑器 - 动画配置可视化编辑 + 手动调试触发 + JSON导出 + 开发SOP
+- ✅ AI中间适配层 - 规则引擎 + Dify/n8n扩展 + 上下文感知
+- ✅ AI配置面板 - 参数热编辑 + 系统Prompt自定义 + 温度/Token调节
+- ✅ AI悬浮球 - 全局快速AI对话入口
+- ✅ 语音识别 - 本地faster-whisper离线识别，MediaRecorder录音，无需联网
+- ✅ 语音播报 - 机台状态/报警语音播报
 - ✅ WinForm模拟器 - tkinter GUI，按钮控制流程事件写入DB
-- ✅ AI助手 - 自然语言查询 + 回放跳转
 - ✅ 一键部署 - deploy.bat
 
 ## 快速开始
@@ -42,6 +49,21 @@
 - Node.js 16+
 - Git
 - Oracle客户端（生产环境）
+- ffmpeg（语音识别需要，通过pip install imageio-ffmpeg自动安装）
+
+### 安装依赖
+
+```bash
+# 后端
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+
+# 前端
+cd frontend
+npm install
+```
 
 ### 开发模式
 
@@ -52,14 +74,11 @@ start-dev.bat
 # 方式二：手动启动
 # 后端
 cd backend
-python -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
 python main.py
 
 # 前端（新终端）
 cd frontend
-npm install
 npm run dev
 ```
 
@@ -110,7 +129,7 @@ fab-twin-pro-ver1/
 │   │   ├── events.py          # 事件+趋势时间轴
 │   │   ├── lots.py            # 批次查询
 │   │   ├── alarms.py          # 告警统计
-│   │   ├── ai.py              # AI自然语言查询
+│   │   ├── ai.py              # AI自然语言查询+语音识别
 │   │   ├── floors.py          # 楼层/区域/轨迹/天车CRUD
 │   │   ├── oht.py             # 天车位置
 │   │   ├── recipes.py         # 工艺配方
@@ -123,15 +142,17 @@ fab-twin-pro-ver1/
 │       ├── simulator.py       # 工艺模拟器+PODOPENER流程模拟器
 │       ├── db_poller.py       # DB事件轮询服务（外部写入驱动）
 │       ├── ods.py             # ODS数据中台
-│       └── ai_mcp.py          # AI MCP调用框架
+│       ├── ai_mcp.py          # AI MCP调用框架
+│       ├── ai_middleware.py   # AI中间适配层（规则引擎+Dify+n8n）
+│       └── speech_service.py  # 本地Whisper语音识别服务
 ├── frontend/                   # Vue3 前端
 │   └── src/
 │       ├── views/             # 4个页面
 │       │   ├── Dashboard.vue      # 主页看板
 │       │   ├── MachineDetail.vue # 机台详情
-│       │   ├── ModelEditor.vue   # 模型编辑器
+│       │   ├── ModelEditor.vue   # 模型编辑器（配置+调试+指南）
 │       │   └── Login.vue         # 登录页
-│       ├── components/        # 18个组件
+│       ├── components/        # 组件
 │       │   ├── FloorView3D.vue       # 楼层3D视图
 │       │   ├── FloorPlan.vue         # 2D平面图编辑器
 │       │   ├── MachineModel3D.vue    # TEL DRM UNITY精细模型
@@ -142,22 +163,35 @@ fab-twin-pro-ver1/
 │       │   ├── HistoryReplay.vue     # 历史回放时间轴
 │       │   ├── PlaybackBar.vue       # 播放控制条
 │       │   ├── KpiCards.vue          # KPI卡片
-│       │   ├── AiAssistant.vue       # AI助手
+│       │   ├── AiAssistant.vue       # AI助手面板
+│       │   ├── AIConfigPanel.vue     # AI配置面板（参数热编辑）
+│       │   ├── AIFloatingBall.vue    # AI全局悬浮球
+│       │   ├── VoiceInput.vue        # 语音输入组件
+│       │   ├── EventAnimationDebugger.vue # 动画调试面板
 │       │   ├── EventList.vue         # 事件列表
 │       │   ├── AlarmStats.vue        # 告警统计
 │       │   └── ...
-│       ├── composables/       # 5个组合式函数
+│       ├── composables/       # 组合式函数
 │       │   ├── useThree.js            # Three.js封装
 │       │   ├── useIsoProjection.js    # 等角投影
 │       │   ├── useWebSocket.js        # WebSocket管理
 │       │   ├── useEventActionMapping.js # 事件动作映射
+│       │   ├── useAnimationConfig.js  # 统一动画配置加载器
 │       │   └── useAuth.js             # 认证
-│       ├── stores/            # 3个Pinia状态管理
+│       ├── configs/             # 配置文件
+│       │   └── machine-animations/  # 机台动画配置
+│       │       ├── podopener.json    # VPO事件-阶段-动画映射
+│       │       └── _schema.json     # 配置Schema校验
+│       ├── stores/            # Pinia状态管理
 │       │   ├── app.js         # 全局状态
 │       │   ├── model.js       # 机台型号配置
-│       │   └── auth.js        # 认证状态
+│       │   └── auth.js        # 认证状态（支持*通配符权限）
 │       └── api/index.js       # API统一封装
 ├── docs/                       # 归档文档
+│   ├── 系统架构说明书.md       # 系统架构详细说明
+│   ├── 开发进度管控.md         # 开发里程碑与进度
+│   ├── 变更改版记录.md         # 版本变更记录
+│   ├── 新机台开发SOP.md       # 新机台开发标准流程
 │   ├── 项目总结.md            # 详细项目总结
 │   ├── 项目统一架构规划.md     # 架构设计与规范
 │   ├── 项目计划说明书.md       # 项目计划与里程碑
@@ -184,6 +218,71 @@ fab-twin-pro-ver1/
 ├── create_user.bat            # 创建数据库用户
 └── create_user.sql            # 创建用户SQL
 ```
+
+## 统一动画配置架构
+
+### 四层架构
+
+```
+设备模型描述层 → 统一映射配置层 → 动画动作原语层 → 可视化调试层
+   (JSON)          (podopener.json)    (translate/rotate)   (模型编辑器)
+```
+
+### 配置文件结构（podopener.json）
+
+```json
+{
+  "machine_type": "podopener",
+  "version": "2.0",
+  "flows": {
+    "PACKING": {
+      "phases": [{ "key": "POD_PLACE", "label": "空POD放置", "duration_ms": 2000 }],
+      "event_to_phase": { "POD_PLACED": { "phase": "POD_PLACE", "anim": "pod.enter" } }
+    }
+  },
+  "animations": {
+    "pod.enter": { "action": "translate", "target": "pod", "axis": "x", "from": -120, "to": 0, "duration_ms": 2000 }
+  },
+  "targets": {
+    "pod": { "view_2d": "pod2dLayer", "view_3d": "podShell", "desc": "POD外壳" }
+  }
+}
+```
+
+### 模型编辑器工作流
+
+1. **模型管理** - 查看机台型号、创建新型号
+2. **动画配置** - 可视化编辑阶段/事件映射/动画原语/部件目标（4个子Tab）
+3. **动画调试** - 手动触发事件、阶段跳转、时间轴可视化
+4. **导出上线** - 导出JSON覆盖到configs目录，2D/3D视图自动加载
+
+## AI功能
+
+### AI中间适配层
+
+```
+用户输入 → ai_middleware.py → 规则引擎(本地) / Dify(云端) / n8n(编排)
+                              ↓
+                         上下文感知（当前机台/状态/事件）
+```
+
+- 本地规则引擎：Lot查询、机台状态、告警统计、温度趋势、产量统计、异常检测
+- Dify扩展：对话管理 + RAG知识库
+- n8n扩展：工具编排（Oracle/MES/RCMS/FDC）
+
+### AI配置面板
+
+- 系统Prompt自定义
+- 温度/最大Token/Top-P 调节
+- AI模式切换（规则引擎/Dify/n8n）
+- 语音播报开关
+
+### 语音识别
+
+- 前端：MediaRecorder API 录音 → webm/opus 格式上传
+- 后端：faster-whisper (CPU/int8) + imageio-ffmpeg 解码
+- 完全离线，国内网络可用
+- 模型：`openai/whisper-small`（通过 hf-mirror.com 镜像下载）
 
 ## 数据库
 
@@ -283,23 +382,12 @@ DB_POLLER_INTERVAL_MS = 1000
 | 3F | 主生产楼层 | ~15台 |
 | 4F | 刻蚀区扩展 | ~12台 |
 
-## AI功能
-
-### 当前实现（本地规则引擎）
-- Lot号查询 + 回放跳转
-- 机台状态查询
-- 告警统计分析
-- 温度趋势分析
-- 产量统计
-- 异常检测
-
-### 扩展方案（Dify + n8n）
-1. 部署 Dify - 对话管理 + RAG知识库
-2. 部署 n8n - 工具编排（Oracle/MES/RCMS/FDC）
-3. 配置 `backend/config.py` 中 AI MCP 参数
-
 ## 文档
 
+- [系统架构说明书](docs/系统架构说明书.md) - 系统架构详细说明
+- [开发进度管控](docs/开发进度管控.md) - 开发里程碑与进度
+- [变更更改版记录](docs/变更更改版记录.md) - 版本变更记录
+- [新机台开发SOP](docs/新机台开发SOP.md) - 新机台开发标准流程
 - [PROJECT_STATUS.md](PROJECT_STATUS.md) - 项目进度与后续开发计划
 - [docs/项目总结.md](docs/项目总结.md) - 详细项目总结
 - [docs/项目统一架构规划.md](docs/项目统一架构规划.md) - 架构设计与规范
