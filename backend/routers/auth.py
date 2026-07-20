@@ -28,17 +28,14 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 
 def get_user_permissions(user: User, db: Session) -> list:
-    """获取用户所有权限"""
+    """获取用户所有权限（基于角色-权限关联表）
+
+    注意：admin 角色直接返回 ["*"] 表示拥有全部权限
+    其他角色通过 ROLE_PERMISSIONS 表查询实际授权的权限ID列表
+    """
     if user.role == "admin":
         return ["*"]  # admin 拥有全部权限
-    
-    try:
-        permissions = db.query(Permission).all()
-        if permissions:
-            return [p.id for p in permissions]
-    except Exception:
-        pass
-    
+
     try:
         role_permissions = db.query(RolePermission).filter(RolePermission.role_id == user.role).all()
         permission_ids = [rp.permission_id for rp in role_permissions]

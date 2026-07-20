@@ -29,6 +29,12 @@ const routes = [
     component: () => import('../views/ModelEditor.vue'),
     meta: { requiresAuth: true, requirePermission: 'model_edit' },
   },
+  {
+    path: '/users',
+    name: 'user-management',
+    component: () => import('../views/UserManagement.vue'),
+    meta: { requiresAuth: true, requirePermission: 'user_manage' },
+  },
 ]
 
 const router = createRouter({

@@ -140,6 +140,28 @@ export const api = {
   getPermissions: () => request('GET', '/auth/permissions'),
   checkPermission: (permId) => request('GET', `/auth/check/${permId}`),
   getMachineMapping: (machineId) => request('GET', `/auth/machine/${machineId}`),
+
+  // 用户管理API（admin专用）
+  getUsers: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request('GET', `/users?${qs}`);
+  },
+  createUser: (data) => request('POST', '/users', data),
+  getUserDetail: (id) => request('GET', `/users/${id}`),
+  updateUser: (id, data) => request('PUT', `/users/${id}`, data),
+  deleteUser: (id) => request('DELETE', `/users/${id}`),
+  resetUserPassword: (id, data) => request('PUT', `/users/${id}/password`, data),
+
+  // 角色管理API
+  getRoles: () => request('GET', '/roles'),
+  createRole: (data) => request('POST', '/roles', data),
+  updateRole: (id, data) => request('PUT', `/roles/${id}`, data),
+  deleteRole: (id) => request('DELETE', `/roles/${id}`),
+  getRolePermissions: (id) => request('GET', `/roles/${id}/permissions`),
+  updateRolePermissions: (id, permIds) => request('PUT', `/roles/${id}/permissions`, { permission_ids: permIds }),
+
+  // 权限管理API
+  getAllPermissions: () => request('GET', '/permissions'),
 };
 
 export default api;

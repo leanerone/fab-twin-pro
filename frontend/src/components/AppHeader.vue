@@ -30,6 +30,10 @@ function goModelEditor() {
   router.push('/model-editor')
 }
 
+function goUserManagement() {
+  router.push('/users')
+}
+
 function toggleUserMenu() {
   showUserMenu.value = !showUserMenu.value
 }
@@ -49,6 +53,7 @@ function onDocClick(e) {
 const isDashboard = computed(() => route.name === 'dashboard')
 const isDetail = computed(() => route.name === 'machine-detail')
 const isModelEditor = computed(() => route.name === 'model-editor')
+const isUserManagement = computed(() => route.name === 'user-management')
 
 onMounted(() => {
   updateClock()
@@ -76,7 +81,15 @@ onUnmounted(() => {
         :class="{ active: isModelEditor }"
         @click="goModelEditor"
       >
-        模型管理
+        模型编辑器
+      </button>
+      <button
+        v-if="authStore.hasPermission('user_manage')"
+        class="nav-tab"
+        :class="{ active: isUserManagement }"
+        @click="goUserManagement"
+      >
+        用户管理
       </button>
     </nav>
     <div class="header-right">

@@ -6,7 +6,7 @@ echo ========================================
 echo.
 
 REM 启动后端
-echo [1/2] 启动后端 (FastAPI :8001)...
+echo [1/2] 启动后端 (FastAPI :8002)...
 start "FabTwin Backend" cmd /k "cd /d %~dp0backend && venv\Scripts\python.exe main.py"
 
 REM 等待后端启动
@@ -20,8 +20,8 @@ echo.
 echo ========================================
 echo  启动完成！
 echo  前端: http://localhost:5173
-echo  后端: http://localhost:8001
-echo  API文档: http://localhost:8001/docs
+echo  后端: http://localhost:8002
+echo  API文档: http://localhost:8002/docs
 echo ========================================
 echo.
 echo 关闭对应窗口即可停止服务

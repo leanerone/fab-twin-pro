@@ -89,13 +89,6 @@ onMounted(async () => {
             <button class="view-toggle" @click="toggleViewMode">
               {{ viewMode === '3d' ? '📋 平面图' : '🎯 3D视图' }}
             </button>
-            <button
-              v-if="authStore.hasPermission('model_edit')"
-              class="view-toggle editor-btn"
-              @click="router.push('/model-editor')"
-            >
-              🔧 模型编辑器
-            </button>
           </div>
         </div>
         
@@ -248,16 +241,6 @@ onMounted(async () => {
 .view-toggle:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.editor-btn {
-  margin-left: 8px;
-  border-color: #f59e0b;
-  color: #f59e0b;
-}
-
-.editor-btn:hover {
-  background: rgba(245, 158, 11, 0.15);
 }
 
 .view-content {

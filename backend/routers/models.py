@@ -7,9 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import MachineModelConfig, EventActionMapping
+from models import MachineModelConfig, EventActionMapping, User
+from routers.auth import get_current_user, check_permission
 
 router = APIRouter(prefix="/api/models", tags=["机台型号配置"])
+
+
+def require_model_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """要求当前用户拥有 model_edit 权限"""
+    if not check_permission(user, "model_edit", db):
+        raise HTTPException(status_code=403, detail="无权限：需要 model_edit 权限")
+    return user
 
 
 def _now_iso():
@@ -84,7 +92,7 @@ def get_model(model_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("")
-def create_model(payload: dict, db: Session = Depends(get_db)):
+def create_model(payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """新建机台型号"""
     model_id = payload.get("model_id")
     if not model_id:
@@ -115,7 +123,7 @@ def create_model(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.put("/{model_id}")
-def update_model(model_id: str, payload: dict, db: Session = Depends(get_db)):
+def update_model(model_id: str, payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """更新机台型号配置"""
     m = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
     if not m:
@@ -147,7 +155,7 @@ def update_model(model_id: str, payload: dict, db: Session = Depends(get_db)):
 
 
 @router.delete("/{model_id}")
-def delete_model(model_id: str, db: Session = Depends(get_db)):
+def delete_model(model_id: str, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """删除机台型号"""
     m = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
     if not m:
@@ -159,7 +167,7 @@ def delete_model(model_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{model_id}/duplicate")
-def duplicate_model(model_id: str, payload: dict, db: Session = Depends(get_db)):
+def duplicate_model(model_id: str, payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """复制机台型号（基于现有型号新建）"""
     m = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
     if not m:
@@ -220,7 +228,7 @@ def list_event_actions(model_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{model_id}/event-actions")
-def create_event_action(model_id: str, payload: dict, db: Session = Depends(get_db)):
+def create_event_action(model_id: str, payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """新建事件动作映射"""
     m = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
     if not m:
@@ -251,7 +259,7 @@ def create_event_action(model_id: str, payload: dict, db: Session = Depends(get_
 
 
 @router.put("/{model_id}/event-actions/{mapping_id}")
-def update_event_action(model_id: str, mapping_id: str, payload: dict, db: Session = Depends(get_db)):
+def update_event_action(model_id: str, mapping_id: str, payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """更新事件动作映射"""
     mp = db.query(EventActionMapping).filter(
         EventActionMapping.model_id == model_id,
@@ -280,7 +288,7 @@ def update_event_action(model_id: str, mapping_id: str, payload: dict, db: Sessi
 
 
 @router.delete("/{model_id}/event-actions/{mapping_id}")
-def delete_event_action(model_id: str, mapping_id: str, db: Session = Depends(get_db)):
+def delete_event_action(model_id: str, mapping_id: str, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
     """删除事件动作映射"""
     mp = db.query(EventActionMapping).filter(
         EventActionMapping.model_id == model_id,

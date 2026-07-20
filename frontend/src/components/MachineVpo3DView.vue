@@ -71,7 +71,7 @@ let resizeHandler = null
 let autoLoopTimer = null
 
 const MODEL_SCALE = 0.005
-const DEFAULT_MODEL_URL = '/models/vpo-2200-3d.json'
+const DEFAULT_MODEL_URL = '/models/podopener-2200-3d.json'
 
 const POD_BOTTOM_Z_BASE = 148 * MODEL_SCALE
 const POD_TOP_Z = 680 * MODEL_SCALE

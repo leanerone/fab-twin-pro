@@ -7,8 +7,17 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Floor, FloorArea, Machine, Track, Vehicle
+from routers.auth import get_current_user, check_permission
+from models import User
 
 router = APIRouter(prefix="/api/floors", tags=["floors"])
+
+
+def require_floor_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """要求当前用户拥有 floor_edit 权限"""
+    if not check_permission(user, "floor_edit", db):
+        raise HTTPException(status_code=403, detail="无权限：需要 floor_edit 权限")
+    return user
 
 
 @router.get("", response_model=List[dict])
@@ -109,7 +118,7 @@ def get_floor_machines(floor_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{floor_id}/areas")
-def add_area(floor_id: int, area: dict, db: Session = Depends(get_db)):
+def add_area(floor_id: int, area: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """添加楼层区域"""
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
@@ -132,7 +141,7 @@ def add_area(floor_id: int, area: dict, db: Session = Depends(get_db)):
 
 
 @router.put("/{floor_id}/areas/{area_id}")
-def update_area(floor_id: int, area_id: int, data: dict, db: Session = Depends(get_db)):
+def update_area(floor_id: int, area_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """更新楼层区域位置和尺寸"""
     area = db.query(FloorArea).filter(FloorArea.id == area_id, FloorArea.floor_id == floor_id).first()
     if not area:
@@ -156,7 +165,7 @@ def update_area(floor_id: int, area_id: int, data: dict, db: Session = Depends(g
 
 
 @router.post("/{floor_id}/machines")
-def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db)):
+def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """添加新机台到楼层"""
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
@@ -199,7 +208,7 @@ def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db)):
 
 
 @router.delete("/{floor_id}/areas/{area_id}")
-def delete_area(floor_id: int, area_id: int, db: Session = Depends(get_db)):
+def delete_area(floor_id: int, area_id: int, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """删除楼层区域"""
     area = db.query(FloorArea).filter(FloorArea.id == area_id, FloorArea.floor_id == floor_id).first()
     if not area:
@@ -210,7 +219,7 @@ def delete_area(floor_id: int, area_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{floor_id}/machines/{machine_id}")
-def delete_machine(floor_id: int, machine_id: str, db: Session = Depends(get_db)):
+def delete_machine(floor_id: int, machine_id: str, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """从楼层删除机台（仅清除楼层关联，不删除机台记录）"""
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
@@ -223,7 +232,7 @@ def delete_machine(floor_id: int, machine_id: str, db: Session = Depends(get_db)
 
 
 @router.put("/{floor_id}/machines/{machine_id}/position")
-def update_machine_position(floor_id: int, machine_id: str, position: dict, db: Session = Depends(get_db)):
+def update_machine_position(floor_id: int, machine_id: str, position: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """更新机台在楼层平面图上的位置"""
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
@@ -237,7 +246,7 @@ def update_machine_position(floor_id: int, machine_id: str, position: dict, db: 
 
 
 @router.post("/import")
-def import_floor_plan(data: dict, db: Session = Depends(get_db)):
+def import_floor_plan(data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """批量导入楼层平面图数据"""
     floor_id = data.get("floor_id")
     areas = data.get("areas", [])
@@ -313,7 +322,7 @@ def export_floor_plan(floor_id: int, db: Session = Depends(get_db)):
 # ========== 天车轨迹 API ==========
 
 @router.post("/{floor_id}/tracks")
-def add_track(floor_id: int, data: dict, db: Session = Depends(get_db)):
+def add_track(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """添加天车轨迹"""
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
@@ -336,7 +345,7 @@ def add_track(floor_id: int, data: dict, db: Session = Depends(get_db)):
 
 
 @router.put("/{floor_id}/tracks/{track_id}")
-def update_track(floor_id: int, track_id: int, data: dict, db: Session = Depends(get_db)):
+def update_track(floor_id: int, track_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """更新天车轨迹"""
     track = db.query(Track).filter(Track.id == track_id, Track.floor_id == floor_id).first()
     if not track:
@@ -356,7 +365,7 @@ def update_track(floor_id: int, track_id: int, data: dict, db: Session = Depends
 
 
 @router.delete("/{floor_id}/tracks/{track_id}")
-def delete_track(floor_id: int, track_id: int, db: Session = Depends(get_db)):
+def delete_track(floor_id: int, track_id: int, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """删除天车轨迹"""
     track = db.query(Track).filter(Track.id == track_id, Track.floor_id == floor_id).first()
     if not track:
@@ -373,7 +382,7 @@ def delete_track(floor_id: int, track_id: int, db: Session = Depends(get_db)):
 # ========== 天车 API ==========
 
 @router.post("/{floor_id}/vehicles")
-def add_vehicle(floor_id: int, data: dict, db: Session = Depends(get_db)):
+def add_vehicle(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """添加天车"""
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
@@ -411,7 +420,7 @@ def add_vehicle(floor_id: int, data: dict, db: Session = Depends(get_db)):
 
 
 @router.put("/{floor_id}/vehicles/{vehicle_id}")
-def update_vehicle(floor_id: int, vehicle_id: str, data: dict, db: Session = Depends(get_db)):
+def update_vehicle(floor_id: int, vehicle_id: str, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """更新天车状态"""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id, Vehicle.floor_id == floor_id).first()
     if not vehicle:
@@ -438,7 +447,7 @@ def update_vehicle(floor_id: int, vehicle_id: str, data: dict, db: Session = Dep
 
 
 @router.delete("/{floor_id}/vehicles/{vehicle_id}")
-def delete_vehicle(floor_id: int, vehicle_id: str, db: Session = Depends(get_db)):
+def delete_vehicle(floor_id: int, vehicle_id: str, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """删除天车"""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id, Vehicle.floor_id == floor_id).first()
     if not vehicle:

@@ -6,3 +6,10 @@ aiosqlite>=0.19.0
 python-dateutil>=2.8
 redis>=5.0
 requests>=2.31.0
+# Oracle 驱动（生产环境必需）
+oracledb>=2.0.0
+# 语音识别（可选，faster-whisper 用于本地 ASR）
+faster-whisper>=1.0.0
+imageio-ffmpeg>=0.4.9
+# FastAPI 文件上传支持（语音识别接收音频）
+python-multipart>=0.0.6

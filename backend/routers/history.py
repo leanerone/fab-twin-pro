@@ -17,13 +17,17 @@ def _normalize_ts(ts: str) -> str:
     数据库中存在两种格式：
     1. 2026-07-12T08:00:00.000Z （本地时间被错误标记为UTC）
     2. 2026-07-18T20:25:00.054573 （本地时间无后缀）
-    统一返回: 2026-07-12T08:00:00.000 （无时区后缀，前端按本地时间解析）
+    3. 2026-07-17 00:52:55 （Oracle存储为空格分隔）
+    统一返回: 2026-07-17 00:52:55 （空格分隔，匹配Oracle字符串比较）
     """
     if not ts:
         return ""
     ts = str(ts).strip()
     # 去掉Z后缀和时区偏移（+08:00等），因为数据本身就是东八区时间
     ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
+    # 将T分隔符替换为空格，匹配Oracle数据库中的存储格式
+    # Oracle字符串比较时空格(32) < T(84)，会导致范围查询出错
+    ts = ts.replace('T', ' ')
     return ts
 
 
@@ -165,8 +169,8 @@ def get_timeline(
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    start = f"{date}T00:00:00"
-    end = f"{date}T23:59:59.999999"
+    start = f"{date} 00:00:00"
+    end = f"{date} 23:59:59.999999"
 
     rows = (
         db.query(DT_EVENT_RAW)

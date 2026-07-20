@@ -48,7 +48,7 @@ def create_machines(db: Session):
         {"id": "OXE-18", "name": "刻蚀机 OXE-18", "line": 2, "floor": 3, "has_smif": True, "x_pos": -4, "y_pos": -6, "floor_x": 74, "floor_y": 55},
         {"id": "OXE-19", "name": "刻蚀机 OXE-19", "line": 2, "floor": 3, "has_smif": True, "x_pos": 0, "y_pos": -6, "floor_x": 81, "floor_y": 55},
         {"id": "OXE-20", "name": "刻蚀机 OXE-20", "line": 2, "floor": 3, "has_smif": True, "x_pos": 4, "y_pos": -6, "floor_x": 88, "floor_y": 55},
-        {"id": "PODOPENER-1", "name": "POD开盖机 PODOPENER-1", "line": 1, "floor": 3, "has_smif": True, "x_pos": 16, "y_pos": 0, "floor_x": 40, "floor_y": 8, "process_type": "PODOPENER", "model": "VPO-2200"},
+        {"id": "PODOPENER-1", "name": "POD开盖机 PODOPENER-1", "line": 1, "floor": 3, "has_smif": True, "x_pos": 16, "y_pos": 0, "floor_x": 40, "floor_y": 8, "process_type": "PODOPENER", "model": "PODOPENER-2200"},
         {"id": "STK-3F", "name": "STK传输机 3F", "line": 1, "floor": 3, "has_smif": False, "x_pos": 0, "y_pos": 0, "floor_x": 47, "floor_y": 38, "process_type": "STK"},
 
         # === 4F: 刻蚀区扩展 ===
@@ -423,7 +423,7 @@ def create_machine_model_configs(db: Session):
     ]
 
     vpo_views = {
-        "view_3d": {"type": "vpo", "model_source": "/models/vpo-2200-3d.json",
+        "view_3d": {"type": "vpo", "model_source": "/models/podopener-2200-3d.json",
                     "default_camera": {"position": [700, -300, 400], "target": [0, 0, 400]}},
         "view_2d": {"type": "vpo", "svg_source": "procedural",
                     "view_label": "正视图"},
@@ -608,7 +608,7 @@ def create_machine_model_configs(db: Session):
 
     for mp in vpo_mappings:
         db.add(EventActionMapping(
-            model_id="VPO-2200",
+            model_id="PODOPENER-2200",
             mapping_id=mp["mapping_id"],
             description=mp["description"],
             trigger_event_type=mp["trigger_event_type"],

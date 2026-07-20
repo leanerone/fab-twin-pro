@@ -1,12 +1,15 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed, reactive } from 'vue'
 import { api } from '../api'
+import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
   floorId: { type: Number, default: 1 },
 })
 
 const emit = defineEmits(['select-machine'])
+
+const authStore = useAuthStore()
 
 const floorData = ref(null)
 const machines = ref([])
@@ -541,6 +544,13 @@ watch(editMode, (val) => {
   }
 })
 
+// 权限被收回时强制退出编辑模式
+watch(() => authStore.hasPermission('floor_edit'), (allowed) => {
+  if (!allowed && editMode.value) {
+    editMode.value = false
+  }
+}, { immediate: true })
+
 onMounted(() => {
   loadFloorData().then(() => {
     updateVehiclePositions()
@@ -563,13 +573,14 @@ onUnmounted(() => {
         <span class="fp-desc">{{ floorData?.description }}</span>
       </div>
       <div class="fp-actions">
-        <label class="action-btn import-btn">
+        <label v-if="authStore.hasPermission('floor_edit')" class="action-btn import-btn">
           📥 导入
           <input type="file" accept=".json" @change="importFloorPlan" />
         </label>
         <button class="action-btn" @click="exportFloorPlan">📤 导出</button>
-        <button 
-          class="action-btn" 
+        <button
+          v-if="authStore.hasPermission('floor_edit')"
+          class="action-btn"
           :class="{ active: editMode }"
           @click="editMode = !editMode"
         >
