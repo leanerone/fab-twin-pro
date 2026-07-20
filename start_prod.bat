@@ -1,11 +1,12 @@
 @echo off
-chcp 65001 >nul
-title FabTwin 生产环境启动
+title FabTwin Prod Start
 
 REM ================================================================
-REM FabTwin 生产环境启动脚本
-REM 用途：在量产服务器上启动前后端服务
-REM 前提：已完成 deploy.bat 部署（venv + node_modules + dist 都已就绪）
+REM FabTwin Production Start Script
+REM Usage: Start frontend and backend services on prod server
+REM Prereq: deploy.bat has been run (venv + node_modules + dist ready)
+REM
+REM IMPORTANT: English only to avoid encoding issues on Windows Server
 REM ================================================================
 
 setlocal
@@ -15,74 +16,79 @@ set "BACKEND_DIR=%BASE_DIR%\backend"
 set "FRONTEND_DIR=%BASE_DIR%\frontend"
 
 echo ================================================================
-echo  FabTwin 生产环境启动
+echo  FabTwin Production Start
 echo ================================================================
 echo.
 
-REM 检查必备文件
+REM Check required files
 if not exist "%BACKEND_DIR%\venv\Scripts\python.exe" (
-    echo ERROR: 后端venv不存在，请先运行 deploy.bat
+    echo ERROR: backend venv not found, please run deploy.bat first
     pause
     exit /b 1
 )
 
 if not exist "%FRONTEND_DIR%\dist\index.html" (
-    echo ERROR: 前端构建产物不存在，请先运行 deploy.bat
+    echo ERROR: frontend dist not found, please run deploy.bat first
     pause
     exit /b 1
 )
 
-REM 检查端口占用
+REM Check port usage
 netstat -ano | findstr ":8002 " | findstr "LISTENING" >nul
 if not errorlevel 1 (
-    echo WARNING: 端口8002已被占用，可能后端已在运行
-    choice /C YN /M "是否继续启动后端（可能失败）"
+    echo WARNING: port 8002 in use, backend may be running
+    choice /C YN /M "Continue starting backend (may fail)"
     if errorlevel 2 exit /b 0
 )
 
 netstat -ano | findstr ":5173 " | findstr "LISTENING" >nul
 if not errorlevel 1 (
-    echo WARNING: 端口5173已被占用，可能前端已在运行
-    choice /C YN /M "是否继续启动前端（可能失败）"
+    echo WARNING: port 5173 in use, frontend may be running
+    choice /C YN /M "Continue starting frontend (may fail)"
     if errorlevel 2 exit /b 0
 )
 
-REM 配置环境变量（生产环境）
+REM Production env vars
 set "DB_TYPE=oracle"
 set "SIMULATION_ENABLED=False"
 set "DB_POLLER_ENABLED=True"
-REM 如果不使用默认值，请取消注释并修改以下配置
+
+REM Uncomment and modify if non-default Oracle config
 REM set "ORACLE_HOST=192.168.x.x"
 REM set "ORACLE_PORT=1521"
 REM set "ORACLE_SERVICE=ORCLPDB"
 REM set "ORACLE_USER=fabtwin"
 REM set "ORACLE_PASSWORD=fabtwin"
 
-echo [1/2] 启动后端服务 (FastAPI :8002)...
+REM For Oracle 10g/11g: set ORACLE_CLIENT_DIR to Instant Client path
+REM set "ORACLE_CLIENT_DIR=C:\oracle\instantclient_19_x"
+
+echo [1/2] Starting backend (FastAPI :8002)...
 start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && venv\Scripts\python.exe main.py"
 
-echo 等待后端启动（5秒）...
+echo Waiting for backend to start (5 sec)...
 timeout /t 5 /nobreak >nul
 
-echo [2/2] 启动前端服务 (Vite Preview :5173)...
+echo [2/2] Starting frontend (Vite Preview :5173)...
 cd /d "%FRONTEND_DIR%"
 if exist "node_modules\.bin\vite.cmd" (
     start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && node_modules\.bin\vite.cmd preview --port 5173 --host"
 ) else (
-    echo WARNING: vite.cmd 不存在，使用 npx 启动
+    echo WARNING: vite.cmd not found, using npx
     start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && npx vite preview --port 5173 --host"
 )
 
 echo.
 echo ================================================================
-echo  服务已启动！
+echo  Services started!
 echo ================================================================
-echo  前端: http://localhost:5173
-echo  后端: http://localhost:8002
-echo  API文档: http://localhost:8002/docs
-echo  健康检查: http://localhost:8002/health
+echo  Frontend:  http://localhost:5173
+echo  Backend:   http://localhost:8002
+echo  API docs:  http://localhost:8002/docs
+echo  Health:    http://localhost:8002/health
 echo ================================================================
 echo.
-echo 关闭对应窗口即可停止服务
+echo Close the corresponding window to stop the service
 echo.
 pause
+endlocal

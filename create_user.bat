@@ -1,19 +1,27 @@
 @echo off
-chcp 65001 >nul
-title FabTwin 创建 Oracle 用户
+title FabTwin Create Oracle User
 
 REM ================================================================
-REM FabTwin Oracle 用户创建脚本
-REM 用途：创建 fabtwin 业务用户、表空间、授权
-REM 前提：Oracle 服务已启动，执行者有 sysdba 权限
+REM FabTwin Oracle User Creation Script
+REM Usage: Create fabtwin business user, tablespace, grants
+REM Prereq: Oracle DB is running, executor has sysdba privilege
+REM
+REM Note: Usually this is done by DBA team on the Oracle server.
+REM       App deployer can send create_user.sql to DBA team to run.
 REM ================================================================
 
 setlocal
 cd /d %~dp0
 
-REM ---------- 自动检测 ORACLE_HOME ----------
+REM ---------- Auto detect ORACLE_HOME ----------
 if not defined ORACLE_HOME (
     for /f "tokens=2,*" %%a in ('reg query "HKLM\SOFTWARE\Oracle\KEY_OraDB19Home1" /v ORACLE_HOME 2^>nul ^| findstr ORACLE_HOME') do (
+        set "ORACLE_HOME=%%b"
+    )
+    for /f "tokens=2,*" %%a in ('reg query "HKLM\SOFTWARE\Oracle\KEY_OraDB18Home1" /v ORACLE_HOME 2^>nul ^| findstr ORACLE_HOME') do (
+        set "ORACLE_HOME=%%b"
+    )
+    for /f "tokens=2,*" %%a in ('reg query "HKLM\SOFTWARE\Oracle\KEY_OraDB12Home1" /v ORACLE_HOME 2^>nul ^| findstr ORACLE_HOME') do (
         set "ORACLE_HOME=%%b"
     )
 )
@@ -39,12 +47,12 @@ set "ORACLE_SID=ORCL"
 
 echo.
 echo ================================================================
-echo  创建 fabtwin 用户（需 sysdba 权限）
+echo  Creating fabtwin user (requires sysdba privilege)
 echo ================================================================
 echo.
 
 if not exist "create_user.sql" (
-    echo ERROR: 未找到 create_user.sql
+    echo ERROR: create_user.sql not found
     pause
     exit /b 1
 )
@@ -52,13 +60,13 @@ if not exist "create_user.sql" (
 sqlplus /nolog @create_user.sql
 
 if errorlevel 1 (
-    echo WARNING: sqlplus 退出码 %errorlevel%
+    echo WARNING: sqlplus exited with code %errorlevel%
     pause
     exit /b 1
 )
 
 echo.
-echo 用户创建完成！接下来请运行 init_db.bat 初始化表结构
+echo User creation done. Next: run init_db.bat to initialize schema
 echo.
 pause
 endlocal

@@ -50,6 +50,7 @@
 | 服务名 | ORCLPDB | `ORACLE_SERVICE` |
 | 业务用户名 | fabtwin | `ORACLE_USER`（DB 组创建） |
 | 业务用户密码 | ******** | `ORACLE_PASSWORD`（DB 组创建） |
+| Oracle 版本 | 10g / 11g / 12c / 19c 等 | 决定连接模式（见 1.2.1） |
 
 **DB 组需确保该业务用户具有以下权限：**
 - `CREATE SESSION` - 连接数据库
@@ -59,6 +60,37 @@
 **应用部署方需确保：**
 - 量产服务器能访问 DB 组的 Oracle 端口（默认 1521）
 - 防火墙规则已开通（如跨网段）
+
+#### 1.2.1 Oracle 版本兼容性（关键）
+
+后端使用 Python `oracledb` 包连接 Oracle，支持两种模式：
+
+| Oracle 版本 | 连接模式 | 是否需要 Oracle Client | 配置 |
+|------------|----------|----------------------|------|
+| **12.1+**（12c/18c/19c/21c/23ai） | Thin 模式（默认） | 否 | 无需额外配置 |
+| **10g / 11g** | Thick 模式 | 是（Instant Client 11.2+） | 需设置 `ORACLE_CLIENT_DIR` |
+
+**如量产 Oracle 是 10g / 11g，必须：**
+
+1. 在量产服务器安装 Oracle Instant Client（11.2 或 19c 版本均可，19c 客户端可向下连接 9.2+）
+   - 下载地址：https://www.oracle.com/database/technologies/instant-client.html
+   - 选择 `instantclient-basic-windows.x64-19.x.0.0.0dbru.zip`
+   - 解压到 `C:\oracle\instantclient_19_x`（路径无空格、无中文）
+
+2. 设置环境变量 `ORACLE_CLIENT_DIR` 指向 Instant Client 目录：
+   ```cmd
+   setx ORACLE_CLIENT_DIR "C:\oracle\instantclient_19_x"
+   ```
+
+3. 后端 `database.py` 会自动检测并切换到 Thick 模式（无需改代码）
+
+**报错对照表：**
+
+| 错误码 | 含义 | 解决方案 |
+|--------|------|----------|
+| ORA-03134 | 连接到旧版本数据库被拒绝 | 切换到 Thick 模式（设置 `ORACLE_CLIENT_DIR`） |
+| ORA-28040 | No matching authentication protocol | 同上，Thick 模式 + 高版本 Instant Client |
+| DPI-1072 | Oracle Client 已初始化 | 忽略，正常现象 |
 
 ### 1.3 网络策略
 
@@ -253,6 +285,28 @@ venv\Scripts\python.exe -c "import oracledb; conn=oracledb.connect(user='fabtwin
 
 ```cmd
 sqlplus fabtwin/********@ORCLPDB @init_oracle_db.sql
+```
+
+**方式 3：用 Aqua Data Studio 执行**（适合 DB 组日常工具）
+
+仓库已提供 Aqua Data Studio 兼容版本 `sql/init_oracle_aqua.sql`（由 `gen_aqua_sql.py` 从 `init_oracle_db.sql` 自动生成，移除了所有 SQL*Plus 特定命令）。
+
+**操作步骤：**
+1. 打开 Aqua Data Studio
+2. 连接到 Oracle（DB 组提供的连接信息）
+3. `File → Open` 打开 `sql/init_oracle_aqua.sql`
+4. `Query → Execute All`（或 F5）执行整个脚本
+5. 检查执行日志，确认无错误
+
+**Aqua Data Studio 兼容性说明：**
+- 已移除：`PROMPT`、`SET DEFINE OFF`、`SET SQLBLANKLINES ON`、`EXIT`、`SPOOL` 等 SQL*Plus 命令
+- 保留：标准 SQL（CREATE TABLE / INSERT / DROP 等）+ PL/SQL 块（CREATE TRIGGER ... END; / ）
+- 兼容工具：Aqua Data Studio、DBeaver、SQL Developer、Toad
+
+**如需重新生成 Aqua 版本**（修改 init_oracle_db.sql 后）：
+```cmd
+cd /d D:\deploy\fab-twin-pro
+python gen_aqua_sql.py
 ```
 
 **该脚本会完成：**
@@ -698,6 +752,80 @@ REM 重启应用
 
 **Nginx 日志：** `C:\nginx\logs\error.log` 和 `access.log`
 
+### 10.6 Windows Server 编码问题（UTF-8 / GBK）
+
+**常见症状：**
+- `.bat` 文件运行闪退（窗口一闪即关）
+- 中文注释显示为乱码
+- `chcp 65001` 后命令行无法正常输入
+- SQL 文件执行报错 ORA-00911 invalid character
+
+**原因：**
+- Windows Server 中文版默认编码是 GBK（CP936），不是 UTF-8
+- 文件保存为 UTF-8 with BOM 时，BOM 字节会被当作 SQL 内容导致 ORA-00911
+- `.bat` 文件包含中文且编码不匹配时，cmd 解析失败导致闪退
+
+**本项目已采取的规避措施：**
+
+1. **所有 `.bat` 文件仅使用英文**（deploy.bat / init_db.bat / start_prod.bat / create_user.bat / package_offline.bat）
+   - 移除了 `chcp 65001`（中文 Windows Server 上易导致解析问题）
+   - 所有提示信息、注释、错误消息均为英文
+   - 文件以 ANSI/GBK 编码保存（cmd 原生支持）
+
+2. **SQL 文件保存为 UTF-8 无 BOM**
+   - `init_oracle_db.sql` 和 `init_oracle_aqua.sql` 均为 UTF-8 无 BOM
+   - 可用以下命令验证：
+     ```cmd
+     powershell -Command "$b=[IO.File]::ReadAllBytes('sql\init_oracle_db.sql')[0..2]; if($b[0]-eq0xEF-and$b[1]-eq0xBB-and$b[2]-eq0xBF){'UTF-8 with BOM'}else{'No BOM'}"
+     ```
+
+3. **如仍遇到编码问题：**
+   - 用 Notepad++ 打开 `.bat` 文件 → `Encoding → Convert to ANSI`
+   - 用 Notepad++ 打开 SQL 文件 → `Encoding → Convert to UTF-8 without BOM`
+   - Windows Server 设置：`Control Panel → Region → Administrative → Change system locale → 取消勾选 Beta: Use Unicode UTF-8`
+
+### 10.7 bat 脚本闪退排查
+
+**所有 bat 脚本末尾均有 `pause`**，正常完成或出错都会等待用户按键。如仍出现闪退：
+
+**排查步骤：**
+
+1. **在 cmd 中手动运行**（不要双击）：
+   ```cmd
+   cd /d D:\deploy\fab-twin-pro
+   deploy.bat
+   ```
+   这样即使脚本退出，cmd 窗口也不会关闭，可以看到错误信息。
+
+2. **检查文件编码**：
+   ```cmd
+   powershell -Command "Get-Content deploy.bat -Encoding Byte -TotalCount 3"
+   ```
+   如返回 `239 187 191`（EF BB BF），说明是 UTF-8 with BOM，需另存为 ANSI。
+
+3. **检查文件路径是否含中文/空格**：
+   - 部署目录建议用纯英文路径，如 `D:\deploy\fab-twin-pro`
+   - 避免使用 `D:\部署\` 或 `C:\Users\张三\` 等路径
+
+4. **以管理员身份运行**：
+   - 右键 `deploy.bat` → `以管理员身份运行`
+   - 部分环境（如安装 venv、写入 Program Files）需要管理员权限
+
+5. **打开 echo 调试**：
+   - 编辑 bat 文件，第二行加 `@echo on`
+   - 重新运行，会显示每条命令的执行过程
+
+**常见闪退原因：**
+
+| 原因 | 解决方案 |
+|------|----------|
+| 文件编码 UTF-8 with BOM | 另存为 ANSI 编码 |
+| 路径含中文/空格 | 改用纯英文路径 |
+| 缺少 `setlocal` / `endlocal` | 检查脚本结构（本项目已修复） |
+| `setlocal enabledelayedexpansion` 配合 `!var!` 使用不当 | 检查变量引用（本项目已修复） |
+| 调用 `npm` / `vite` 等 PowerShell 脚本被拦截 | 使用 `cmd /c "npm ..."` 绕过执行策略 |
+| 权限不足（无法创建 venv） | 以管理员身份运行 |
+
 ---
 
 ## 附录 A：环境变量完整清单
@@ -710,6 +838,7 @@ REM 重启应用
 | ORACLE_SERVICE | ORCLPDB | 是 | Oracle PDB 服务名（**DB 组提供**） |
 | ORACLE_USER | fabtwin | 是 | Oracle 用户名（**DB 组创建**） |
 | ORACLE_PASSWORD | fabtwin | 是 | Oracle 密码（**DB 组创建**） |
+| ORACLE_CLIENT_DIR | （空） | **10g/11g 必填** | Oracle Instant Client 路径（如 `C:\oracle\instantclient_19_x`），12c+ 不需要 |
 | SIMULATION_ENABLED | False | 否 | 模拟器（生产环境关闭） |
 | DB_POLLER_ENABLED | True | 否 | DB 事件轮询 |
 | AI_PROVIDER | local | 否 | AI 提供方 |
@@ -734,9 +863,10 @@ REM 重启应用
 
 ---
 
-**文档版本**：v1.2
+**文档版本**：v1.3
 **最后更新**：2026-07-20
 **变更说明**：
+- v1.3 (2026-07-20): 新增 Oracle 10g/11g 兼容性说明（Thick 模式 + ORACLE_CLIENT_DIR）；新增 Aqua Data Studio 初始化 SQL 使用方式；新增 Windows Server UTF-8/GBK 编码问题处理；新增 bat 脚本闪退排查章节；所有 bat 文件改为纯英文避免编码问题
 - v1.2 (2026-07-20): 明确 Oracle 数据库由 DB 组搭建运维，应用部署方仅需索取连接信息；移除"安装 Oracle Client"要求；业务用户/表空间创建改为由 DB 组执行；init_db.bat 支持远程执行或由 DB 组在 DB 服务器执行；故障排查章节调整为联系 DB 组
 - v1.1 (2026-07-20): 修复 init_db.bat 自动检测 ORACLE_HOME；deploy.bat 改用 vite preview 生产模式 + SQL 脚本初始化；补充 SEQUENCE+TRIGGER、RBAC 权限控制、NT 用户自动登录说明
 - v1.0 (2026-07-20): 初版 SOP
