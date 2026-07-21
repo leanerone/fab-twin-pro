@@ -58,24 +58,38 @@ echo  Watch the new window for logs.
 echo  Press Ctrl+C in the new window to stop the backend.
 echo.
 
-start "FabTwin Backend" cmd /k ^
-  "set DB_TYPE=!DB_TYPE! && ^
-   set SIMULATION_ENABLED=!SIMULATION_ENABLED! && ^
-   set DB_POLLER_ENABLED=!DB_POLLER_ENABLED! && ^
-   set ORACLE_HOST=!ORACLE_HOST! && ^
-   set ORACLE_PORT=!ORACLE_PORT! && ^
-   set ORACLE_SERVICE=!ORACLE_SERVICE! && ^
-   set ORACLE_USER=!ORACLE_USER! && ^
-   set ORACLE_PASSWORD=!ORACLE_PASSWORD! && ^
-   set ORACLE_DSN_TYPE=!ORACLE_DSN_TYPE! && ^
-   set ORACLE_CLIENT_DIR=!ORACLE_CLIENT_DIR! && ^
-   set NO_PROXY=* && ^
-   set no_proxy=* && ^
-   set HTTP_PROXY= && ^
-   set HTTPS_PROXY= && ^
-   cd /d %BACKEND_DIR% && ^
-   echo === DB_TYPE=%DB_TYPE% ORACLE_HOST=%ORACLE_HOST% ORACLE_USER=%ORACLE_USER% === && ^
-   venv\Scripts\python.exe main.py"
+REM Create a launcher bat in backend dir (avoids TEMP path quoting issues)
+set "LAUNCHER=%BACKEND_DIR%\_run_backend.bat"
+(
+  echo @echo off
+  echo chcp 65001 ^>nul
+  echo cd /d "%BACKEND_DIR%"
+  echo set DB_TYPE=!DB_TYPE!
+  echo set SIMULATION_ENABLED=!SIMULATION_ENABLED!
+  echo set DB_POLLER_ENABLED=!DB_POLLER_ENABLED!
+  echo set ORACLE_HOST=!ORACLE_HOST!
+  echo set ORACLE_PORT=!ORACLE_PORT!
+  echo set ORACLE_SERVICE=!ORACLE_SERVICE!
+  echo set ORACLE_USER=!ORACLE_USER!
+  echo set ORACLE_PASSWORD=!ORACLE_PASSWORD!
+  echo set ORACLE_DSN_TYPE=!ORACLE_DSN_TYPE!
+  echo set ORACLE_CLIENT_DIR=!ORACLE_CLIENT_DIR!
+  echo set NO_PROXY=*
+  echo set no_proxy=*
+  echo set HTTP_PROXY=
+  echo set HTTPS_PROXY=
+  echo echo === Effective Config ===
+  echo echo DB_TYPE=!DB_TYPE!
+  echo echo ORACLE_HOST=!ORACLE_HOST!
+  echo echo ORACLE_USER=!ORACLE_USER!
+  echo echo ORACLE_SERVICE=!ORACLE_SERVICE!
+  echo echo ORACLE_CLIENT_DIR=!ORACLE_CLIENT_DIR!
+  echo echo ===========================
+  echo venv\Scripts\python.exe main.py
+) > "%LAUNCHER%"
+
+echo [INFO] Created launcher: %LAUNCHER%
+start "FabTwin Backend" cmd /k "%LAUNCHER%"
 
 echo.
 echo Backend started in new window.
