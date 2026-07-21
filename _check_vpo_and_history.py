@@ -261,16 +261,17 @@ try:
             log(f"         received_ts_utc={rec_ts!r} -> normalized={rec_norm!r}")
 
         # Test if current date would find data
-        today = datetime.now().strftime("%Y-%m-%d")
-        today_start = f"{today} 00:00:00"
-        today_end = f"{today} 23:59:59"
-        today_count = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.event_ts_utc >= today_start).filter(DT_EVENT_RAW.event_ts_utc <= today_end).count()
-        log(f"  Today's data ({today}): {today_count} records")
+        from sqlalchemy import func
+        ts_col = func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
+        today_start_dt = datetime.strptime(f"{datetime.now().strftime('%Y-%m-%d')} 00:00:00", "%Y-%m-%d %H:%M:%S")
+        today_end_dt = datetime.strptime(f"{datetime.now().strftime('%Y-%m-%d')} 23:59:59", "%Y-%m-%d %H:%M:%S")
+        today_count = db.query(DT_EVENT_RAW).filter(ts_col >= today_start_dt).filter(ts_col <= today_end_dt).count()
+        log(f"  Today's data ({datetime.now().strftime('%Y-%m-%d')}): {today_count} records")
 
         # Check last 7 days
         for days_ago in [1, 3, 7, 14, 30]:
-            start_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d 00:00:00")
-            cnt = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.event_ts_utc >= start_date).count()
+            start_dt = datetime.now() - timedelta(days=days_ago)
+            cnt = db.query(DT_EVENT_RAW).filter(ts_col >= start_dt).count()
             log(f"  Last {days_ago} days: {cnt} records")
 
     finally:
@@ -296,8 +297,11 @@ try:
 
         # Check if seed data is from the default sample (base_time=2026-06-14)
         if raw_count > 0:
-            early_count = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.event_ts_utc < '2026-07-01').count()
-            late_count = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.event_ts_utc >= '2026-07-01').count()
+            from sqlalchemy import func
+            ts_col = func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
+            july_start = datetime.strptime("2026-07-01 00:00:00", "%Y-%m-%d %H:%M:%S")
+            early_count = db.query(DT_EVENT_RAW).filter(ts_col < july_start).count()
+            late_count = db.query(DT_EVENT_RAW).filter(ts_col >= july_start).count()
             log(f"  Data before 2026-07-01: {early_count}")
             log(f"  Data from 2026-07-01 onwards: {late_count}")
 

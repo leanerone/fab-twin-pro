@@ -26,15 +26,34 @@ _last_poll_ts = None
 _running = False
 
 
-def _normalize_ts(ts: str) -> str:
-    """标准化时间戳：去掉Z后缀和时区信息，统一为东八区本地时间格式
-    解决数据库中混用 UTC(Z后缀) 和本地时间(无后缀) 导致字符串比较错误的问题
+def _parse_ts(ts) -> datetime:
+    """将各种格式的时间戳转换为 datetime 对象
+    
+    支持格式：
+    - datetime 对象（直接返回）
+    - "2026-07-21T00:00:00" (ISO)
+    - "2026-07-21 00:00:00" (空格分隔)
+    - "2026-07-21T00:00:00.000Z" (带Z后缀)
     """
     if not ts:
-        return ""
+        return datetime.min
+    if isinstance(ts, datetime):
+        return ts
     ts = str(ts).strip()
     ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
-    return ts
+    formats = [
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(ts, fmt)
+        except ValueError:
+            continue
+    return datetime.min
 
 
 def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
@@ -74,7 +93,7 @@ def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
         "event_name": event_name,
         "event_type": event_type,
         "category": category,
-        "timestamp": _normalize_ts(raw_event.event_ts_utc or raw_event.received_ts_utc),
+        "timestamp": (_parse_ts(raw_event.event_ts_utc or raw_event.received_ts_utc)).strftime("%Y-%m-%d %H:%M:%S"),
         "lot_id": payload.get("lot_id"),
         "port_id": payload.get("port_id"),
         "cassette_id": payload.get("cassette_id"),
@@ -98,11 +117,11 @@ async def poll_db_events():
     try:
         max_ts = db.query(DT_EVENT_RAW.received_ts_utc).order_by(DT_EVENT_RAW.received_ts_utc.desc()).first()
         if max_ts and max_ts[0]:
-            _last_poll_ts = _normalize_ts(max_ts[0])
+            _last_poll_ts = _parse_ts(max_ts[0])
             logger.info(f"[DB Poller] 初始时间设置为数据库最新事件时间: {_last_poll_ts}")
             print(f"[DB Poller] 初始时间设置为数据库最新事件时间: {_last_poll_ts}", flush=True)
         else:
-            _last_poll_ts = (datetime.now() - timedelta(seconds=10)).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+            _last_poll_ts = datetime.now() - timedelta(seconds=10)
             logger.info(f"[DB Poller] 数据库无数据，初始时间设置为当前时间前10秒: {_last_poll_ts}")
             print(f"[DB Poller] 数据库无数据，初始时间设置为当前时间前10秒: {_last_poll_ts}", flush=True)
     finally:
@@ -113,19 +132,19 @@ async def poll_db_events():
         try:
             db = SessionLocal()
             try:
-                # 查询新事件（使用标准化时间比较）
+                # 查询新事件（使用datetime比较）
                 all_recent = db.query(DT_EVENT_RAW).order_by(
                     DT_EVENT_RAW.received_ts_utc.desc()
                 ).limit(100).all()
 
                 new_events = []
                 for ev in all_recent:
-                    ev_ts = _normalize_ts(ev.received_ts_utc)
+                    ev_ts = _parse_ts(ev.received_ts_utc)
                     if ev_ts > _last_poll_ts:
                         new_events.append(ev)
 
                 # 按时间正序排列
-                new_events.sort(key=lambda e: _normalize_ts(e.received_ts_utc))
+                new_events.sort(key=lambda e: _parse_ts(e.received_ts_utc))
 
                 if new_events:
                     for ev in new_events:
@@ -135,8 +154,8 @@ async def poll_db_events():
                             "type": "raw_event",
                             "data": event_data
                         })
-                        # 更新时间戳（使用标准化时间）
-                        ev_ts = _normalize_ts(ev.received_ts_utc)
+                        # 更新时间戳（使用datetime）
+                        ev_ts = _parse_ts(ev.received_ts_utc)
                         if ev_ts > _last_poll_ts:
                             _last_poll_ts = ev_ts
 

@@ -99,10 +99,12 @@ def get_rv_history(
     db: Session = Depends(get_db),
 ):
     """获取机台RV消息历史"""
+    from sqlalchemy import func
+    ts_col = func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .order_by(DT_EVENT_RAW.event_ts_utc.desc())
+        .order_by(ts_col.desc())
         .limit(limit)
         .all()
     )
