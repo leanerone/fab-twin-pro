@@ -66,8 +66,24 @@ async def websocket_realtime(websocket: WebSocket):
 def on_startup():
     print("========== FabTwin 启动 ==========")
 
+    # 打印 DB 配置
+    from config import (
+        DB_TYPE, ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE,
+        ORACLE_USER, ORACLE_DSN_TYPE, ORACLE_CLIENT_DIR,
+    )
+    print(f"[DB Config] DB_TYPE={DB_TYPE}")
+    print(f"[DB Config] ORACLE_HOST={ORACLE_HOST}")
+    print(f"[DB Config] ORACLE_PORT={ORACLE_PORT}")
+    print(f"[DB Config] ORACLE_SERVICE={ORACLE_SERVICE}")
+    print(f"[DB Config] ORACLE_USER={ORACLE_USER}")
+    print(f"[DB Config] ORACLE_DSN_TYPE={ORACLE_DSN_TYPE}")
+    print(f"[DB Config] ORACLE_CLIENT_DIR={ORACLE_CLIENT_DIR}")
+
     try:
         init_db()
+        from database import engine, DB_IS_SQLITE
+        print(f"[DB] Connected to: {engine.url}")
+        print(f"[DB] Is SQLite: {DB_IS_SQLITE}")
         print("[DB] 数据库初始化完成")
 
         db = SessionLocal()
@@ -77,7 +93,14 @@ def on_startup():
                 print("[Seed] 首次启动，生成种子数据...")
                 init_seed_data(db)
             else:
-                print("[Seed] 数据库已有数据，跳过种子数据生成")
+                print(f"[Seed] 数据库已有 {machine_count} 台机台，跳过种子数据生成")
+
+                # 检查 MACHINE_MODEL_CONFIGS
+                from models import MachineModelConfig
+                model_count = db.query(MachineModelConfig).count()
+                print(f"[Seed] MACHINE_MODEL_CONFIGS 有 {model_count} 条记录")
+                for m in db.query(MachineModelConfig).all():
+                    print(f"[Seed]   - {m.model_id}: view_mode={m.view_mode}")
         finally:
             db.close()
 
@@ -90,6 +113,8 @@ def on_startup():
             print("[DB Poller] DB事件轮询服务已启动")
     except Exception as e:
         print(f"[WARN] 数据库初始化失败: {e}")
+        import traceback
+        traceback.print_exc()
         print("[WARN] 将以降级模式启动，部分功能可能不可用")
         try:
             if SIMULATION_ENABLED:
