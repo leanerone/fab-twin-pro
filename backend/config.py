@@ -15,7 +15,13 @@ if DB_TYPE == "oracle":
     ORACLE_HOST = os.getenv("ORACLE_HOST", "localhost")
     ORACLE_PORT = int(os.getenv("ORACLE_PORT", "1521"))
     ORACLE_SERVICE = os.getenv("ORACLE_SERVICE", "ORCLPDB")
-    DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?service_name={ORACLE_SERVICE}"
+    # DSN type: service_name (12c+ PDB) or sid (10g/11g traditional)
+    # Set ORACLE_DSN_TYPE=sid for Oracle 10g/11g
+    ORACLE_DSN_TYPE = os.getenv("ORACLE_DSN_TYPE", "service_name").lower()
+    if ORACLE_DSN_TYPE == "sid":
+        DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?sid={ORACLE_SERVICE}"
+    else:
+        DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?service_name={ORACLE_SERVICE}"
     DB_IS_SQLITE = False
 else:
     DB_PATH = os.path.join(BASE_DIR, "fabtwin.db")

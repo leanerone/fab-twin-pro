@@ -60,11 +60,20 @@ REM set "ORACLE_SERVICE=ORCLPDB"
 REM set "ORACLE_USER=fabtwin"
 REM set "ORACLE_PASSWORD=fabtwin"
 
-REM For Oracle 10g/11g: set ORACLE_CLIENT_DIR to Instant Client path
+REM For Oracle 10g/11g: set ORACLE_CLIENT_DIR and ORACLE_DSN_TYPE
 REM set "ORACLE_CLIENT_DIR=C:\oracle\instantclient_19_x"
+REM set "ORACLE_DSN_TYPE=sid"
+
+REM Ensure defaults if not set
+if not defined ORACLE_HOST set "ORACLE_HOST=localhost"
+if not defined ORACLE_PORT set "ORACLE_PORT=1521"
+if not defined ORACLE_SERVICE set "ORACLE_SERVICE=ORCLPDB"
+if not defined ORACLE_USER set "ORACLE_USER=fabtwin"
+if not defined ORACLE_PASSWORD set "ORACLE_PASSWORD=fabtwin"
+if not defined ORACLE_DSN_TYPE set "ORACLE_DSN_TYPE=service_name"
 
 echo [1/2] Starting backend (FastAPI :8002)...
-start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && venv\Scripts\python.exe main.py"
+start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && set ORACLE_HOST=%ORACLE_HOST% && set ORACLE_PORT=%ORACLE_PORT% && set ORACLE_SERVICE=%ORACLE_SERVICE% && set ORACLE_USER=%ORACLE_USER% && set ORACLE_PASSWORD=%ORACLE_PASSWORD% && set ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE% && set ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR% && venv\Scripts\python.exe main.py"
 
 echo Waiting for backend to start (5 sec)...
 timeout /t 5 /nobreak >nul
