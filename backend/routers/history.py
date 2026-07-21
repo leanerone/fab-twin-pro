@@ -18,17 +18,43 @@ def _normalize_ts(ts: str) -> str:
     1. 2026-07-12T08:00:00.000Z （本地时间被错误标记为UTC）
     2. 2026-07-18T20:25:00.054573 （本地时间无后缀）
     3. 2026-07-17 00:52:55 （Oracle存储为空格分隔）
-    统一返回: 2026-07-17 00:52:55 （空格分隔，匹配Oracle字符串比较）
+    返回空格分隔格式，同时保留原始格式用于多格式匹配
     """
     if not ts:
         return ""
     ts = str(ts).strip()
-    # 去掉Z后缀和时区偏移（+08:00等），因为数据本身就是东八区时间
     ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
-    # 将T分隔符替换为空格，匹配Oracle数据库中的存储格式
-    # Oracle字符串比较时空格(32) < T(84)，会导致范围查询出错
     ts = ts.replace('T', ' ')
     return ts
+
+
+def _get_ts_filter(column, start_ts=None, end_ts=None):
+    """生成时间范围查询条件，同时支持T分隔和空格分隔的时间戳格式
+    
+    关键问题：Oracle中event_ts_utc是String类型，字符串比较是按ASCII码：
+    - 空格(32) < T(84)，所以 "2026-07-17 00:00:00" < "2026-07-17T00:00:00"
+    如果只查询空格格式，会漏掉所有T分隔的数据！
+    
+    解决方案：用OR条件同时匹配两种格式
+    """
+    from sqlalchemy import or_
+    
+    conditions = []
+    if start_ts:
+        start_space = _normalize_ts(start_ts)
+        start_T = start_space.replace(' ', 'T')
+        conditions.append(or_(
+            column >= start_space,
+            column >= start_T
+        ))
+    if end_ts:
+        end_space = _normalize_ts(end_ts)
+        end_T = end_space.replace(' ', 'T')
+        conditions.append(or_(
+            column <= end_space,
+            column <= end_T
+        ))
+    return conditions
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
@@ -132,10 +158,9 @@ def get_history(
     """
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
-    if start_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc >= _normalize_ts(start_time))
-    if end_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc <= _normalize_ts(end_time))
+    ts_conditions = _get_ts_filter(DT_EVENT_RAW.event_ts_utc, start_time, end_time)
+    for cond in ts_conditions:
+        query = query.filter(cond)
 
     query = query.order_by(DT_EVENT_RAW.event_ts_utc.asc())
     total = query.count()
@@ -175,8 +200,8 @@ def get_timeline(
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(DT_EVENT_RAW.event_ts_utc >= start)
-        .filter(DT_EVENT_RAW.event_ts_utc <= end)
+        .filter(or_(DT_EVENT_RAW.event_ts_utc >= start, DT_EVENT_RAW.event_ts_utc >= start.replace(' ', 'T')))
+        .filter(or_(DT_EVENT_RAW.event_ts_utc <= end, DT_EVENT_RAW.event_ts_utc <= end.replace(' ', 'T')))
         .order_by(DT_EVENT_RAW.event_ts_utc.asc())
         .all()
     )
@@ -234,10 +259,9 @@ def get_alarm_history(
     """获取机台Alarm历史记录"""
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
-    if start_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc >= _normalize_ts(start_time))
-    if end_time:
-        query = query.filter(DT_EVENT_RAW.event_ts_utc <= _normalize_ts(end_time))
+    ts_conditions = _get_ts_filter(DT_EVENT_RAW.event_ts_utc, start_time, end_time)
+    for cond in ts_conditions:
+        query = query.filter(cond)
 
     query = query.order_by(DT_EVENT_RAW.event_ts_utc.desc())
     rows = query.limit(limit * 3).all()  # 多取一些用于过滤
@@ -287,17 +311,21 @@ def get_event_detail(
     ev = _event_to_dict(row)
 
     # 查找前后事件（用于连续回放）
+    ts_str = str(row.event_ts_utc)
+    ts_space = ts_str.replace('T', ' ')
+    ts_T = ts_str.replace(' ', 'T')
+    
     prev_row = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(DT_EVENT_RAW.event_ts_utc < row.event_ts_utc)
+        .filter(or_(DT_EVENT_RAW.event_ts_utc < ts_space, DT_EVENT_RAW.event_ts_utc < ts_T))
         .order_by(DT_EVENT_RAW.event_ts_utc.desc())
         .first()
     )
     next_row = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(DT_EVENT_RAW.event_ts_utc > row.event_ts_utc)
+        .filter(or_(DT_EVENT_RAW.event_ts_utc > ts_space, DT_EVENT_RAW.event_ts_utc > ts_T))
         .order_by(DT_EVENT_RAW.event_ts_utc.asc())
         .first()
     )
