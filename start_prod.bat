@@ -61,6 +61,14 @@ if not defined DB_TYPE set "DB_TYPE=oracle"
 if not defined SIMULATION_ENABLED set "SIMULATION_ENABLED=False"
 if not defined DB_POLLER_ENABLED set "DB_POLLER_ENABLED=True"
 
+REM 关键：绕过 HJTC Proxy 系统代理拦截
+set "NO_PROXY=*"
+set "no_proxy=*"
+set "HTTP_PROXY="
+set "HTTPS_PROXY="
+set "http_proxy="
+set "https_proxy="
+
 REM Fallback defaults if still not set
 if not defined ORACLE_HOST set "ORACLE_HOST=localhost"
 if not defined ORACLE_PORT set "ORACLE_PORT=1521"
@@ -70,18 +78,20 @@ if not defined ORACLE_PASSWORD set "ORACLE_PASSWORD=fabtwin"
 if not defined ORACLE_DSN_TYPE set "ORACLE_DSN_TYPE=service_name"
 
 echo [1/2] Starting backend (FastAPI :8002)...
-start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && set ORACLE_HOST=%ORACLE_HOST% && set ORACLE_PORT=%ORACLE_PORT% && set ORACLE_SERVICE=%ORACLE_SERVICE% && set ORACLE_USER=%ORACLE_USER% && set ORACLE_PASSWORD=%ORACLE_PASSWORD% && set ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE% && set ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR% && venv\Scripts\python.exe main.py"
+start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && set ORACLE_HOST=%ORACLE_HOST% && set ORACLE_PORT=%ORACLE_PORT% && set ORACLE_SERVICE=%ORACLE_SERVICE% && set ORACLE_USER=%ORACLE_USER% && set ORACLE_PASSWORD=%ORACLE_PASSWORD% && set ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE% && set ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR% && set NO_PROXY=* && set no_proxy=* && set HTTP_PROXY= && set HTTPS_PROXY= && venv\Scripts\python.exe main.py"
 
 echo Waiting for backend to start (5 sec)...
 timeout /t 5 /nobreak >nul
 
 echo [2/2] Starting frontend (Vite Preview :5173)...
 cd /d "%FRONTEND_DIR%"
+set "NO_PROXY=*"
+set "no_proxy=*"
 if exist "node_modules\.bin\vite.cmd" (
-    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && node_modules\.bin\vite.cmd preview --port 5173 --host"
+    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && set NO_PROXY=* && set no_proxy=* && set HTTP_PROXY= && set HTTPS_PROXY= && node_modules\.bin\vite.cmd preview --port 5173 --host"
 ) else (
     echo WARNING: vite.cmd not found, using npx
-    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && npx vite preview --port 5173 --host"
+    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && set NO_PROXY=* && set no_proxy=* && set HTTP_PROXY= && set HTTPS_PROXY= && npx vite preview --port 5173 --host"
 )
 
 echo.

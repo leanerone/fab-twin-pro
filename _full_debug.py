@@ -6,6 +6,14 @@ import sys
 import json
 import time
 
+# 关键：绕过系统代理（HJTC Proxy 会拦截所有 HTTP 请求）
+os.environ['NO_PROXY'] = '*'
+os.environ['no_proxy'] = '*'
+os.environ.pop('HTTP_PROXY', None)
+os.environ.pop('HTTPS_PROXY', None)
+os.environ.pop('http_proxy', None)
+os.environ.pop('https_proxy', None)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
 BACKEND_DIR = os.path.join(BASE_DIR, 'backend')
 sys.path.insert(0, BACKEND_DIR)
@@ -127,42 +135,71 @@ try:
     import urllib.request
     import urllib.error
 
-    base = "http://127.0.0.1:8002"
-    endpoints = [
-        ("/health", "GET"),
-        ("/api/models", "GET"),
-        ("/api/machines/PODOPENER-1", "GET"),
-        ("/api/history/PODOPENER-1?limit=5", "GET"),
-    ]
+    # 关键：创建不使用代理的 opener
+    proxy_handler = urllib.request.ProxyHandler({})  # 空字典 = 不使用代理
+    opener = urllib.request.build_opener(proxy_handler)
 
-    for path, method in endpoints:
-        url = base + path
+    # 尝试多种连接方式
+    bases = [
+        "http://127.0.0.1:8002",
+        "http://localhost:8002",
+    ]
+    base = None
+    for b in bases:
         try:
-            req = urllib.request.Request(url, method=method)
+            req = urllib.request.Request(b + "/health", method="GET")
             req.add_header("User-Agent", "FullDebug/1.0")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-                print(f"  [OK] {method} {path} -> {resp.status}")
-                if "/models" in path and resp.status == 200:
-                    data = json.loads(body)
-                    print(f"    Got {len(data)} models:")
-                    for d in data:
-                        print(f"      - {d.get('model_id')}: view_mode={d.get('view_mode')}")
-                        vc = d.get('views_config', {})
-                        if vc:
-                            v2d = vc.get('view_2d', {}).get('type', '?')
-                            v3d = vc.get('view_3d', {}).get('type', '?')
-                            print(f"        view_2d.type={v2d}, view_3d.type={v3d}")
+            resp = opener.open(req, timeout=3)
+            body = resp.read().decode("utf-8", errors="replace")
+            print(f"  [OK] {b}/health -> {resp.status}: {body[:100]}")
+            base = b
+            break
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            print(f"  [{e.code}] {method} {path}: {e.reason}")
-            print(f"    body: {body[:200]}")
-        except urllib.error.URLError as e:
-            print(f"  [CONN-ERROR] {method} {path}: {e.reason}")
-            print(f"    (Backend may not be running on port 8002)")
-            break
+            is_hjtc = "HJTC" in body
+            print(f"  [{e.code}] {b}/health: {e.reason}" + (" [HJTC Proxy拦截!]" if is_hjtc else ""))
+            print(f"    body: {body[:150]}")
         except Exception as e:
-            print(f"  [ERROR] {method} {path}: {e}")
+            print(f"  [CONN] {b}/health: {e}")
+
+    if not base:
+        print("\n  [DIAGNOSIS] 后端无法访问！可能原因：")
+        print("    1. 后端 FastAPI 没有启动")
+        print("    2. HJTC Proxy 系统代理在拦截（需设置 NO_PROXY=*）")
+        print("    3. 后端监听地址不对（应该监听 0.0.0.0 或 127.0.0.1）")
+        print("\n  请在浏览器直接访问 http://127.0.0.1:8002/health 测试")
+        print("  如果浏览器也被拦截，则是 HJTC Proxy 系统级拦截，需要配置白名单")
+    else:
+        endpoints = [
+            ("/api/models", "GET"),
+            ("/api/machines/PODOPENER-1", "GET"),
+            ("/api/history/PODOPENER-1?limit=5", "GET"),
+        ]
+
+        for path, method in endpoints:
+            url = base + path
+            try:
+                req = urllib.request.Request(url, method=method)
+                req.add_header("User-Agent", "FullDebug/1.0")
+                with opener.open(req, timeout=5) as resp:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    print(f"  [OK] {method} {path} -> {resp.status}")
+                    if "/models" in path and resp.status == 200:
+                        data = json.loads(body)
+                        print(f"    Got {len(data)} models:")
+                        for d in data:
+                            print(f"      - {d.get('model_id')}: view_mode={d.get('view_mode')}")
+                            vc = d.get('views_config', {})
+                            if vc:
+                                v2d = vc.get('view_2d', {}).get('type', '?')
+                                v3d = vc.get('view_3d', {}).get('type', '?')
+                                print(f"        view_2d.type={v2d}, view_3d.type={v3d}")
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", errors="replace")
+                print(f"  [{e.code}] {method} {path}: {e.reason}")
+                print(f"    body: {body[:200]}")
+            except Exception as e:
+                print(f"  [ERROR] {method} {path}: {e}")
 except Exception as e:
     print(f"  [ERROR] {e}")
 
@@ -170,34 +207,41 @@ except Exception as e:
 print("\n[6] VITE PREVIEW CHECK")
 print("-" * 70)
 try:
+    # 用同样的 opener 绕过代理
     base = "http://127.0.0.1:5173"
     # 检查 dist 静态资源
     try:
-        with urllib.request.urlopen(base + "/", timeout=3) as resp:
+        req = urllib.request.Request(base + "/", method="GET")
+        req.add_header("User-Agent", "FullDebug/1.0")
+        with opener.open(req, timeout=3) as resp:
             body = resp.read().decode("utf-8", errors="replace")[:200]
             print(f"  [OK] GET / -> {resp.status}")
             print(f"    HTML preview: {body[:100]}")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        is_hjtc = "HJTC" in body
+        print(f"  [{e.code}] GET /: {e.reason}" + (" [HJTC拦截]" if is_hjtc else ""))
     except Exception as e:
         print(f"  [ERROR] GET /: {e}")
 
-    # 检查 vite proxy 是否生效（请求 /api/models 应该被代理到后端）
+    # 检查 vite proxy 是否生效
     try:
         req = urllib.request.Request(base + "/api/models", method="GET")
         req.add_header("User-Agent", "FullDebug/1.0")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with opener.open(req, timeout=5) as resp:
             body = resp.read().decode("utf-8", errors="replace")
             print(f"  [OK] GET /api/models (via vite proxy) -> {resp.status}")
             data = json.loads(body)
             print(f"    Got {len(data)} models")
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        print(f"  [{e.code}] GET /api/models via vite proxy: {e.reason}")
-        if e.code == 403:
-            print(f"    [DIAGNOSIS] Vite preview IS NOT proxying /api!")
-            print(f"    Vite config needs preview.proxy section.")
-            print(f"    body: {body[:200]}")
-        else:
-            print(f"    body: {body[:200]}")
+        is_hjtc = "HJTC" in body
+        print(f"  [{e.code}] GET /api/models via vite proxy: {e.reason}" + (" [HJTC拦截]" if is_hjtc else ""))
+        if is_hjtc:
+            print(f"    [DIAGNOSIS] HJTC Proxy 在拦截 5173 端口请求！")
+        elif e.code == 403:
+            print(f"    [DIAGNOSIS] Vite preview 可能没有 proxy 配置")
+        print(f"    body: {body[:200]}")
     except Exception as e:
         print(f"  [ERROR] GET /api/models via vite: {e}")
 except Exception as e:
