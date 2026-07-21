@@ -85,26 +85,57 @@ if defined ORACLE_CLIENT_DIR (
     )
 )
 
-REM Search common paths
+REM Search fixed common paths (no wildcards inside for loop)
 if "%CLIENT_FOUND%"=="0" (
     for %%p in (
-        "C:\app\client\*\product\19.*\client_1"
-        "C:\oracle\product\19.*\client_1"
-        "C:\oracle\product\19.*\dbhome_1"
-        "C:\oracle\instantclient_19_*"
-        "C:\app\oracle\product\19.*\client_1"
+        "C:\oracle\product\19.0.0\client_1"
+        "C:\oracle\product\19.3.0\client_1"
+        "C:\oracle\product\19.0.0\dbhome_1"
+        "C:\oracle\instantclient_19_3"
+        "C:\oracle\instantclient_19_11"
+        "C:\app\oracle\product\19.0.0\client_1"
         "N:\WINDOWS.X64_193000_db_home"
     ) do (
-        if exist "%%~p\bin\oci.dll" (
-            echo   Found Oracle Client: %%~p
-            echo   Found Oracle Client: %%~p >> "%REPORT%"
-            set "CLIENT_DIR=%%~p"
-            set "CLIENT_FOUND=1"
-            goto :found_client
+        if "%CLIENT_FOUND%"=="0" (
+            if exist "%%~p\bin\oci.dll" (
+                echo   Found Oracle Client: %%~p
+                echo   Found Oracle Client: %%~p >> "%REPORT%"
+                set "CLIENT_DIR=%%~p"
+                set "CLIENT_FOUND=1"
+            )
         )
     )
 )
-:found_client
+
+REM Search with dir command in C:\app\client (covers c11463 etc)
+if "%CLIENT_FOUND%"=="0" (
+    if exist "C:\app\client" (
+        for /f "delims=" %%f in ('dir "C:\app\client\*\product\*\client_1\bin\oci.dll" /s /b 2^>nul') do (
+            if "%CLIENT_FOUND%"=="0" (
+                for %%a in ("%%~dpf.") do (
+                    set "CLIENT_DIR=%%~dpa"
+                    set "CLIENT_DIR=!CLIENT_DIR:~0,-1!"
+                    set "CLIENT_FOUND=1"
+                )
+            )
+        )
+    )
+)
+
+REM Also search C:\oracle
+if "%CLIENT_FOUND%"=="0" (
+    if exist "C:\oracle" (
+        for /f "delims=" %%f in ('dir "C:\oracle\*\bin\oci.dll" /s /b 2^>nul') do (
+            if "%CLIENT_FOUND%"=="0" (
+                for %%a in ("%%~dpf.") do (
+                    set "CLIENT_DIR=%%~dpa"
+                    set "CLIENT_DIR=!CLIENT_DIR:~0,-1!"
+                    set "CLIENT_FOUND=1"
+                )
+            )
+        )
+    )
+)
 
 if "%CLIENT_FOUND%"=="0" (
     echo   ERROR: Oracle Client (oci.dll) not found in common paths.

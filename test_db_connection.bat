@@ -122,25 +122,61 @@ echo   SKIP: Python venv not found >> "%REPORT%"
 )
 
 REM Auto-detect Oracle Client if not set
+set "OC_FOUND=0"
 if "%ORACLE_CLIENT_DIR%"=="" (
     if defined ORACLE_CLIENT_DIR (
         set "ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR%"
-    ) else (
+        set "OC_FOUND=1"
+    )
+)
+
+if "%OC_FOUND%"=="0" (
+    if "%ORACLE_CLIENT_DIR%"=="" (
         for %%p in (
-            "C:\app\client\*\product\19.*\client_1"
-            "C:\oracle\product\19.*\client_1"
-            "C:\oracle\product\19.*\dbhome_1"
-            "C:\oracle\instantclient_19_*"
-            "C:\app\oracle\product\19.*\client_1"
+            "C:\oracle\product\19.0.0\client_1"
+            "C:\oracle\product\19.3.0\client_1"
+            "C:\oracle\product\19.0.0\dbhome_1"
+            "C:\oracle\instantclient_19_3"
+            "C:\oracle\instantclient_19_11"
+            "C:\app\oracle\product\19.0.0\client_1"
         ) do (
-            if exist "%%~p\bin\oci.dll" (
-                set "ORACLE_CLIENT_DIR=%%~p"
-                goto :thick_found
+            if "%OC_FOUND%"=="0" (
+                if exist "%%~p\bin\oci.dll" (
+                    set "ORACLE_CLIENT_DIR=%%~p"
+                    set "OC_FOUND=1"
+                )
             )
         )
     )
 )
-:thick_found
+
+if "%OC_FOUND%"=="0" (
+    if exist "C:\app\client" (
+        for /f "delims=" %%f in ('dir "C:\app\client\*\product\*\client_1\bin\oci.dll" /s /b 2^>nul') do (
+            if "%OC_FOUND%"=="0" (
+                for %%a in ("%%~dpf.") do (
+                    set "ORACLE_CLIENT_DIR=%%~dpa"
+                    set "ORACLE_CLIENT_DIR=!ORACLE_CLIENT_DIR:~0,-1!"
+                    set "OC_FOUND=1"
+                )
+            )
+        )
+    )
+)
+
+if "%OC_FOUND%"=="0" (
+    if exist "C:\oracle" (
+        for /f "delims=" %%f in ('dir "C:\oracle\*\bin\oci.dll" /s /b 2^>nul') do (
+            if "%OC_FOUND%"=="0" (
+                for %%a in ("%%~dpf.") do (
+                    set "ORACLE_CLIENT_DIR=%%~dpa"
+                    set "ORACLE_CLIENT_DIR=!ORACLE_CLIENT_DIR:~0,-1!"
+                    set "OC_FOUND=1"
+                )
+            )
+        )
+    )
+)
 
 if "%ORACLE_CLIENT_DIR%"=="" (
     echo   SKIP: Oracle Client not found, cannot test Thick mode
