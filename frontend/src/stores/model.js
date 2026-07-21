@@ -21,6 +21,7 @@ export const useModelStore = defineStore('model', () => {
 
   function resolveModelId(machineModel) {
     if (!machineModel) return 'GENERIC-ETCH'
+    console.log('[modelStore] resolveModelId input:', machineModel, 'available:', Object.keys(modelMap.value))
     if (modelMap.value[machineModel]) return machineModel
     const upper = machineModel.toUpperCase().replace(/\s+/g, '-')
     if (modelMap.value[upper]) return upper
@@ -28,16 +29,20 @@ export const useModelStore = defineStore('model', () => {
       const idNorm = id.toUpperCase().replace(/[-_\s]/g, '')
       const modelNorm = machineModel.toUpperCase().replace(/[-_\s]/g, '')
       if (idNorm === modelNorm || idNorm.includes(modelNorm) || modelNorm.includes(idNorm)) {
+        console.log('[modelStore] resolveModelId fuzzy match:', machineModel, '->', id)
         return id
       }
     }
+    console.warn('[modelStore] resolveModelId FALLBACK:', machineModel, '-> GENERIC-ETCH')
     return 'GENERIC-ETCH'
   }
 
   function getViewMode(machineModel) {
     const modelId = resolveModelId(machineModel)
     const m = modelMap.value[modelId]
-    return m ? m.view_mode : 'threejs'
+    const mode = m ? m.view_mode : 'threejs'
+    console.log('[modelStore] getViewMode:', machineModel, '-> modelId:', modelId, '-> viewMode:', mode, 'hasConfig:', !!m)
+    return mode
   }
 
   async function loadModels() {
@@ -45,10 +50,11 @@ export const useModelStore = defineStore('model', () => {
     loading.value = true
     try {
       const data = await api.getModels()
+      console.log('[modelStore] loadModels got', data?.length, 'models:', data?.map(m => m.model_id))
       models.value = data || []
       preloadModelAssets(data || [])
     } catch (e) {
-      console.error('[modelStore] 加载机台型号失败:', e)
+      console.error('[modelStore] loadModels FAILED:', e)
     } finally {
       loading.value = false
     }

@@ -76,7 +76,9 @@ def _mapping_to_dict(m: EventActionMapping) -> dict:
 def list_models(db: Session = Depends(get_db)):
     """获取所有机台型号列表"""
     models = db.query(MachineModelConfig).order_by(MachineModelConfig.model_id).all()
-    return [_model_to_dict(m) for m in models]
+    result = [_model_to_dict(m) for m in models]
+    print(f"[API] /api/models called, returning {len(result)} models: {[m.model_id for m in models]}", flush=True)
+    return result
 
 
 @router.get("/{model_id}")
