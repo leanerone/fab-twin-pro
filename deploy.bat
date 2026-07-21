@@ -1,16 +1,24 @@
 @echo off
-title FabTwin Deploy
+setlocal enabledelayedexpansion
 
 REM ================================================================
 REM FabTwin One-Click Deployment Script
-REM Usage: Deploy frontend and backend services on intranet prod server
-REM Flow: check env -> install deps -> init DB -> build frontend -> start
+REM 
+REM This script does:
+REM   1. Check prerequisites (Python 3.11+, Node.js 18+)
+REM   2. Load environment config from env.bat
+REM   3. Create Python venv and install dependencies
+REM   4. Install frontend dependencies
+REM   5. Build frontend (npm run build)
+REM   6. Verify database connection
 REM
-REM IMPORTANT: This script uses English only to avoid UTF-8/GBK issues
-REM            on Windows Server. Do not add Chinese comments.
+REM Prerequisites:
+REM   - Python 3.11+ in PATH
+REM   - Node.js 18+ in PATH
+REM   - Oracle Client 19c+ (for Oracle 10g/11g connection)
 REM ================================================================
 
-setlocal enabledelayedexpansion
+title FabTwin Deploy
 
 set "BASE_DIR=%~dp0"
 set "BASE_DIR=%BASE_DIR:~0,-1%"
@@ -18,208 +26,157 @@ set "BACKEND_DIR=%BASE_DIR%\backend"
 set "FRONTEND_DIR=%BASE_DIR%\frontend"
 
 echo ================================================================
-echo          FabTwin Deployment
+echo  FabTwin Deployment
 echo ================================================================
-echo Deploy dir: %BASE_DIR%
 echo.
 
-REM ---------- Load env.bat if exists ----------
+REM ----- Step 1: Check prerequisites -----
+echo [1/6] Checking prerequisites...
+
+where python >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Python not found in PATH
+    pause
+    exit /b 1
+)
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VER=%%i
+echo   Python: %PYTHON_VER%
+
+where node >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Node.js not found in PATH
+    pause
+    exit /b 1
+)
+for /f "tokens=1" %%i in ('node --version 2^>^&1') do set NODE_VER=%%i
+echo   Node.js: %NODE_VER%
+
+echo.
+
+REM ----- Step 2: Load env.bat -----
+echo [2/6] Loading environment config...
 if exist "%BASE_DIR%\env.bat" (
     call "%BASE_DIR%\env.bat"
-    echo [INFO] Loaded DB config from env.bat
+    echo   DB_TYPE: !DB_TYPE!
+    echo   ORACLE_HOST: !ORACLE_HOST!
+    echo   ORACLE_USER: !ORACLE_USER!
+    echo   ORACLE_SERVICE: !ORACLE_SERVICE!
+    echo   ORACLE_CLIENT_DIR: !ORACLE_CLIENT_DIR!
 ) else (
-    echo [INFO] env.bat not found, using inline defaults
+    echo   WARNING: env.bat not found, using defaults
+    set "DB_TYPE=oracle"
 )
-
-REM ---------- Production env vars ----------
-if not defined DB_TYPE set "DB_TYPE=oracle"
-if not defined SIMULATION_ENABLED set "SIMULATION_ENABLED=False"
-if not defined DB_POLLER_ENABLED set "DB_POLLER_ENABLED=True"
-
-REM Fallback defaults if still not set
-if not defined ORACLE_HOST set "ORACLE_HOST=localhost"
-if not defined ORACLE_PORT set "ORACLE_PORT=1521"
-if not defined ORACLE_SERVICE set "ORACLE_SERVICE=ORCLPDB"
-if not defined ORACLE_USER set "ORACLE_USER=fabtwin"
-if not defined ORACLE_PASSWORD set "ORACLE_PASSWORD=fabtwin"
-if not defined ORACLE_DSN_TYPE set "ORACLE_DSN_TYPE=service_name"
-
-echo [1/5] Checking environment...
 echo.
 
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Python not found, please install Python 3.10+ first
-    pause
-    exit /b 1
-)
-
-node --version >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Node.js not found, please install Node.js 16+ first
-    pause
-    exit /b 1
-)
-
-echo OK: Python and Node.js ready
-echo.
-
-REM ---------- [2/5] Backend deps ----------
-echo [2/5] Deploying backend...
-echo.
-
-if not exist "%BACKEND_DIR%\venv" (
-    echo Creating Python venv...
-    cd /d "%BACKEND_DIR%"
-    python -m venv venv
-    if errorlevel 1 (
-        echo ERROR: venv creation failed
-        pause
-        exit /b 1
-    )
-)
-
-echo Installing backend deps...
+REM ----- Step 3: Backend venv and dependencies -----
+echo [3/6] Setting up backend...
 cd /d "%BACKEND_DIR%"
 
-if exist "wheels" (
-    echo INFO: wheels dir found, using offline install
-    venv\Scripts\pip.exe install --no-index --find-links wheels -r requirements.txt -q
-) else (
-    venv\Scripts\pip.exe install -r requirements.txt -q
-)
-
-if errorlevel 1 (
-    echo WARNING: pip install may have partial failures, continuing...
-)
-
-REM ---------- [3/5] Database init ----------
-echo.
-echo [3/5] Initializing database...
-echo.
-
-REM Build connection string
-REM Already set above with defaults, just build CONN_STR
-if "%ORACLE_DSN_TYPE%"=="sid" (
-    set "CONN_STR=%ORACLE_USER%/%ORACLE_PASSWORD%@%ORACLE_HOST%:%ORACLE_PORT%:%ORACLE_SERVICE%"
-) else (
-    set "CONN_STR=%ORACLE_USER%/%ORACLE_PASSWORD%@%ORACLE_HOST%:%ORACLE_PORT%/%ORACLE_SERVICE%"
-)
-
-where sqlplus >nul 2>&1
-if errorlevel 1 (
-    echo WARNING: sqlplus not found, skipping SQL script init
-    echo Will use ORM create_all to create empty tables (no base data)
-    echo.
-    echo For full init with base data, ask DBA team to run:
-    echo   sql\init_oracle_db.sql  on the Oracle server
-    echo.
-    venv\Scripts\python.exe -c "from database import init_db; init_db(); print('ORM tables created')"
+if not exist "venv" (
+    echo   Creating Python venv...
+    python -m venv venv
     if errorlevel 1 (
-        echo ERROR: ORM init failed
-        pause
-        exit /b 1
-    )
-) else (
-    if exist "%BASE_DIR%\sql\init_oracle_db.sql" (
-        echo INFO: Running sql\init_oracle_db.sql
-        echo INFO: Connecting %ORACLE_HOST%:%ORACLE_PORT%/%ORACLE_SERVICE% as %ORACLE_USER%
-        sqlplus -S "%CONN_STR%" @%BASE_DIR%\sql\init_oracle_db.sql > "%BASE_DIR%\init_db.log" 2>&1
-        if errorlevel 1 (
-            echo WARNING: SQL script may have errors, check init_db.log
-            echo Last 20 lines:
-            powershell -Command "Get-Content %BASE_DIR%\init_db.log -Tail 20" 2>nul
-        ) else (
-            echo OK: Database initialized
-        )
-    ) else (
-        echo WARNING: sql\init_oracle_db.sql not found, using ORM create_all
-        venv\Scripts\python.exe -c "from database import init_db; init_db(); print('ORM tables created')"
-    )
-)
-
-REM ---------- [4/5] Frontend build ----------
-echo.
-echo [4/5] Deploying frontend...
-echo.
-
-cd /d "%FRONTEND_DIR%"
-
-if exist "dist\index.html" (
-    echo INFO: dist exists, skipping build
-) else (
-    if not exist "node_modules" (
-        echo Installing frontend deps...
-        cmd /c "npm install -q"
-        if errorlevel 1 (
-            echo WARNING: npm install failed, check node_modules
-        )
-    )
-
-    echo Building frontend...
-    if exist "node_modules\.bin\vite.cmd" (
-        cmd /c "node_modules\.bin\vite.cmd build"
-    ) else (
-        cmd /c "npm run build"
-    )
-    if errorlevel 1 (
-        echo ERROR: Frontend build failed
+        echo ERROR: Failed to create venv
         pause
         exit /b 1
     )
 )
 
-REM ---------- [5/5] Start services ----------
-echo.
-echo [5/5] Starting services...
-echo.
-
-netstat -ano | findstr ":8002 " | findstr "LISTENING" >nul
-if not errorlevel 1 (
-    echo WARNING: port 8002 in use, backend may be running
+echo   Installing Python dependencies...
+call venv\Scripts\activate
+python -m pip install --upgrade pip >nul 2>&1
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo ERROR: pip install failed
+    pause
+    exit /b 1
 )
-
-netstat -ano | findstr ":5173 " | findstr "LISTENING" >nul
-if not errorlevel 1 (
-    echo WARNING: port 5173 in use, frontend may be running
-)
-
+call deactivate
+echo   Backend ready.
 echo.
-echo ================================================================
-echo  Service Info
-echo ================================================================
-echo  Frontend:  http://localhost:5173
-echo  Backend:   http://localhost:8002
-echo  API docs:  http://localhost:8002/docs
-echo  Health:    http://localhost:8002/health
-echo ================================================================
-echo.
-echo Press any key to start services (close windows to stop)...
-pause >nul
 
-echo Starting backend...
-start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && set ORACLE_HOST=%ORACLE_HOST% && set ORACLE_PORT=%ORACLE_PORT% && set ORACLE_SERVICE=%ORACLE_SERVICE% && set ORACLE_USER=%ORACLE_USER% && set ORACLE_PASSWORD=%ORACLE_PASSWORD% && set ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE% && set ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR% && venv\Scripts\python.exe main.py"
-
-echo Waiting for backend to start (5 sec)...
-timeout /t 5 /nobreak >nul
-
-echo Starting frontend (vite preview production mode)...
+REM ----- Step 4: Frontend dependencies -----
+echo [4/6] Setting up frontend...
 cd /d "%FRONTEND_DIR%"
-if exist "node_modules\.bin\vite.cmd" (
-    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && node_modules\.bin\vite.cmd preview --port 5173 --host"
-) else (
-    echo WARNING: vite.cmd not found, trying npx
-    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && npx vite preview --port 5173 --host"
-)
 
+if not exist "node_modules" (
+    echo   Installing npm dependencies...
+    call npm install
+    if errorlevel 1 (
+        echo ERROR: npm install failed
+        pause
+        exit /b 1
+    )
+) else (
+    echo   node_modules exists, skipping npm install
+)
 echo.
-echo ================================================================
-echo  Services started!
-echo ================================================================
-echo  Open browser: http://localhost:5173
+
+REM ----- Step 5: Build frontend -----
+echo [5/6] Building frontend...
+call npm run build
+if errorlevel 1 (
+    echo ERROR: npm run build failed
+    pause
+    exit /b 1
+)
+if not exist "dist\index.html" (
+    echo ERROR: dist\index.html not found after build
+    pause
+    exit /b 1
+)
+echo   Frontend built successfully.
 echo.
-echo  Login: NT auto-login or admin/admin123
+
+REM ----- Step 6: Verify database connection -----
+echo [6/6] Testing database connection...
+cd /d "%BASE_DIR%"
+
+REM Create a temp test script
+set "TEST_SCRIPT=%BACKEND_DIR%\_test_db_conn.py"
+(
+echo import os
+echo os.environ['DB_TYPE'] = '!DB_TYPE!'
+echo os.environ['ORACLE_HOST'] = '!ORACLE_HOST!'
+echo os.environ['ORACLE_PORT'] = '!ORACLE_PORT!'
+echo os.environ['ORACLE_SERVICE'] = '!ORACLE_SERVICE!'
+echo os.environ['ORACLE_USER'] = '!ORACLE_USER!'
+echo os.environ['ORACLE_PASSWORD'] = '!ORACLE_PASSWORD!'
+echo os.environ['ORACLE_DSN_TYPE'] = '!ORACLE_DSN_TYPE!'
+echo os.environ['ORACLE_CLIENT_DIR'] = '!ORACLE_CLIENT_DIR!'
+echo from sqlalchemy import text
+echo from database import SessionLocal, engine
+echo print(f'Engine: {engine.url}')
+echo db = SessionLocal^(^)
+echo result = db.execute^(text^('SELECT 1 FROM DUAL'^)^)
+echo print^('Database connection: OK'^)
+echo db.close^(^)
+) > "%TEST_SCRIPT%"
+
+call "%BACKEND_DIR%\venv\Scripts\python.exe" "%TEST_SCRIPT%"
+if errorlevel 1 (
+    echo.
+    echo WARNING: Database connection test failed
+    echo Please check:
+    echo   1. Oracle Client is installed and ORACLE_CLIENT_DIR is correct
+    echo   2. Database credentials in env.bat are correct
+    echo   3. Network connectivity to !ORACLE_HOST!:!ORACLE_PORT!
+    echo.
+    echo You can still start the app, but database features may not work.
+) else (
+    echo   Database connection: OK
+)
+del "%TEST_SCRIPT%" 2>nul
+echo.
+
+REM ----- Done -----
 echo ================================================================
+echo  Deployment Complete!
+echo ================================================================
+echo.
+echo  Next steps:
+echo   1. Review and modify env.bat for your production database
+echo   2. Run start_prod.bat to start the services
 echo.
 pause
 endlocal

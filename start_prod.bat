@@ -1,15 +1,20 @@
 @echo off
-title FabTwin Prod Start
+setlocal enabledelayedexpansion
 
 REM ================================================================
 REM FabTwin Production Start Script
-REM Usage: Start frontend and backend services on prod server
-REM Prereq: deploy.bat has been run (venv + node_modules + dist ready)
+REM 
+REM This script starts:
+REM   1. Backend (FastAPI on port 8002)
+REM   2. Frontend (Vite Preview on port 5173)
 REM
-REM IMPORTANT: English only to avoid encoding issues on Windows Server
+REM Prerequisites:
+REM   - deploy.bat has been run (venv + node_modules + dist ready)
+REM   - env.bat has correct database configuration
 REM ================================================================
 
-setlocal
+title FabTwin Start
+
 set "BASE_DIR=%~dp0"
 set "BASE_DIR=%BASE_DIR:~0,-1%"
 set "BACKEND_DIR=%BASE_DIR%\backend"
@@ -20,91 +25,116 @@ echo  FabTwin Production Start
 echo ================================================================
 echo.
 
-REM Check required files
+REM ----- Load environment config -----
+if exist "%BASE_DIR%\env.bat" (
+    call "%BASE_DIR%\env.bat"
+) else (
+    echo ERROR: env.bat not found
+    echo Please create env.bat with your database configuration
+    pause
+    exit /b 1
+)
+
+echo Configuration:
+echo   DB_TYPE: %DB_TYPE%
+echo   ORACLE_HOST: %ORACLE_HOST%
+echo   ORACLE_USER: %ORACLE_USER%
+echo   ORACLE_SERVICE: %ORACLE_SERVICE%
+echo.
+
+REM ----- Check required files -----
 if not exist "%BACKEND_DIR%\venv\Scripts\python.exe" (
-    echo ERROR: backend venv not found, please run deploy.bat first
+    echo ERROR: backend venv not found
+    echo Please run deploy.bat first
     pause
     exit /b 1
 )
 
 if not exist "%FRONTEND_DIR%\dist\index.html" (
-    echo ERROR: frontend dist not found, please run deploy.bat first
+    echo ERROR: frontend dist not found
+    echo Please run deploy.bat first
     pause
     exit /b 1
 )
 
-REM Check port usage
+REM ----- Check ports -----
 netstat -ano | findstr ":8002 " | findstr "LISTENING" >nul
 if not errorlevel 1 (
-    echo WARNING: port 8002 in use, backend may be running
-    choice /C YN /M "Continue starting backend (may fail)"
+    echo WARNING: Port 8002 already in use
+    choice /C YN /M "Continue anyway"
     if errorlevel 2 exit /b 0
 )
 
 netstat -ano | findstr ":5173 " | findstr "LISTENING" >nul
 if not errorlevel 1 (
-    echo WARNING: port 5173 in use, frontend may be running
-    choice /C YN /M "Continue starting frontend (may fail)"
+    echo WARNING: Port 5173 already in use
+    choice /C YN /M "Continue anyway"
     if errorlevel 2 exit /b 0
 )
 
-REM ---------- Load env.bat if exists ----------
-if exist "%BASE_DIR%\env.bat" (
-    call "%BASE_DIR%\env.bat"
-    echo [INFO] Loaded DB config from env.bat
-) else (
-    echo [INFO] env.bat not found, using inline defaults
-)
-
-REM Production env vars
-if not defined DB_TYPE set "DB_TYPE=oracle"
-if not defined SIMULATION_ENABLED set "SIMULATION_ENABLED=False"
-if not defined DB_POLLER_ENABLED set "DB_POLLER_ENABLED=True"
-
-REM 关键：绕过 HJTC Proxy 系统代理拦截
-set "NO_PROXY=*"
-set "no_proxy=*"
-set "HTTP_PROXY="
-set "HTTPS_PROXY="
-set "http_proxy="
-set "https_proxy="
-
-REM Fallback defaults if still not set
-if not defined ORACLE_HOST set "ORACLE_HOST=localhost"
-if not defined ORACLE_PORT set "ORACLE_PORT=1521"
-if not defined ORACLE_SERVICE set "ORACLE_SERVICE=ORCLPDB"
-if not defined ORACLE_USER set "ORACLE_USER=fabtwin"
-if not defined ORACLE_PASSWORD set "ORACLE_PASSWORD=fabtwin"
-if not defined ORACLE_DSN_TYPE set "ORACLE_DSN_TYPE=service_name"
-
+REM ----- Start Backend -----
 echo [1/2] Starting backend (FastAPI :8002)...
-start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && set DB_TYPE=oracle && set SIMULATION_ENABLED=False && set DB_POLLER_ENABLED=True && set ORACLE_HOST=%ORACLE_HOST% && set ORACLE_PORT=%ORACLE_PORT% && set ORACLE_SERVICE=%ORACLE_SERVICE% && set ORACLE_USER=%ORACLE_USER% && set ORACLE_PASSWORD=%ORACLE_PASSWORD% && set ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE% && set ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR% && set NO_PROXY=* && set no_proxy=* && set HTTP_PROXY= && set HTTPS_PROXY= && venv\Scripts\python.exe main.py"
 
-echo Waiting for backend to start (5 sec)...
-timeout /t 5 /nobreak >nul
+REM Create a launcher bat to avoid cmd quoting issues
+set "BACKEND_LAUNCHER=%BACKEND_DIR%\_run_backend.bat"
+(
+echo @echo off
+echo cd /d "%BACKEND_DIR%"
+echo set DB_TYPE=%DB_TYPE%
+echo set ORACLE_HOST=%ORACLE_HOST%
+echo set ORACLE_PORT=%ORACLE_PORT%
+echo set ORACLE_SERVICE=%ORACLE_SERVICE%
+echo set ORACLE_USER=%ORACLE_USER%
+echo set ORACLE_PASSWORD=%ORACLE_PASSWORD%
+echo set ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE%
+echo set ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR%
+echo set SIMULATION_ENABLED=%SIMULATION_ENABLED%
+echo set DB_POLLER_ENABLED=%DB_POLLER_ENABLED%
+echo set NO_PROXY=*
+echo set no_proxy=*
+echo set HTTP_PROXY=
+echo set HTTPS_PROXY=
+echo echo === Backend Config ===
+echo echo DB_TYPE=%DB_TYPE%
+echo echo ORACLE_HOST=%ORACLE_HOST%
+echo echo ORACLE_USER=%ORACLE_USER%
+echo echo ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR%
+echo echo ======================
+echo venv\Scripts\python.exe main.py
+) > "%BACKEND_LAUNCHER%"
 
+start "FabTwin Backend" cmd /k "%BACKEND_LAUNCHER%"
+
+echo   Backend starting... (check new window for logs)
+timeout /t 3 /nobreak >nul
+
+REM ----- Start Frontend -----
 echo [2/2] Starting frontend (Vite Preview :5173)...
+
 cd /d "%FRONTEND_DIR%"
 set "NO_PROXY=*"
-set "no_proxy=*"
+set "no_proxy="
+
 if exist "node_modules\.bin\vite.cmd" (
-    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && set NO_PROXY=* && set no_proxy=* && set HTTP_PROXY= && set HTTPS_PROXY= && node_modules\.bin\vite.cmd preview --port 5173 --host"
+    start "FabTwin Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && set NO_PROXY=* && node_modules\.bin\vite.cmd preview --port 5173 --host"
 ) else (
-    echo WARNING: vite.cmd not found, using npx
-    start "FabTwin Frontend" cmd /k "cd /d %FRONTEND_DIR% && set NO_PROXY=* && set no_proxy=* && set HTTP_PROXY= && set HTTPS_PROXY= && npx vite preview --port 5173 --host"
+    start "FabTwin Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && set NO_PROXY=* && npx vite preview --port 5173 --host"
 )
 
+echo   Frontend starting...
 echo.
+
+REM ----- Done -----
 echo ================================================================
-echo  Services started!
+echo  Services Started!
 echo ================================================================
+echo.
 echo  Frontend:  http://localhost:5173
 echo  Backend:   http://localhost:8002
 echo  API docs:  http://localhost:8002/docs
 echo  Health:    http://localhost:8002/health
-echo ================================================================
 echo.
-echo Close the corresponding window to stop the service
+echo  Close the windows to stop the services.
 echo.
 pause
 endlocal
