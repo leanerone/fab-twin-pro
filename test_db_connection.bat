@@ -237,7 +237,7 @@ echo os.environ['ORACLE_USER'] = '%DB_USER%'
 echo os.environ['ORACLE_PASSWORD'] = '%DB_PASSWORD%'
 echo os.environ['ORACLE_SERVICE'] = '%DB_SID%'
 echo os.environ['ORACLE_DSN_TYPE'] = '%DB_DSN_TYPE%'
-echo if '%ORACLE_CLIENT_DIR%' != '': os.environ['ORACLE_CLIENT_DIR'] = '%ORACLE_CLIENT_DIR%'
+echo if '%ORACLE_CLIENT_DIR%': os.environ['ORACLE_CLIENT_DIR'] = '%ORACLE_CLIENT_DIR%'
 echo sys.path.insert^(0, r'%BACKEND_DIR%'^)
 echo try:
 echo     from database import engine

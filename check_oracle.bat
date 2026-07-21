@@ -157,17 +157,9 @@ echo "%PATH%" | find /i "%BIN_DIR%" >nul
 if errorlevel 1 (
     echo   WARNING: PATH does not contain %BIN_DIR%
     echo   WARNING: PATH does not contain %BIN_DIR% >> "%REPORT%"
-    echo   Attempting to add to system PATH...
-    echo   Attempting to add to system PATH... >> "%REPORT%"
-    setx PATH "%PATH%;%BIN_DIR%" >nul 2>&1
-    if errorlevel 1 (
-        echo   WARNING: Failed to set PATH automatically (may need admin)
-        echo   WARNING: Failed to set PATH automatically >> "%REPORT%"
-    ) else (
-        echo   FIXED: Added %BIN_DIR% to system PATH
-        echo   FIXED: Added %BIN_DIR% to system PATH >> "%REPORT%"
-        set /a FIXED+=1
-    )
+    echo   Please add to PATH manually or run as Admin:
+    echo     setx PATH "%%PATH%%;%BIN_DIR%"
+    echo   Manual PATH fix required >> "%REPORT%"
 ) else (
     echo   OK: PATH contains Oracle bin
     echo   OK: PATH contains Oracle bin >> "%REPORT%"
