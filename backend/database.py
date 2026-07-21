@@ -13,7 +13,11 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-from config import DATABASE_URL, DB_IS_SQLITE
+from config import (
+    DATABASE_URL, DB_IS_SQLITE,
+    ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE,
+    ORACLE_USER, ORACLE_PASSWORD, ORACLE_DSN_TYPE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +112,29 @@ if not DB_IS_SQLITE:
 _connect_args = {}
 if DB_IS_SQLITE:
     _connect_args["check_same_thread"] = False
+    engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
+else:
+    # Oracle: 绕过 SQLAlchemy URL 解析，直接用 oracledb.makedsn 生成 DSN
+    # 原因：sqlalchemy-oracledb 对 ?sid= 查询参数解析在部分版本有问题，
+    # 导致 ORA-12504 (listener 未收到 SERVICE_NAME)。
+    # 使用 creator 函数直接调用 oracledb.connect()，DSN 完全由 makedsn 控制。
+    import oracledb as _oracledb
 
-engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
+    if ORACLE_DSN_TYPE == "sid":
+        _oracle_dsn = _oracledb.makedsn(ORACLE_HOST, ORACLE_PORT, sid=ORACLE_SERVICE)
+    else:
+        _oracle_dsn = _oracledb.makedsn(ORACLE_HOST, ORACLE_PORT, service_name=ORACLE_SERVICE)
+
+    logger.info(f"Oracle DSN: {_oracle_dsn}")
+
+    def _oracle_creator():
+        return _oracledb.connect(user=ORACLE_USER, password=ORACLE_PASSWORD, dsn=_oracle_dsn)
+
+    engine = create_engine(
+        "oracle+oracledb://",
+        creator=_oracle_creator,
+        pool_pre_ping=True,
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -9,15 +9,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 本地开发默认使用 SQLite，生产部署切 Oracle 无需改代码
 DB_TYPE = os.getenv("DB_TYPE", "oracle").lower()
 
+# Oracle 连接参数（始终定义，便于 database.py 导入；SQLite 模式下不使用）
+ORACLE_USER = os.getenv("ORACLE_USER", "fabtwin")
+ORACLE_PASSWORD = os.getenv("ORACLE_PASSWORD", "fabtwin")
+ORACLE_HOST = os.getenv("ORACLE_HOST", "localhost")
+ORACLE_PORT = int(os.getenv("ORACLE_PORT", "1521"))
+ORACLE_SERVICE = os.getenv("ORACLE_SERVICE", "ORCLPDB")
+# DSN type: service_name (12c+ PDB) or sid (10g/11g traditional)
+# Set ORACLE_DSN_TYPE=sid for Oracle 10g/11g
+ORACLE_DSN_TYPE = os.getenv("ORACLE_DSN_TYPE", "service_name").lower()
+
 if DB_TYPE == "oracle":
-    ORACLE_USER = os.getenv("ORACLE_USER", "fabtwin")
-    ORACLE_PASSWORD = os.getenv("ORACLE_PASSWORD", "fabtwin")
-    ORACLE_HOST = os.getenv("ORACLE_HOST", "localhost")
-    ORACLE_PORT = int(os.getenv("ORACLE_PORT", "1521"))
-    ORACLE_SERVICE = os.getenv("ORACLE_SERVICE", "ORCLPDB")
-    # DSN type: service_name (12c+ PDB) or sid (10g/11g traditional)
-    # Set ORACLE_DSN_TYPE=sid for Oracle 10g/11g
-    ORACLE_DSN_TYPE = os.getenv("ORACLE_DSN_TYPE", "service_name").lower()
     if ORACLE_DSN_TYPE == "sid":
         DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?sid={ORACLE_SERVICE}"
     else:
