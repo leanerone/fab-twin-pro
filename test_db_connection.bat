@@ -92,7 +92,10 @@ echo     print^('THIN_FAILED', str^(e^)^)
 echo     sys.exit^(1^)
     ) > "%BASE_DIR%\_test_thin.py"
 
-    for /f "usebackq tokens=1,* delims= " %%a in (`"%PY_EXE%" "%BASE_DIR%\_test_thin.py"`) do (
+    "%PY_EXE%" "%BASE_DIR%\_test_thin.py" > "%BASE_DIR%\_tmp_thin.txt"
+    set /p THIN_RAW= < "%BASE_DIR%\_tmp_thin.txt"
+    del "%BASE_DIR%\_tmp_thin.txt" >nul 2>&1
+    for /f "tokens=1,* delims= " %%a in ("%THIN_RAW%") do (
         set "THIN_STATUS=%%a"
         set "THIN_DETAIL=%%b"
     )
@@ -163,7 +166,10 @@ echo     print^('THICK_FAILED', str^(e^)^)
 echo     sys.exit^(1^)
 ) > "%BASE_DIR%\_test_thick.py"
 
-for /f "usebackq tokens=1,* delims= " %%a in (`"%PY_EXE%" "%BASE_DIR%\_test_thick.py"`) do (
+"%PY_EXE%" "%BASE_DIR%\_test_thick.py" > "%BASE_DIR%\_tmp_thick.txt"
+set /p THICK_RAW= < "%BASE_DIR%\_tmp_thick.txt"
+del "%BASE_DIR%\_tmp_thick.txt" >nul 2>&1
+for /f "tokens=1,* delims= " %%a in ("%THICK_RAW%") do (
     set "THICK_STATUS=%%a"
     set "THICK_DETAIL=%%b"
 )
@@ -208,7 +214,10 @@ echo     print^('BACKEND_FAILED', str^(e^)^)
 echo     sys.exit^(1^)
     ) > "%BASE_DIR%\_test_backend.py"
 
-    for /f "usebackq tokens=1,* delims= " %%a in (`"%PY_EXE%" "%BASE_DIR%\_test_backend.py"`) do (
+    "%PY_EXE%" "%BASE_DIR%\_test_backend.py" > "%BASE_DIR%\_tmp_backend.txt"
+    set /p BACK_RAW= < "%BASE_DIR%\_tmp_backend.txt"
+    del "%BASE_DIR%\_tmp_backend.txt" >nul 2>&1
+    for /f "tokens=1,* delims= " %%a in ("%BACK_RAW%") do (
         set "BACK_STATUS=%%a"
         set "BACK_DETAIL=%%b"
     )
