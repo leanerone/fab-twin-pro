@@ -430,13 +430,13 @@ def create_machine_model_configs(db: Session):
     }
 
     vpo_model = MachineModelConfig(
-        model_id="VPO-2200",
-        model_name="VPO 立式氧化炉",
+        model_id="PODOPENER-2200",
+        model_name="PODOPENER 开盖机",
         vendor="TEL",
-        process_type="OXIDE",
+        process_type="PODOPENER",
         version="1.0",
         view_mode="vpo",
-        description="VPO 立式氧化炉 2D/3D 统一视图，支持POD穿入脱出动画",
+        description="PODOPENER 开盖机 2D/3D 统一视图，支持POD穿入脱出动画",
         views_config_json=json.dumps(vpo_views, ensure_ascii=False),
         parts_config_json=json.dumps(vpo_parts, ensure_ascii=False),
         state_mapping_json=json.dumps(vpo_states, ensure_ascii=False),
