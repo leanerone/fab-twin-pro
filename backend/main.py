@@ -69,8 +69,9 @@ def on_startup():
     # 打印 DB 配置
     from config import (
         DB_TYPE, ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE,
-        ORACLE_USER, ORACLE_DSN_TYPE, ORACLE_CLIENT_DIR,
+        ORACLE_USER, ORACLE_DSN_TYPE,
     )
+    ORACLE_CLIENT_DIR = os.getenv("ORACLE_CLIENT_DIR", "N/A")
     print(f"[DB Config] DB_TYPE={DB_TYPE}")
     print(f"[DB Config] ORACLE_HOST={ORACLE_HOST}")
     print(f"[DB Config] ORACLE_PORT={ORACLE_PORT}")
