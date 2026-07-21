@@ -50,7 +50,7 @@ REM ---------- Check 2: Python bitness ----------
 echo.
 echo [2/8] Checking Python architecture...
 echo [2/8] Checking Python architecture... >> "%REPORT%"
-for /f "delims=" %%a in ('"%PY_EXE%" -c "import struct; print(struct.calcsize('P')*8)"') do set "PY_BITS=%%a"
+for /f "usebackq delims=" %%a in (`"%PY_EXE%" -c "import struct; print(struct.calcsize('P')*8)"`) do set "PY_BITS=%%a"
 echo   Python is %PY_BITS%-bit
 echo   Python is %PY_BITS%-bit >> "%REPORT%"
 if not "%PY_BITS%"=="64" (
@@ -204,7 +204,7 @@ echo     print^('THICK_FAILED', str^(e^)^)
 echo     sys.exit^(1^)
 ) > "%BASE_DIR%\_check_thick.py"
 
-for /f "tokens=1,* delims= " %%a in ('"%PY_EXE%" "%BASE_DIR%\_check_thick.py"') do (
+for /f "usebackq tokens=1,* delims= " %%a in (`"%PY_EXE%" "%BASE_DIR%\_check_thick.py"`) do (
     set "THICK_STATUS=%%a"
     set "THICK_DETAIL=%%b"
 )
@@ -275,7 +275,7 @@ echo     print^('CONNECT_FAILED', str^(e^)^)
 echo     sys.exit^(1^)
     ) > "%BASE_DIR%\_check_conn.py"
 
-    for /f "tokens=1,* delims= " %%a in ('"%PY_EXE%" "%BASE_DIR%\_check_conn.py"') do (
+    for /f "usebackq tokens=1,* delims= " %%a in (`"%PY_EXE%" "%BASE_DIR%\_check_conn.py"`) do (
         set "CONN_STATUS=%%a"
         set "CONN_DETAIL=%%b"
     )
