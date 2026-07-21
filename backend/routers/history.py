@@ -1,6 +1,13 @@
-"""历史数据回放API：基于DT_EVENT_RAW表实现事件时间轴回放"""
+"""历史数据回放API：基于DT_EVENT_RAW表实现事件时间轴回放
+
+生产环境关键说明：
+- 量产Oracle中 event_ts_utc 多为 None，真实时间戳在 received_ts_utc
+- received_ts_utc 是 datetime 类型，不是字符串
+- 必须用 datetime 对象查询，不能用字符串，否则报 ORA-01843
+"""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional
 from datetime import datetime
 import json
@@ -12,53 +19,49 @@ from models import DT_EVENT_RAW
 router = APIRouter(prefix="/api/history", tags=["history"])
 
 
-def _normalize_ts(ts: str) -> str:
-    """标准化时间戳：去掉Z后缀和时区信息，统一为东八区本地时间格式
-    数据库中存在两种格式：
-    1. 2026-07-12T08:00:00.000Z （本地时间被错误标记为UTC）
-    2. 2026-07-18T20:25:00.054573 （本地时间无后缀）
-    3. 2026-07-17 00:52:55 （Oracle存储为空格分隔）
-    返回空格分隔格式，同时保留原始格式用于多格式匹配
+def _parse_ts(ts) -> Optional[datetime]:
+    """将各种格式的时间戳转换为 datetime 对象
+    
+    支持格式：
+    - datetime 对象（直接返回）
+    - "2026-07-21T00:00:00" (ISO)
+    - "2026-07-21 00:00:00" (空格分隔)
+    - "2026-07-21T00:00:00.000Z" (带Z后缀)
+    - "2026-07-21" (仅日期)
     """
     if not ts:
-        return ""
+        return None
+    if isinstance(ts, datetime):
+        return ts
     ts = str(ts).strip()
+    # 去掉 Z 和时区后缀
     ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
-    ts = ts.replace('T', ' ')
-    return ts
+    # 尝试多种格式
+    formats = [
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(ts, fmt)
+        except ValueError:
+            continue
+    return None
 
 
-def _get_ts_filter(column, start_ts=None, end_ts=None):
-    """生成时间范围查询条件，同时支持T分隔和空格分隔的时间戳格式
-    
-    关键问题：Oracle中event_ts_utc是String类型，字符串比较是按ASCII码：
-    - 空格(32) < T(84)，所以 "2026-07-17 00:00:00" < "2026-07-17T00:00:00"
-    如果只查询空格格式，会漏掉所有T分隔的数据！
-    
-    解决方案：用OR条件同时匹配两种格式
-    """
-    from sqlalchemy import or_
-    
-    conditions = []
-    if start_ts:
-        start_space = _normalize_ts(start_ts)
-        start_T = start_space.replace(' ', 'T')
-        conditions.append(or_(
-            column >= start_space,
-            column >= start_T
-        ))
-    if end_ts:
-        end_space = _normalize_ts(end_ts)
-        end_T = end_space.replace(' ', 'T')
-        conditions.append(or_(
-            column <= end_space,
-            column <= end_T
-        ))
-    return conditions
+def _normalize_ts(ts) -> str:
+    """标准化时间戳为 'YYYY-MM-DD HH:MM:SS' 格式（用于API输出）"""
+    dt = _parse_ts(ts)
+    if dt is None:
+        return ""
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
-    """解析VFEI事件payload，统一返回结构化数据"""
+    """解析VFEI事件payload"""
     try:
         return json.loads(payload_json) if payload_json else {}
     except:
@@ -115,12 +118,15 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
             "severity": severity,
         }
 
+    # 优先使用 event_ts_utc，为空则回退 received_ts_utc
+    ts_value = row.event_ts_utc or row.received_ts_utc
+
     return {
         "raw_id": row.raw_id,
         "tool_id": row.tool_id,
         "source_system": row.source_system,
         "source_message_id": row.source_message_id,
-        "timestamp": _normalize_ts(row.event_ts_utc or row.received_ts_utc),
+        "timestamp": _normalize_ts(ts_value),
         "parse_status": row.parse_status,
         "event_category": event_category,
         "event_name": event_name,
@@ -135,6 +141,16 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
     }
 
 
+def _get_ts_column():
+    """获取用于时间查询的列
+    
+    生产环境中 event_ts_utc 多为 None，使用 received_ts_utc 查询
+    使用 coalesce 优先取 event_ts_utc，为空则取 received_ts_utc
+    """
+    from sqlalchemy import func
+    return func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
+
+
 @router.get("/{tool_id}")
 def get_history(
     tool_id: str,
@@ -145,30 +161,26 @@ def get_history(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    """
-    获取指定机台的历史事件时间轴
-
-    参数:
-    - tool_id: 机台ID (如 VPO-01, OXE-01)
-    - start_time: 开始时间 (ISO格式, 如 2026-06-14T00:00:00)
-    - end_time: 结束时间
-    - event_category: 过滤事件类型 alarm/pod/process
-    - limit: 返回数量上限
-    - offset: 分页偏移
-    """
+    """获取指定机台的历史事件时间轴"""
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
-    ts_conditions = _get_ts_filter(DT_EVENT_RAW.event_ts_utc, start_time, end_time)
-    for cond in ts_conditions:
-        query = query.filter(cond)
+    ts_col = _get_ts_column()
+    if start_time:
+        start_dt = _parse_ts(start_time)
+        if start_dt:
+            query = query.filter(ts_col >= start_dt)
+    if end_time:
+        end_dt = _parse_ts(end_time)
+        if end_dt:
+            query = query.filter(ts_col <= end_dt)
 
-    query = query.order_by(DT_EVENT_RAW.event_ts_utc.asc())
+    query = query.order_by(ts_col.asc())
     total = query.count()
     rows = query.offset(offset).limit(limit).all()
 
     events = [_event_to_dict(r) for r in rows]
 
-    # 如果有过滤条件，在Python层过滤（因为event_category是从payload解析的）
+    # 如果有过滤条件，在Python层过滤
     if event_category:
         events = [e for e in events if e["event_category"] == event_category]
 
@@ -187,22 +199,20 @@ def get_timeline(
     date: Optional[str] = Query(None, description="日期 YYYY-MM-DD，默认今天"),
     db: Session = Depends(get_db),
 ):
-    """
-    获取机台单日时间轴摘要（用于时间轴缩略图）
-    返回按小时聚合的事件统计
-    """
+    """获取机台单日时间轴摘要（按小时聚合）"""
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    start = f"{date} 00:00:00"
-    end = f"{date} 23:59:59.999999"
+    start_dt = datetime.strptime(f"{date} 00:00:00", "%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.strptime(f"{date} 23:59:59", "%Y-%m-%d %H:%M:%S")
 
+    ts_col = _get_ts_column()
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(or_(DT_EVENT_RAW.event_ts_utc >= start, DT_EVENT_RAW.event_ts_utc >= start.replace(' ', 'T')))
-        .filter(or_(DT_EVENT_RAW.event_ts_utc <= end, DT_EVENT_RAW.event_ts_utc <= end.replace(' ', 'T')))
-        .order_by(DT_EVENT_RAW.event_ts_utc.asc())
+        .filter(ts_col >= start_dt)
+        .filter(ts_col <= end_dt)
+        .order_by(ts_col.asc())
         .all()
     )
 
@@ -259,12 +269,18 @@ def get_alarm_history(
     """获取机台Alarm历史记录"""
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
-    ts_conditions = _get_ts_filter(DT_EVENT_RAW.event_ts_utc, start_time, end_time)
-    for cond in ts_conditions:
-        query = query.filter(cond)
+    ts_col = _get_ts_column()
+    if start_time:
+        start_dt = _parse_ts(start_time)
+        if start_dt:
+            query = query.filter(ts_col >= start_dt)
+    if end_time:
+        end_dt = _parse_ts(end_time)
+        if end_dt:
+            query = query.filter(ts_col <= end_dt)
 
-    query = query.order_by(DT_EVENT_RAW.event_ts_utc.desc())
-    rows = query.limit(limit * 3).all()  # 多取一些用于过滤
+    query = query.order_by(ts_col.desc())
+    rows = query.limit(limit * 3).all()
 
     alarms = []
     for row in rows:
@@ -311,28 +327,31 @@ def get_event_detail(
     ev = _event_to_dict(row)
 
     # 查找前后事件（用于连续回放）
-    ts_str = str(row.event_ts_utc)
-    ts_space = ts_str.replace('T', ' ')
-    ts_T = ts_str.replace(' ', 'T')
-    
-    prev_row = (
-        db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(or_(DT_EVENT_RAW.event_ts_utc < ts_space, DT_EVENT_RAW.event_ts_utc < ts_T))
-        .order_by(DT_EVENT_RAW.event_ts_utc.desc())
-        .first()
-    )
-    next_row = (
-        db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(or_(DT_EVENT_RAW.event_ts_utc > ts_space, DT_EVENT_RAW.event_ts_utc > ts_T))
-        .order_by(DT_EVENT_RAW.event_ts_utc.asc())
-        .first()
-    )
+    ts_col = _get_ts_column()
+    current_ts = row.event_ts_utc or row.received_ts_utc
+    current_dt = _parse_ts(current_ts)
+
+    prev_row = None
+    next_row = None
+    if current_dt:
+        prev_row = (
+            db.query(DT_EVENT_RAW)
+            .filter(DT_EVENT_RAW.tool_id == tool_id)
+            .filter(ts_col < current_dt)
+            .order_by(ts_col.desc())
+            .first()
+        )
+        next_row = (
+            db.query(DT_EVENT_RAW)
+            .filter(DT_EVENT_RAW.tool_id == tool_id)
+            .filter(ts_col > current_dt)
+            .order_by(ts_col.asc())
+            .first()
+        )
 
     ev["prev_event_id"] = prev_row.raw_id if prev_row else None
     ev["next_event_id"] = next_row.raw_id if next_row else None
-    ev["prev_timestamp"] = _normalize_ts(prev_row.event_ts_utc) if prev_row else None
-    ev["next_timestamp"] = _normalize_ts(next_row.event_ts_utc) if next_row else None
+    ev["prev_timestamp"] = _normalize_ts(prev_row.event_ts_utc or prev_row.received_ts_utc) if prev_row else None
+    ev["next_timestamp"] = _normalize_ts(next_row.event_ts_utc or next_row.received_ts_utc) if next_row else None
 
     return ev
