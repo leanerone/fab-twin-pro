@@ -30,7 +30,7 @@ machines = db.query(Machine).all()
 print(f"Total machines: {len(machines)}")
 if machines:
     for m in machines:
-        print(f"  - {m.tool_id} (model={m.model}, status={m.status}, ip={m.ip_address or 'N/A'})")
+        print(f"  - id={m.id}, model={m.model}, state={m.state}, name={m.name or 'N/A'}")
 
 # 2. MachineModelConfig table
 print("\n--- 2. MachineModelConfig Table ---")
@@ -50,9 +50,9 @@ if machines and models:
         if machine.model in model_ids:
             mc = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == machine.model).first()
             status = "OK" if mc and mc.view_mode else "NO VIEW_MODE"
-            print(f"  {machine.tool_id} -> {machine.model}: {status}")
+            print(f"  {machine.id} -> {machine.model}: {status}")
         else:
-            print(f"  {machine.tool_id} -> {machine.model}: MISSING!")
+            print(f"  {machine.id} -> {machine.model}: MISSING!")
 
 # 4. DT_EVENT_RAW data
 print("\n--- 4. DT_EVENT_RAW Data ---")
@@ -87,8 +87,8 @@ if total_events > 0:
     print("\n--- 5. Machine Data Coverage ---")
     if machines:
         for m in machines:
-            cnt = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == m.tool_id).count()
-            print(f"  {m.tool_id}: {cnt} events in DT_EVENT_RAW")
+            cnt = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == m.id).count()
+            print(f"  {m.id}: {cnt} events in DT_EVENT_RAW")
 
 # 5. VPO specific check
 print("\n--- 6. VPO Model Check ---")
@@ -103,7 +103,7 @@ if vpo_models:
     vpo_machines = [m for m in machines if m.model in vpo_model_ids]
     print(f"\nMachines using VPO models: {len(vpo_machines)}")
     for m in vpo_machines:
-        print(f"  - {m.tool_id} (model={m.model})")
+        print(f"  - {m.id} (model={m.model})")
 
 db.close()
 

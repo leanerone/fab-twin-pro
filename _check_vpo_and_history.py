@@ -55,7 +55,8 @@ try:
     from config import DB_TYPE, ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE
 
     db = SessionLocal()
-    db.execute("SELECT 1 FROM DUAL" if not DB_IS_SQLITE else "SELECT 1")
+    from sqlalchemy import text
+    db.execute(text("SELECT 1 FROM DUAL" if not DB_IS_SQLITE else "SELECT 1"))
     log(f"  OK: Connected to {DB_TYPE.upper()}")
     if not DB_IS_SQLITE:
         log(f"  Oracle: {ORACLE_HOST}:{ORACLE_PORT}/{ORACLE_SERVICE}")
