@@ -48,23 +48,20 @@ if not errorlevel 1 (
     if errorlevel 2 exit /b 0
 )
 
+REM ---------- Load env.bat if exists ----------
+if exist "%BASE_DIR%\env.bat" (
+    call "%BASE_DIR%\env.bat"
+    echo [INFO] Loaded DB config from env.bat
+) else (
+    echo [INFO] env.bat not found, using inline defaults
+)
+
 REM Production env vars
-set "DB_TYPE=oracle"
-set "SIMULATION_ENABLED=False"
-set "DB_POLLER_ENABLED=True"
+if not defined DB_TYPE set "DB_TYPE=oracle"
+if not defined SIMULATION_ENABLED set "SIMULATION_ENABLED=False"
+if not defined DB_POLLER_ENABLED set "DB_POLLER_ENABLED=True"
 
-REM Uncomment and modify if non-default Oracle config
-REM set "ORACLE_HOST=192.168.x.x"
-REM set "ORACLE_PORT=1521"
-REM set "ORACLE_SERVICE=ORCLPDB"
-REM set "ORACLE_USER=fabtwin"
-REM set "ORACLE_PASSWORD=fabtwin"
-
-REM For Oracle 10g/11g: set ORACLE_CLIENT_DIR and ORACLE_DSN_TYPE
-REM set "ORACLE_CLIENT_DIR=C:\oracle\instantclient_19_x"
-REM set "ORACLE_DSN_TYPE=sid"
-
-REM Ensure defaults if not set
+REM Fallback defaults if still not set
 if not defined ORACLE_HOST set "ORACLE_HOST=localhost"
 if not defined ORACLE_PORT set "ORACLE_PORT=1521"
 if not defined ORACLE_SERVICE set "ORACLE_SERVICE=ORCLPDB"

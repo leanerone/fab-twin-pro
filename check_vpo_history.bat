@@ -14,9 +14,19 @@ set "BASE_DIR=%BASE_DIR:~0,-1%"
 set "BACKEND_DIR=%BASE_DIR%\backend"
 set "PY_EXE=%BACKEND_DIR%\venv\Scripts\python.exe"
 
+REM Load Oracle DB config from env.bat
+if exist "%BASE_DIR%\env.bat" (
+    call "%BASE_DIR%\env.bat"
+) else (
+    echo WARNING: env.bat not found, using default DB config
+    echo Please create env.bat or set Oracle env vars manually
+)
+
 echo ================================================================
 echo  FabTwin VPO Model & History Diagnostic Tool
 echo ================================================================
+echo.
+echo DB: %ORACLE_HOST%:%ORACLE_PORT%/%ORACLE_SERVICE% (%ORACLE_USER%)
 echo.
 
 if not exist "%PY_EXE%" (
