@@ -71,16 +71,47 @@ if errorlevel 1 (
 :: Step 4: Create IIS Site Directory
 echo [4/6] Creating IIS site directory...
 set "IIS_SITE_DIR=C:\inetpub\wwwroot\FabTwin"
+set "DIST_DIR=frontend\dist"
+
 if not exist "%IIS_SITE_DIR%" mkdir "%IIS_SITE_DIR%"
 
-:: Copy frontend dist to IIS directory
-if exist "frontend\dist" (
+if exist "%DIST_DIR%" (
     echo [INFO] Copying frontend files to IIS directory...
-    xcopy /E /I /Y "frontend\dist\*" "%IIS_SITE_DIR%\" >nul
-    echo [OK] Frontend files copied.
+    echo [INFO] Source: %DIST_DIR%
+    echo [INFO] Target: %IIS_SITE_DIR%
+    
+    del /s /q "%IIS_SITE_DIR%\*" >nul 2>&1
+    xcopy /E /I /Y "%DIST_DIR%\*" "%IIS_SITE_DIR%\"
+    
+    if errorlevel 1 (
+        echo [ERROR] Copy failed!
+        pause
+        exit /b 1
+    )
+    
+    echo [INFO] Verifying files...
+    if exist "%IIS_SITE_DIR%\index.html" (
+        for /f "tokens=3" %%a in ('dir "%IIS_SITE_DIR%\index.html" ^| findstr "index.html"') do set "SIZE=%%a"
+        echo [OK] index.html copied (%SIZE% bytes)
+        
+        if exist "%IIS_SITE_DIR%\assets" (
+            for /f %%a in ('dir "%IIS_SITE_DIR%\assets" /b ^| find /c /v ""') do set "FILES=%%a"
+            echo [OK] assets directory copied (%FILES% files)
+        ) else (
+            echo [ERROR] assets directory NOT found!
+            pause
+            exit /b 1
+        )
+    ) else (
+        echo [ERROR] index.html NOT copied!
+        pause
+        exit /b 1
+    )
 ) else (
-    echo [WARN] frontend\dist not found.
-    echo [WARN] Please run 'npm run build' in frontend folder first.
+    echo [ERROR] %DIST_DIR% NOT found!
+    echo [ERROR] Please run: cd frontend ^&^& npm run build
+    pause
+    exit /b 1
 )
 
 :: Create web.config with reverse proxy and Windows Auth
