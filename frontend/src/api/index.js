@@ -136,6 +136,13 @@ export const api = {
   // 认证API
   login: () => request('POST', '/auth/login', null, false),
   loginWithPassword: (username, password) => request('POST', '/auth/login-password', { username, password }, false),
+  loginWindows: (username) => request('POST', '/auth/login-windows', { username }, false),
+  // 通过ASP获取Windows用户名
+  getWindowsUser: async () => {
+    const res = await fetch('/get_user.asp', { method: 'GET', credentials: 'include' });
+    if (!res.ok) throw new Error(`ASP error: ${res.status}`);
+    return res.json();
+  },
   getUserInfo: () => request('GET', '/auth/user'),
   getPermissions: () => request('GET', '/auth/permissions'),
   checkPermission: (permId) => request('GET', `/auth/check/${permId}`),

@@ -17,6 +17,9 @@ class LoginPasswordRequest(BaseModel):
     username: str
     password: str
 
+class LoginWindowsRequest(BaseModel):
+    username: str
+
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     """获取当前用户"""
@@ -198,6 +201,58 @@ def login_with_password(data: LoginPasswordRequest, db: Session = Depends(get_db
     expected_password = data.username + "123"
     if data.password != expected_password:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+    
+    user.last_login_at = datetime.now().isoformat()
+    db.commit()
+    
+    permissions = get_user_permissions(user, db)
+    
+    return {
+        "token": user.id,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "display_name": user.display_name,
+            "role": user.role,
+            "department": user.department,
+        },
+        "permissions": permissions,
+    }
+
+
+@router.post("/login-windows")
+def login_windows(data: LoginWindowsRequest, db: Session = Depends(get_db)):
+    """Windows NT登录（前端通过ASP获取用户名后发送过来）"""
+    windows_user = data.username
+    
+    if not windows_user:
+        raise HTTPException(status_code=401, detail="未获取到Windows用户名")
+    
+    # 提取用户名（去除DOMAIN\前缀）
+    if "\\" in windows_user:
+        windows_user = windows_user.split("\\")[-1]
+    
+    username = windows_user
+    
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        user = db.query(User).filter(User.display_name == username).first()
+    
+    if not user:
+        user = User(
+            id=str(uuid.uuid4()),
+            username=username,
+            display_name=username,
+            email="",
+            department="",
+            role="user",
+            windows_sid="",
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     
     user.last_login_at = datetime.now().isoformat()
     db.commit()

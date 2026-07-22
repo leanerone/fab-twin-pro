@@ -131,13 +131,15 @@ async function handleNtLogin() {
   error.value = ''
 
   try {
-    const result = await api.login()
-    if (result.need_password_login) {
+    const aspResult = await api.getWindowsUser()
+    if (!aspResult.success || !aspResult.username) {
       passwordMode.value = true
-      error.value = result.message || 'NT自动登录不可用，请使用账号密码登录'
+      error.value = '无法获取Windows用户名，请使用账号密码登录'
       loggingIn.value = false
       return
     }
+    
+    const result = await api.loginWindows(aspResult.username)
     if (result.token) {
       authStore.login(result.token, result.user, result.permissions)
       await router.push('/')
@@ -145,8 +147,9 @@ async function handleNtLogin() {
       error.value = '登录失败，请联系管理员'
     }
   } catch (e) {
-    console.error('Login error:', e)
-    error.value = '网络连接失败，请检查后端服务: ' + e.message
+    console.error('NT Login error:', e)
+    error.value = 'Windows登录失败，请尝试账号密码登录: ' + e.message
+    passwordMode.value = true
   } finally {
     loggingIn.value = false
   }
