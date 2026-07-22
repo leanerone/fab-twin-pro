@@ -85,7 +85,7 @@ echo  Backend:   http://localhost:8002
 echo  API docs:  http://localhost:8002/docs
 echo  Health:    http://localhost:8002/health
 echo.
-echo  IIS Frontend: http://服务器IP (port 80)
+echo  IIS Frontend: http://???IP (port 80)
 echo.
 echo  Close the backend window to stop.
 echo.
