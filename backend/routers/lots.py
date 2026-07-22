@@ -24,6 +24,27 @@ def _parse_ts(ts) -> str:
     return ts_str
 
 
+def _extract_date(ts_str: str) -> str:
+    """从时间戳字符串中提取日期部分（YYYY-MM-DD）
+    
+    支持多种格式：
+    - 2026-07-22 15:00:48
+    - 2026-7-22 下午3:00:48
+    - 2026-07-22T15:00:48
+    """
+    if not ts_str:
+        return ""
+    try:
+        # 取第一个空格或T之前的部分作为日期
+        date_part = ts_str.split()[0].split('T')[0]
+        parts = date_part.split('-')
+        if len(parts) == 3:
+            return f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+    except Exception:
+        pass
+    return ""
+
+
 @router.get("", response_model=List[LotOut])
 def list_lots(
     machine_id: str = Query(default=None),
@@ -33,21 +54,19 @@ def list_lots(
     """获取机台当天的 Lot 列表
     
     从 DT_EVENT_RAW 解析 lot_id，而不是从模拟的 Lot 表读取
+    
+    注意：Oracle 中 received_ts_utc 可能是中文格式（如 2026-7-22 下午3:00:48），
+    因此不在 SQL 层用 LIKE 过滤日期，而是在 Python 层过滤。
     """
     # 时间列：优先 event_ts_utc，fallback received_ts_utc
     ts_col = func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
     
-    # 查询条件
+    # 查询条件：只按 machine_id 过滤（避免 Oracle LIKE 对中文时间戳的问题）
     q = db.query(
         DT_EVENT_RAW.tool_id,
         DT_EVENT_RAW.payload_json,
         ts_col.label("ts")
     ).filter(DT_EVENT_RAW.tool_id == machine_id)
-    
-    # 日期过滤
-    if date:
-        # Oracle 用 LIKE，支持 datetime 对象自动转换
-        q = q.filter(ts_col.like(f"{date}%"))
     
     rows = q.order_by(ts_col).all()
     
@@ -56,14 +75,21 @@ def list_lots(
     for row in rows:
         try:
             payload = json.loads(row.payload_json) if row.payload_json else {}
-        except:
+        except Exception:
             payload = {}
         
         lot_id = payload.get("lot_id")
-        if not lot_id:
+        # 过滤掉 NULL 字符串和空值
+        if not lot_id or lot_id == "NULL":
             continue
         
         ts_str = str(row.ts) if row.ts else ""
+        
+        # 日期过滤（Python 层，支持中文格式时间戳）
+        if date:
+            row_date = _extract_date(ts_str)
+            if row_date != date:
+                continue
         
         if lot_id not in lot_set:
             lot_set[lot_id] = {

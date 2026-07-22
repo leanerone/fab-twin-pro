@@ -132,6 +132,12 @@ async function handleNtLogin() {
 
   try {
     const result = await api.login()
+    if (result.need_password_login) {
+      adminMode.value = true
+      error.value = result.message || '请使用管理员登录'
+      loggingIn.value = false
+      return
+    }
     if (result.token) {
       authStore.login(result.token, result.user, result.permissions)
       await router.push('/')

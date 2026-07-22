@@ -54,24 +54,50 @@ def check_permission(user: User, permission_id: str, db: Session) -> bool:
 
 @router.post("/login")
 def login(request: Request, db: Session = Depends(get_db)):
-    """Windows NT自动登录（获取客户端Windows用户名）"""
+    """Windows NT自动登录（获取客户端Windows用户名）
+    
+    注意：在IIS反向代理环境下，无法获取真实的客户端Windows用户名，
+    此时返回 need_password_login=True，引导用户使用管理员登录。
+    """
     try:
         client_ip = request.client.host
-        from subprocess import check_output, CalledProcessError
-        try:
-            result = check_output(["powershell", "-Command", 
-                f"([System.Net.Dns]::GetHostEntry('{client_ip}')).HostName"], 
-                timeout=5).decode('utf-8').strip()
-            hostname = result.split('.')[0]
-        except (CalledProcessError, TimeoutError):
-            hostname = "UNKNOWN"
+        forwarded_user = request.headers.get("X-Forwarded-User", "")
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
         
-        try:
-            result = check_output(["powershell", "-Command", 
-                "$env:USERNAME"], timeout=5).decode('utf-8').strip()
-            windows_user = result
-        except (CalledProcessError, TimeoutError):
-            windows_user = "guest"
+        # 真实的客户端 IP（优先使用 X-Forwarded-For）
+        real_client_ip = forwarded_for.split(',')[0].strip() if forwarded_for else client_ip
+        
+        # 检查是否在 IIS 反向代理环境下
+        is_proxy = client_ip in ("127.0.0.1", "::1", "localhost")
+        
+        if forwarded_user:
+            # IIS Windows 认证传递的用户名（格式: DOMAIN\username）
+            windows_user = forwarded_user.split("\\")[-1] if "\\" in forwarded_user else forwarded_user
+            hostname = real_client_ip
+        elif is_proxy:
+            # 代理环境下无法获取真实客户端Windows用户名
+            # 返回提示让用户使用密码登录
+            return {
+                "need_password_login": True,
+                "message": "代理环境下无法自动获取Windows用户名，请使用管理员登录"
+            }
+        else:
+            # 直连模式：尝试获取本地Windows用户名
+            from subprocess import check_output, CalledProcessError
+            try:
+                result = check_output(["powershell", "-Command", 
+                    f"([System.Net.Dns]::GetHostEntry('{real_client_ip}')).HostName"], 
+                    timeout=5).decode('utf-8').strip()
+                hostname = result.split('.')[0]
+            except (CalledProcessError, TimeoutError):
+                hostname = "UNKNOWN"
+            
+            try:
+                result = check_output(["powershell", "-Command", 
+                    "$env:USERNAME"], timeout=5).decode('utf-8').strip()
+                windows_user = result
+            except (CalledProcessError, TimeoutError):
+                windows_user = "guest"
         
         username = f"{hostname}\\{windows_user}"
         
