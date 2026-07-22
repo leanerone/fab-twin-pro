@@ -111,12 +111,6 @@ echo           ^</conditions^>
 echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/{R:1}" /^>
 echo         ^</rule^>
 echo       ^</rules^>
-echo       ^<outboundRules^>
-echo         ^<rule name="ReverseProxyOutboundRule" preCondition="ResponseIsHtml"^>
-echo           ^<match filterByTags="A, Form, Img" pattern="^http://127\.0\.0\.1:8002/(.*)$" /^>
-echo           ^<action type="Rewrite" value="/{R:1}" /^>
-echo         ^</rule^>
-echo       ^</outboundRules^>
 echo     ^</rewrite^>
 echo     ^<httpProtocol^>
 echo       ^<customHeaders^>
