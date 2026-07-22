@@ -101,42 +101,7 @@ echo [OK] get_user.asp copied
 
 echo.
 echo [7/8] Creating web.config...
-(
-echo ^<?xml version="1.0" encoding="UTF-8"?^>
-echo ^<configuration^>
-echo   ^<system.webServer^>
-echo     ^<security^>
-echo       ^<authentication^>
-echo         ^<anonymousAuthentication enabled="false" /^>
-echo         ^<windowsAuthentication enabled="true" /^>
-echo       ^</authentication^>
-echo     ^</security^>
-echo     ^<rewrite^>
-echo       ^<rules^>
-echo         ^<rule name="APIProxy" stopProcessing="true"^>
-echo           ^<match url="^api/(.*)" /^>
-echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/api/{R:1}" /^>
-echo         ^</rule^>
-echo         ^<rule name="WSProxy" stopProcessing="true"^>
-echo           ^<match url="^ws/(.*)" /^>
-echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/ws/{R:1}" /^>
-echo         ^</rule^>
-echo         ^<rule name="SpaFallback" stopProcessing="true"^>
-echo           ^<match url="^(.*)$" /^>
-echo           ^<conditions^>
-echo             ^<add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" /^>
-echo             ^<add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" /^>
-echo             ^<add input="{URL}" pattern="^/api/" negate="true" /^>
-echo             ^<add input="{URL}" pattern="^/ws/" negate="true" /^>
-echo             ^<add input="{URL}" pattern="^/get_user.asp" negate="true" /^>
-echo           ^</conditions^>
-echo           ^<action type="Rewrite" url="index.html" /^>
-echo         ^</rule^>
-echo       ^</rules^>
-echo     ^</rewrite^>
-echo   ^</system.webServer^>
-echo ^</configuration^>
-) > "%IIS_SITE_DIR%\web.config"
+powershell -Command "[System.IO.File]::WriteAllText('%IIS_SITE_DIR%\web.config', '<configuration><location path=""get_user.asp""><system.webServer><security><authentication><anonymousAuthentication enabled=""false"" /><windowsAuthentication enabled=""true"" /></authentication></security></system.webServer></location><system.webServer><security><authentication><anonymousAuthentication enabled=""true"" /><windowsAuthentication enabled=""true"" /></authentication></security><rewrite><rules><rule name=""APIProxy"" stopProcessing=""true""><match url=""^api/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/api/{R:1}"" /></rule><rule name=""WSProxy"" stopProcessing=""true""><match url=""^ws/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/ws/{R:1}"" /></rule><rule name=""SpaFallback"" stopProcessing=""true""><match url=""^(.*)$"" /><conditions><add input=""{REQUEST_FILENAME}"" matchType=""IsFile"" negate=""true"" /><add input=""{REQUEST_FILENAME}"" matchType=""IsDirectory"" negate=""true"" /><add input=""{URL}"" pattern=""^/api/"" negate=""true"" /><add input=""{URL}"" pattern=""^/ws/"" negate=""true"" /><add input=""{URL}"" pattern=""^/get_user.asp"" negate=""true"" /></conditions><action type=""Rewrite"" url=""index.html"" /></rule></rules></rewrite></system.webServer></configuration>', [System.Text.Encoding]::UTF8)"
 echo [OK] web.config created
 
 echo.
@@ -157,6 +122,11 @@ echo [OK] Default Web Site stopped
 
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"true" >nul 2>&1
 echo [OK] ARR Proxy enabled
+
+echo [INFO] Unlocking authentication sections for location nodes...
+%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/anonymousAuthentication >nul 2>&1
+%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/windowsAuthentication >nul 2>&1
+echo [OK] Authentication sections unlocked
 
 %windir%\system32\inetsrv\appcmd.exe start site "FabTwin" >nul 2>&1
 echo [OK] FabTwin site started
