@@ -89,25 +89,37 @@ echo       ^<rules^>
 echo         ^<rule name="APIProxy" stopProcessing="true"^>
 echo           ^<match url="^api/(.*)" /^>
 echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/api/{R:1}" /^>
+echo           ^<serverVariables^>
+echo             ^<set name="HTTP_X_FORWARDED_USER" value="{LOGON_USER}" /^>
+echo             ^<set name="HTTP_X_FORWARDED_FOR" value="{REMOTE_ADDR}" /^>
+echo           ^</serverVariables^>
 echo         ^</rule^>
 echo         ^<rule name="WSProxy" stopProcessing="true"^>
 echo           ^<match url="^ws/(.*)" /^>
 echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/ws/{R:1}" /^>
+echo           ^<serverVariables^>
+echo             ^<set name="HTTP_X_FORWARDED_USER" value="{LOGON_USER}" /^>
+echo             ^<set name="HTTP_X_FORWARDED_FOR" value="{REMOTE_ADDR}" /^>
+echo           ^</serverVariables^>
 echo         ^</rule^>
 echo         ^<rule name="SpaFallback" stopProcessing="true"^>
 echo           ^<match url="^(.*)$" /^>
 echo           ^<conditions^>
 echo             ^<add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" /^>
 echo             ^<add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" /^>
+echo             ^<add input="{URL}" pattern="^/api/" negate="true" /^>
+echo             ^<add input="{URL}" pattern="^/ws/" negate="true" /^>
 echo           ^</conditions^>
 echo           ^<action type="Rewrite" url="index.html" /^>
 echo         ^</rule^>
 echo       ^</rules^>
+echo       ^<allowedServerVariables^>
+echo         ^<add name="HTTP_X_FORWARDED_USER" /^>
+echo         ^<add name="HTTP_X_FORWARDED_FOR" /^>
+echo       ^</allowedServerVariables^>
 echo     ^</rewrite^>
 echo     ^<httpProtocol^>
 echo       ^<customHeaders^>
-echo         ^<add name="X-Forwarded-For" value="{REMOTE_ADDR}" /^>
-echo         ^<add name="X-Forwarded-User" value="{REMOTE_USER}" /^>
 echo       ^</customHeaders^>
 echo     ^</httpProtocol^>
 echo   ^</system.webServer^>
@@ -161,6 +173,11 @@ if errorlevel 1 (
 REM Enable ARR Proxy
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"true" >nul 2>&1
 echo [OK] ARR Proxy enabled
+
+REM Allow server variables for X-Forwarded-* headers
+%windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/rewrite/allowedServerVariables /+"[name='HTTP_X_FORWARDED_USER']" >nul 2>&1
+%windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/rewrite/allowedServerVariables /+"[name='HTTP_X_FORWARDED_FOR']" >nul 2>&1
+echo [OK] Server variables allowed for X-Forwarded headers
 
 REM Start site
 %windir%\system32\inetsrv\appcmd.exe start site "FabTwin" >nul 2>&1
