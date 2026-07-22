@@ -108,12 +108,12 @@ echo           ^<conditions^>
 echo             ^<add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" /^>
 echo             ^<add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" /^>
 echo           ^</conditions^>
-echo           ^<action type="Rewrite" url="http://127.0.0.1:8000/{R:1}" /^>
+echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/{R:1}" /^>
 echo         ^</rule^>
 echo       ^</rules^>
 echo       ^<outboundRules^>
 echo         ^<rule name="ReverseProxyOutboundRule" preCondition="ResponseIsHtml"^>
-echo           ^<match filterByTags="A, Form, Img" pattern="^http://127\.0\.0\.1:8000/(.*)$" /^>
+echo           ^<match filterByTags="A, Form, Img" pattern="^http://127\.0\.0\.1:8002/(.*)$" /^>
 echo           ^<action type="Rewrite" value="/{R:1}" /^>
 echo         ^</rule^>
 echo       ^</outboundRules^>
@@ -173,11 +173,11 @@ echo  Deployment Complete!
 echo ================================================================
 echo.
 echo [INFO] Access URL: http://%%COMPUTERNAME%% or http://this-server-ip
-echo [INFO] Backend must be running on port 8000
+echo [INFO] Backend must be running on port 8002 (start_prod.bat)
 echo [INFO] Windows Auth: Users will use their own Windows account
 echo.
 echo [NEXT STEPS]
-echo 1. Make sure backend is running: .\start_backend.bat
+echo 1. Make sure backend is running: .\start_prod.bat
 echo 2. Open browser and visit http://%%COMPUTERNAME%%
 echo 3. Login with your Windows domain account
 echo.

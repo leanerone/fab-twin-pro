@@ -16,7 +16,7 @@
 │         IIS (端口 80/443)            │
 │  - Windows Authentication 启用      │
 │  - 注入请求头: REMOTE_USER           │
-│  - 反向代理到 http://localhost:8000 │
+│  - 反向代理到 http://localhost:8002 │
 └─────────────────────────────────────┘
       │
       ▼
@@ -68,7 +68,7 @@ Install-WindowsFeature -name Web-Server -IncludeManagementTools
       <rules>
         <rule name="ReverseProxyInboundRule" stopProcessing="true">
           <match url="(.*)" />
-          <action type="Rewrite" url="http://localhost:8000/{R:1}" />
+          <action type="Rewrite" url="http://localhost:8002/{R:1}" />
           <serverVariables>
             <!-- 将认证用户传递给后端 -->
             <set name="HTTP_X_FORWARDED_USER" value="{REMOTE_USER}" />
@@ -242,9 +242,9 @@ export const useAuthStore = defineStore('auth', {
 ```powershell
 # 1. 启动后端（不需要修改）
 cd E:\HJQ\deploy\fab-twin-pro
-.\start_backend.bat
+.\start_prod.bat
 
-# 2. IIS 会自动监听 80 端口，代理到 8000
+# 2. IIS 会自动监听 80 端口，代理到 8002
 
 # 3. 用户访问
 http://your-server/FabTwin

@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 # Windows 普通用户无法绑定 80 端口，默认使用 8080
 # 如需使用 80 端口，请以管理员身份运行，或设置环境变量 PROXY_PORT=80
 PROXY_PORT = int(os.environ.get('PROXY_PORT', '8080'))
-BACKEND_URL = "http://127.0.0.1:8000"   # 后端地址
+BACKEND_URL = "http://127.0.0.1:8002"   # 后端地址
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
 COOKIE_NAME = "fabtwin_user"
 COOKIE_MAX_AGE = 86400 * 7   # 7天
