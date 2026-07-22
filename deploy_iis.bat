@@ -112,18 +112,12 @@ if exist "%IIS_SITE_DIR%\assets" (
     exit /b 1
 )
 
-:: Create web.config with reverse proxy
+:: Create web.config with reverse proxy (no authentication section - locked at parent level)
 echo [INFO] Creating web.config...
 (
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
 echo ^<configuration^>
 echo   ^<system.webServer^>
-echo     ^<security^>
-echo       ^<authentication^>
-echo         ^<anonymousAuthentication enabled="true" /^>
-echo         ^<windowsAuthentication enabled="false" /^>
-echo       ^</authentication^>
-echo     ^</security^>
 echo     ^<rewrite^>
 echo       ^<rules^>
 echo         ^<rule name="APIProxy" stopProcessing="true"^>
@@ -148,7 +142,7 @@ echo     ^<httpProtocol^>
 echo       ^<customHeaders^>
 echo         ^<add name="X-Forwarded-For" value="{REMOTE_ADDR}" /^>
 echo       ^</customHeaders^>
-echo     ^</httpProtocol^>
+echo     ^<httpProtocol^>
 echo   ^</system.webServer^>
 echo ^</configuration^>
 ) > "%IIS_SITE_DIR%\web.config"

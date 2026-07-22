@@ -73,12 +73,6 @@ echo.
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
 echo ^<configuration^>
 echo   ^<system.webServer^>
-echo     ^<security^>
-echo       ^<authentication^>
-echo         ^<anonymousAuthentication enabled="true" /^>
-echo         ^<windowsAuthentication enabled="false" /^>
-echo       ^</authentication^>
-echo     ^</security^>
 echo     ^<rewrite^>
 echo       ^<rules^>
 echo         ^<rule name="APIProxy" stopProcessing="true"^>

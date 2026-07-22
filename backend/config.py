@@ -7,7 +7,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 支持 SQLite / Oracle 一键切换
 # 切换方式：设置环境变量 DB_TYPE=oracle 并配置 ORACLE_DSN
 # 本地开发默认使用 SQLite，生产部署切 Oracle 无需改代码
-DB_TYPE = os.getenv("DB_TYPE", "oracle").lower()
+DB_TYPE = os.getenv("DB_TYPE", "oracle").strip().lower()
 
 # Oracle 连接参数（始终定义，便于 database.py 导入；SQLite 模式下不使用）
 ORACLE_USER = os.getenv("ORACLE_USER", "fabtwin")
