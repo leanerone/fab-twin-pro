@@ -131,6 +131,10 @@ const currentColor = computed(() => {
   return stateColors[s] || stateColors.idle
 })
 
+const machineName = computed(() => {
+  return props.machine?.name || props.machine?.id || 'PODOPENER'
+})
+
 const currentPhase = ref('IDLE')
 const phaseProgress = ref(0)
 const autoLoopRunning = ref(false)
@@ -1454,7 +1458,7 @@ defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })
       <span v-if="signalActive" class="signal-indicator">信号</span>
     </div>
 
-    <div class="vpo3d-label">PODOPENER-1 3D View</div>
+    <div class="vpo3d-label">{{ machineName }} 3D View</div>
   </div>
 </template>
 

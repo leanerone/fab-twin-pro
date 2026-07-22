@@ -27,9 +27,18 @@ const streamRef = ref(null)
 
 const supported = computed(() => {
   if (props.mode === 'input') {
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)
+    // 优先检测 Web Speech API（浏览器原生，Edge/Chrome 支持）
+    const hasWebSpeech = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
+    // 备选：MediaRecorder + 后端 Whisper
+    const hasMediaRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)
+    return hasWebSpeech || hasMediaRecorder
   }
   return 'speechSynthesis' in window
+})
+
+// 是否使用 Web Speech API（浏览器原生语音识别）
+const useWebSpeech = computed(() => {
+  return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
 })
 
 const icon = computed(() => {
@@ -44,15 +53,23 @@ const icon = computed(() => {
 
 async function toggleRecording() {
   if (!supported.value) {
-    showMsg('error', '当前浏览器不支持录音，请使用 Chrome 或 Edge')
+    showMsg('error', '当前浏览器不支持语音输入，请使用 Chrome 或 Edge 浏览器')
     return
   }
   if (isProcessing.value) return
 
   if (isRecording.value) {
-    stopRecording()
+    if (useWebSpeech.value) {
+      stopWebSpeech()
+    } else {
+      stopRecording()
+    }
   } else {
-    await startRecording()
+    if (useWebSpeech.value) {
+      await startWebSpeech()
+    } else {
+      await startRecording()
+    }
   }
 }
 
@@ -162,6 +179,90 @@ function stopRecording() {
   isRecording.value = false
 }
 
+// ==================== 语音输入：Web Speech API（浏览器原生，无需后端）====================
+
+let recognitionInstance = null
+
+async function startWebSpeech() {
+  errorMsg.value = ''
+  try {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      showMsg('error', '浏览器不支持语音识别')
+      return
+    }
+
+    recognitionInstance = new SpeechRecognition()
+    recognitionInstance.lang = 'zh-CN'
+    recognitionInstance.continuous = false
+    recognitionInstance.interimResults = true
+
+    recognitionInstance.onstart = () => {
+      isRecording.value = true
+      emit('speechStart')
+    }
+
+    recognitionInstance.onresult = (event) => {
+      let finalTranscript = ''
+      let interimTranscript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript
+        } else {
+          interimTranscript += transcript
+        }
+      }
+      if (interimTranscript) {
+        emit('speechInterim', interimTranscript)
+      }
+      if (finalTranscript) {
+        emit('speechResult', finalTranscript)
+      }
+    }
+
+    recognitionInstance.onerror = (event) => {
+      console.error('[语音] Web Speech 错误:', event.error)
+      const errMap = {
+        'no-speech': '未检测到语音，请重试',
+        'audio-capture': '无法访问麦克风',
+        'not-allowed': '麦克风权限被拒绝',
+        'network': '网络错误，语音识别服务不可用',
+        'aborted': '语音识别已取消',
+      }
+      const msg = errMap[event.error] || `语音识别错误: ${event.error}`
+      if (event.error !== 'aborted') {
+        showMsg('error', msg)
+        emit('speechError', msg)
+      }
+      isRecording.value = false
+      emit('speechEnd')
+    }
+
+    recognitionInstance.onend = () => {
+      isRecording.value = false
+      emit('speechEnd')
+      recognitionInstance = null
+    }
+
+    recognitionInstance.start()
+  } catch (e) {
+    console.error('[语音] 启动 Web Speech 失败:', e)
+    showMsg('error', '语音识别启动失败: ' + (e.message || e.name))
+    emit('speechError', e.message || e.name)
+  }
+}
+
+function stopWebSpeech() {
+  if (recognitionInstance) {
+    try {
+      recognitionInstance.stop()
+    } catch (e) {}
+    recognitionInstance = null
+  }
+  isRecording.value = false
+}
+
 function showMsg(type, msg) {
   errorMsg.value = msg
   setTimeout(() => { errorMsg.value = '' }, 3500)
@@ -169,7 +270,11 @@ function showMsg(type, msg) {
 
 onUnmounted(() => {
   if (isRecording.value) {
-    stopRecording()
+    if (useWebSpeech.value) {
+      stopWebSpeech()
+    } else {
+      stopRecording()
+    }
   }
   if (streamRef.value) {
     streamRef.value.getTracks().forEach(t => t.stop())

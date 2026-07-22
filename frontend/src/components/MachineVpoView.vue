@@ -250,12 +250,13 @@ function draw2DBase() {
     cx: '506', cy: '906', rx: '386', ry: '52', fill: '#cbd5e1', opacity: '0.45',
   }))
 
+  const machineName = props.machine?.name || props.machine?.id || 'PODOPENER'
   const titleText = createSvgElement('text', { x: '56', y: '72', class: 'machine-label' })
-  titleText.textContent = 'PODOPENER FRONT VIEW'
+  titleText.textContent = machineName + ' FRONT VIEW'
   svg.appendChild(titleText)
 
   const subtitleText = createSvgElement('text', { x: '56', y: '98', fill: '#64748b', 'font-size': '13' })
-  subtitleText.textContent = 'POD 穿脱循环演示'
+  subtitleText.textContent = 'POD 穿脱循环演示 - ' + machineName
   svg.appendChild(subtitleText)
 
   const mainGroup = createSvgElement('g', { filter: 'url(#softShadow)' })
@@ -1203,7 +1204,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="containerRef" class="vpo-viewer">
-    <svg ref="svgRef" class="vpo-svg" viewBox="0 0 1000 1000" role="img" aria-label="PODOPENER 2D 视图"></svg>
+    <svg ref="svgRef" class="vpo-svg" viewBox="0 0 1000 1000" role="img" :aria-label="(machine?.name || machine?.id || 'PODOPENER') + ' 2D 视图'"></svg>
 
     <div class="vpo-status-bar">
       <div class="status-item">
