@@ -99,9 +99,14 @@ if errorlevel 1 (
 echo [OK] get_user.asp copied
 
 echo.
-echo [7/8] Creating web.config...
-powershell -Command "[System.IO.File]::WriteAllText('%IIS_SITE_DIR%\web.config', '<configuration><system.webServer><security><authentication><anonymousAuthentication enabled=""true"" /><windowsAuthentication enabled=""true"" /></authentication></security><rewrite><rules><rule name=""APIProxy"" stopProcessing=""true""><match url=""^api/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/api/{R:1}"" /></rule><rule name=""WSProxy"" stopProcessing=""true""><match url=""^ws/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/ws/{R:1}"" /></rule><rule name=""SpaFallback"" stopProcessing=""true""><match url=""^(.*)$"" /><conditions><add input=""{REQUEST_FILENAME}"" matchType=""IsFile"" negate=""true"" /><add input=""{REQUEST_FILENAME}"" matchType=""IsDirectory"" negate=""true"" /><add input=""{URL}"" pattern=""^/api/"" negate=""true"" /><add input=""{URL}"" pattern=""^/ws/"" negate=""true"" /><add input=""{URL}"" pattern=""^/get_user.asp"" negate=""true"" /></conditions><action type=""Rewrite"" url=""index.html"" /></rule></rules></rewrite></system.webServer></configuration>', [System.Text.Encoding]::UTF8)"
-echo [OK] web.config created
+echo [7/8] Copying web.config...
+copy "%SCRIPT_DIR%\web.config" "%IIS_SITE_DIR%\web.config" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Failed to copy web.config!
+    pause
+    exit /b 1
+)
+echo [OK] web.config copied
 
 echo.
 echo [8/8] Configuring IIS site...
