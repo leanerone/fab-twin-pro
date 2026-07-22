@@ -54,9 +54,8 @@ if exist "%WINDIR%\System32\inetsrv\rewrite.dll" (
 
 :: Step 3: Check ARR Module
 echo [3/6] Checking ARR (Application Request Routing) module...
-if exist "%WINDIR%\System32\inetsrv\arr.dll" (
-    echo [OK] ARR module is installed.
-) else (
+%WINDIR%\System32\inetsrv\appcmd.exe list modules | findstr /i "ApplicationRequestRouting" >nul 2>&1
+if errorlevel 1 (
     echo [WARN] ARR module NOT found.
     echo [WARN] Please download and install from:
     echo        https://www.iis.net/downloads/microsoft/application-request-routing
@@ -65,6 +64,8 @@ if exist "%WINDIR%\System32\inetsrv\arr.dll" (
     start https://www.iis.net/downloads/microsoft/application-request-routing
     pause
     exit /b 1
+) else (
+    echo [OK] ARR module is installed.
 )
 
 :: Step 4: Create IIS Site Directory
