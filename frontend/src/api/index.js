@@ -14,14 +14,26 @@ async function request(method, path, data = null, requireAuth = true) {
     const token = getToken();
     if (token) {
       opts.headers.Authorization = `Bearer ${token}`;
+    } else if (requireAuth) {
+      const currentHash = window.location.hash;
+      if (!currentHash.includes('/login')) {
+        window.location.hash = '#/login';
+      }
+      throw new Error('No token available');
     }
   }
   if (data && method !== 'GET' && method !== 'DELETE') opts.body = JSON.stringify(data);
   const res = await fetch(BASE + path, opts);
   if (!res.ok) {
     if (res.status === 401) {
-      localStorage.removeItem('fabtwin_token');
-      window.location.hash = '#/login';
+      const token = getToken();
+      if (token) {
+        localStorage.removeItem('fabtwin_token');
+      }
+      const currentHash = window.location.hash;
+      if (!currentHash.includes('/login')) {
+        window.location.hash = '#/login';
+      }
     }
     throw new Error(`API error: ${res.status}`);
   }
