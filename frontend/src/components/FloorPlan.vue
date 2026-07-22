@@ -26,7 +26,7 @@ const mousePos = ref({ x: 0, y: 0 })
 // 编辑工具: select/machine/area/track/vehicle
 const editTool = ref('select')
 // 新机台表单
-const newMachine = ref({ id: '', name: '', process_type: 'ETCH', line: 1 })
+const newMachine = ref({ id: '', name: '', model: '', process_type: 'ETCH', line: 1 })
 // 画框区域
 const drawingArea = ref(null)
 const dragInfo = ref(null)
@@ -65,6 +65,20 @@ const areaTypeColors = {
 }
 
 const processTypes = ['ETCH', 'WAT', 'WS', 'STK', 'CMP', 'PVD', 'LITHO', 'IMP']
+
+// 模型配置列表（用于新建机台时绑定）
+const modelConfigs = ref([])
+
+async function loadModelConfigs() {
+  try {
+    const res = await fetch('/api/models')
+    if (res.ok) {
+      modelConfigs.value = await res.json()
+    }
+  } catch (e) {
+    console.error('加载模型配置失败:', e)
+  }
+}
 
 async function loadFloorData() {
   isLoading.value = true
@@ -249,9 +263,14 @@ function handleAddMachine(pos) {
     showToast('请先输入机台ID', 'error')
     return
   }
+  if (!newMachine.value.model) {
+    showToast('请选择模型', 'error')
+    return
+  }
   api.addFloorMachine(props.floorId, {
     id: newMachine.value.id,
     name: newMachine.value.name || newMachine.value.id,
+    model: newMachine.value.model,
     process_type: newMachine.value.process_type,
     line: newMachine.value.line,
     floor_x: pos.x,
@@ -555,6 +574,7 @@ onMounted(() => {
   loadFloorData().then(() => {
     updateVehiclePositions()
   })
+  loadModelConfigs()
 })
 
 onUnmounted(() => {
@@ -613,6 +633,10 @@ onUnmounted(() => {
       <div v-if="editTool === 'machine'" class="tool-form">
         <input v-model="newMachine.id" placeholder="机台ID" class="tool-input" />
         <input v-model="newMachine.name" placeholder="名称(可选)" class="tool-input" />
+        <select v-model="newMachine.model" class="tool-input">
+          <option value="">-- 选择模型 --</option>
+          <option v-for="m in modelConfigs" :key="m.model_id" :value="m.model_id">{{ m.model_name }} ({{ m.model_id }})</option>
+        </select>
         <select v-model="newMachine.process_type" class="tool-input">
           <option v-for="t in processTypes" :key="t" :value="t">{{ t }}</option>
         </select>

@@ -1,5 +1,14 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+
+// Props: 支持暂停控制
+const props = defineProps({
+  paused: { type: Boolean, default: false },
+  metrics: { type: Object, default: () => ({}) },
+  runState: { type: String, default: 'idle' },
+  events: { type: Array, default: () => [] },
+  mode: { type: String, default: 'realtime' },
+})
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -888,8 +897,17 @@ function drawScene() {
   drawStatusLabel()
 }
 
+let isPaused = false
+
+// 监听外部 paused 属性
+watch(() => props.paused, (val) => {
+  isPaused = val
+})
+
 function animate() {
-  updatePhaseMachine()
+  if (!isPaused) {
+    updatePhaseMachine()
+  }
   drawScene()
   rafId = requestAnimationFrame(animate)
 }

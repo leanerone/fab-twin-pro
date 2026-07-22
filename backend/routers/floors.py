@@ -166,7 +166,18 @@ def update_area(floor_id: int, area_id: int, data: dict, db: Session = Depends(g
 
 @router.post("/{floor_id}/machines")
 def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """添加新机台到楼层"""
+    """添加新机台到楼层
+    
+    支持字段：
+    - id: 机台ID（必填）
+    - name: 名称（可选，默认同ID）
+    - model: 模型ID，绑定 MachineModelConfig（可选）
+    - process_type: 工艺类型（可选）
+    - line: 产线（可选）
+    - floor_x, floor_y: 地图位置（百分比）
+    """
+    from models import MachineModelConfig
+    
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
@@ -179,9 +190,16 @@ def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db), _: 
     if existing:
         raise HTTPException(status_code=409, detail="机台ID已存在")
     
+    # 检查模型是否存在
+    model_id = machine.get("model")
+    if model_id:
+        model_config = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
+        if not model_config:
+            raise HTTPException(status_code=400, detail=f"模型 '{model_id}' 不存在，请先创建模型配置")
+    
     new_machine = Machine(
         id=machine_id,
-        model=machine.get("model", "未知型号"),
+        model=model_id or "GENERIC-ETCH",
         name=machine.get("name", machine_id),
         line=machine.get("line", 1),
         floor=floor_id,
@@ -204,7 +222,7 @@ def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db), _: 
     )
     db.add(new_machine)
     db.commit()
-    return {"id": new_machine.id, "name": new_machine.name, "message": "机台添加成功"}
+    return {"id": new_machine.id, "name": new_machine.name, "model": new_machine.model, "message": "机台添加成功"}
 
 
 @router.delete("/{floor_id}/areas/{area_id}")
