@@ -17,10 +17,8 @@ if errorlevel 1 (
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
-:: ================================================================
-:: Fix 1: Kill existing backend processes
-:: ================================================================
-echo --- [1/5] Killing existing backend processes ---
+:: Fix 1: Kill backend
+echo --- [1/4] Stopping existing backend ---
 echo.
 
 netstat -ano | findstr ":8002 " | findstr "LISTENING" >nul
@@ -36,41 +34,39 @@ if not errorlevel 1 (
 
 echo.
 
-:: ================================================================
-:: Fix 2: Copy frontend files to IIS
-:: ================================================================
-echo --- [2/5] Copying frontend files to IIS ---
+:: Fix 2: Copy frontend files
+echo --- [2/4] Copying frontend files to IIS ---
 echo.
 
 set "IIS_SITE_DIR=C:\inetpub\wwwroot\FabTwin"
 set "DIST_DIR=frontend\dist"
 
-if exist "%DIST_DIR%" (
-    echo [INFO] Source: %DIST_DIR%
-    echo [INFO] Target: %IIS_SITE_DIR%
-    echo.
-    
-    if not exist "%IIS_SITE_DIR%" mkdir "%IIS_SITE_DIR%"
-    
-    del /s /q "%IIS_SITE_DIR%\*" >nul 2>&1
-    xcopy /E /I /Y "%DIST_DIR%\*" "%IIS_SITE_DIR%\"
-    
-    if errorlevel 1 (
-        echo [ERROR] Copy failed!
-    ) else (
-        echo [OK] Frontend files copied successfully
-    )
-) else (
+if not exist "%DIST_DIR%" (
     echo [ERROR] %DIST_DIR% NOT found!
-    echo [INFO] Please run: cd frontend && npm run build
+    echo [INFO] Please run: cd frontend ^& npm run build
+    pause
+    exit /b 1
+)
+
+echo [INFO] Source: %DIST_DIR%
+echo [INFO] Target: %IIS_SITE_DIR%
+echo.
+
+if not exist "%IIS_SITE_DIR%" mkdir "%IIS_SITE_DIR%"
+
+del /s /q "%IIS_SITE_DIR%\*" >nul 2>&1
+xcopy /E /I /Y "%DIST_DIR%\*" "%IIS_SITE_DIR%\"
+
+if errorlevel 1 (
+    echo [ERROR] Copy failed!
+) else (
+    echo [OK] Frontend files copied successfully
 )
 
 echo.
 
-:: ================================================================
 :: Fix 3: Update web.config
-:: ================================================================
-echo --- [3/5] Updating web.config ---
+echo --- [3/4] Updating web.config ---
 echo.
 
 (
@@ -106,13 +102,8 @@ echo     ^</rewrite^>
 echo     ^<httpProtocol^>
 echo       ^<customHeaders^>
 echo         ^<add name="X-Forwarded-For" value="{REMOTE_ADDR}" /^>
-echo         ^<add name="X-Forwarded-User" value="{REMOTE_USER}" /^>
 echo       ^</customHeaders^>
 echo     ^</httpProtocol^>
-echo     ^<staticContent^>
-echo       ^<mimeMap fileExtension=".*" mimeType="application/octet-stream" /^>
-echo     ^</staticContent^>
-echo     ^<httpErrors errorMode="Detailed" /^>
 echo   ^</system.webServer^>
 echo ^</configuration^>
 ) > "%IIS_SITE_DIR%\web.config"
@@ -121,36 +112,21 @@ echo [OK] web.config updated.
 
 echo.
 
-:: ================================================================
-:: Fix 4: Reset IIS
-:: ================================================================
-echo --- [4/5] Resetting IIS ---
+:: Fix 4: Reset IIS and fix auth
+echo --- [4/4] Resetting IIS ---
 echo.
 
-echo [INFO] Stopping IIS...
-iisreset /stop >nul 2>&1
-echo [OK] IIS stopped.
+echo [INFO] Enabling Anonymous Authentication...
+%WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"False" /commit:apphost >nul 2>&1
+%WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"True" /commit:apphost >nul 2>&1
 
-timeout /t 2 /nobreak >nul
+echo [INFO] Enabling ARR Proxy...
+%WINDIR%\System32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"True" /commit:apphost >nul 2>&1
 
-echo [INFO] Starting IIS...
+echo [INFO] Restarting IIS...
 iisreset /start >nul 2>&1
-echo [OK] IIS started.
-
-echo [INFO] Starting FabTwin site...
 %WINDIR%\System32\inetsrv\appcmd.exe start site /site.name:FabTwin >nul 2>&1
-echo [OK] FabTwin site started.
-
-echo.
-
-:: ================================================================
-:: Fix 5: Restart backend
-:: ================================================================
-echo --- [5/5] Starting backend ---
-echo.
-
-echo [INFO] Starting backend service...
-call "%SCRIPT_DIR%start_backend.bat"
+echo [OK] IIS restarted.
 
 echo.
 echo ================================================================
@@ -158,14 +134,9 @@ echo  Fix Complete!
 echo ================================================================
 echo.
 echo [NEXT STEPS]
-echo 1. Wait for backend to start (check the new window)
-echo 2. Open browser and visit http://服务器IP or http://localhost
-echo 3. Login with admin/admin123 (if using password login)
-echo.
-echo [TROUBLESHOOTING]
-echo - If still IIS welcome page: check port 80 conflicts
-echo - If API error: check backend is running on port 8002
-echo - Run .\check_deployment.bat for detailed diagnostic
+echo 1. Start backend: .\start_backend.bat
+echo 2. Open browser: http://SERVER-IP
+echo 3. Login: admin / admin123
 echo.
 pause
 

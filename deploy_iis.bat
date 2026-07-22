@@ -1,9 +1,9 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
 :: ================================================================
 :: FabTwin IIS Reverse Proxy Deployment
-:: One-click deploy IIS + Windows Auth + Reverse Proxy
+:: One-click deploy IIS + Reverse Proxy + Anonymous Auth
 :: Run this as Administrator
 :: ================================================================
 
@@ -75,46 +75,44 @@ set "DIST_DIR=frontend\dist"
 
 if not exist "%IIS_SITE_DIR%" mkdir "%IIS_SITE_DIR%"
 
-if exist "%DIST_DIR%" (
-    echo [INFO] Copying frontend files to IIS directory...
-    echo [INFO] Source: %DIST_DIR%
-    echo [INFO] Target: %IIS_SITE_DIR%
-    
-    del /s /q "%IIS_SITE_DIR%\*" >nul 2>&1
-    xcopy /E /I /Y "%DIST_DIR%\*" "%IIS_SITE_DIR%\"
-    
-    if errorlevel 1 (
-        echo [ERROR] Copy failed!
-        pause
-        exit /b 1
-    )
-    
-    echo [INFO] Verifying files...
-    if exist "%IIS_SITE_DIR%\index.html" (
-        for /f "tokens=3" %%a in ('dir "%IIS_SITE_DIR%\index.html" ^| findstr "index.html"') do set "SIZE=%%a"
-        echo [OK] index.html copied (%SIZE% bytes)
-        
-        if exist "%IIS_SITE_DIR%\assets" (
-            for /f %%a in ('dir "%IIS_SITE_DIR%\assets" /b ^| find /c /v ""') do set "FILES=%%a"
-            echo [OK] assets directory copied (%FILES% files)
-        ) else (
-            echo [ERROR] assets directory NOT found!
-            pause
-            exit /b 1
-        )
-    ) else (
-        echo [ERROR] index.html NOT copied!
-        pause
-        exit /b 1
-    )
-) else (
+if not exist "%DIST_DIR%" (
     echo [ERROR] %DIST_DIR% NOT found!
-    echo [ERROR] Please run: cd frontend ^&^& npm run build
+    echo [ERROR] Please run: cd frontend ^& npm run build
     pause
     exit /b 1
 )
 
-:: Create web.config with reverse proxy and Windows Auth
+echo [INFO] Copying frontend files to IIS directory...
+echo [INFO] Source: %DIST_DIR%
+echo [INFO] Target: %IIS_SITE_DIR%
+
+del /s /q "%IIS_SITE_DIR%\*" >nul 2>&1
+xcopy /E /I /Y "%DIST_DIR%\*" "%IIS_SITE_DIR%\"
+
+if errorlevel 1 (
+    echo [ERROR] Copy failed!
+    pause
+    exit /b 1
+)
+
+echo [INFO] Verifying files...
+if exist "%IIS_SITE_DIR%\index.html" (
+    echo [OK] index.html exists
+) else (
+    echo [ERROR] index.html NOT found after copy!
+    pause
+    exit /b 1
+)
+
+if exist "%IIS_SITE_DIR%\assets" (
+    echo [OK] assets directory exists
+) else (
+    echo [ERROR] assets directory NOT found!
+    pause
+    exit /b 1
+)
+
+:: Create web.config with reverse proxy
 echo [INFO] Creating web.config...
 (
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
@@ -136,10 +134,6 @@ echo         ^<rule name="WSProxy" stopProcessing="true"^>
 echo           ^<match url="^ws/(.*)" /^>
 echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/ws/{R:1}" /^>
 echo         ^</rule^>
-echo         ^<rule name="HistoryAPI" stopProcessing="true"^>
-echo           ^<match url="^history/(.*)" /^>
-echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/history/{R:1}" /^>
-echo         ^</rule^>
 echo         ^<rule name="SpaFallback" stopProcessing="true"^>
 echo           ^<match url="^(.*)$" /^>
 echo           ^<conditions^>
@@ -153,13 +147,8 @@ echo     ^</rewrite^>
 echo     ^<httpProtocol^>
 echo       ^<customHeaders^>
 echo         ^<add name="X-Forwarded-For" value="{REMOTE_ADDR}" /^>
-echo         ^<add name="X-Forwarded-User" value="{REMOTE_USER}" /^>
 echo       ^</customHeaders^>
 echo     ^</httpProtocol^>
-echo     ^<staticContent^>
-echo       ^<mimeMap fileExtension=".*" mimeType="application/octet-stream" /^>
-echo     ^</staticContent^>
-echo     ^<httpErrors errorMode="Detailed" /^>
 echo   ^</system.webServer^>
 echo ^</configuration^>
 ) > "%IIS_SITE_DIR%\web.config"
@@ -195,7 +184,7 @@ echo [INFO] Stopping Default Web Site (to free port 80)...
 %WINDIR%\System32\inetsrv\appcmd.exe stop site /site.name:"Default Web Site" >nul 2>&1
 echo [OK] Default Web Site stopped.
 
-:: Enable Anonymous Authentication at site level
+:: Enable Anonymous Authentication
 echo [INFO] Enabling Anonymous Authentication...
 %WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"False" /commit:apphost >nul
 %WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"True" /commit:apphost >nul
@@ -217,14 +206,14 @@ echo ================================================================
 echo  Deployment Complete!
 echo ================================================================
 echo.
-echo [INFO] Access URL: http://%%COMPUTERNAME%% or http://this-server-ip
-echo [INFO] Backend must be running on port 8002 (start_prod.bat)
-echo [INFO] Windows Auth: Users will use their own Windows account
+echo [INFO] Access URL: http://SERVER-IP or http://localhost
+echo [INFO] Backend must be running on port 8002 (start_backend.bat)
+echo [INFO] Auth mode: Anonymous (use admin/admin123 to login)
 echo.
 echo [NEXT STEPS]
-echo 1. Make sure backend is running: .\start_prod.bat
-echo 2. Open browser and visit http://%%COMPUTERNAME%%
-echo 3. Login with your Windows domain account
+echo 1. Make sure backend is running: .\start_backend.bat
+echo 2. Open browser and visit http://SERVER-IP
+echo 3. Login with admin / admin123
 echo.
 echo ================================================================
 pause

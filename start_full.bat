@@ -37,7 +37,7 @@ if not exist "%PYTHON%" (
 
 if not exist "%BASE_DIR%frontend\dist\index.html" (
     echo ERROR: frontend\dist not found
-    echo Please run 'npm run build' in frontend folder first
+    echo Please run: cd frontend ^& npm run build
     pause
     exit /b 1
 )
@@ -107,17 +107,15 @@ echo  Backend:   http://localhost:8002
 echo  API docs:  http://localhost:8002/docs
 echo  Health:    http://localhost:8002/health
 echo.
-echo  Frontend:  http://服务器IP:8080
+echo  Frontend:  http://SERVER-IP:8080
 echo             http://localhost:8080
 echo.
-echo  Login:     admin / admin123 (管理员)
-echo             engineer / engineer123 (工程师)
-echo             user / user123 (普通用户)
+echo  Login:     admin / admin123
 echo.
 echo  [IMPORTANT]
 echo  - Keep both command windows open while using FabTwin
 echo  - Close both windows to stop the service
-echo  - If port 8080 is occupied, use: set PROXY_PORT=8081 before running
+echo  - If port 8080 is occupied, set PROXY_PORT=8081 before running
 echo.
 pause
 endlocal
