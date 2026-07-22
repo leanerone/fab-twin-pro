@@ -142,7 +142,7 @@ echo     ^<httpProtocol^>
 echo       ^<customHeaders^>
 echo         ^<add name="X-Forwarded-For" value="{REMOTE_ADDR}" /^>
 echo       ^</customHeaders^>
-echo     ^<httpProtocol^>
+echo     ^</httpProtocol^>
 echo   ^</system.webServer^>
 echo ^</configuration^>
 ) > "%IIS_SITE_DIR%\web.config"
