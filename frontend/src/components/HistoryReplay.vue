@@ -86,6 +86,18 @@ function selectEvent(ev) {
 function jumpToHour(hour) {
   const ts = `${selectedDate.value}T${String(hour).padStart(2, '0')}:00:00.000`
   emit('jump', ts)
+  // 同步滚动事件列表到对应时间
+  const targetStr = `${selectedDate.value} ${String(hour).padStart(2, '0')}:`
+  const list = document.querySelector('.hr-list')
+  if (!list) return
+  const items = list.querySelectorAll('.hr-item')
+  for (const item of items) {
+    const timeEl = item.querySelector('.hr-item-time')
+    if (timeEl && timeEl.textContent.includes(targetStr.slice(11, 16))) {
+      item.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      break
+    }
+  }
 }
 
 function getEventIcon(cat) {
@@ -184,7 +196,7 @@ watch(filterCategory, loadEvents)
         </div>
       </div>
       <div class="hr-tl-hours">
-        <span v-for="h in [0,6,12,18,23]" :key="h">{{ h }}</span>
+        <span v-for="h in 24" :key="h-1">{{ (h-1) % 6 === 0 ? (h-1) : '' }}</span>
       </div>
     </div>
 
@@ -315,12 +327,13 @@ watch(filterCategory, loadEvents)
 }
 .hr-tl-bars {
   display: flex;
-  gap: 2px;
+  gap: 1px;
   height: 40px;
   align-items: flex-end;
 }
 .hr-tl-bar {
   flex: 1;
+  min-width: 0;
   height: 100%;
   background: #0a1120;
   border-radius: 2px;
@@ -346,10 +359,13 @@ watch(filterCategory, loadEvents)
 .hr-tl-seg.process { background: #3b82f6; }
 .hr-tl-hours {
   display: flex;
-  justify-content: space-between;
   margin-top: 4px;
   font-size: 9px;
   color: #475569;
+}
+.hr-tl-hours span {
+  flex: 1;
+  text-align: center;
 }
 
 /* 事件列表 */

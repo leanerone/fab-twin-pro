@@ -55,21 +55,22 @@ def check_permission(user: User, permission_id: str, db: Session) -> bool:
 @router.post("/login")
 def login(request: Request, db: Session = Depends(get_db)):
     """Windows NT自动登录（获取客户端Windows用户名）
-    
+
     注意：在IIS反向代理环境下，无法获取真实的客户端Windows用户名，
-    此时返回 need_password_login=True，引导用户使用管理员登录。
+    此时返回 need_password_login=True，引导用户使用账号密码登录。
     """
     try:
         client_ip = request.client.host
         forwarded_user = request.headers.get("X-Forwarded-User", "")
         forwarded_for = request.headers.get("X-Forwarded-For", "")
-        
+
         # 真实的客户端 IP（优先使用 X-Forwarded-For）
         real_client_ip = forwarded_for.split(',')[0].strip() if forwarded_for else client_ip
-        
+
         # 检查是否在 IIS 反向代理环境下
-        is_proxy = client_ip in ("127.0.0.1", "::1", "localhost")
-        
+        # IIS 代理下 client_ip 是 127.0.0.1，或者有 X-Forwarded-For 头
+        is_proxy = client_ip in ("127.0.0.1", "::1", "localhost") or bool(forwarded_for)
+
         if forwarded_user:
             # IIS Windows 认证传递的用户名（格式: DOMAIN\username）
             windows_user = forwarded_user.split("\\")[-1] if "\\" in forwarded_user else forwarded_user
@@ -79,32 +80,32 @@ def login(request: Request, db: Session = Depends(get_db)):
             # 返回提示让用户使用密码登录
             return {
                 "need_password_login": True,
-                "message": "代理环境下无法自动获取Windows用户名，请使用管理员登录"
+                "message": "代理环境下无法自动获取Windows用户名，请使用账号密码登录"
             }
         else:
-            # 直连模式：尝试获取本地Windows用户名
+            # 直连模式（开发环境）：尝试获取本地Windows用户名
             from subprocess import check_output, CalledProcessError
             try:
-                result = check_output(["powershell", "-Command", 
-                    f"([System.Net.Dns]::GetHostEntry('{real_client_ip}')).HostName"], 
+                result = check_output(["powershell", "-Command",
+                    f"([System.Net.Dns]::GetHostEntry('{real_client_ip}')).HostName"],
                     timeout=5).decode('utf-8').strip()
                 hostname = result.split('.')[0]
             except (CalledProcessError, TimeoutError):
                 hostname = "UNKNOWN"
-            
+
             try:
-                result = check_output(["powershell", "-Command", 
+                result = check_output(["powershell", "-Command",
                     "$env:USERNAME"], timeout=5).decode('utf-8').strip()
                 windows_user = result
             except (CalledProcessError, TimeoutError):
                 windows_user = "guest"
-        
+
         username = f"{hostname}\\{windows_user}"
-        
+
         user = db.query(User).filter(User.username == username).first()
         if not user:
             user = db.query(User).filter(User.username == windows_user).first()
-        
+
         if not user:
             user = User(
                 id=str(uuid.uuid4()),
@@ -120,12 +121,12 @@ def login(request: Request, db: Session = Depends(get_db)):
             db.add(user)
             db.commit()
             db.refresh(user)
-        
+
         user.last_login_at = datetime.now().isoformat()
         db.commit()
-        
+
         permissions = get_user_permissions(user, db)
-        
+
         return {
             "token": user.id,
             "user": {

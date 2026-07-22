@@ -20,46 +20,12 @@
       </div>
 
       <div class="login-form">
-        <!-- NT自动登录模式 -->
-        <template v-if="!adminMode">
-          <div v-if="!loggingIn" class="login-info">
-            <div class="info-icon">🔐</div>
-            <h2>Windows NT 自动登录</h2>
-            <p>系统将自动获取您的 Windows 域账号进行身份验证</p>
-          </div>
-
-          <div v-else class="loading-state">
-            <div class="spinner"></div>
-            <p>正在验证身份...</p>
-          </div>
-
-          <button 
-            v-if="!loggingIn"
-            @click="handleNtLogin" 
-            class="login-btn"
-          >
-            登录系统
-          </button>
-
-          <div class="divider">
-            <span>或</span>
-          </div>
-
-          <button 
-            v-if="!loggingIn"
-            @click="adminMode = true" 
-            class="admin-btn"
-          >
-            管理员登录
-          </button>
-        </template>
-
-        <!-- 管理员账号密码登录模式 -->
-        <template v-else>
+        <!-- 账号密码登录模式（默认） -->
+        <template v-if="!ntMode">
           <div v-if="!loggingIn" class="login-info">
             <div class="info-icon">🔑</div>
-            <h2>管理员登录</h2>
-            <p>使用账号密码进行身份验证</p>
+            <h2>系统登录</h2>
+            <p>请输入您的工号和密码进行身份验证</p>
           </div>
 
           <div v-else class="loading-state">
@@ -82,20 +48,54 @@
             </div>
           </div>
 
-          <button 
+          <button
             v-if="!loggingIn"
-            @click="handleAdminLogin" 
+            @click="handleAdminLogin"
             class="login-btn"
           >
             登录
           </button>
 
-          <button 
+          <div class="divider">
+            <span>或</span>
+          </div>
+
+          <button
             v-if="!loggingIn"
-            @click="backToNt" 
+            @click="ntMode = true"
+            class="admin-btn"
+          >
+            Windows NT 登录
+          </button>
+        </template>
+
+        <!-- Windows NT 登录模式 -->
+        <template v-else>
+          <div v-if="!loggingIn" class="login-info">
+            <div class="info-icon">🔐</div>
+            <h2>Windows NT 登录</h2>
+            <p>系统将自动获取您的 Windows 域账号进行身份验证（仅限局域网内）</p>
+          </div>
+
+          <div v-else class="loading-state">
+            <div class="spinner"></div>
+            <p>正在验证身份...</p>
+          </div>
+
+          <button
+            v-if="!loggingIn"
+            @click="handleNtLogin"
+            class="login-btn"
+          >
+            NT 登录
+          </button>
+
+          <button
+            v-if="!loggingIn"
+            @click="backToPassword"
             class="back-btn"
           >
-            返回 NT 登录
+            返回账号密码登录
           </button>
         </template>
 
@@ -121,7 +121,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const loggingIn = ref(false)
 const error = ref('')
-const adminMode = ref(false)
+const ntMode = ref(false)
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
@@ -133,8 +133,8 @@ async function handleNtLogin() {
   try {
     const result = await api.login()
     if (result.need_password_login) {
-      adminMode.value = true
-      error.value = result.message || '请使用管理员登录'
+      ntMode.value = false
+      error.value = result.message || 'NT登录不可用，请使用账号密码登录'
       loggingIn.value = false
       return
     }
@@ -176,8 +176,8 @@ async function handleAdminLogin() {
   }
 }
 
-function backToNt() {
-  adminMode.value = false
+function backToPassword() {
+  ntMode.value = false
   error.value = ''
   username.value = ''
   password.value = ''

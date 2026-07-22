@@ -29,8 +29,23 @@ function statusLabel(s) {
 function formatTime(t) {
   if (!t) return '--:--'
   try {
-    if (t.includes('T')) return t.slice(11, 16)
-    return t.slice(0, 5)
+    const str = String(t).trim()
+    // 支持 2026-07-22 15:00:48 格式
+    if (str.includes(' ')) return str.slice(11, 16)
+    // 支持 2026-07-22T15:00:48 格式
+    if (str.includes('T')) return str.slice(11, 16)
+    // 支持中文格式 2026-7-22 下午3:00:48
+    if (str.includes('下午') || str.includes('上午')) {
+      const parts = str.split(' ')
+      if (parts.length >= 3) {
+        let h = parseInt(parts[2].split(':')[0]) || 0
+        const m = parts[2].split(':')[1] || '00'
+        if (parts[1] === '下午' && h !== 12) h += 12
+        if (parts[1] === '上午' && h === 12) h = 0
+        return `${String(h).padStart(2, '0')}:${m}`
+      }
+    }
+    return str.slice(0, 5)
   } catch {
     return '--:--'
   }
@@ -131,6 +146,7 @@ function selectLot(lot) {
   border-bottom: 1px solid rgba(26, 40, 68, 0.5);
   font-size: 11.5px;
   cursor: pointer;
+  overflow: hidden;
 }
 .lot-row:hover {
   background: var(--panel-2);
@@ -143,13 +159,31 @@ function selectLot(lot) {
   color: var(--accent);
   font-family: monospace;
   font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .lot-meta {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   margin-top: 3px;
   color: var(--text-dim);
   font-size: 10.5px;
+}
+.lot-meta > span:first-child {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lot-meta > span:last-child {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--accent);
+  font-family: monospace;
 }
 .lot-badge {
   display: inline-block;

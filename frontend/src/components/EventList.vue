@@ -40,7 +40,7 @@ function formatTime(timestamp) {
 
 <template>
   <div class="event-list-panel">
-    <div class="section-title">事件流</div>
+    <div class="section-title">实时事件流</div>
     <div ref="listRef" class="event-list">
       <div v-for="e in events" :key="e.id || (e.timestamp + e.event_code)" class="event-row">
         <span class="etime">{{ formatTime(e.timestamp) }}</span>
@@ -78,6 +78,8 @@ function formatTime(timestamp) {
   font-size: 10px;
   white-space: nowrap;
   padding-top: 1px;
+  min-width: 58px;
+  flex-shrink: 0;
 }
 .event-row .etag {
   padding: 1px 6px;
