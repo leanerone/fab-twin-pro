@@ -24,7 +24,9 @@ import time
 from datetime import datetime, timedelta
 
 # ============ 配置 ============
-PROXY_PORT = 80              # 代理服务器端口（同事通过 http://服务器IP 访问）
+# Windows 普通用户无法绑定 80 端口，默认使用 8080
+# 如需使用 80 端口，请以管理员身份运行，或设置环境变量 PROXY_PORT=80
+PROXY_PORT = int(os.environ.get('PROXY_PORT', '8080'))
 BACKEND_URL = "http://127.0.0.1:8000"   # 后端地址
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
 COOKIE_NAME = "fabtwin_user"
@@ -344,7 +346,12 @@ def main():
         print("[提示] 请先运行 'npm run build' 构建前端")
         sys.exit(1)
 
-    server = ThreadedHTTPServer(('0.0.0.0', PROXY_PORT), ProxyHandler)
+    try:
+        server = ThreadedHTTPServer(('0.0.0.0', PROXY_PORT), ProxyHandler)
+    except PermissionError as e:
+        print(f"[错误] 无法绑定端口 {PROXY_PORT}：{e}")
+        print("[提示] 80 端口需要管理员权限，或修改环境变量 PROXY_PORT=8080")
+        sys.exit(1)
     print("[启动] 代理服务器运行中...")
     print("[提示] 按 Ctrl+C 停止")
 

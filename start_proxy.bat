@@ -25,7 +25,8 @@ echo  FabTwin One-Click Proxy Server
 echo ================================================================
 echo.
 echo [INFO] Starting proxy server...
-echo [INFO] Access: http://%%COMPUTERNAME%% or http://this-server-ip
+echo [INFO] Access: http://%%COMPUTERNAME%%:8080 or http://this-server-ip:8080
+echo [INFO] If you need port 80, please run as Administrator or set PROXY_PORT=80
 echo.
 
 "%PYTHON%" start_proxy.py
