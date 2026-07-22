@@ -83,6 +83,26 @@ echo [6/8] Creating web.config...
 (
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
 echo ^<configuration^>
+echo   ^<location path="."^>
+echo     ^<system.webServer^>
+echo       ^<security^>
+echo         ^<authentication^>
+echo           ^<anonymousAuthentication enabled="true" /^>
+echo           ^<windowsAuthentication enabled="true" /^>
+echo         ^</authentication^>
+echo       ^</security^>
+echo     ^</system.webServer^>
+echo   ^</location^>
+echo   ^<location path="api/auth/login"^>
+echo     ^<system.webServer^>
+echo       ^<security^>
+echo         ^<authentication^>
+echo           ^<anonymousAuthentication enabled="false" /^>
+echo           ^<windowsAuthentication enabled="true" /^>
+echo         ^</authentication^>
+echo       ^</security^>
+echo     ^</system.webServer^>
+echo   ^</location^>
 echo   ^<system.webServer^>
 echo     ^<rewrite^>
 echo       ^<rules^>
@@ -154,21 +174,27 @@ echo [INFO] Unlocking authentication configuration...
 %windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/windowsAuthentication >nul 2>&1
 echo [OK] Authentication sections unlocked
 
-REM Configure Windows Authentication (disable anonymous, enable Windows)
-echo [INFO] Setting Windows Authentication...
-%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"false" >nul 2>&1
+REM Configure mixed authentication: Anonymous + Windows Auth
+echo [INFO] Setting Anonymous Authentication (site-level)...
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"true" >nul 2>&1
 if errorlevel 1 (
-    echo [WARNING] Failed to disable Anonymous Auth. May need manual configuration in IIS Manager.
+    echo [WARNING] Failed to enable Anonymous Auth. May need manual configuration in IIS Manager.
 ) else (
-    echo [OK] Anonymous Authentication disabled
+    echo [OK] Anonymous Authentication enabled
 )
 
+echo [INFO] Setting Windows Authentication (site-level)...
 %windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"true" >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] Failed to enable Windows Auth. May need manual configuration in IIS Manager.
 ) else (
     echo [OK] Windows Authentication enabled
 )
+
+REM Set Windows Auth providers (Negotiate + NTLM)
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /+"providers.[value='Negotiate']" >nul 2>&1
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /+"providers.[value='NTLM']" >nul 2>&1
+echo [OK] Windows Auth providers configured
 
 REM Enable ARR Proxy
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"true" >nul 2>&1
