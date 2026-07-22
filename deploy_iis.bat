@@ -122,24 +122,31 @@ echo ^<configuration^>
 echo   ^<system.webServer^>
 echo     ^<security^>
 echo       ^<authentication^>
-echo         ^<anonymousAuthentication enabled="false" /^>
-echo         ^<windowsAuthentication enabled="true"^>
-echo           ^<providers^>
-echo             ^<add value="Negotiate" /^>
-echo             ^<add value="NTLM" /^>
-echo           ^</providers^>
-echo         ^</windowsAuthentication^>
+echo         ^<anonymousAuthentication enabled="true" /^>
+echo         ^<windowsAuthentication enabled="false" /^>
 echo       ^</authentication^>
 echo     ^</security^>
 echo     ^<rewrite^>
 echo       ^<rules^>
-echo         ^<rule name="ReverseProxyInboundRule" stopProcessing="true"^>
+echo         ^<rule name="APIProxy" stopProcessing="true"^>
+echo           ^<match url="^api/(.*)" /^>
+echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/api/{R:1}" /^>
+echo         ^</rule^>
+echo         ^<rule name="WSProxy" stopProcessing="true"^>
+echo           ^<match url="^ws/(.*)" /^>
+echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/ws/{R:1}" /^>
+echo         ^</rule^>
+echo         ^<rule name="HistoryAPI" stopProcessing="true"^>
+echo           ^<match url="^history/(.*)" /^>
+echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/history/{R:1}" /^>
+echo         ^</rule^>
+echo         ^<rule name="SpaFallback" stopProcessing="true"^>
 echo           ^<match url="^(.*)$" /^>
 echo           ^<conditions^>
 echo             ^<add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" /^>
 echo             ^<add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" /^>
 echo           ^</conditions^>
-echo           ^<action type="Rewrite" url="http://127.0.0.1:8002/{R:1}" /^>
+echo           ^<action type="Rewrite" url="index.html" /^>
 echo         ^</rule^>
 echo       ^</rules^>
 echo     ^</rewrite^>
@@ -149,6 +156,10 @@ echo         ^<add name="X-Forwarded-For" value="{REMOTE_ADDR}" /^>
 echo         ^<add name="X-Forwarded-User" value="{REMOTE_USER}" /^>
 echo       ^</customHeaders^>
 echo     ^</httpProtocol^>
+echo     ^<staticContent^>
+echo       ^<mimeMap fileExtension=".*" mimeType="application/octet-stream" /^>
+echo     ^</staticContent^>
+echo     ^<httpErrors errorMode="Detailed" /^>
 echo   ^</system.webServer^>
 echo ^</configuration^>
 ) > "%IIS_SITE_DIR%\web.config"
@@ -184,11 +195,11 @@ echo [INFO] Stopping Default Web Site (to free port 80)...
 %WINDIR%\System32\inetsrv\appcmd.exe stop site /site.name:"Default Web Site" >nul 2>&1
 echo [OK] Default Web Site stopped.
 
-:: Enable Windows Authentication at site level
-echo [INFO] Enabling Windows Authentication...
-%WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"True" /commit:apphost >nul
-%WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"False" /commit:apphost >nul
-echo [OK] Windows Authentication enabled.
+:: Enable Anonymous Authentication at site level
+echo [INFO] Enabling Anonymous Authentication...
+%WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"False" /commit:apphost >nul
+%WINDIR%\System32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"True" /commit:apphost >nul
+echo [OK] Anonymous Authentication enabled.
 
 :: Enable Proxy in ARR
 echo [INFO] Enabling ARR Proxy...

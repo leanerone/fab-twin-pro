@@ -1,13 +1,14 @@
 @echo off
 setlocal
 
-title FabTwin Backend Only
+title FabTwin Full Stack
 
 set "BASE_DIR=%~dp0"
 set "BACKEND_DIR=%BASE_DIR%backend"
+set "PYTHON=%BACKEND_DIR%\venv\Scripts\python.exe"
 
 echo ================================================================
-echo  FabTwin Backend Only Start
+echo  FabTwin Full Stack Startup
 echo ================================================================
 echo.
 
@@ -27,21 +28,37 @@ echo   ORACLE_USER: %ORACLE_USER%
 echo   ORACLE_SERVICE: %ORACLE_SERVICE%
 echo.
 
-if not exist "%BACKEND_DIR%\venv\Scripts\python.exe" (
-    echo ERROR: backend venv not found
+if not exist "%PYTHON%" (
+    echo ERROR: Python venv not found
     echo Please run deploy.bat first
+    pause
+    exit /b 1
+)
+
+if not exist "%BASE_DIR%frontend\dist\index.html" (
+    echo ERROR: frontend\dist not found
+    echo Please run 'npm run build' in frontend folder first
     pause
     exit /b 1
 )
 
 netstat -ano | findstr ":8002 " | findstr "LISTENING" >nul
 if not errorlevel 1 (
-    echo WARNING: Port 8002 already in use
-    choice /C YN /M "Continue anyway"
-    if errorlevel 2 exit /b 0
+    echo WARNING: Port 8002 already in use, killing...
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8002 " ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>&1
+    )
 )
 
-echo [1/1] Starting backend (FastAPI :8002)...
+netstat -ano | findstr ":8080 " | findstr "LISTENING" >nul
+if not errorlevel 1 (
+    echo WARNING: Port 8080 already in use, killing...
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080 " ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>&1
+    )
+)
+
+echo [1/2] Starting backend (FastAPI :8002)...
 
 set "BACKEND_LAUNCHER=%BACKEND_DIR%\_run_backend.bat"
 
@@ -72,20 +89,35 @@ echo venv\Scripts\python.exe main.py >> "%BACKEND_LAUNCHER%"
 start "FabTwin Backend" cmd /k "%BACKEND_LAUNCHER%"
 
 echo   Backend starting... (check new window for logs)
-timeout /t 3 /nobreak >nul
+timeout /t 5 /nobreak >nul
+
+echo.
+echo [2/2] Starting proxy server (:8080)...
+start "FabTwin Proxy" cmd /k "%PYTHON%" "%BASE_DIR%start_proxy.py"
+
+echo   Proxy server starting... (check new window for logs)
+timeout /t 2 /nobreak >nul
 
 echo.
 echo ================================================================
-echo  Backend Started!
+echo  FabTwin Started Successfully!
 echo ================================================================
 echo.
 echo  Backend:   http://localhost:8002
 echo  API docs:  http://localhost:8002/docs
 echo  Health:    http://localhost:8002/health
 echo.
-echo  IIS Frontend: http://服务器IP (port 80)
+echo  Frontend:  http://服务器IP:8080
+echo             http://localhost:8080
 echo.
-echo  Close the backend window to stop.
+echo  Login:     admin / admin123 (管理员)
+echo             engineer / engineer123 (工程师)
+echo             user / user123 (普通用户)
+echo.
+echo  [IMPORTANT]
+echo  - Keep both command windows open while using FabTwin
+echo  - Close both windows to stop the service
+echo  - If port 8080 is occupied, use: set PROXY_PORT=8081 before running
 echo.
 pause
 endlocal
