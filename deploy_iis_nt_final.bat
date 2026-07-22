@@ -27,6 +27,8 @@ if errorlevel 1 (
 )
 echo [OK] Running as Administrator
 
+set "SCRIPT_DIR=%~dp0"
+
 echo.
 echo [2/8] Checking IIS installation...
 if not exist "%windir%\system32\inetsrv\appcmd.exe" (
@@ -88,20 +90,14 @@ if errorlevel 1 (
 echo [OK] Frontend files copied
 
 echo.
-echo [6/8] Creating get_user.asp (returns Windows username)...
-(
-echo ^<%
-echo Response.ContentType = "application/json"
-echo Dim user
-echo user = Request.ServerVariables("LOGON_USER")
-echo If user = "" Then
-echo     Response.Write "{""success"":false,""message"":""No user authenticated""}"
-echo Else
-echo     Response.Write "{""success"":true,""username"":""" & Replace(user, """", """""""") & """}"
-echo End If
-echo ^%^>
-) > "%IIS_SITE_DIR%\get_user.asp"
-echo [OK] get_user.asp created
+echo [6/8] Copying get_user.asp (returns Windows username)...
+copy "%SCRIPT_DIR%\get_user.asp" "%IIS_SITE_DIR%\get_user.asp" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Failed to copy get_user.asp!
+    pause
+    exit /b 1
+)
+echo [OK] get_user.asp copied
 
 echo.
 echo [7/8] Creating web.config...
