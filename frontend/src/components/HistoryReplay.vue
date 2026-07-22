@@ -86,14 +86,15 @@ function selectEvent(ev) {
 function jumpToHour(hour) {
   const ts = `${selectedDate.value}T${String(hour).padStart(2, '0')}:00:00.000`
   emit('jump', ts)
-  // 同步滚动事件列表到对应时间
-  const targetStr = `${selectedDate.value} ${String(hour).padStart(2, '0')}:`
+  // 同步滚动事件列表到对应小时
+  const hourStr = String(hour).padStart(2, '0')
   const list = document.querySelector('.hr-list')
   if (!list) return
   const items = list.querySelectorAll('.hr-item')
   for (const item of items) {
     const timeEl = item.querySelector('.hr-item-time')
-    if (timeEl && timeEl.textContent.includes(targetStr.slice(11, 16))) {
+    // timeEl.textContent 格式为 "15:00"，匹配小时部分
+    if (timeEl && timeEl.textContent.startsWith(hourStr + ':')) {
       item.scrollIntoView({ behavior: 'smooth', block: 'center' })
       break
     }
