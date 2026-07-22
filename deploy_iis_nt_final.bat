@@ -127,6 +127,18 @@ echo [OK] Default Web Site stopped
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"true" >nul 2>&1
 echo [OK] ARR Proxy enabled
 
+echo [INFO] Configuring authentication via appcmd...
+%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/anonymousAuthentication >nul 2>&1
+%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/windowsAuthentication >nul 2>&1
+echo [OK] Authentication sections unlocked
+
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:"true" /commit:apphost >nul 2>&1
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" /section:system.webServer/security/authentication/windowsAuthentication /enabled:"true" /commit:apphost >nul 2>&1
+echo [OK] Site: anonymous + windows auth enabled
+
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin/get_user.asp" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:"false" /commit:apphost >nul 2>&1
+echo [OK] get_user.asp: anonymous disabled, windows auth only
+
 %windir%\system32\inetsrv\appcmd.exe start site "FabTwin" >nul 2>&1
 echo [OK] FabTwin site started
 
