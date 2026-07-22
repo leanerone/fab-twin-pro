@@ -167,7 +167,10 @@ async function handleAdminLogin() {
     const result = await api.loginWithPassword(username.value, password.value)
     if (result.token) {
       authStore.login(result.token, result.user, result.permissions)
+      console.log('[Login] Token saved:', localStorage.getItem('fabtwin_token'))
+      console.log('[Login] Router pushing to /')
       await router.push('/')
+      console.log('[Login] Router pushed, current path:', router.currentRoute.value.path)
     } else {
       error.value = '登录失败，用户名或密码错误'
     }
