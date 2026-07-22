@@ -1,15 +1,14 @@
 @echo off
 setlocal
-title FabTwin IIS NT Auth Final Deployment
+title FabTwin IIS NT Auth Deployment
 echo ================================================================
-echo  FabTwin IIS NT Auth Final Deployment
+echo  FabTwin IIS NT Auth Deployment
 echo ================================================================
 echo.
-echo  FINAL SOLUTION:
-echo    1. IIS handles Windows Authentication
-echo    2. ASP file returns LOGON_USER
+echo  SOLUTION: ASP Bridge for Windows Auth
+echo    1. IIS with Anonymous + Windows Authentication
+echo    2. ASP file returns LOGON_USER (triggers Windows Auth)
 echo    3. Frontend reads username from ASP and sends to backend
-echo    4. No reverse proxy needed for auth!
 echo.
 echo  REQUIREMENTS:
 echo    - Run as Administrator
@@ -101,7 +100,7 @@ echo [OK] get_user.asp copied
 
 echo.
 echo [7/8] Creating web.config...
-powershell -Command "[System.IO.File]::WriteAllText('%IIS_SITE_DIR%\web.config', '<configuration><location path=""get_user.asp""><system.webServer><security><authentication><anonymousAuthentication enabled=""false"" /><windowsAuthentication enabled=""true"" /></authentication></security></system.webServer></location><system.webServer><security><authentication><anonymousAuthentication enabled=""true"" /><windowsAuthentication enabled=""true"" /></authentication></security><rewrite><rules><rule name=""APIProxy"" stopProcessing=""true""><match url=""^api/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/api/{R:1}"" /></rule><rule name=""WSProxy"" stopProcessing=""true""><match url=""^ws/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/ws/{R:1}"" /></rule><rule name=""SpaFallback"" stopProcessing=""true""><match url=""^(.*)$"" /><conditions><add input=""{REQUEST_FILENAME}"" matchType=""IsFile"" negate=""true"" /><add input=""{REQUEST_FILENAME}"" matchType=""IsDirectory"" negate=""true"" /><add input=""{URL}"" pattern=""^/api/"" negate=""true"" /><add input=""{URL}"" pattern=""^/ws/"" negate=""true"" /><add input=""{URL}"" pattern=""^/get_user.asp"" negate=""true"" /></conditions><action type=""Rewrite"" url=""index.html"" /></rule></rules></rewrite></system.webServer></configuration>', [System.Text.Encoding]::UTF8)"
+powershell -Command "[System.IO.File]::WriteAllText('%IIS_SITE_DIR%\web.config', '<configuration><system.webServer><security><authentication><anonymousAuthentication enabled=""true"" /><windowsAuthentication enabled=""true"" /></authentication></security><rewrite><rules><rule name=""APIProxy"" stopProcessing=""true""><match url=""^api/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/api/{R:1}"" /></rule><rule name=""WSProxy"" stopProcessing=""true""><match url=""^ws/(.*)"" /><action type=""Rewrite"" url=""http://127.0.0.1:8002/ws/{R:1}"" /></rule><rule name=""SpaFallback"" stopProcessing=""true""><match url=""^(.*)$"" /><conditions><add input=""{REQUEST_FILENAME}"" matchType=""IsFile"" negate=""true"" /><add input=""{REQUEST_FILENAME}"" matchType=""IsDirectory"" negate=""true"" /><add input=""{URL}"" pattern=""^/api/"" negate=""true"" /><add input=""{URL}"" pattern=""^/ws/"" negate=""true"" /><add input=""{URL}"" pattern=""^/get_user.asp"" negate=""true"" /></conditions><action type=""Rewrite"" url=""index.html"" /></rule></rules></rewrite></system.webServer></configuration>', [System.Text.Encoding]::UTF8)"
 echo [OK] web.config created
 
 echo.
@@ -123,11 +122,6 @@ echo [OK] Default Web Site stopped
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"true" >nul 2>&1
 echo [OK] ARR Proxy enabled
 
-echo [INFO] Unlocking authentication sections for location nodes...
-%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/anonymousAuthentication >nul 2>&1
-%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/windowsAuthentication >nul 2>&1
-echo [OK] Authentication sections unlocked
-
 %windir%\system32\inetsrv\appcmd.exe start site "FabTwin" >nul 2>&1
 echo [OK] FabTwin site started
 
@@ -136,11 +130,11 @@ echo ================================================================
 echo  Deployment Complete!
 echo ================================================================
 echo.
-echo  Auth Mode: Windows Authentication (ASP bridge)
+echo  Auth Mode: Anonymous + Windows Authentication (ASP bridge)
 echo  URL:       http://SERVER-IP (port 80)
 echo.
 echo  HOW IT WORKS:
-echo    1. Frontend calls /get_user.asp (IIS handles auth)
+echo    1. Frontend calls /get_user.asp (triggers Windows Auth prompt)
 echo    2. get_user.asp returns LOGON_USER via IIS
 echo    3. Frontend sends username to /api/auth/login-windows
 echo    4. Backend creates session for this user
@@ -149,6 +143,7 @@ echo  TROUBLESHOOTING:
 echo    - If 401: Check Windows Auth is installed
 echo    - If 500: Check ASP feature is installed
 echo    - If login fails: Check get_user.asp returns correct user
+echo    - Fallback: Use admin/admin123 for password login
 echo.
 pause
 endlocal
