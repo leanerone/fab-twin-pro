@@ -132,6 +132,10 @@ if errorlevel 1 (
 )
 echo [OK] Application Pool created/updated.
 
+:: Step 5.5: Clean up duplicate FabTwin under Default Web Site
+echo [5.5/6] Cleaning up duplicate FabTwin entries...
+%WINDIR%\System32\inetsrv\appcmd.exe delete app /app.name:"Default Web Site/FabTwin" >nul 2>&1
+
 :: Step 6: Create IIS Site
 echo [6/6] Creating IIS Site...
 %WINDIR%\System32\inetsrv\appcmd.exe add site /name:FabTwin /bindings:http/*:80: /physicalPath:"%IIS_SITE_DIR%" >nul 2>&1
@@ -143,6 +147,11 @@ if errorlevel 1 (
     %WINDIR%\System32\inetsrv\appcmd.exe set app /app.name:FabTwin/ /applicationPool:FabTwinAppPool >nul
 )
 echo [OK] IIS Site created/updated.
+
+:: Stop Default Web Site to free port 80
+echo [INFO] Stopping Default Web Site (to free port 80)...
+%WINDIR%\System32\inetsrv\appcmd.exe stop site /site.name:"Default Web Site" >nul 2>&1
+echo [OK] Default Web Site stopped.
 
 :: Enable Windows Authentication at site level
 echo [INFO] Enabling Windows Authentication...
