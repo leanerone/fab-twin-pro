@@ -5,9 +5,6 @@ echo ================================================================
 echo  FabTwin IIS Windows Auth Deployment
 echo ================================================================
 echo.
-echo  This script configures IIS with Windows Authentication
-echo  for intranet NT auto-login.
-echo.
 echo  REQUIREMENTS:
 echo    - Run as Administrator
 echo    - Windows Authentication feature installed
@@ -16,7 +13,6 @@ echo.
 pause
 echo.
 
-REM [1/8] Check admin
 net session >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Please run as Administrator!
@@ -25,7 +21,6 @@ if errorlevel 1 (
 )
 echo [OK] Running as Administrator
 
-REM [2/8] Check IIS
 echo.
 echo [2/8] Checking IIS installation...
 if not exist "%windir%\system32\inetsrv\appcmd.exe" (
@@ -35,7 +30,6 @@ if not exist "%windir%\system32\inetsrv\appcmd.exe" (
 )
 echo [OK] IIS is installed
 
-REM [3/8] Check modules
 echo.
 echo [3/8] Checking required modules...
 reg query "HKLM\SOFTWARE\Microsoft\IIS Extensions\URL Rewrite" >nul 2>&1
@@ -46,7 +40,6 @@ if errorlevel 1 (
 )
 echo [OK] URL Rewrite module installed
 
-REM [4/8] Check Windows Auth feature
 echo.
 echo [4/8] Checking Windows Authentication feature...
 reg query "HKLM\SOFTWARE\Microsoft\InetStp\Components" /v "WindowsAuthentication" >nul 2>&1
@@ -57,7 +50,6 @@ if errorlevel 1 (
 )
 echo [OK] Windows Authentication feature check done
 
-REM [5/8] Copy frontend files
 echo.
 echo [5/8] Copying frontend files...
 set "DIST_DIR=frontend\dist"
@@ -77,32 +69,11 @@ if errorlevel 1 (
 )
 echo [OK] Frontend files copied
 
-REM [6/8] Create web.config (no auth section - configured via appcmd)
 echo.
-echo [6/8] Creating web.config...
+echo [6/8] Creating web.config (SIMPLE version without location nodes)...
 (
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
 echo ^<configuration^>
-echo   ^<location path="."^>
-echo     ^<system.webServer^>
-echo       ^<security^>
-echo         ^<authentication^>
-echo           ^<anonymousAuthentication enabled="true" /^>
-echo           ^<windowsAuthentication enabled="true" /^>
-echo         ^</authentication^>
-echo       ^</security^>
-echo     ^</system.webServer^>
-echo   ^</location^>
-echo   ^<location path="api/auth/login"^>
-echo     ^<system.webServer^>
-echo       ^<security^>
-echo         ^<authentication^>
-echo           ^<anonymousAuthentication enabled="false" /^>
-echo           ^<windowsAuthentication enabled="true" /^>
-echo         ^</authentication^>
-echo       ^</security^>
-echo     ^</system.webServer^>
-echo   ^</location^>
 echo   ^<system.webServer^>
 echo     ^<rewrite^>
 echo       ^<rules^>
@@ -145,18 +116,15 @@ echo     ^</httpProtocol^>
 echo   ^</system.webServer^>
 echo ^</configuration^>
 ) > "%IIS_SITE_DIR%\web.config"
-echo [OK] web.config created
+echo [OK] web.config created (SIMPLE version)
 
-REM [7/8] Configure IIS site
 echo.
 echo [7/8] Configuring IIS site and authentication...
 
-REM Create AppPool
 %windir%\system32\inetsrv\appcmd.exe add apppool /name:"FabTwinAppPool" /managedRuntimeVersion:"" >nul 2>&1
 %windir%\system32\inetsrv\appcmd.exe set apppool "FabTwinAppPool" /processModel.identityType:"ApplicationPoolIdentity" >nul 2>&1
 echo [OK] Application Pool configured
 
-REM Create or update site
 %windir%\system32\inetsrv\appcmd.exe add site /name:"FabTwin" /physicalPath:"%IIS_SITE_DIR%" /bindings:"http/*:80:" >nul 2>&1
 if errorlevel 1 (
     %windir%\system32\inetsrv\appcmd.exe set site "FabTwin" /bindings:"http/*:80:" >nul 2>&1
@@ -164,52 +132,37 @@ if errorlevel 1 (
 )
 echo [OK] Site configured
 
-REM Stop Default Web Site to free port 80
 %windir%\system32\inetsrv\appcmd.exe stop site "Default Web Site" >nul 2>&1
 echo [OK] Default Web Site stopped
 
-REM Unlock authentication sections (required for site-level config)
 echo [INFO] Unlocking authentication configuration...
 %windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/anonymousAuthentication >nul 2>&1
 %windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/windowsAuthentication >nul 2>&1
 echo [OK] Authentication sections unlocked
 
-REM Configure mixed authentication: Anonymous + Windows Auth
-echo [INFO] Setting Anonymous Authentication (site-level)...
+echo [INFO] Setting Anonymous Authentication enabled...
 %windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"true" >nul 2>&1
-if errorlevel 1 (
-    echo [WARNING] Failed to enable Anonymous Auth. May need manual configuration in IIS Manager.
-) else (
-    echo [OK] Anonymous Authentication enabled
-)
+echo [OK] Anonymous Authentication enabled
 
-echo [INFO] Setting Windows Authentication (site-level)...
+echo [INFO] Setting Windows Authentication enabled...
 %windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"true" >nul 2>&1
-if errorlevel 1 (
-    echo [WARNING] Failed to enable Windows Auth. May need manual configuration in IIS Manager.
-) else (
-    echo [OK] Windows Authentication enabled
-)
+echo [OK] Windows Authentication enabled
 
-REM Set Windows Auth providers (Negotiate + NTLM)
+echo [INFO] Setting Windows Auth providers...
 %windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /+"providers.[value='Negotiate']" >nul 2>&1
 %windir%\system32\inetsrv\appcmd.exe set config "FabTwin" -section:system.webServer/security/authentication/windowsAuthentication /+"providers.[value='NTLM']" >nul 2>&1
 echo [OK] Windows Auth providers configured
 
-REM Enable ARR Proxy
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/proxy /enabled:"true" >nul 2>&1
 echo [OK] ARR Proxy enabled
 
-REM Allow server variables for X-Forwarded-* headers
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/rewrite/allowedServerVariables /+"[name='HTTP_X_FORWARDED_USER']" >nul 2>&1
 %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/rewrite/allowedServerVariables /+"[name='HTTP_X_FORWARDED_FOR']" >nul 2>&1
-echo [OK] Server variables allowed for X-Forwarded headers
+echo [OK] Server variables allowed
 
-REM Start site
 %windir%\system32\inetsrv\appcmd.exe start site "FabTwin" >nul 2>&1
 echo [OK] FabTwin site started
 
-REM [8/8] Verify
 echo.
 echo [8/8] Verifying configuration...
 %windir%\system32\inetsrv\appcmd.exe list config "FabTwin" -section:system.webServer/security/authentication | findstr "enabled"
@@ -219,18 +172,19 @@ echo ================================================================
 echo  Deployment Complete!
 echo ================================================================
 echo.
-echo  Auth Mode: Windows Authentication (NT auto-login)
+echo  Auth Mode: Mixed (Anonymous + Windows Auth)
 echo  URL:       http://SERVER-IP (port 80)
 echo.
-echo  IMPORTANT:
-echo    - Backend must be running: .\start_backend.bat
-echo    - Users will be auto-logged in with their Windows domain account
-echo    - If Windows Auth fails, users can click "Account Password Login"
+echo  HOW IT WORKS:
+echo    1. Site-level: Anonymous + Windows Auth both enabled
+echo    2. Browser sends Windows credentials automatically (intranet)
+echo    3. IIS passes {LOGON_USER} to backend via X-Forwarded-User
+echo    4. If Windows Auth fails, user falls back to password login
 echo.
 echo  TROUBLESHOOTING:
-echo    - If 401 error: Check Windows Auth feature is installed
-echo    - If 500.19: Run appcmd unlock commands manually
-echo    - Access from other PCs may require domain trust
+echo    - If login fails: Check browser "Local intranet" security zone
+echo    - If 401: Make sure Windows Auth feature is installed
+echo    - If 500: Check Event Viewer for detailed error
 echo.
 pause
 endlocal
