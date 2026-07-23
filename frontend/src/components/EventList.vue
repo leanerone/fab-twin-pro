@@ -27,18 +27,32 @@ function tagClass(type) {
 // 格式化时间（只显示时分秒）
 function formatTime(timestamp) {
   if (!timestamp) return '--:--:--'
+  const str = String(timestamp).trim()
   try {
-    const d = new Date(timestamp)
-    if (isNaN(d.getTime())) {
-      // fallback: 手动提取时间部分
-      const sep = timestamp.includes('T') ? 'T' : ' '
-      const timePart = timestamp.split(sep)[1]
-      return timePart ? timePart.slice(0, 8) : '--:--:--'
+    // 支持 Oracle NLS 中文格式: "2026-7-23 下午12:01:14" / "2026-7-23 上午8:30:00"
+    const nlsMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})$/)
+    if (nlsMatch) {
+      let h = parseInt(nlsMatch[5], 10)
+      const m = nlsMatch[6]
+      const s = nlsMatch[7]
+      const ampm = nlsMatch[4]
+      if (ampm === '下午' && h !== 12) h += 12
+      if (ampm === '上午' && h === 12) h = 0
+      return `${String(h).padStart(2, '0')}:${m}:${s}`
     }
-    const hh = String(d.getHours()).padStart(2, '0')
-    const mm = String(d.getMinutes()).padStart(2, '0')
-    const ss = String(d.getSeconds()).padStart(2, '0')
-    return `${hh}:${mm}:${ss}`
+
+    const d = new Date(str)
+    if (!isNaN(d.getTime())) {
+      const hh = String(d.getHours()).padStart(2, '0')
+      const mm = String(d.getMinutes()).padStart(2, '0')
+      const ss = String(d.getSeconds()).padStart(2, '0')
+      return `${hh}:${mm}:${ss}`
+    }
+
+    // fallback: 手动提取时间部分
+    const sep = str.includes('T') ? 'T' : ' '
+    const timePart = str.split(sep)[1]
+    return timePart ? timePart.slice(0, 8) : '--:--:--'
   } catch {
     return '--:--:--'
   }

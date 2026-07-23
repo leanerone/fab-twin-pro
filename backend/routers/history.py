@@ -15,10 +15,33 @@ from datetime import datetime
 import json
 
 from database import get_db
-from models import DT_EVENT_RAW
+from models import DT_EVENT_RAW, MachineToolMapping
 from services.time_utils import parse_ts, normalize_ts
 
 router = APIRouter(prefix="/api/history", tags=["history"])
+
+
+def _resolve_tool_ids(db, machine_id: str) -> set:
+    """将 machine_id 解析为对应的 tool_id 集合（支持 VPO-01 -> PODOPENER-1 映射）"""
+    tool_ids = {machine_id}
+
+    # PODOPENER 机台量产 Oracle 中 tool_id 通常为 PODOPENER（不带序号）
+    if machine_id.upper().startswith("PODOPENER"):
+        tool_ids.add("PODOPENER")
+
+    # 尝试查询映射表（可能不存在于量产 Oracle 中）
+    try:
+        mappings = db.query(MachineToolMapping).filter(
+            (MachineToolMapping.machine_id == machine_id) |
+            (MachineToolMapping.tool_id == machine_id)
+        ).all()
+        for m in mappings:
+            tool_ids.add(m.tool_id)
+            tool_ids.add(m.machine_id)
+    except Exception:
+        pass  # 映射表不存在或查询失败，忽略
+
+    return tool_ids
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
@@ -78,6 +101,9 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
 
     ts_value = row.event_ts_utc or row.received_ts_utc
 
+    # 构造可读的事件描述：优先 alarm_text/description，其次 event_name
+    description = payload.get("alarm_text") or payload.get("description") or event_name
+
     return {
         "raw_id": row.raw_id,
         "tool_id": row.tool_id,
@@ -88,6 +114,7 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
         "event_category": event_category,
         "event_name": event_name,
         "event_type": payload.get("event_type", "VFEI"),
+        "description": description,
         "lot_id": payload.get("lot_id") if payload.get("lot_id") != "NULL" else None,
         "cassette_id": payload.get("cassette_id") if payload.get("cassette_id") != "NULL" else None,
         "chamber_id": payload.get("chamber_id") if payload.get("chamber_id") != "NULL" else None,
@@ -113,7 +140,8 @@ def get_history(
     由于 received_ts_utc 是 VARCHAR2 且格式不统一（ISO/空格/NLS中文），
     不在SQL层做时间过滤，按 raw_id 降序取最近N条，在Python层解析过滤。
     """
-    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
+    tool_ids = _resolve_tool_ids(db, tool_id)
+    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
 
     start_dt = parse_ts(start_time) if start_time else None
     end_dt = parse_ts(end_time) if end_time else None
@@ -168,9 +196,10 @@ def get_timeline(
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
+    tool_ids = _resolve_tool_ids(db, tool_id)
     rows = (
         db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id == tool_id)
+        .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
         .order_by(DT_EVENT_RAW.raw_id.desc())
         .limit(5000)
         .all()
@@ -284,16 +313,17 @@ def get_event_detail(
     ev = _event_to_dict(row)
 
     # 查找前后事件（用 raw_id 近似，因为 VARCHAR2 时间格式不统一无法可靠 ORDER BY）
+    tool_ids = _resolve_tool_ids(db, tool_id)
     prev_row = (
         db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id == tool_id)
+        .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
         .filter(DT_EVENT_RAW.raw_id < raw_id)
         .order_by(DT_EVENT_RAW.raw_id.desc())
         .first()
     )
     next_row = (
         db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id == tool_id)
+        .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
         .filter(DT_EVENT_RAW.raw_id > raw_id)
         .order_by(DT_EVENT_RAW.raw_id.asc())
         .first()

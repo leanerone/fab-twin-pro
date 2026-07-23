@@ -12,11 +12,42 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 import json
 
 from database import get_db
-from models import Lot, MachineEvent, DT_EVENT_RAW
+from models import Lot, MachineEvent, DT_EVENT_RAW, MachineToolMapping
 from schemas import LotOut, EventOut
 from services.time_utils import parse_ts, normalize_ts, extract_date
 
 router = APIRouter(prefix="/api/lots", tags=["lots"])
+
+
+def _resolve_tool_ids(db: Session, machine_id: str) -> set:
+    """将 machine_id 解析为对应的 tool_id 集合
+
+    支持三种情况：
+    1. machine_id 和 tool_id 相同（如 OXE-01）
+    2. machine_id 通过 machine_tool_mappings 映射到 tool_id（如 VPO-01 -> PODOPENER-1）
+    3. PODOPENER 机台：量产 Oracle 中 tool_id 为 PODOPENER（不带序号）
+
+    注意：machine_tool_mappings 表可能不存在于量产 Oracle 中，需要 try-except。
+    """
+    tool_ids = {machine_id}
+
+    # PODOPENER 机台量产 tool_id 通常是 PODOPENER（不带 -1）
+    if machine_id.upper().startswith("PODOPENER"):
+        tool_ids.add("PODOPENER")
+
+    # 尝试查询映射表（可能不存在于量产 Oracle 中）
+    try:
+        mappings = db.query(MachineToolMapping).filter(
+            (MachineToolMapping.machine_id == machine_id) |
+            (MachineToolMapping.tool_id == machine_id)
+        ).all()
+        for m in mappings:
+            tool_ids.add(m.tool_id)
+            tool_ids.add(m.machine_id)
+    except Exception:
+        pass  # 映射表不存在或查询失败，忽略
+
+    return tool_ids
 
 
 @router.get("", response_model=List[LotOut])
@@ -32,11 +63,14 @@ def list_lots(
     注意：Oracle 中 received_ts_utc 可能是中文格式（如 2026-7-22 下午3:00:48），
     因此不在 SQL 层用 LIKE 过滤日期或 ORDER BY 时间戳，全部在 Python 层处理。
     """
-    # 查询条件：只按 machine_id 过滤（避免 Oracle LIKE 对中文时间戳的问题）
+    # 解析 machine_id 对应的所有 tool_id（含映射关系）
+    tool_ids = _resolve_tool_ids(db, machine_id)
+
+    # 查询条件：按 tool_id 集合过滤
     # 用 raw_id 排序（近似时间顺序；VARCHAR2 时间排序不可靠）
     rows = (
         db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id == machine_id)
+        .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
         .order_by(DT_EVENT_RAW.raw_id.asc())
         .limit(5000)
         .all()
@@ -101,7 +135,7 @@ def list_lots(
 @router.get("/{lot_id}", response_model=LotOut)
 def get_lot(lot_id: str, db: Session = Depends(get_db)):
     """获取单个 Lot 详情"""
-    # 用 raw_id 排序，Python 层过滤 lot_id（避免 SQL LIKE 注入/漏匹配）
+    # 用 raw_id 排序，Python 层过滤 lot_id（Lot ID 不是 machine/tool ID，不做映射）
     rows = (
         db.query(DT_EVENT_RAW)
         .order_by(DT_EVENT_RAW.raw_id.asc())
@@ -139,7 +173,7 @@ def get_lot(lot_id: str, db: Session = Depends(get_db)):
 @router.get("/{lot_id}/events", response_model=List[EventOut])
 def get_lot_events(lot_id: str, db: Session = Depends(get_db)):
     """获取该 Lot 加工时间段内的事件"""
-    # 用 raw_id 排序，Python 层过滤 lot_id
+    # Lot ID 不是 machine/tool ID，不做映射，全表扫描后过滤
     rows = (
         db.query(DT_EVENT_RAW)
         .order_by(DT_EVENT_RAW.raw_id.asc())

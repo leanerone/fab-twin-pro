@@ -1033,6 +1033,7 @@ def create_machine_tool_mappings(db: Session):
 
     mappings = [
         {"machine_id": "VPO-01", "tool_id": "PODOPENER-1", "description": "VPO-01对应Tool ID PODOPENER-1", "is_primary": True},
+        {"machine_id": "PODOPENER-1", "tool_id": "PODOPENER", "description": "量产Oracle中PODOPENER-1对应Tool ID PODOPENER", "is_primary": True},
     ]
 
     for m in mappings:

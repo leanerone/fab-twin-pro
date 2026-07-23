@@ -60,6 +60,9 @@ def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
     ts_dt = parse_ts(raw_event.event_ts_utc or raw_event.received_ts_utc)
     ts_str = ts_dt.strftime("%Y-%m-%d %H:%M:%S") if ts_dt else ""
 
+    # 构造可读描述
+    description = payload.get("alarm_text") or payload.get("description") or event_name
+
     return {
         "raw_id": raw_event.raw_id,
         "tool_id": raw_event.tool_id,
@@ -67,6 +70,7 @@ def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
         "event_type": event_type,
         "category": category,
         "timestamp": ts_str,
+        "description": description,
         "lot_id": payload.get("lot_id"),
         "port_id": payload.get("port_id"),
         "cassette_id": payload.get("cassette_id"),

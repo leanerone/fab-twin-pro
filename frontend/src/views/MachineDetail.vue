@@ -557,7 +557,7 @@ async function loadLatestEvents() {
     ...e,
     machine_id: e.tool_id || machineId.value,
     event_code: e.event_name,
-    description: e.event_name,
+    description: e.description || e.event_name,
   }))
   if (data.length) {
     if (mode.value === 'playback') {
@@ -661,7 +661,7 @@ async function switchToPlayback() {
     ...e,
     machine_id: e.tool_id || machineId.value,
     event_code: e.event_name,
-    description: e.event_name,
+    description: e.description || e.event_name,
     _ts: parseTs(e.timestamp),
   }))
   if (!historyData.length) {

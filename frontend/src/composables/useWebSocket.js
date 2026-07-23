@@ -122,24 +122,25 @@ export function useWebSocket() {
             const parsedEvent = parseVfeiEvent(msg.data)
             store.applyRealtimeEvent(parsedEvent)
           } else if (msg.type === 'raw_event' && msg.data) {
-            // DB轮询推送的原始事件（db_poller）
-            const raw = msg.data
-            console.log('[WS] 收到DB轮询事件:', raw.event_name, 'tool_id=', raw.tool_id, 'ts=', raw.timestamp)
-            const parsedEvent = parseVfeiEvent({
-              ...raw.payload,
-              machine_id: raw.tool_id,
-              tool_id: raw.tool_id,
-              event_name: raw.event_name,
-              event_type: raw.event_type || 'VFEI',
-              event_category: raw.category || 'other',
-              timestamp: raw.timestamp,
-              raw_id: raw.raw_id,
-              lot_id: raw.lot_id,
-              cassette_id: raw.cassette_id,
-              alarm_info: raw.alarm_info,
-            })
-            store.applyRealtimeEvent(parsedEvent)
-          } else if (msg.type === 'cur_status' && Array.isArray(msg.data)) {
+                // DB轮询推送的原始事件（db_poller）
+                const raw = msg.data
+                console.log('[WS] 收到DB轮询事件:', raw.event_name, 'tool_id=', raw.tool_id, 'ts=', raw.timestamp)
+                const parsedEvent = parseVfeiEvent({
+                  ...raw.payload,
+                  machine_id: raw.tool_id,
+                  tool_id: raw.tool_id,
+                  event_name: raw.event_name,
+                  event_type: raw.event_type || 'VFEI',
+                  event_category: raw.category || 'other',
+                  timestamp: raw.timestamp,
+                  description: raw.description || raw.payload?.alarm_text || raw.payload?.description || raw.event_name,
+                  raw_id: raw.raw_id,
+                  lot_id: raw.lot_id,
+                  cassette_id: raw.cassette_id,
+                  alarm_info: raw.alarm_info,
+                })
+                store.applyRealtimeEvent(parsedEvent)
+              } else if (msg.type === 'cur_status' && Array.isArray(msg.data)) {
             // 当前状态更新（CUR表）
             msg.data.forEach(cur => {
               const m = store.machines.find(x => x.id === cur.tool_id)
