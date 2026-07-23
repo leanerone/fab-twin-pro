@@ -66,14 +66,12 @@ def list_lots(
     # 解析 machine_id 对应的所有 tool_id（含映射关系）
     tool_ids = _resolve_tool_ids(db, machine_id)
 
-    # 查询条件：按 tool_id 集合过滤
-    # 用 raw_id 降序取最新 5000 条（raw_id 递增，降序=最新数据优先）
-    # 避免事件数 >5000 的机台只取到旧数据导致当天 Lot 丢失
+    # 取该机台所有事件（不限制 5000），按 raw_id 倒序便于 Python 层处理
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
         .order_by(DT_EVENT_RAW.raw_id.desc())
-        .limit(5000)
+        .limit(50000)
         .all()
     )
 
@@ -175,11 +173,10 @@ def get_lot(lot_id: str, db: Session = Depends(get_db)):
 def get_lot_events(lot_id: str, db: Session = Depends(get_db)):
     """获取该 Lot 加工时间段内的事件"""
     # Lot ID 不是 machine/tool ID，不做映射，全表扫描后过滤
-    # 降序取最新 5000 条，避免旧机台事件数 >5000 时取不到近期数据
     rows = (
         db.query(DT_EVENT_RAW)
         .order_by(DT_EVENT_RAW.raw_id.desc())
-        .limit(5000)
+        .limit(50000)
         .all()
     )
 

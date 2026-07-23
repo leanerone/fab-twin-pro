@@ -1,7 +1,6 @@
 <script setup>
 import { ref, watch, nextTick } from 'vue'
 
-// 事件流列表：时间 + 类型标签 + 描述，自动滚动到最新
 const props = defineProps({
   events: {
     type: Array,
@@ -11,7 +10,6 @@ const props = defineProps({
 
 const listRef = ref(null)
 
-// 监听事件变化，自动滚动到底部
 watch(() => props.events.length, async () => {
   await nextTick()
   if (listRef.value) {
@@ -19,42 +17,50 @@ watch(() => props.events.length, async () => {
   }
 })
 
-// 事件类型标签样式映射
 function tagClass(type) {
   return 'tag-' + (type || 'INFO').toUpperCase()
 }
 
-// 格式化时间（只显示时分秒）
+// 格式化时间：显示 YYYY-MM-DD HH:MM:SS 完整时间戳
 function formatTime(timestamp) {
-  if (!timestamp) return '--:--:--'
+  if (!timestamp) return '-- --:--:--'
   const str = String(timestamp).trim()
   try {
-    // 支持 Oracle NLS 中文格式: "2026-7-23 下午12:01:14" / "2026-7-23 上午8:30:00"
+    // Oracle NLS 中文格式: "2026-7-23 下午12:01:14"
     const nlsMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})$/)
     if (nlsMatch) {
+      const year = nlsMatch[1]
+      const month = String(nlsMatch[2]).padStart(2, '0')
+      const day = String(nlsMatch[3]).padStart(2, '0')
       let h = parseInt(nlsMatch[5], 10)
       const m = nlsMatch[6]
       const s = nlsMatch[7]
       const ampm = nlsMatch[4]
       if (ampm === '下午' && h !== 12) h += 12
       if (ampm === '上午' && h === 12) h = 0
-      return `${String(h).padStart(2, '0')}:${m}:${s}`
+      return `${year}-${month}-${day} ${String(h).padStart(2, '0')}:${m}:${s}`
     }
 
-    const d = new Date(str)
-    if (!isNaN(d.getTime())) {
-      const hh = String(d.getHours()).padStart(2, '0')
-      const mm = String(d.getMinutes()).padStart(2, '0')
-      const ss = String(d.getSeconds()).padStart(2, '0')
-      return `${hh}:${mm}:${ss}`
+    // ISO 格式: "2026-07-23T12:01:14" / "2026-07-23 12:01:14" / "2026-07-23T12:01:14.000Z"
+    const stdMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{2}):(\d{2})/)
+    if (stdMatch) {
+      const month = String(stdMatch[2]).padStart(2, '0')
+      const day = String(stdMatch[3]).padStart(2, '0')
+      return `${stdMatch[1]}-${month}-${day} ${stdMatch[4]}:${stdMatch[5]}:${stdMatch[6]}`
     }
 
-    // fallback: 手动提取时间部分
+    // fallback: 手动提取
     const sep = str.includes('T') ? 'T' : ' '
-    const timePart = str.split(sep)[1]
-    return timePart ? timePart.slice(0, 8) : '--:--:--'
+    if (str.includes(sep)) {
+      const [datePart, timePart] = str.split(sep)
+      const parts = (datePart || '').split('-')
+      if (parts.length >= 3) {
+        return `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')} ${(timePart || '').slice(0, 8)}`
+      }
+    }
+    return '-- --:--:--'
   } catch {
-    return '--:--:--'
+    return '-- --:--:--'
   }
 }
 </script>
@@ -66,7 +72,7 @@ function formatTime(timestamp) {
       <div v-for="e in events" :key="e.id || (e.timestamp + e.event_code)" class="event-row">
         <span class="etime">{{ formatTime(e.timestamp) }}</span>
         <span class="etag" :class="tagClass(e.event_type)">{{ e.event_type }}</span>
-        <span class="edesc">{{ e.description }}</span>
+        <span class="edesc">{{ e.description || e.event_code || e.event_name || '' }}</span>
       </div>
       <div v-if="!events.length" class="empty-state">等待事件...</div>
     </div>
@@ -99,7 +105,7 @@ function formatTime(timestamp) {
   font-size: 10px;
   white-space: nowrap;
   padding-top: 1px;
-  min-width: 58px;
+  min-width: 130px;
   flex-shrink: 0;
 }
 .event-row .etag {
@@ -115,9 +121,12 @@ function formatTime(timestamp) {
 .tag-WAFER { background: rgba(16, 185, 129, 0.15); color: var(--green); }
 .tag-TRANSFER { background: rgba(245, 158, 11, 0.15); color: var(--yellow); }
 .tag-INFO { background: rgba(107, 122, 148, 0.15); color: var(--text-dim); }
+.tag-VFEI { background: rgba(0, 212, 255, 0.2); color: var(--accent); }
+.tag-HOST { background: rgba(124, 58, 237, 0.2); color: var(--accent-2); }
 .event-row .edesc {
   flex: 1;
   color: var(--text);
   line-height: 1.4;
+  word-break: break-all;
 }
 </style>

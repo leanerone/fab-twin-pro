@@ -131,14 +131,19 @@ def get_history(
     start_time: Optional[str] = Query(None, description="开始时间 ISO格式"),
     end_time: Optional[str] = Query(None, description="结束时间 ISO格式"),
     event_category: Optional[str] = Query(None, description="事件分类过滤: alarm/pod/process/other"),
-    limit: int = Query(500, ge=1, le=5000),
+    limit: int = Query(500, ge=1, le=20000),
     offset: int = Query(0, ge=0),
+    before_raw_id: Optional[int] = Query(None, description="分页游标：返回 raw_id < 此值的事件，配合 next 翻页"),
     db: Session = Depends(get_db),
 ):
     """获取指定机台的历史事件时间轴
 
     由于 received_ts_utc 是 VARCHAR2 且格式不统一（ISO/空格/NLS中文），
-    不在SQL层做时间过滤，按 raw_id 降序取最近N条，在Python层解析过滤。
+    不在SQL层做时间过滤，在Python层用 parse_ts 解析过滤。
+
+    分页策略：
+    - 优先按 start_time/end_time 在 Python 层做时间过滤
+    - 当事件总数超 limit 时，前端用 before_raw_id 翻页
     """
     tool_ids = _resolve_tool_ids(db, tool_id)
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
@@ -146,8 +151,12 @@ def get_history(
     start_dt = parse_ts(start_time) if start_time else None
     end_dt = parse_ts(end_time) if end_time else None
 
-    # 按 raw_id 降序取最近N条（raw_id通常递增，近似时间顺序）
-    fetch_limit = min(limit * 4 + offset, 5000)
+    # 分页：before_raw_id 模式（仅在无 start_dt 时使用）
+    if before_raw_id is not None and not start_dt:
+        query = query.filter(DT_EVENT_RAW.raw_id < before_raw_id)
+
+    # 拉取数据
+    fetch_limit = min(limit + offset, 20000)
     rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(fetch_limit).all()
 
     # Python层解析和过滤
@@ -174,11 +183,17 @@ def get_history(
     total = len(events)
     paged = events[offset:offset + limit]
 
+    # 下一页游标：返回结果中 raw_id 最小值 - 1
+    next_raw_id = None
+    if paged:
+        next_raw_id = min(e["raw_id"] for e in paged) - 1
+
     return {
         "tool_id": tool_id,
         "total": total,
         "limit": limit,
         "offset": offset,
+        "next_raw_id": next_raw_id,
         "events": paged,
     }
 

@@ -45,21 +45,21 @@ export const api = {
   getMachines: () => request('GET', '/machines'),
   getMachine: (id) => request('GET', `/machines/${id}`),
   getMachineStats: () => request('GET', '/machines/stats'),
-  
+
   // 事件API
   getEvents: (machineId, date) => request('GET', `/events/${machineId}?date=${date}`),
   getLatestEvents: (machineId, limit = 60) => request('GET', `/events/${machineId}/latest?limit=${limit}`),
   getTimeline: (machineId, date) => request('GET', `/events/${machineId}/timeline?date=${date}`),
-  
+
   // Lot API
   getLots: (machineId, date) => request('GET', `/lots?machine_id=${machineId}&date=${date}`),
   getLot: (lotId) => request('GET', `/lots/${lotId}`),
   getLotEvents: (lotId) => request('GET', `/lots/${lotId}/events`),
-  
+
   // 告警API
   getAlarms: (machineId, date) => request('GET', `/alarms?machine_id=${machineId}&date=${date}`),
   getAlarmStats: (machineId, date) => request('GET', `/alarms/stats?machine_id=${machineId}&date=${date}`),
-  
+
   // AI API
   aiQuery: (question, machineId) => request('POST', '/ai/query', { question, machine_id: machineId }),
   // AI 统一聊天接口
@@ -90,15 +90,15 @@ export const api = {
     return res.json();
   },
   aiSpeechStatus: () => request('GET', '/ai/speech/status'),
-  
+
   // OHT API
   getOHTPositions: () => request('GET', '/oht'),
   getOHTHistory: (ohtId) => request('GET', `/oht/${ohtId}`),
-  
+
   // 配方API
   getRecipes: (machineId) => request('GET', `/recipes?machine_id=${machineId}`),
   getRecipe: (recipeId) => request('GET', `/recipes/${recipeId}`),
-  
+
   // 楼层API
   getFloors: () => request('GET', '/floors'),
   getFloor: (floorId) => request('GET', `/floors/${floorId}`),
@@ -149,11 +149,20 @@ export const api = {
   login: () => request('POST', '/auth/login', null, false),
   loginWithPassword: (username, password) => request('POST', '/auth/login-password', { username, password }, false),
   loginWindows: (username) => request('POST', '/auth/login-windows', { username }, false),
-  // 通过ASP获取Windows用户名
+  // 通过ASP获取Windows用户名（仅IIS模式有效；直连模式返回fallback让前端走密码登录）
   getWindowsUser: async () => {
-    const res = await fetch('/get_user.asp', { method: 'GET', credentials: 'include' });
-    if (!res.ok) throw new Error(`ASP error: ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch('/get_user.asp', { method: 'GET', credentials: 'include' });
+      if (!res.ok) throw new Error(`ASP error: ${res.status}`);
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('ASP returned non-JSON (likely HTML 404 in direct mode)');
+      }
+      return res.json();
+    } catch (e) {
+      // 直连模式无 ASP/JSON，提示用户使用密码登录
+      return { success: false, username: '', error: e.message };
+    }
   },
   getUserInfo: () => request('GET', '/auth/user'),
   getPermissions: () => request('GET', '/auth/permissions'),
