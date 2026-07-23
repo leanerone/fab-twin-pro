@@ -85,12 +85,14 @@ export function useWebSocket() {
         return
       }
       // WebSocket 连接策略：
-      // - IIS 部署（port 80/443）：优先通过 IIS 代理 /ws/realtime（ARR 反向代理）
-      //   如果失败，fallback 直连后端 8002
+      // - IIS 部署（port 80/443）：直连后端 8002（URL Rewrite 不支持 WebSocket 升级握手）
       // - Vite dev/preview（其他端口）：走 Vite proxy（原生支持 ws 升级）
+      const isIIS = (location.port === '80' || location.port === '443' || location.port === '')
       const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const wsUrl = `${wsProto}//${location.host}/ws/realtime`
-      console.log('[WS] Connecting to:', wsUrl)
+      const wsUrl = isIIS
+        ? `${wsProto}//${location.hostname}:8002/ws/realtime`
+        : `${wsProto}//${location.host}/ws/realtime`
+      console.log('[WS] Connecting to:', wsUrl, isIIS ? '(IIS mode, direct to backend)' : '(Vite proxy mode)')
       try {
         this.ws = new WebSocket(wsUrl)
       } catch (e) {
