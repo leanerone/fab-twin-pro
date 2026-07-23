@@ -63,8 +63,11 @@ if exist "%BASE_DIR%\env.bat" (
     echo   ORACLE_SERVICE: %ORACLE_SERVICE%
     echo   ORACLE_CLIENT_DIR: %ORACLE_CLIENT_DIR%
 ) else (
-    echo   WARNING: env.bat not found, using defaults
-    set "DB_TYPE=oracle"
+    echo   [ERROR] env.bat not found!
+    echo   Please create env.bat with your database settings first.
+    echo   See env.bat.example or one_click_deploy.bat for the format.
+    pause
+    exit /b 1
 )
 echo.
 

@@ -2,10 +2,11 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
 
-from config import DB_TYPE, ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, ORACLE_USER
+from config import DB_TYPE, ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, ORACLE_USER, ORACLE_DSN_TYPE
 
 print(f"DB_TYPE: {DB_TYPE}")
 print(f"DB: {ORACLE_HOST}:{ORACLE_PORT}/{ORACLE_SERVICE} ({ORACLE_USER})")
+print(f"DSN_TYPE: {ORACLE_DSN_TYPE}")
 
 if DB_TYPE == 'sqlite':
     print("[OK] SQLite mode - no external connection needed")
@@ -24,7 +25,12 @@ try:
     else:
         print("[INFO] ORACLE_CLIENT_DIR not set, using Thin mode")
 
-    dsn = oracledb.makedsn(ORACLE_HOST, ORACLE_PORT, service_name=ORACLE_SERVICE)
+    if ORACLE_DSN_TYPE == 'sid':
+        dsn = oracledb.makedsn(ORACLE_HOST, ORACLE_PORT, sid=ORACLE_SERVICE)
+    else:
+        dsn = oracledb.makedsn(ORACLE_HOST, ORACLE_PORT, service_name=ORACLE_SERVICE)
+
+    print(f"[INFO] DSN: {dsn}")
     with oracledb.connect(user=ORACLE_USER, password=os.environ.get('ORACLE_PASSWORD', ''), dsn=dsn) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM DUAL")

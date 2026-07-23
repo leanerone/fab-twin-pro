@@ -55,15 +55,24 @@ echo   ORACLE_USER=[%ORACLE_USER%]
 echo   ORACLE_SERVICE=[%ORACLE_SERVICE%]
 
 if "%DB_TYPE%"=="" (
-    echo   [WARN] DB_TYPE empty, using defaults
-    set DB_TYPE=sqlite
-    set ORACLE_HOST=localhost
-    set ORACLE_PORT=1521
-    set ORACLE_SERVICE=ORCLPDB
-    set ORACLE_USER=fabtwin
-    set ORACLE_PASSWORD=fabtwin
-    set ORACLE_DSN_TYPE=service_name
-    set ORACLE_CLIENT_DIR=C:\oracle\WINDOWS.X64_193000_db_home
+    echo   [ERROR] DB_TYPE is empty!
+    echo   Please edit env.bat and set your database connection settings.
+    echo.
+    echo   Example env.bat content for Oracle:
+    echo     set DB_TYPE=oracle
+    echo     set ORACLE_HOST=10.30.8.119
+    echo     set ORACLE_PORT=1521
+    echo     set ORACLE_SERVICE=APCDB
+    echo     set ORACLE_USER=emuuser
+    echo     set ORACLE_PASSWORD=apcuser
+    echo     set ORACLE_DSN_TYPE=sid
+    echo     set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
+    echo.
+    echo   Example env.bat content for SQLite (no Oracle):
+    echo     set DB_TYPE=sqlite
+    echo.
+    pause
+    exit /b 1
 )
 echo.
 

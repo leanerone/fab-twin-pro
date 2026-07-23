@@ -154,6 +154,16 @@ echo [OK] Site: anonymous + windows auth enabled
 %windir%\system32\inetsrv\appcmd.exe set config "FabTwin/get_user.asp" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:"false" /commit:apphost >nul 2>&1
 echo [OK] get_user.asp: anonymous disabled, windows auth only
 
+echo.
+echo [INFO] Enabling WebSocket at site level...
+%windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/webSocket >nul 2>&1
+%windir%\system32\inetsrv\appcmd.exe set config "FabTwin" /section:system.webServer/webSocket /enabled:"true" /commit:apphost >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] WebSocket site-level config failed, ARR proxy may still work
+) else (
+    echo [OK] WebSocket enabled at site level
+)
+
 %windir%\system32\inetsrv\appcmd.exe start site "FabTwin" >nul 2>&1
 echo [OK] FabTwin site started
 

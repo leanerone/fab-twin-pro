@@ -4,12 +4,28 @@ setlocal
 title FabTwin Dev Start
 
 set "BASE_DIR=%~dp0"
+set "BASE_DIR=%BASE_DIR:~0,-1%"
 set "BACKEND_DIR=%BASE_DIR%\backend"
 set "FRONTEND_DIR=%BASE_DIR%\frontend"
 
 echo ================================================================
 echo  FabTwin Development Start
 echo ================================================================
+echo.
+
+REM ----- Load env.bat -----
+if exist "%BASE_DIR%\env.bat" (
+    echo [INFO] Loading env.bat...
+    call "%BASE_DIR%\env.bat"
+    echo   DB_TYPE: %DB_TYPE%
+    echo   ORACLE_HOST: %ORACLE_HOST%
+    echo   ORACLE_USER: %ORACLE_USER%
+    echo   ORACLE_SERVICE: %ORACLE_SERVICE%
+    echo   ORACLE_CLIENT_DIR: %ORACLE_CLIENT_DIR%
+) else (
+    echo [WARN] env.bat not found, using defaults
+    set "DB_TYPE=sqlite"
+)
 echo.
 
 REM ----- Auto-create backend venv if missing -----
@@ -33,9 +49,27 @@ if not exist "venv\Scripts\python.exe" (
     echo [OK] Dependencies installed.
 )
 
-REM ----- Start backend -----
+REM ----- Start backend with env vars -----
 echo [1/2] Starting backend (FastAPI :8002)...
-start "FabTwin Backend" cmd /k "cd /d %BACKEND_DIR% && venv\Scripts\python.exe main.py"
+set "BACKEND_LAUNCHER=%BACKEND_DIR%\_run_backend_dev.bat"
+echo @echo off > "%BACKEND_LAUNCHER%"
+echo cd /d "%BACKEND_DIR%" >> "%BACKEND_LAUNCHER%"
+echo set "DB_TYPE=%DB_TYPE%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_HOST=%ORACLE_HOST%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_PORT=%ORACLE_PORT%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_SERVICE=%ORACLE_SERVICE%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_USER=%ORACLE_USER%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_PASSWORD=%ORACLE_PASSWORD%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_DSN_TYPE=%ORACLE_DSN_TYPE%" >> "%BACKEND_LAUNCHER%"
+echo set "ORACLE_CLIENT_DIR=%ORACLE_CLIENT_DIR%" >> "%BACKEND_LAUNCHER%"
+echo set "SIMULATION_ENABLED=%SIMULATION_ENABLED%" >> "%BACKEND_LAUNCHER%"
+echo set "DB_POLLER_ENABLED=%DB_POLLER_ENABLED%" >> "%BACKEND_LAUNCHER%"
+echo set "NO_PROXY=*" >> "%BACKEND_LAUNCHER%"
+echo set "no_proxy=*" >> "%BACKEND_LAUNCHER%"
+echo set "HTTP_PROXY=" >> "%BACKEND_LAUNCHER%"
+echo set "HTTPS_PROXY=" >> "%BACKEND_LAUNCHER%"
+echo venv\Scripts\python.exe main.py >> "%BACKEND_LAUNCHER%"
+start "FabTwin Backend" cmd /k "%BACKEND_LAUNCHER%"
 
 timeout /t 3 /nobreak >nul
 
