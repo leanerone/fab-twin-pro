@@ -11,6 +11,7 @@ echo  FabTwin Backend Only Start
 echo ================================================================
 echo.
 
+REM ----- Load env.bat -----
 if exist "%BASE_DIR%env.bat" (
     call "%BASE_DIR%env.bat"
 ) else (
@@ -27,13 +28,38 @@ echo   ORACLE_USER: %ORACLE_USER%
 echo   ORACLE_SERVICE: %ORACLE_SERVICE%
 echo.
 
+REM ----- Auto-create venv if missing -----
+cd /d "%BACKEND_DIR%"
+
 if not exist "%BACKEND_DIR%\venv\Scripts\python.exe" (
-    echo ERROR: backend venv not found
-    echo Please run deploy.bat first
-    pause
-    exit /b 1
+    echo [INFO] Backend venv not found, auto-creating...
+    where python >nul 2>&1
+    if errorlevel 1 (
+        echo ERROR: Python not found in PATH, cannot create venv
+        echo Please install Python 3.11+ first
+        pause
+        exit /b 1
+    )
+    python -m venv venv
+    if errorlevel 1 (
+        echo ERROR: Failed to create venv
+        pause
+        exit /b 1
+    )
+    echo [OK] venv created.
+    echo [INFO] Installing dependencies...
+    venv\Scripts\python.exe -m pip install --upgrade pip >nul 2>&1
+    venv\Scripts\pip.exe install -r requirements.txt
+    if errorlevel 1 (
+        echo ERROR: pip install failed
+        pause
+        exit /b 1
+    )
+    echo [OK] Dependencies installed.
+    echo.
 )
 
+REM ----- Check port -----
 netstat -ano | findstr ":8002 " | findstr "LISTENING" >nul
 if not errorlevel 1 (
     echo WARNING: Port 8002 already in use
@@ -43,6 +69,7 @@ if not errorlevel 1 (
 
 echo [1/1] Starting backend (FastAPI :8002)...
 
+REM Write launcher script with env vars
 set "BACKEND_LAUNCHER=%BACKEND_DIR%\_run_backend.bat"
 
 echo @echo off > "%BACKEND_LAUNCHER%"

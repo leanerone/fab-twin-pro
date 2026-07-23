@@ -56,7 +56,7 @@ copy /Y "%BASE_DIR%\sql\*.sql" "%DEPLOY_DIR%\sql\" >nul
 echo [4/8] Copying deploy scripts...
 copy /Y "%BASE_DIR%\deploy.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%BASE_DIR%\start-dev.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%BASE_DIR%\start_prod.bat" "%DEPLOY_DIR%\" >nul
+copy /Y "%BASE_DIR%\start_backend.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%BASE_DIR%\init_db.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%BASE_DIR%\create_user.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%BASE_DIR%\create_user.sql" "%DEPLOY_DIR%\" >nul
@@ -113,7 +113,7 @@ echo - frontend/        Frontend code + dist build + node_modules
 echo - sql/             Database init SQL
 echo - deploy.bat       One-click deploy script
 echo - start-dev.bat    Dev start script
-echo - start_prod.bat   Production start script
+echo - start_backend.bat Production start script
 echo - init_db.bat      DB init script
 echo - create_user.bat  Oracle user creation script
 echo.

@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
 REM ================================================================
 REM FabTwin One-Click Deployment Script
@@ -57,11 +57,11 @@ REM ----- Step 2: Load env.bat -----
 echo [2/6] Loading environment config...
 if exist "%BASE_DIR%\env.bat" (
     call "%BASE_DIR%\env.bat"
-    echo   DB_TYPE: !DB_TYPE!
-    echo   ORACLE_HOST: !ORACLE_HOST!
-    echo   ORACLE_USER: !ORACLE_USER!
-    echo   ORACLE_SERVICE: !ORACLE_SERVICE!
-    echo   ORACLE_CLIENT_DIR: !ORACLE_CLIENT_DIR!
+    echo   DB_TYPE: %DB_TYPE%
+    echo   ORACLE_HOST: %ORACLE_HOST%
+    echo   ORACLE_USER: %ORACLE_USER%
+    echo   ORACLE_SERVICE: %ORACLE_SERVICE%
+    echo   ORACLE_CLIENT_DIR: %ORACLE_CLIENT_DIR%
 ) else (
     echo   WARNING: env.bat not found, using defaults
     set "DB_TYPE=oracle"
@@ -80,18 +80,17 @@ if not exist "venv" (
         pause
         exit /b 1
     )
+    echo   venv created.
 )
 
 echo   Installing Python dependencies...
-call venv\Scripts\activate
-python -m pip install --upgrade pip >nul 2>&1
-pip install -r requirements.txt
+venv\Scripts\python.exe -m pip install --upgrade pip >nul 2>&1
+venv\Scripts\pip.exe install -r requirements.txt
 if errorlevel 1 (
     echo ERROR: pip install failed
     pause
     exit /b 1
 )
-call deactivate
 echo   Backend ready.
 echo.
 
@@ -132,41 +131,19 @@ REM ----- Step 6: Verify database connection -----
 echo [6/6] Testing database connection...
 cd /d "%BASE_DIR%"
 
-REM Create a temp test script
-set "TEST_SCRIPT=%BACKEND_DIR%\_test_db_conn.py"
-(
-echo import os
-echo os.environ['DB_TYPE'] = '!DB_TYPE!'
-echo os.environ['ORACLE_HOST'] = '!ORACLE_HOST!'
-echo os.environ['ORACLE_PORT'] = '!ORACLE_PORT!'
-echo os.environ['ORACLE_SERVICE'] = '!ORACLE_SERVICE!'
-echo os.environ['ORACLE_USER'] = '!ORACLE_USER!'
-echo os.environ['ORACLE_PASSWORD'] = '!ORACLE_PASSWORD!'
-echo os.environ['ORACLE_DSN_TYPE'] = '!ORACLE_DSN_TYPE!'
-echo os.environ['ORACLE_CLIENT_DIR'] = '!ORACLE_CLIENT_DIR!'
-echo from sqlalchemy import text
-echo from database import SessionLocal, engine
-echo print(f'Engine: {engine.url}')
-echo db = SessionLocal^(^)
-echo result = db.execute^(text^('SELECT 1 FROM DUAL'^)^)
-echo print^('Database connection: OK'^)
-echo db.close^(^)
-) > "%TEST_SCRIPT%"
-
-call "%BACKEND_DIR%\venv\Scripts\python.exe" "%TEST_SCRIPT%"
+call "backend\venv\Scripts\python.exe" backend\_test_db.py
 if errorlevel 1 (
     echo.
     echo WARNING: Database connection test failed
     echo Please check:
     echo   1. Oracle Client is installed and ORACLE_CLIENT_DIR is correct
     echo   2. Database credentials in env.bat are correct
-    echo   3. Network connectivity to !ORACLE_HOST!:!ORACLE_PORT!
+    echo   3. Network connectivity to %ORACLE_HOST%:%ORACLE_PORT%
     echo.
     echo You can still start the app, but database features may not work.
 ) else (
     echo   Database connection: OK
 )
-del "%TEST_SCRIPT%" 2>nul
 echo.
 
 REM ----- Done -----
@@ -176,7 +153,8 @@ echo ================================================================
 echo.
 echo  Next steps:
 echo   1. Review and modify env.bat for your production database
-echo   2. Run start_prod.bat to start the services
+echo   2. Run start_backend.bat to start backend only (IIS frontend)
+echo   3. Or run start-dev.bat to start both frontend and backend (dev mode)
 echo.
 pause
 endlocal
