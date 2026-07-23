@@ -2,8 +2,9 @@
 
 生产环境关键说明：
 - 量产Oracle中 event_ts_utc 多为 None，真实时间戳在 received_ts_utc
-- received_ts_utc 是 datetime 类型，不是字符串
-- 必须用 datetime 对象查询，不能用字符串，否则报 ORA-01843
+- received_ts_utc 是 VARCHAR2 类型，存储格式为 Oracle NLS 中文：
+  例如: "2026-7-23 下午12:01:14" (月/日不补零，12小时制+上午/下午)
+- 由于格式不统一且月日不补零，查询用 LIKE 前缀匹配日期，Python层精确过滤
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from datetime import datetime
 import json
 import re
 
-from database import get_db
+from database import get_db, DB_IS_SQLITE
 from models import DT_EVENT_RAW
 
 router = APIRouter(prefix="/api/history", tags=["history"])
@@ -21,45 +22,84 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 def _parse_ts(ts) -> Optional[datetime]:
     """将各种格式的时间戳转换为 datetime 对象
-    
-    支持格式：
-    - datetime 对象（直接返回）
-    - "2026-07-21T00:00:00" (ISO)
-    - "2026-07-21 00:00:00" (空格分隔)
-    - "2026-07-21T00:00:00.000Z" (带Z后缀)
-    - "2026-07-21" (仅日期)
+
+    支持格式（按优先级）：
+    1. datetime 对象（直接返回）
+    2. Oracle NLS 中文: "2026-7-23 下午12:01:14" / "2026-07-23 上午08:30:00"
+    3. "2026-07-21 00:00:00" (标准24小时制)
+    4. "2026-07-21T00:00:00" (ISO)
+    5. "2026-07-21T00:00:00.000Z" (带Z后缀)
+    6. "2026-07-21" (仅日期)
     """
     if not ts:
         return None
     if isinstance(ts, datetime):
         return ts
     ts = str(ts).strip()
-    # 去掉 Z 和时区后缀
-    ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
-    # 尝试多种格式
+    if not ts:
+        return None
+
+    # 先去掉 Z 和时区后缀
+    ts_clean = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
+
+    # 格式1: Oracle NLS 中文 "2026-7-23 下午12:01:14"
+    # 月日不补零，12小时制，上午/下午
+    nls_match = re.match(
+        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})$',
+        ts_clean
+    )
+    if nls_match:
+        year = int(nls_match.group(1))
+        month = int(nls_match.group(2))
+        day = int(nls_match.group(3))
+        ampm = nls_match.group(4)
+        hour = int(nls_match.group(5))
+        minute = int(nls_match.group(6))
+        second = int(nls_match.group(7))
+        # 12小时制转24小时制
+        if ampm == '下午' and hour != 12:
+            hour += 12
+        elif ampm == '上午' and hour == 12:
+            hour = 0
+        try:
+            return datetime(year, month, day, hour, minute, second)
+        except ValueError:
+            pass
+
+    # 格式2-5: 标准格式
     formats = [
         "%Y-%m-%d %H:%M:%S.%f",
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%d",
+        "%Y-%-m-%-d %H:%M:%S",  # 不补零的24小时制
     ]
     for fmt in formats:
         try:
-            return datetime.strptime(ts, fmt)
+            return datetime.strptime(ts_clean, fmt)
         except ValueError:
             continue
+
+    # 最后尝试：不补零的日期+时间（月日不补零，24小时制）
+    loose_match = re.match(
+        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$',
+        ts_clean
+    )
+    if loose_match:
+        try:
+            return datetime(
+                int(loose_match.group(1)),
+                int(loose_match.group(2)),
+                int(loose_match.group(3)),
+                int(loose_match.group(4)),
+                int(loose_match.group(5)),
+                int(loose_match.group(6)),
+            )
+        except ValueError:
+            pass
+
     return None
-
-
-def _format_ts_for_query(dt: datetime) -> str:
-    """将 datetime 转换为字符串，用于与 VARCHAR2 列比较
-    
-    Oracle VARCHAR2 存储格式混合：有 'YYYY-MM-DD HH:MM:SS' 也有 'YYYY-MM-DDTHH:MM:SS'
-    使用 'YYYY-MM-DD' 格式做前缀匹配比较更安全
-    对于范围查询，使用 'YYYY-MM-DDTHH:MM:SS' (ISO T格式)
-    """
-    return dt.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _normalize_ts(ts) -> str:
@@ -68,6 +108,40 @@ def _normalize_ts(ts) -> str:
     if dt is None:
         return ""
     return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _date_to_like_prefix(date_str: str) -> str:
+    """将 YYYY-MM-DD 转换为 LIKE 查询前缀
+    由于 Oracle NLS 格式月日不补零，需要匹配 "2026-7-23 " 和 "2026-07-23 "
+    返回多种可能的前缀列表
+    """
+    parts = date_str.split('-')
+    if len(parts) != 3:
+        return [f"{date_str}%"]
+    y, m, d = parts
+    mi = int(m)
+    di = int(d)
+    # 生成补零和不补零的组合
+    prefixes = [
+        f"{y}-{m}-{d} ",       # 都补零: 2026-07-23
+        f"{y}-{mi}-{di} ",     # 都不补零: 2026-7-23
+        f"{y}-{m}-{di} ",      # 月补零日不补零: 2026-07-23 (同第一个，但di可能一位)
+        f"{y}-{mi}-{d} ",      # 月不补零日补零: 2026-7-23 (同第二个，但d可能两位)
+    ]
+    # 去重
+    seen = set()
+    unique = []
+    for p in prefixes:
+        if p not in seen:
+            seen.add(p)
+            unique.append(p)
+    return unique
+
+
+def _get_ts_column():
+    """获取用于时间查询的列（优先 event_ts_utc，回退 received_ts_utc）"""
+    from sqlalchemy import func
+    return func.nvl(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
@@ -83,17 +157,16 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
     payload = _parse_vfei_payload(row.payload_json)
     event_name = payload.get("event_name", "UNKNOWN")
 
-    # 统一事件类型分类
     event_category = "other"
     if event_name == "EC_ALARM_REPORT":
         event_category = "alarm"
-    elif event_name in ("DETACH_POD_PLACE", "ATTACH_POD_PLACE", "POD_PLACED", "POD_REMOVED", 
+    elif event_name in ("DETACH_POD_PLACE", "ATTACH_POD_PLACE", "POD_PLACED", "POD_REMOVED",
                         "LOCK_PORT_COMPLETED", "UNLOCK_PORT_COMPLETED", "MVIN", "MVOU",
                         "POD_LOCK", "POD_UNLOCK", "READ_TAG", "WRITE_TAG",
                         "COMPLETED_PORT_LOCK", "COMPLETED_PORT_UNLOCK",
                         "READ_BATTERY", "OPEN_POD", "CLOSE_POD"):
         event_category = "pod"
-    elif event_name in ("STATE_CHANGE", "PROCESS_START", "PROCESS_END", 
+    elif event_name in ("STATE_CHANGE", "PROCESS_START", "PROCESS_END",
                         "DOOR_OPEN", "DOOR_CLOSE", "LOAD_CYCLE_STARTED", "LOAD_CYCLE_COMPLETED",
                         "UNLOAD_CYCLE_COMPLETED", "StartMapping_LEFT", "StartMapping_RIGHT",
                         "EndMapping", "Start", "PS", "PE", "WaferLoaded", "WaferUnloaded",
@@ -107,7 +180,6 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
                         "ACK_UI_DOUBLECHECK"):
         event_category = "process"
 
-    # 提取alarm信息
     alarm_info = None
     if event_category == "alarm":
         alarm_id = payload.get("alarm_id", "")
@@ -121,14 +193,12 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
             severity = "warn"
         elif alarm_id == "0411":
             severity = "info"
-
         alarm_info = {
             "alarm_id": alarm_id,
             "alarm_text": alarm_text,
             "severity": severity,
         }
 
-    # 优先使用 event_ts_utc，为空则回退 received_ts_utc
     ts_value = row.event_ts_utc or row.received_ts_utc
 
     return {
@@ -151,17 +221,6 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
     }
 
 
-def _get_ts_column():
-    """获取用于时间查询的列
-    
-    生产环境中 event_ts_utc 多为 None，使用 received_ts_utc 查询
-    Oracle 中这两个列是 VARCHAR2 类型，存储格式为 'YYYY-MM-DD HH:MM:SS'
-    使用 COALESCE + NVL 优先取 event_ts_utc，为空则取 received_ts_utc
-    """
-    from sqlalchemy import func
-    return func.nvl(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
-
-
 @router.get("/{tool_id}")
 def get_history(
     tool_id: str,
@@ -176,31 +235,66 @@ def get_history(
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
     ts_col = _get_ts_column()
-    if start_time:
-        start_dt = _parse_ts(start_time)
-        if start_dt:
-            query = query.filter(ts_col >= _format_ts_for_query(start_dt))
-    if end_time:
-        end_dt = _parse_ts(end_time)
-        if end_dt:
-            query = query.filter(ts_col <= _format_ts_for_query(end_dt))
 
-    query = query.order_by(ts_col.asc())
-    total = query.count()
-    rows = query.offset(offset).limit(limit).all()
+    # 对于 VARCHAR2 列的时间范围查询：
+    # 先用 LIKE 前缀匹配缩小范围（按日期），再在 Python 层精确过滤
+    start_dt = _parse_ts(start_time) if start_time else None
+    end_dt = _parse_ts(end_time) if end_time else None
 
-    events = [_event_to_dict(r) for r in rows]
+    # 日期前缀匹配（减少数据量）
+    if start_dt:
+        date_str = start_dt.strftime("%Y-%m-%d")
+        prefixes = _date_to_like_prefix(date_str)
+        or_conditions = [ts_col.like(p) for p in prefixes]
+        query = query.filter(or_(*or_conditions))
+    if end_dt:
+        # end_date 也加前缀匹配
+        date_str = end_dt.strftime("%Y-%m-%d")
+        prefixes = _date_to_like_prefix(date_str)
+        or_conditions = [ts_col.like(p) for p in prefixes]
+        # 注意：如果有 start 和 end 且在同一天，用 AND；跨天的话需要 OR
+        # 这里简单处理：只按 end 日期过滤，精确范围在 Python 层做
+        # 更稳妥的方式是不在这里限制 end，让 Python 层处理
+        pass
 
-    # 如果有过滤条件，在Python层过滤
-    if event_category:
-        events = [e for e in events if e["event_category"] == event_category]
+    # 按 raw_id 降序（通常 raw_id 递增，近似时间顺序）
+    # 由于 VARCHAR2 时间格式不统一，无法可靠 ORDER BY
+    query = query.order_by(DT_EVENT_RAW.raw_id.desc())
+
+    # 多取一些数据，在 Python 层过滤后分页
+    fetch_limit = min(limit * 10 + offset, 5000)
+    rows = query.limit(fetch_limit).all()
+
+    # Python 层解析和过滤
+    events = []
+    for r in rows:
+        ev = _event_to_dict(r)
+        ts = ev.get("timestamp", "")
+        if not ts:
+            continue
+        ev_dt = _parse_ts(ts)
+        if not ev_dt:
+            continue
+        if start_dt and ev_dt < start_dt:
+            continue
+        if end_dt and ev_dt > end_dt:
+            continue
+        if event_category and ev["event_category"] != event_category:
+            continue
+        events.append(ev)
+
+    # 按时间正序
+    events.sort(key=lambda e: e["timestamp"])
+
+    total = len(events)
+    paged = events[offset:offset + limit]
 
     return {
         "tool_id": tool_id,
         "total": total,
         "limit": limit,
         "offset": offset,
-        "events": events,
+        "events": paged,
     }
 
 
@@ -214,30 +308,30 @@ def get_timeline(
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    # VARCHAR2 列存储 ISO T 格式 'YYYY-MM-DDTHH:MM:SS'，用字符串前缀比较
-    start_str = f"{date}T00:00:00"
-    end_str = f"{date}T23:59:59"
-
+    # 用 LIKE 前缀匹配当天数据
     ts_col = _get_ts_column()
+    prefixes = _date_to_like_prefix(date)
+    or_conditions = [ts_col.like(p) for p in prefixes]
+
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(ts_col >= start_str)
-        .filter(ts_col <= end_str)
-        .order_by(ts_col.asc())
+        .filter(or_(*or_conditions))
+        .order_by(DT_EVENT_RAW.raw_id.asc())
+        .limit(5000)
         .all()
     )
 
-    # 按小时聚合
+    # 按小时聚合（在 Python 层解析时间）
     hours = {h: {"alarm": 0, "pod": 0, "process": 0, "other": 0, "events": []} for h in range(24)}
 
     for row in rows:
         ev = _event_to_dict(row)
         ts = ev.get("timestamp", "")
-        try:
-            hour = int(ts[11:13]) if len(ts) >= 13 else 0
-        except:
-            hour = 0
+        dt = _parse_ts(ts)
+        if not dt:
+            continue
+        hour = dt.hour
 
         cat = ev["event_category"]
         if 0 <= hour < 24:
@@ -279,24 +373,19 @@ def get_alarm_history(
     db: Session = Depends(get_db),
 ):
     """获取机台Alarm历史记录"""
-    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
-
-    ts_col = _get_ts_column()
-    if start_time:
-        start_dt = _parse_ts(start_time)
-        if start_dt:
-            query = query.filter(ts_col >= _format_ts_for_query(start_dt))
-    if end_time:
-        end_dt = _parse_ts(end_time)
-        if end_dt:
-            query = query.filter(ts_col <= _format_ts_for_query(end_dt))
-
-    query = query.order_by(ts_col.desc())
-    rows = query.limit(limit * 3).all()
+    # 先查历史事件，在 Python 层过滤 alarm
+    result = get_history(
+        tool_id=tool_id,
+        start_time=start_time,
+        end_time=end_time,
+        event_category="alarm",
+        limit=limit * 3,
+        offset=0,
+        db=db,
+    )
 
     alarms = []
-    for row in rows:
-        ev = _event_to_dict(row)
+    for ev in result["events"]:
         if ev["event_category"] == "alarm" and ev.get("alarm"):
             alarm = ev["alarm"]
             if severity and alarm.get("severity") != severity:
@@ -338,29 +427,21 @@ def get_event_detail(
 
     ev = _event_to_dict(row)
 
-    # 查找前后事件（用于连续回放）
-    ts_col = _get_ts_column()
-    current_ts = row.event_ts_utc or row.received_ts_utc
-    # VARCHAR2 列，直接用字符串比较
-    current_ts_str = _normalize_ts(current_ts) if current_ts else None
-
-    prev_row = None
-    next_row = None
-    if current_ts_str:
-        prev_row = (
-            db.query(DT_EVENT_RAW)
-            .filter(DT_EVENT_RAW.tool_id == tool_id)
-            .filter(ts_col < current_ts_str)
-            .order_by(ts_col.desc())
-            .first()
-        )
-        next_row = (
-            db.query(DT_EVENT_RAW)
-            .filter(DT_EVENT_RAW.tool_id == tool_id)
-            .filter(ts_col > current_ts_str)
-            .order_by(ts_col.asc())
-            .first()
-        )
+    # 查找前后事件（用 raw_id 近似，因为时间格式不统一）
+    prev_row = (
+        db.query(DT_EVENT_RAW)
+        .filter(DT_EVENT_RAW.tool_id == tool_id)
+        .filter(DT_EVENT_RAW.raw_id < raw_id)
+        .order_by(DT_EVENT_RAW.raw_id.desc())
+        .first()
+    )
+    next_row = (
+        db.query(DT_EVENT_RAW)
+        .filter(DT_EVENT_RAW.tool_id == tool_id)
+        .filter(DT_EVENT_RAW.raw_id > raw_id)
+        .order_by(DT_EVENT_RAW.raw_id.asc())
+        .first()
+    )
 
     ev["prev_event_id"] = prev_row.raw_id if prev_row else None
     ev["next_event_id"] = next_row.raw_id if next_row else None

@@ -28,9 +28,10 @@ _running = False
 
 def _parse_ts(ts) -> datetime:
     """将各种格式的时间戳转换为 datetime 对象
-    
+
     支持格式：
     - datetime 对象（直接返回）
+    - Oracle NLS 中文: "2026-7-23 下午12:01:14"
     - "2026-07-21T00:00:00" (ISO)
     - "2026-07-21 00:00:00" (空格分隔)
     - "2026-07-21T00:00:00.000Z" (带Z后缀)
@@ -40,7 +41,32 @@ def _parse_ts(ts) -> datetime:
     if isinstance(ts, datetime):
         return ts
     ts = str(ts).strip()
-    ts = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
+    if not ts:
+        return datetime.min
+    ts_clean = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
+
+    # Oracle NLS 中文格式 "2026-7-23 下午12:01:14"
+    nls_match = re.match(
+        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})$',
+        ts_clean
+    )
+    if nls_match:
+        year = int(nls_match.group(1))
+        month = int(nls_match.group(2))
+        day = int(nls_match.group(3))
+        ampm = nls_match.group(4)
+        hour = int(nls_match.group(5))
+        minute = int(nls_match.group(6))
+        second = int(nls_match.group(7))
+        if ampm == '下午' and hour != 12:
+            hour += 12
+        elif ampm == '上午' and hour == 12:
+            hour = 0
+        try:
+            return datetime(year, month, day, hour, minute, second)
+        except ValueError:
+            pass
+
     formats = [
         "%Y-%m-%d %H:%M:%S.%f",
         "%Y-%m-%d %H:%M:%S",
@@ -50,9 +76,28 @@ def _parse_ts(ts) -> datetime:
     ]
     for fmt in formats:
         try:
-            return datetime.strptime(ts, fmt)
+            return datetime.strptime(ts_clean, fmt)
         except ValueError:
             continue
+
+    # 月日不补零的24小时制
+    loose_match = re.match(
+        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$',
+        ts_clean
+    )
+    if loose_match:
+        try:
+            return datetime(
+                int(loose_match.group(1)),
+                int(loose_match.group(2)),
+                int(loose_match.group(3)),
+                int(loose_match.group(4)),
+                int(loose_match.group(5)),
+                int(loose_match.group(6)),
+            )
+        except ValueError:
+            pass
+
     return datetime.min
 
 
