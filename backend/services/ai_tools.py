@@ -8,11 +8,12 @@
     "table_data": {"headers": [...], "rows": [...]}  # 表格数据（可选）
 }
 
-数据源优先级：
-1. DT_EVENT_RAW（21万条真实VFEI事件）→ 机台状态/事件时间线/告警
-2. lots（567条真实批次）→ Lot查询/产量统计
-3. recipes（76条真实配方）→ 工艺配方
-4. machines（56台机台主数据）→ 基础信息（id/name/state）
+数据源（生产环境真实数据）：
+1. DT_EVENT_RAW（21万条 VFEI 事件）→ 机台状态/事件时间线/告警/Lot 提取
+2. DT_EVENT_RAW_CUR（当前事件快照）→ 实时状态补充
+3. machines（机台主数据）→ 仅 id/name/state 基础信息
+
+注意：lots/alarms/recipes/DT_ALARM_EVENT/DT_STATE_SNAPSHOT 均为假数据，不查询
 """
 import json
 import re
@@ -20,11 +21,7 @@ from datetime import datetime
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from models import (
-    Machine, Lot, Recipe, Alarm,
-    DT_EVENT_RAW, DT_EVENT_RAW_CUR,
-    DT_STATE_SNAPSHOT, DT_ALARM_EVENT,
-)
+from models import Machine, DT_EVENT_RAW
 
 
 def _parse_payload(payload_json: str) -> dict:
@@ -243,42 +240,56 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
 
 
 def _get_alarms_fallback(db: Session, machine_id: str = None, limit: int = 20) -> dict:
-    """告警查询回退：使用 alarms 表"""
-    q = db.query(Alarm)
-    if machine_id:
-        q = q.filter(Alarm.machine_id == machine_id)
-    alarms = q.order_by(Alarm.timestamp.desc()).limit(limit).all()
+    """告警查询回退：用 Python 解析 payload（兼容 Oracle 10g，不查假数据 alarms 表）"""
+    tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
+
+    q = db.query(DT_EVENT_RAW)
+    if tool_ids:
+        q = q.filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    events = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(limit * 5).all()
+
+    alarms = []
+    for e in events:
+        payload = _parse_payload(e.payload_json)
+        alarm_code = payload.get("alarm_code")
+        if alarm_code and alarm_code.upper() not in ("NULL", ""):
+            alarms.append({
+                "timestamp": e.received_ts_utc,
+                "tool_id": e.tool_id,
+                "alarm_code": alarm_code,
+                "alarm_text": payload.get("alarm_text", ""),
+                "lot_id": payload.get("lot_id", ""),
+            })
+            if len(alarms) >= limit:
+                break
 
     if not alarms:
         scope = f"机台 {machine_id}" if machine_id else "全厂"
         return {"answer": f"{scope} 暂无告警记录。", "sql": ""}
 
     scope = f"机台 {machine_id}" if machine_id else "全厂"
-    crit = sum(1 for a in alarms if a.level == "crit")
-    warn = sum(1 for a in alarms if a.level == "warn")
-    unresolved = sum(1 for a in alarms if not a.resolved)
+    answer = f"{scope} 告警统计（从事件流提取）：\n"
+
+    code_counts = {}
+    for a in alarms:
+        code_counts[a["alarm_code"]] = code_counts.get(a["alarm_code"], 0) + 1
+    answer += "• 告警类型分布：\n"
+    for code, cnt in sorted(code_counts.items(), key=lambda x: -x[1]):
+        answer += f"  {code}: {cnt} 次\n"
 
     table_data = {
-        "headers": ["时间", "描述", "等级", "状态"],
+        "headers": ["时间", "机台", "告警代码", "描述", "Lot"],
         "rows": [
-            [a.timestamp, a.description, a.level, "未解决" if not a.resolved else "已解决"]
+            [a["timestamp"], a["tool_id"], a["alarm_code"], a["alarm_text"], a["lot_id"]]
             for a in alarms[:10]
         ],
     }
 
-    answer = (
-        f"{scope} 告警统计（最近{len(alarms)}条）：\n"
-        f"• 严重：{crit} 条\n"
-        f"• 警告：{warn} 条\n"
-        f"• 未解决：{unresolved} 条\n\n"
-        f"最近 10 条告警见下表。"
-    )
-
     return {
         "answer": answer,
-        "sql": f"SELECT * FROM alarms{' WHERE machine_id=' + repr(machine_id) if machine_id else ''} ORDER BY timestamp DESC",
+        "sql": "",
         "table_data": table_data,
-        "jump_timestamp": alarms[0].timestamp if alarms else None,
+        "jump_timestamp": alarms[0]["timestamp"] if alarms else None,
     }
 
 
@@ -345,179 +356,240 @@ def get_event_timeline(db: Session, machine_id: str = None, limit: int = 20) -> 
     }
 
 
-# ==================== 工具4: 产量统计 ====================
+# ==================== 工具4: 产量统计（从 DT_EVENT_RAW 聚合） ====================
 
 def get_yield_stats(db: Session, machine_id: str = None) -> dict:
-    """查询产量统计（从 lots 表取真实数据）"""
-    q = db.query(Lot)
-    if machine_id:
-        q = q.filter(Lot.machine_id == machine_id)
-    lots = q.all()
+    """查询产量统计（从 DT_EVENT_RAW 的 lot_id 字段聚合真实数据）"""
+    tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
 
-    if not lots:
-        scope = f"机台 {machine_id}" if machine_id else "全厂"
-        return {"answer": f"{scope} 暂无 Lot 记录。", "sql": ""}
+    # 从 DT_EVENT_RAW 提取唯一 lot_id
+    try:
+        if tool_ids:
+            sql = text("""
+                SELECT DISTINCT JSON_VALUE(payload_json, '$.lot_id') as lot_id,
+                       tool_id
+                FROM dt_event_raw
+                WHERE tool_id IN :tool_ids
+                  AND payload_json LIKE '%"lot_id":%'
+                  AND JSON_VALUE(payload_json, '$.lot_id') IS NOT NULL
+                  AND JSON_VALUE(payload_json, '$.lot_id') NOT IN ('NULL', 'null', '')
+            """)
+            rows = db.execute(sql, {"tool_ids": tuple(tool_ids) if len(tool_ids) > 1 else tool_ids[0]}).fetchall()
+        else:
+            sql = text("""
+                SELECT DISTINCT JSON_VALUE(payload_json, '$.lot_id') as lot_id,
+                       tool_id
+                FROM dt_event_raw
+                WHERE payload_json LIKE '%"lot_id":%'
+                  AND JSON_VALUE(payload_json, '$.lot_id') IS NOT NULL
+                  AND JSON_VALUE(payload_json, '$.lot_id') NOT IN ('NULL', 'null', '')
+                  AND rownum <= 10000
+            """)
+            rows = db.execute(sql).fetchall()
+    except Exception as e:
+        # JSON_VALUE 不支持（Oracle 10g），用 Python 解析
+        return _get_yield_stats_fallback(db, machine_id)
 
-    lot_count = len(lots)
-    done = sum(1 for l in lots if l.status == "done")
-    processing = sum(1 for l in lots if l.status == "processing")
-    pending = sum(1 for l in lots if l.status == "pending")
-    total_wafers = sum(l.wafer_count for l in lots if l.wafer_count)
+    # 统计唯一 lot_id
+    lot_ids = set()
+    lot_tools = {}  # lot_id -> [tool_ids]
+    for r in rows:
+        lot = r.lot_id
+        if lot and lot.upper() not in ("NULL", ""):
+            lot_ids.add(lot)
+            if lot not in lot_tools:
+                lot_tools[lot] = set()
+            lot_tools[lot].add(r.tool_id)
 
+    lot_count = len(lot_ids)
     scope = f"机台 {machine_id}" if machine_id else "全厂"
 
-    # 最近 5 个 Lot
-    recent_q = db.query(Lot)
-    if machine_id:
-        recent_q = recent_q.filter(Lot.machine_id == machine_id)
-    recent_lots = recent_q.order_by(Lot.start_time.desc()).limit(5).all()
+    if lot_count == 0:
+        return {"answer": f"{scope} 暂无 Lot 记录。", "sql": ""}
 
+    # 统计每个机台处理的 Lot 数
+    tool_lot_counts = {}
+    for lot, tools in lot_tools.items():
+        for t in tools:
+            tool_lot_counts[t] = tool_lot_counts.get(t, 0) + 1
+
+    answer = (
+        f"{scope} 产量统计（从事件流提取真实数据）：\n"
+        f"• Lot 批次：{lot_count} 个（唯一 lot_id）\n"
+    )
+    if machine_id:
+        answer += f"• 机台：{machine_id}\n"
+    else:
+        # 全厂统计时，显示各机台 Lot 数量
+        answer += f"\n各机台 Lot 数量：\n"
+        for tid, cnt in sorted(tool_lot_counts.items(), key=lambda x: -x[1])[:10]:
+            answer += f"  {tid}: {cnt} 个\n"
+
+    # 最近 10 个 Lot 的表格
+    recent_lots = list(lot_ids)[:10]
     table_data = {
-        "headers": ["Lot ID", "机台", "产品", "晶圆数", "状态", "开始时间"],
+        "headers": ["Lot ID", "关联机台"],
         "rows": [
-            [l.id, l.machine_id, l.product, l.wafer_count, l.status, l.start_time]
-            for l in recent_lots
+            [lot, ", ".join(lot_tools.get(lot, set()))]
+            for lot in recent_lots
         ],
     }
 
-    answer = (
-        f"{scope} 产量统计（真实数据）：\n"
-        f"• Lot 批次：{lot_count} 个\n"
-        f"• 已完成：{done} 个\n"
-        f"• 加工中：{processing} 个\n"
-        f"• 等待中：{pending} 个\n"
-        f"• 累计晶圆：{total_wafers} 片\n\n"
-        f"最近 5 个 Lot 见下表。"
-    )
-
-    where = f" WHERE machine_id='{machine_id}'" if machine_id else ""
     return {
         "answer": answer,
-        "sql": f"SELECT COUNT(*), SUM(wafer_count) FROM lots{where}",
+        "sql": "SELECT DISTINCT lot_id FROM dt_event_raw payload_json",
         "table_data": table_data,
     }
 
 
-# ==================== 工具5: Lot 查询 ====================
+def _get_yield_stats_fallback(db: Session, machine_id: str = None) -> dict:
+    """产量统计回退：用 Python 解析 payload（兼容 Oracle 10g）"""
+    tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
+
+    q = db.query(DT_EVENT_RAW)
+    if tool_ids:
+        q = q.filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    events = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
+
+    lot_ids = set()
+    lot_tools = {}
+    for e in events:
+        payload = _parse_payload(e.payload_json)
+        lot = payload.get("lot_id")
+        if lot and lot.upper() not in ("NULL", ""):
+            lot_ids.add(lot)
+            if lot not in lot_tools:
+                lot_tools[lot] = set()
+            lot_tools[lot].add(e.tool_id)
+
+    lot_count = len(lot_ids)
+    scope = f"机台 {machine_id}" if machine_id else "全厂"
+
+    if lot_count == 0:
+        return {"answer": f"{scope} 暂无 Lot 记录。", "sql": ""}
+
+    answer = f"{scope} 产量统计（从事件流提取）：\n• Lot 批次：{lot_count} 个\n"
+
+    table_data = {
+        "headers": ["Lot ID", "关联机台"],
+        "rows": [[lot, ", ".join(lot_tools.get(lot, set()))] for lot in list(lot_ids)[:10]],
+    }
+
+    return {"answer": answer, "sql": "", "table_data": table_data}
+
+
+# ==================== 工具5: Lot 查询（从 DT_EVENT_RAW 提取） ====================
 
 def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None) -> dict:
-    """查询 Lot 信息（从 lots 表 + DT_EVENT_RAW 事件）"""
+    """查询 Lot 信息（从 DT_EVENT_RAW 的 payload 提取）"""
     if lot_id:
-        # 查指定 Lot
-        lot = db.query(Lot).filter(Lot.id == lot_id).first()
-        if lot:
-            status_cn = {
-                "done": "已完成", "processing": "加工中",
-                "pending": "等待中", "hold": "暂停"
-            }.get(lot.status, lot.status)
+        # 从 DT_EVENT_RAW 查该 Lot 的所有事件
+        events = db.query(DT_EVENT_RAW).filter(
+            DT_EVENT_RAW.payload_json.like(f'%{lot_id}%')
+        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(50).all()
 
-            answer = (
-                f"Lot {lot.id} 详情：\n"
-                f"• 机台：{lot.machine_id}\n"
-                f"• 产品：{lot.product}\n"
-                f"• 晶圆数：{lot.wafer_count} 片\n"
-                f"• 状态：{status_cn}\n"
-                f"• 开始时间：{lot.start_time}\n"
-                f"• 结束时间：{lot.end_time or '进行中'}\n"
-                f"• 工艺配方：{lot.recipe_id or '未指定'}"
-            )
+        if not events:
+            return {"answer": f"未找到 Lot {lot_id} 的相关事件。", "sql": ""}
 
-            # 从 DT_EVENT_RAW 查该 Lot 的事件记录
-            try:
-                events = db.query(DT_EVENT_RAW).filter(
-                    DT_EVENT_RAW.payload_json.like(f'%{lot_id}%')
-                ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(5).all()
-                if events:
-                    answer += f"\n\n相关事件（最近 {len(events)} 条）："
-                    for e in events:
-                        p = _parse_payload(e.payload_json)
-                        answer += f"\n  • {e.received_ts_utc} - {p.get('event_name', '')} ({e.tool_id})"
-            except Exception:
-                pass
+        # 从第一个事件提取基本信息
+        first_event = events[0]
+        payload = _parse_payload(first_event.payload_json)
 
-            return {
-                "answer": answer,
-                "sql": f"SELECT * FROM lots WHERE id='{lot_id}'",
-                "jump_timestamp": lot.start_time,
-            }
-        return {"answer": f"未找到 Lot {lot_id}。", "sql": ""}
+        answer = f"Lot {lot_id} 详情（从事件流提取）：\n"
+        answer += f"• 关联机台：{first_event.tool_id}\n"
+        if not _is_null(payload.get("cassette_id")):
+            answer += f"• Cassette：{payload.get('cassette_id')}\n"
+        if not _is_null(payload.get("pod_id")):
+            answer += f"• POD：{payload.get('pod_id')}\n"
+        if not _is_null(payload.get("machine_state")):
+            answer += f"• 最后状态：{payload.get('machine_state')}\n"
+        if not _is_null(payload.get("machine_mode")):
+            answer += f"• 运行模式：{payload.get('machine_mode')}\n"
 
-    # 未指定 Lot ID，列出最近的
-    q = db.query(Lot)
-    if machine_id:
-        q = q.filter(Lot.machine_id == machine_id)
-    lots = q.order_by(Lot.id.desc()).limit(10).all()
+        # 统计涉及的机台
+        tools = set(e.tool_id for e in events)
+        if len(tools) > 1:
+            answer += f"• 涉及机台：{', '.join(tools)}\n"
 
-    if not lots:
+        # 最近 10 条事件
+        answer += f"\n最近 {min(10, len(events))} 条事件："
+        table_data = {
+            "headers": ["时间", "机台", "事件", "状态"],
+            "rows": [],
+        }
+        for e in events[:10]:
+            p = _parse_payload(e.payload_json)
+            table_data["rows"].append([
+                e.received_ts_utc,
+                e.tool_id,
+                p.get("event_name", ""),
+                p.get("machine_state", ""),
+            ])
+
+        return {
+            "answer": answer,
+            "sql": f"SELECT * FROM dt_event_raw WHERE payload_json LIKE '%{lot_id}%'",
+            "table_data": table_data,
+            "jump_timestamp": events[0].received_ts_utc if events else None,
+        }
+
+    # 未指定 Lot ID，从 DT_EVENT_RAW 聚合最近 Lot
+    tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
+
+    q = db.query(DT_EVENT_RAW)
+    if tool_ids:
+        q = q.filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    events = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(1000).all()
+
+    # 提取唯一 lot_id
+    lot_set = {}
+    for e in events:
+        payload = _parse_payload(e.payload_json)
+        lot = payload.get("lot_id")
+        if lot and lot.upper() not in ("NULL", ""):
+            if lot not in lot_set:
+                lot_set[lot] = {"tool_id": e.tool_id, "ts": e.received_ts_utc}
+
+    if not lot_set:
         return {"answer": "未找到相关 Lot 记录。", "sql": ""}
 
     table_data = {
-        "headers": ["Lot ID", "机台", "产品", "状态", "开始时间"],
-        "rows": [
-            [l.id, l.machine_id, l.product, l.status, l.start_time]
-            for l in lots
-        ],
+        "headers": ["Lot ID", "机台", "最后事件时间"],
+        "rows": [[lot, info["tool_id"], info["ts"]] for lot, info in list(lot_set.items())[:10]],
     }
 
-    answer = f"最近 {len(lots)} 个 Lot：\n"
-    answer += "（点击下方表格或输入 Lot ID 查看详情）"
+    answer = f"最近 {len(lot_set)} 个 Lot：\n（点击下方表格或输入 Lot ID 查看详情）"
 
     return {
         "answer": answer,
-        "sql": "SELECT * FROM lots ORDER BY start_time DESC LIMIT 10",
+        "sql": "SELECT DISTINCT lot_id FROM dt_event_raw",
         "table_data": table_data,
-        "jump_timestamp": lots[0].start_time if lots else None,
+        "jump_timestamp": list(lot_set.values())[0]["ts"] if lot_set else None,
     }
 
 
-# ==================== 工具6: 工艺配方 ====================
+# ==================== 工具6: 工艺配方（无真实数据，返回提示） ====================
 
 def get_recipe_info(db: Session, machine_id: str = None) -> dict:
-    """查询工艺配方（从 recipes 表取真实数据，不再硬编码）"""
-    if not machine_id:
-        # 列出所有配方类型
-        recipes = db.query(Recipe).all()
-        if not recipes:
-            return {"answer": "配方表为空。", "sql": ""}
-
-        # 按工艺类型分组统计
-        type_counts = {}
-        for r in recipes:
-            t = r.process_type or "未分类"
-            type_counts[t] = type_counts.get(t, 0) + 1
-
-        answer = f"共有 {len(recipes)} 个配方，按工艺类型分布：\n"
-        for t, cnt in sorted(type_counts.items(), key=lambda x: -x[1]):
-            answer += f"  • {t}: {cnt} 个\n"
-        answer += "\n请指定机台 ID 查看具体配方。"
-        return {"answer": answer, "sql": "SELECT process_type, COUNT(*) FROM recipes GROUP BY process_type"}
-
-    # 查指定机台的配方
-    recipes = db.query(Recipe).filter(Recipe.machine_id == machine_id).all()
-    if not recipes:
-        # 尝试模糊匹配（如 WAT-01 匹配 REC-ETCH-A-WAT-01）
-        recipes = db.query(Recipe).filter(
-            Recipe.id.like(f"%{machine_id}%")
-        ).all()
-
-    if not recipes:
-        return {"answer": f"机台 {machine_id} 暂无配方数据。\n\n（配方需在 MES/RCMS 系统中下发）", "sql": ""}
-
-    answer = f"机台 {machine_id} 工艺配方（共 {len(recipes)} 个）：\n\n"
-    table_data = {
-        "headers": ["配方ID", "名称", "温度(°C)", "压力(Pa)", "RF功率(W)", "气体(sccm)", "时间(秒)"],
-        "rows": [],
-    }
-    for r in recipes:
-        answer += f"• {r.name or r.id}：{r.temperature}°C / {r.pressure}Pa / {r.rf_power}W\n"
-        table_data["rows"].append([
-            r.id, r.name, r.temperature, r.pressure, r.rf_power, r.gas_flow, r.process_time
-        ])
+    """查询工艺配方（生产环境无真实配方数据，返回提示）"""
+    if machine_id:
+        return {
+            "answer": (
+                f"机台 {machine_id} 的工艺配方信息：\n\n"
+                f"当前系统仅采集 VFEI 事件流，不包含配方参数数据。\n"
+                f"请查询 MES 或 RCMS 系统获取详细配方参数。\n\n"
+                f"如有需要，可将配方数据接入 Oracle 后再提供查询。"
+            ),
+            "sql": "",
+        }
 
     return {
-        "answer": answer,
-        "sql": f"SELECT * FROM recipes WHERE machine_id='{machine_id}'",
-        "table_data": table_data,
+        "answer": (
+            "工艺配方查询：\n\n"
+            "当前系统仅采集 VFEI 事件流（POD 开盖/关盖等），不包含工艺配方参数。\n"
+            "请查询 MES 或 RCMS 系统获取配方详情。"
+        ),
+        "sql": "",
     }
 
 
