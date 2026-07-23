@@ -83,8 +83,15 @@ export function useWebSocket() {
       if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
         return
       }
-      // 通过 Vite proxy 代理 ws（避免直连后端跨端口被浏览器阻止）
-      const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/realtime`
+      // WebSocket 连接策略：
+      // - IIS 部署（port 80/443）：URL Rewrite 不支持 WebSocket 升级握手，直连后端 8002
+      // - Vite dev/preview（其他端口）：走 Vite proxy（原生支持 ws 升级）
+      const isIIS = (location.port === '80' || location.port === '443' || location.port === '')
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = isIIS
+        ? `${wsProto}//${location.hostname}:8002/ws/realtime`
+        : `${wsProto}//${location.host}/ws/realtime`
+      console.log('[WS] Connecting to:', wsUrl, isIIS ? '(IIS mode, direct to backend)' : '(Vite proxy mode)')
       try {
         this.ws = new WebSocket(wsUrl)
       } catch (e) {

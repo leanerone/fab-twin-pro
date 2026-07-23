@@ -94,9 +94,19 @@ echo.
 echo [4/8] Installing Python dependencies...
 echo   This may take a few minutes...
 venv\Scripts\python.exe -m pip install --upgrade pip >nul 2>&1
-venv\Scripts\pip.exe install -r requirements.txt
+
+REM 离线安装：检测 wheels 目录，优先用离线包（内网环境必须）
+if exist "wheels" (
+    echo   Found wheels directory, installing OFFLINE...
+    venv\Scripts\pip.exe install --no-index --find-links=wheels -r requirements.txt
+) else (
+    echo   No wheels directory, installing ONLINE...
+    venv\Scripts\pip.exe install -r requirements.txt
+)
 if errorlevel 1 (
     echo [ERROR] pip install failed
+    echo   If offline: ensure wheels directory exists with all packages
+    echo   If online: check network connection
     pause
     exit /b 1
 )

@@ -40,7 +40,13 @@ if not exist "venv\Scripts\python.exe" (
     )
     echo [INFO] Installing dependencies...
     venv\Scripts\python.exe -m pip install --upgrade pip >nul 2>&1
-    venv\Scripts\pip.exe install -r requirements.txt
+    if exist "wheels" (
+        echo   Found wheels directory, installing OFFLINE...
+        venv\Scripts\pip.exe install --no-index --find-links=wheels -r requirements.txt
+    ) else (
+        echo   No wheels directory, installing ONLINE...
+        venv\Scripts\pip.exe install -r requirements.txt
+    )
     if errorlevel 1 (
         echo ERROR: pip install failed
         pause
