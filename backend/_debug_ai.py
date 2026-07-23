@@ -245,12 +245,35 @@ def check_dt_alarm_event(db, machine_id=None):
     for r in rows:
         print(f"  {r.alarm_severity}: {r.cnt} 条")
 
-    # 前 5 条样例
-    q = db.query(DT_ALARM_EVENT)
-    if machine_id:
-        q = q.filter(DT_ALARM_EVENT.tool_id == machine_id)
-    alarms = q.order_by(DT_ALARM_EVENT.start_ts_utc.desc()).limit(5).all()
-    _print_list(alarms, f"最近告警 machine={machine_id or 'ALL'}")
+    # 前 5 条样例（用原生 SQL 避免 duration_sec Integer 类型转换崩溃）
+    from sqlalchemy import text
+    print(f"\n最近告警样例（machine={machine_id or 'ALL'}）：")
+    try:
+        if machine_id:
+            sql = text(
+                "SELECT alarm_event_id, tool_id, alarm_code, alarm_severity, "
+                "start_ts_utc, end_ts_utc, TO_CHAR(duration_sec) as duration_sec, "
+                "cycle_id, lot_id "
+                "FROM dt_alarm_event WHERE tool_id = :tid "
+                "ORDER BY start_ts_utc DESC FETCH FIRST 5 ROWS ONLY"
+            )
+            rows = db.execute(sql, {"tid": machine_id}).fetchall()
+        else:
+            sql = text(
+                "SELECT alarm_event_id, tool_id, alarm_code, alarm_severity, "
+                "start_ts_utc, end_ts_utc, TO_CHAR(duration_sec) as duration_sec, "
+                "cycle_id, lot_id "
+                "FROM dt_alarm_event ORDER BY start_ts_utc DESC FETCH FIRST 5 ROWS ONLY"
+            )
+            rows = db.execute(sql).fetchall()
+        for i, r in enumerate(rows):
+            print(f"  #{i+1}: id={r.alarm_event_id}, tool={r.tool_id}, code={r.alarm_code}, "
+                  f"severity={r.alarm_severity}, start={r.start_ts_utc}, end={r.end_ts_utc}, "
+                  f"duration={r.duration_sec}, lot={r.lot_id}")
+    except Exception as e:
+        print(f"  ⚠️ 原生SQL查询也失败: {e}")
+        print(f"  ℹ️ 这说明 DT_ALARM_EVENT.duration_sec 列在 Oracle 中是 NUMBER 类型且有浮点值，")
+        print(f"     但 models.py 里定义为 Integer，需要后续改为 Float")
 
 
 def check_lots_and_recipes(db, machine_id=None):
