@@ -70,6 +70,21 @@ if errorlevel 1 (
 )
 
 echo.
+echo [4.5/8] Checking WebSocket Protocol feature...
+reg query "HKLM\SOFTWARE\Microsoft\InetStp\Components" /v "WebSocketProtocol" >nul 2>&1
+if errorlevel 1 (
+    echo [INFO] Installing WebSocket Protocol...
+    dism /online /enable-feature /featurename:IIS-WebSockets /all >nul 2>&1
+    if errorlevel 1 (
+        echo [WARNING] Failed to install WebSocket Protocol! Real-time push may not work.
+    ) else (
+        echo [OK] WebSocket Protocol installed
+    )
+) else (
+    echo [OK] WebSocket Protocol installed
+)
+
+echo.
 echo [5/8] Copying frontend files...
 set "DIST_DIR=frontend\dist"
 set "IIS_SITE_DIR=C:\inetpub\wwwroot\FabTwin"
