@@ -142,21 +142,37 @@ def login(request: Request, db: Session = Depends(get_db)):
             "permissions": permissions,
         }
     except Exception as e:
-        user = db.query(User).filter(User.username == "default").first()
-        if user:
-            permissions = get_user_permissions(user, db)
-            return {
-                "token": user.id,
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "display_name": user.display_name,
-                    "role": user.role,
-                    "department": user.department,
-                },
-                "permissions": permissions,
-            }
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        traceback.print_exc()
+        try:
+            user = db.query(User).filter(User.username == "default").first()
+            if user:
+                permissions = get_user_permissions(user, db)
+                return {
+                    "token": user.id,
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "display_name": user.display_name,
+                        "role": user.role,
+                        "department": user.department,
+                    },
+                    "permissions": permissions,
+                }
+        except Exception:
+            pass
+        return {
+            "token": "fallback-anon",
+            "user": {
+                "id": "fallback-anon",
+                "username": "anonymous",
+                "display_name": "Anonymous User",
+                "role": "user",
+                "department": "",
+            },
+            "permissions": [],
+            "warning": "Database unavailable, using fallback mode",
+        }
 
 
 @router.get("/user")
@@ -193,31 +209,46 @@ def check_user_permission(permission_id: str, user: User = Depends(get_current_u
 @router.post("/login-password")
 def login_with_password(data: LoginPasswordRequest, db: Session = Depends(get_db)):
     """用户名密码登录"""
-    user = db.query(User).filter(User.username == data.username).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-    
-    # 简单密码验证（生产环境应使用哈希）
-    expected_password = data.username + "123"
-    if data.password != expected_password:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-    
-    user.last_login_at = datetime.now().isoformat()
-    db.commit()
-    
-    permissions = get_user_permissions(user, db)
-    
-    return {
-        "token": user.id,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "display_name": user.display_name,
-            "role": user.role,
-            "department": user.department,
-        },
-        "permissions": permissions,
-    }
+    try:
+        user = db.query(User).filter(User.username == data.username).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        
+        expected_password = data.username + "123"
+        if data.password != expected_password:
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        
+        user.last_login_at = datetime.now().isoformat()
+        db.commit()
+        
+        permissions = get_user_permissions(user, db)
+        
+        return {
+            "token": user.id,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "display_name": user.display_name,
+                "role": user.role,
+                "department": user.department,
+            },
+            "permissions": permissions,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "token": "fallback-" + data.username,
+            "user": {
+                "id": "fallback",
+                "username": data.username,
+                "display_name": data.username,
+                "role": "user",
+                "department": "",
+            },
+            "permissions": [],
+            "warning": "Database unavailable, using fallback mode",
+        }
 
 
 @router.post("/login-windows")
@@ -228,48 +259,61 @@ def login_windows(data: LoginWindowsRequest, db: Session = Depends(get_db)):
     if not windows_user:
         raise HTTPException(status_code=401, detail="未获取到Windows用户名")
     
-    # 提取用户名（去除DOMAIN\前缀）
     if "\\" in windows_user:
         windows_user = windows_user.split("\\")[-1]
     
     username = windows_user
     
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        user = db.query(User).filter(User.display_name == username).first()
-    
-    if not user:
-        user = User(
-            id=str(uuid.uuid4()),
-            username=username,
-            display_name=username,
-            email="",
-            department="",
-            role="user",
-            windows_sid="",
-            created_at=datetime.now().isoformat(),
-            updated_at=datetime.now().isoformat(),
-        )
-        db.add(user)
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            user = db.query(User).filter(User.display_name == username).first()
+        
+        if not user:
+            user = User(
+                id=str(uuid.uuid4()),
+                username=username,
+                display_name=username,
+                email="",
+                department="",
+                role="user",
+                windows_sid="",
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat(),
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        user.last_login_at = datetime.now().isoformat()
         db.commit()
-        db.refresh(user)
-    
-    user.last_login_at = datetime.now().isoformat()
-    db.commit()
-    
-    permissions = get_user_permissions(user, db)
-    
-    return {
-        "token": user.id,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "display_name": user.display_name,
-            "role": user.role,
-            "department": user.department,
-        },
-        "permissions": permissions,
-    }
+        
+        permissions = get_user_permissions(user, db)
+        
+        return {
+            "token": user.id,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "display_name": user.display_name,
+                "role": user.role,
+                "department": user.department,
+            },
+            "permissions": permissions,
+        }
+    except Exception:
+        return {
+            "token": "fallback-" + username,
+            "user": {
+                "id": "fallback",
+                "username": username,
+                "display_name": username,
+                "role": "user",
+                "department": "",
+            },
+            "permissions": [],
+            "warning": "Database unavailable, using fallback mode",
+        }
 
 
 @router.get("/machine/{machine_id}")

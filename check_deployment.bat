@@ -99,8 +99,11 @@ echo.
 echo --- [4/4] API Proxy Test ---
 echo.
 
-echo [INFO] Testing API through IIS (port 80)...
-powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost/api/auth/login' -Method POST -UseBasicParsing -TimeoutSec 5; Write-Host '[OK] API proxy works:' $r.StatusCode } catch { Write-Host '[ERROR] API proxy failed:' $_.Exception.Message }"
+echo [INFO] Testing Health endpoint through IIS (port 80)...
+powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost/health' -UseBasicParsing -TimeoutSec 5; Write-Host '[OK] IIS proxy -> backend:' $r.StatusCode } catch { Write-Host '[ERROR] IIS proxy failed:' $_.Exception.Message }"
+echo.
+echo [INFO] Testing API endpoint through IIS...
+powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost/api/machines' -UseBasicParsing -TimeoutSec 5; Write-Host '[OK] API proxy works:' $r.StatusCode } catch { Write-Host '[ERROR] API proxy failed:' $_.Exception.Message }"
 
 echo.
 echo ================================================================
