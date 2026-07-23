@@ -1,8 +1,48 @@
 # Windows Server IIS + Windows 认证部署指南
 
+> **注意**：本文档为早期方案设计文档。实际部署方案已改为 **ASP 桥接模式**，详见 [deploy-sop.md](deploy-sop.md) 第 6.1 节。
+> 当前方案使用 `deploy_iis_nt_final.bat` 一键部署，核心文件为 `get_user.asp` + `web.config`。
+
 ## 问题说明
 
-当前 `auth.py` 中使用 `$env:USERNAME` 在**服务器端**执行，获取的是运行后端服务的 Windows 账号，而不是**客户端访问者的账号**。
+IIS 反向代理无法直接将 Windows 认证信息传递给独立运行的 Python 后端进程。
+早期方案使用 `$env:USERNAME` 获取的是服务器运行账号，而非客户端访问者账号。
+
+## 最终方案：ASP 桥接
+
+```
+用户浏览器 (同事电脑)
+      │
+      ▼ 访问 /get_user.asp
+┌─────────────────────────────────────┐
+│         IIS (端口 80)                │
+│  - get_user.asp: 仅 Windows 认证     │
+│  - 其他文件: 匿名访问                │
+│  - 返回: {"username":"DOMAIN\\工号"} │
+└─────────────────────────────────────┘
+      │
+      ▼ 前端拿到用户名
+┌─────────────────────────────────────┐
+│  前端 Login.vue                      │
+│  - 调用 /api/auth/login-windows      │
+│  - 传入 ASP 返回的用户名              │
+└─────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────┐
+│  后端 auth.py /login-windows         │
+│  - 创建/更新用户会话                  │
+│  - 返回 token + 权限                  │
+└─────────────────────────────────────┘
+```
+
+### 核心文件
+
+1. **get_user.asp** - ASP 桥接文件，读取 `LOGON_USER` 返回 JSON
+2. **web.config** - IIS 配置（仅 rewrite rules，不含 authentication）
+3. **deploy_iis_nt_final.bat** - 部署脚本，用 appcmd 配置文件级别认证
+4. **frontend/src/views/Login.vue** - 前端登录逻辑
+5. **backend/routers/auth.py** - 后端 `/login-windows` 接口
 
 ## 解决方案：IIS 反向代理 + Windows 认证
 

@@ -136,11 +136,16 @@ fabtwin-deploy-YYYYMMDD.zip
 ├── sql/
 │   ├── init_oracle_db.sql      # 数据库初始化SQL（不含DT表）
 │   └── cleanup_db.sql          # 数据清理脚本
-├── deploy.bat                  # 一键部署
-├── start_prod.bat              # 生产启动
-├── start-dev.bat               # 开发启动
+├── deploy.bat                  # 一键部署（开发/测试）
+├── deploy_iis_nt_final.bat     # IIS NT认证部署（量产推荐）
+├── start_backend.bat           # 仅启动后端
+├── start-dev.bat               # 开发启动（前后端）
+├── check_deployment.bat        # 部署诊断工具
 ├── init_db.bat                 # DB初始化
 ├── create_user.bat             # Oracle建用户
+├── get_user.asp                # ASP桥接文件（Windows认证）
+├── web.config                  # IIS配置文件
+├── env.bat                     # 环境变量配置
 ├── README.md
 └── deploy-sop.md               # 本文档
 ```
@@ -355,7 +360,54 @@ EXIT;
 
 ## 6. 应用部署
 
-### 6.1 一键部署（推荐）
+### 6.1 IIS + Windows NT 认证部署（推荐，量产环境）
+
+量产环境推荐使用 IIS 反向代理 + ASP 桥接获取 Windows 用户名，实现单点登录。
+
+**前置条件：**
+- Windows Server 已安装 IIS（含 ASP、Windows Authentication、URL Rewrite、ARR 模块）
+- 前端已构建（`frontend\dist\` 存在）
+- 后端 venv 已创建
+
+**部署步骤：**
+
+```cmd
+REM 1. 构建前端（如已有 dist 可跳过）
+cd /d D:\deploy\fab-twin-pro\frontend
+npm install
+npm run build
+
+REM 2. 部署 IIS 站点（管理员权限）
+cd /d D:\deploy\fab-twin-pro
+deploy_iis_nt_final.bat
+```
+
+**deploy_iis_nt_final.bat 会完成：**
+1. 检查 IIS、ASP、Windows Authentication 功能是否安装（未安装自动安装）
+2. 复制 `frontend\dist\` 到 `C:\inetpub\wwwroot\FabTwin\`
+3. 复制 `get_user.asp`（ASP 桥接文件）和 `web.config`（IIS 配置）到站点目录
+4. 创建 IIS 应用程序池和站点（端口 80）
+5. 停止 Default Web Site 释放端口 80
+6. 用 `appcmd` 配置认证：站点匿名+Windows 认证，`get_user.asp` 仅 Windows 认证
+7. 启用 ARR 反向代理
+8. 启动 FabTwin 站点
+
+**认证工作原理（ASP 桥接）：**
+- IIS 独立运行，无法直接将 Windows 认证信息传递给 Python 后端
+- `get_user.asp` 文件由 IIS 原生 ASP 引擎执行，直接读取 `LOGON_USER`
+- 前端登录页调用 `/get_user.asp` → IIS 触发 Windows 认证 → 返回用户名
+- 前端将用户名发送到 `/api/auth/login-windows` → 后端创建会话
+- 每个用户使用自己的 Windows 工号登录，不再使用部署机器的账号
+
+**启动后端：**
+```cmd
+cd /d D:\deploy\fab-twin-pro
+start_backend.bat
+```
+
+**访问地址：** `http://<服务器IP>`（端口 80）
+
+### 6.2 传统部署（deploy.bat，开发/测试用）
 
 ```cmd
 cd /d D:\deploy\fab-twin-pro
@@ -369,12 +421,7 @@ deploy.bat
 4. **部署前端** - 如已存在 `dist/` 跳过构建，否则用 `vite.cmd build` 构建（绕过 PowerShell 执行策略）
 5. **启动服务** - 后端 `python main.py`（设置生产环境变量）+ 前端 `vite preview --port 5173 --host`（生产预览模式）
 
-**与开发模式区别：**
-- 前端使用 `vite preview`（生产构建预览），非 `vite`（开发热更新）
-- 自动设置 `DB_TYPE=oracle`、`SIMULATION_ENABLED=False`、`DB_POLLER_ENABLED=True`
-- 关闭命令行窗口即停止服务
-
-### 6.2 手动分步部署
+### 6.3 手动分步部署
 
 **步骤 1：后端依赖**
 
@@ -438,10 +485,11 @@ REM setx AI_MODEL "glm-5.2"
 
 ### 7.1 启动服务
 
-**生产环境启动：**
+**IIS 部署环境启动（推荐）：**
 ```cmd
+REM 仅启动后端（前端由 IIS 提供）
 cd /d D:\deploy\fab-twin-pro
-start_prod.bat
+start_backend.bat
 ```
 
 **开发模式启动（带热更新）：**
@@ -458,12 +506,14 @@ REM 预期: {"status":"ok","service":"fabtwin"}
 ```
 
 **检查前端：**
-- 浏览器访问 `http://localhost:5173`
+- IIS 部署：浏览器访问 `http://<服务器IP>`（端口 80）
+- 开发模式：浏览器访问 `http://localhost:5173`
 - 应看到登录页面
 
 **登录验证：**
-- 默认 NT 登录会自动识别 Windows 用户（首次登录自动创建 `user` 角色账号）
+- IIS 部署：点击"登录系统"，IIS 自动获取 Windows 工号完成登录
 - 点击"管理员登录"使用 `admin` / `admin123`
+- 部署诊断：运行 `check_deployment.bat` 检查前后端和 IIS 状态
 
 **功能验证清单：**
 - [ ] 主页看板能显示机台列表
@@ -504,10 +554,15 @@ REM 预期: {"status":"ok","service":"fabtwin"}
 - `alarm_view` - 告警查看
 - `user_manage` - 用户管理（仅 admin）
 
-**NT 用户自动登录行为：**
-- 首次 NT 登录 → 自动在 `users` 表创建账号（`username = hostname\windows_user`，`role = "user"`）
+**NT 用户自动登录行为（ASP 桥接模式）：**
+- 用户访问登录页 → 前端调用 `/get_user.asp` → IIS 触发 Windows 认证
+- 用户输入自己的 Windows 工号密码 → ASP 返回 `DOMAIN\工号`
+- 前端将工号发送到 `/api/auth/login-windows` → 后端创建/更新用户会话
+- 首次登录 → 自动在 `users` 表创建账号（`username = 工号`，`role = "user"`）
 - 后续登录 → 更新 `last_login_at`，权限按 `user` 角色
+- 每个用户使用自己的工号登录，不再共享部署机器的账号
 - NT 用户**不能**编辑模型、平面图，**不能**访问用户管理界面
+- 如无法获取 Windows 用户名，可点击"管理员登录"使用 `admin` / `admin123`
 
 **验证方法：**
 ```cmd
@@ -522,7 +577,7 @@ REM 预期: 403 {"detail":"无权限：需要 floor_edit 权限"}
 
 ## 8. Windows 服务注册（推荐）
 
-将前后端注册为 Windows 服务，实现开机自启和后台运行。
+将后端注册为 Windows 服务，实现开机自启和后台运行。前端由 IIS 管理，无需注册服务。
 
 ### 8.1 安装 NSSM
 
@@ -541,28 +596,33 @@ nssm set FabTwinBackend Start SERVICE_AUTO_START
 nssm start FabTwinBackend
 ```
 
-### 8.3 注册前端服务
+### 8.3 IIS 站点自启动
 
+IIS 站点默认随 Windows 服务 WAS（Windows Process Activation Service）自动启动，无需额外配置。
+
+如需手动管理：
 ```cmd
-nssm install FabTwinFrontend "D:\deploy\fab-twin-pro\frontend\node_modules\.bin\vite.cmd" "preview --port 5173 --host"
-nssm set FabTwinFrontend AppDirectory "D:\deploy\fab-twin-pro\frontend"
-nssm set FabTwinFrontend Start SERVICE_AUTO_START
-nssm start FabTwinFrontend
+REM 启动/停止 IIS 站点
+%windir%\system32\inetsrv\appcmd.exe start site "FabTwin"
+%windir%\system32\inetsrv\appcmd.exe stop site "FabTwin"
+
+REM 确保 WAS 服务自启动
+sc config WAS start= auto
+sc config W3SVC start= auto
 ```
 
 ### 8.4 服务管理
 
 ```cmd
-REM 查看状态
+REM 查看后端状态
 sc query FabTwinBackend
-sc query FabTwinFrontend
 
-REM 停止/启动/重启
+REM 停止/启动/重启后端
 nssm stop FabTwinBackend
 nssm start FabTwinBackend
 nssm restart FabTwinBackend
 
-REM 卸载服务
+REM 卸载后端服务
 nssm remove FabTwinBackend confirm
 ```
 
@@ -849,10 +909,10 @@ REM 重启应用
 
 | 端口 | 服务 | 归属 | 说明 |
 |------|------|------|------|
+| 80 | IIS (前端) | 应用部署方 | 量产环境统一入口 |
 | 5173 | Vite (前端) | 应用部署方 | 开发模式/preview |
 | 8002 | FastAPI (后端) | 应用部署方 | API + WebSocket |
 | 1521 | Oracle DB | **DB 组** | 数据库（DB 组管理） |
-| 80 | Nginx (可选) | 应用部署方 | 统一入口 |
 | 6379 | Redis (可选) | 应用部署方 | 缓存 |
 
 ## 附录 C：联系人
@@ -863,9 +923,67 @@ REM 重启应用
 
 ---
 
-**文档版本**：v1.3
-**最后更新**：2026-07-20
+### 10.8 IIS 部署问题排查
+
+**问题：HTTP 500.19 Internal Server Error（web.config 配置错误）**
+
+```
+Config Error: This configuration section cannot be used at this path.
+```
+
+> 原因：web.config 中使用了 `<location>` 节点或 locked 的 authentication 配置。
+> 解决方案：本项目已移除 web.config 中的 authentication 配置，改用 `appcmd` 在 applicationhost.config 中配置。重新运行 `deploy_iis_nt_final.bat`。
+
+**问题：HTTP 500（web.config 内容损坏）**
+
+> 原因：PowerShell 动态生成 web.config 时引号被吞掉。
+> 解决方案：本项目已改为直接 copy 预写好的 web.config 文件。重新运行 `deploy_iis_nt_final.bat`。
+
+**问题：访问网站显示 IIS 欢迎页而非 FabTwin**
+
+> 原因：Default Web Site 未停止，占用端口 80。
+> 解决方案：
+> ```cmd
+> %windir%\system32\inetsrv\appcmd.exe stop site "Default Web Site"
+> %windir%\system32\inetsrv\appcmd.exe start site "FabTwin"
+> ```
+
+**问题：登录提示"无法获取 Windows 用户名"**
+
+> 原因：`get_user.asp` 匿名访问未禁用，IIS 未触发 Windows 认证。
+> 解决方案：重新运行 `deploy_iis_nt_final.bat`，确保 appcmd 正确配置 `get_user.asp` 的认证。
+> 验证：在浏览器中直接访问 `http://<服务器IP>/get_user.asp`，应弹出 Windows 认证对话框。
+
+**问题：登录后页面不跳转，停留在登录页**
+
+> 原因：前端 401 拦截逻辑导致登录成功后跳回登录页。
+> 解决方案：清除浏览器缓存，重新构建前端 `npm run build` 后重新部署。
+
+**问题：所有用户登录后都显示同一个工号**
+
+> 原因：IIS 反向代理无法传递 Windows 认证信息给独立 Python 进程。
+> 解决方案：本项目使用 ASP 桥接方案（`get_user.asp`），确保每个用户通过自己的工号登录。重新运行 `deploy_iis_nt_final.bat`。
+
+**问题：API 请求返回 404 或 502**
+
+> 原因：IIS 反向代理规则未正确配置，或后端未启动。
+> 解决方案：
+> 1. 确认后端运行在 8002 端口：`curl http://localhost:8002/health`
+> 2. 确认 ARR 代理已启用：`%windir%\system32\inetsrv\appcmd.exe list config -section:system.webServer/proxy`
+> 3. 运行 `check_deployment.bat` 诊断
+
+**问题：bat 脚本运行报错 'xxx' is not recognized as an internal or external command**
+
+> 原因：bat 文件换行符为 LF（Linux），Windows cmd 无法正确解析。
+> 解决方案：用 Notepad++ 打开 → 编辑 → 文档格式转换 → 转为 Windows (CRLF) 格式。
+> 或在 Git 中设置：`git config core.autocrlf true` 后重新 pull。
+
+---
+
+**文档版本**：v2.0
+**最后更新**：2026-07-22
 **变更说明**：
+- v2.0 (2026-07-22): 重构部署方案，IIS + ASP 桥接 Windows NT 认证作为推荐量产部署方式；新增 `deploy_iis_nt_final.bat` 和 `start_backend.bat`；移除 `start_prod.bat`、`start_full.bat`、`start_proxy.bat` 等中间版本脚本；新增 IIS 部署问题排查章节；更新端口清单（端口 80 由 IIS 使用）；更新服务注册章节（前端由 IIS 管理）；清理 31 个临时调试脚本
 - v1.3 (2026-07-20): 新增 Oracle 10g/11g 兼容性说明（Thick 模式 + ORACLE_CLIENT_DIR）；新增 Aqua Data Studio 初始化 SQL 使用方式；新增 Windows Server UTF-8/GBK 编码问题处理；新增 bat 脚本闪退排查章节；所有 bat 文件改为纯英文避免编码问题
 - v1.2 (2026-07-20): 明确 Oracle 数据库由 DB 组搭建运维，应用部署方仅需索取连接信息；移除"安装 Oracle Client"要求；业务用户/表空间创建改为由 DB 组执行；init_db.bat 支持远程执行或由 DB 组在 DB 服务器执行；故障排查章节调整为联系 DB 组
 - v1.1 (2026-07-20): 修复 init_db.bat 自动检测 ORACLE_HOME；deploy.bat 改用 vite preview 生产模式 + SQL 脚本初始化；补充 SEQUENCE+TRIGGER、RBAC 权限控制、NT 用户自动登录说明
