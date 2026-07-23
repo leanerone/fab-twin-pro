@@ -57,18 +57,16 @@ async function loadConfig() {
 async function saveConfig() {
   loading.value = true
   try {
-    const data = {}
-    Object.keys(config.value).forEach(key => {
-      const val = config.value[key]
-      if (val !== '' && val !== null && val !== undefined) {
-        if (['api_key', 'dify_api_key', 'n8n_webhook_secret'].includes(key) && !val) {
-          return
-        }
-        data[key] = val
+    // 始终发送所有字段（包括空字符串），确保后端能正确更新 provider 等关键字段
+    const data = { ...config.value }
+    // 只过滤掉 null/undefined，保留空字符串（让后端知道用户清空了某个字段）
+    Object.keys(data).forEach(key => {
+      if (data[key] === null || data[key] === undefined) {
+        delete data[key]
       }
     })
     await api.aiUpdateConfig(data)
-    showToast('success', '配置保存成功')
+    showToast('success', '配置保存成功（运行时生效，重启后需在 env 中持久化）')
   } catch (e) {
     showToast('error', '保存失败：' + (e.message || '未知错误'))
   } finally {
@@ -84,6 +82,7 @@ async function testConnection(type) {
       testConfig = {
         base_url: config.value.base_url,
         api_key: config.value.api_key,
+        model: config.value.model,
       }
     } else if (type === 'dify') {
       testConfig = {

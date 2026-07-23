@@ -31,26 +31,29 @@ from config import (
     N8N_ENABLED, N8N_BASE_URL, N8N_WEBHOOK_SECRET,
 )
 
-# 延迟导入DB模型（避免循环导入）
-_machine_model = None
-_alarm_model = None
-_lot_model = None
-_dt_event_raw_model = None
+# 统一数据访问层（本地规则引擎 + OpenAI Function Calling 共用）
+from services.ai_tools import (
+    get_machine_status,
+    get_machine_alarms,
+    get_event_timeline,
+    get_yield_stats,
+    get_lot_info,
+    get_recipe_info,
+    TOOL_DEFINITIONS,
+    TOOL_HANDLERS,
+)
+
+# DB Session（延迟导入避免循环依赖）
 _db_session = None
 
 
-def _get_models():
-    """延迟获取数据库模型"""
-    global _machine_model, _alarm_model, _lot_model, _dt_event_raw_model, _db_session
-    if _machine_model is None:
-        from models import Machine, Alarm, Lot, DT_EVENT_RAW
+def _get_db():
+    """获取数据库 Session"""
+    global _db_session
+    if _db_session is None:
         from database import SessionLocal
-        _machine_model = Machine
-        _alarm_model = Alarm
-        _lot_model = Lot
-        _dt_event_raw_model = DT_EVENT_RAW
         _db_session = SessionLocal
-    return _machine_model, _alarm_model, _lot_model, _dt_event_raw_model, _db_session
+    return _db_session()
 
 
 class AIMiddleware:
@@ -159,21 +162,24 @@ class AIMiddleware:
                              user_role: str = "user") -> str:
         """构建系统提示词"""
         prompt = """你是一个半导体工厂数字孪生平台的AI助手，名为FabTwin AI。
-你可以回答关于机台状态、生产数据、报警信息、工艺参数、Lot追踪等问题。
+你可以回答关于机台状态、生产数据、报警信息、工艺配方、Lot追踪等问题。
+
+重要说明：
+- 当前系统采集的是VFEI事件流（POD开盖/关盖/端口锁定等），不含温度/压力/RF等传感器数据
+- 不要编造任何数据，所有数据必须通过工具调用获取
+- 如果工具返回的数据不足以回答问题，请如实告知用户
 
 回答要求：
 1. 语言简洁专业，使用中文回答
 2. 数据准确，不要编造数据
 3. 如果涉及时间跳转，在回答最后标注 [JUMP: 时间戳]
-4. 如果涉及表格数据，使用 [TABLE] 标签包裹
-5. 支持的查询类型：机台状态、报警统计、温度趋势、产量统计、异常检测、Lot查询、工艺参数
-
-你可以调用以下工具（通过N8N工作流）：
-- query_machine_status: 查询机台实时状态
-- query_alarm_stats: 查询告警统计
-- query_lot_info: 查询Lot批次信息
-- export_alarm_report: 导出报警报表
-- generate_work_order: 生成故障工单
+4. 你可以通过 function calling 调用以下工具查询真实数据：
+   - get_machine_status: 查询机台实时状态（最新VFEI事件、运行模式、当前Lot）
+   - get_machine_alarms: 查询告警记录（从事件流中提取 alarm_code 非空的事件）
+   - get_event_timeline: 查询事件时间线（事件类型分布和运行模式分布）
+   - get_yield_stats: 查询产量统计（Lot数量、晶圆总数）
+   - get_lot_info: 查询Lot批次详情
+   - get_recipe_info: 查询工艺配方（温度/压力/RF功率等参数）
 """
         if machine_id:
             prompt += f"\n当前关联机台: {machine_id}"
@@ -182,9 +188,9 @@ class AIMiddleware:
             prompt += f"\n上下文数据: {json.dumps(context, ensure_ascii=False, default=str)}"
 
         if user_role == "admin":
-            prompt += "\n用户角色: 管理员，可以调用所有MCP工具和N8N工作流"
+            prompt += "\n用户角色: 管理员"
         else:
-            prompt += "\n用户角色: 普通用户，仅可基础问答，不可调用N8N自动化流程"
+            prompt += "\n用户角色: 普通用户"
 
         return prompt
 
@@ -212,9 +218,8 @@ class AIMiddleware:
 
     def _local_rule_engine(self, question: str, machine_id: str = None,
                            user_role: str = "user") -> Dict[str, Any]:
-        """本地规则引擎 - 关键字匹配路由"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, SessionLocal = _get_models()
-        db = SessionLocal()
+        """本地规则引擎 - 关键字匹配路由到 ai_tools 数据访问层"""
+        db = _get_db()
         try:
             q = question.lower()
 
@@ -222,360 +227,184 @@ class AIMiddleware:
             if user_role == "admin" and self._is_n8n_command(q):
                 return self._trigger_n8n_workflow(question, machine_id, user_role)
 
+            # 从问题中提取机台ID（支持 PODOPENER-1 / OXE-1 / VPO-01 等格式）
+            extracted_mid = self._extract_machine_id(question) or machine_id
+
+            # 从问题中提取 Lot ID
+            extracted_lot = self._extract_lot_id(question)
+
             # Lot 查询
-            if any(k in q for k in ["lot", "批次"]):
-                return self._query_lot(db, question, machine_id)
+            if extracted_lot or any(k in q for k in ["lot", "批次"]):
+                return get_lot_info(db, lot_id=extracted_lot, machine_id=extracted_mid)
 
             # 报警/告警
             if any(k in q for k in ["报警", "告警", "alarm", "异常"]):
                 if user_role == "admin" and ("导出" in q or "报表" in q):
                     return self._trigger_n8n_workflow(question, machine_id, user_role, "export_alarm_report")
-                return self._query_alarms(db, machine_id)
+                return get_machine_alarms(db, machine_id=extracted_mid)
 
-            # 温度/趋势
-            if any(k in q for k in ["温度", "temperature", "temp", "趋势"]):
-                return self._query_temp_trend(db, machine_id, question)
+            # 事件时间线（替代温度趋势，因为DB无传感器数据）
+            if any(k in q for k in ["温度", "temperature", "temp", "趋势", "事件", "event", "时间线"]):
+                return get_event_timeline(db, machine_id=extracted_mid)
 
             # 产量/晶圆
             if any(k in q for k in ["产量", "晶圆", "wafer", "yield", "加工多少", "生产了多少"]):
-                return self._query_yield(db, machine_id)
-
-            # 状态/运行情况
-            if any(k in q for k in ["状态", "status", "怎么样", "情况", "运行", "当前"]):
-                return self._query_machine_status(db, machine_id)
+                return get_yield_stats(db, machine_id=extracted_mid)
 
             # 工艺/配方
             if any(k in q for k in ["工艺", "配方", "recipe", "步骤"]):
-                return self._query_recipe(db, machine_id)
+                return get_recipe_info(db, machine_id=extracted_mid)
 
             # 工单/故障（管理员）
             if user_role == "admin" and any(k in q for k in ["工单", "work order", "故障单"]):
                 return self._trigger_n8n_workflow(question, machine_id, user_role, "generate_work_order")
 
-            # 默认：机台状态
-            return self._query_machine_status(db, machine_id)
+            # 状态/运行情况（默认）
+            return get_machine_status(db, machine_id=extracted_mid)
         finally:
             db.close()
+
+    def _extract_machine_id(self, question: str) -> str:
+        """从自然语言中提取机台ID"""
+        # 匹配 PODOPENER-1 / OXE-01 / VPO-2200-01 / WAT-01 等格式
+        match = re.search(r'\b([A-Z]{2,}[-_]?\d+)\b', question.upper())
+        if match:
+            return match.group(1)
+        return None
+
+    def _extract_lot_id(self, question: str) -> str:
+        """从自然语言中提取 Lot ID"""
+        # 匹配 LOT12345 / V3TY2 / V3FYS 等格式
+        match = re.search(r'\b(LOT[A-Z0-9]+|V\d[A-Z0-9]+)\b', question.upper())
+        if match:
+            return match.group(1)
+        return None
 
     def _is_n8n_command(self, question: str) -> bool:
         """判断是否为N8N自动化指令"""
         keywords = ["导出", "报表", "工单", "批量", "自动", "推送", "生成报告", "生成工单"]
         return any(k in question for k in keywords)
 
-    def _query_machine_status(self, db, machine_id: str = None) -> Dict[str, Any]:
-        """查询机台状态"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, _ = _get_models()
-        if not machine_id:
-            machines = db.query(Machine).all()
-            running = sum(1 for m in machines if m.state == "run")
-            idle = sum(1 for m in machines if m.state == "idle")
-            maint = sum(1 for m in machines if m.state == "maint")
-            answer = (
-                f"当前厂区共 {len(machines)} 台机台：\n"
-                f"• 运行中：{running} 台\n"
-                f"• 空闲：{idle} 台\n"
-                f"• 维护：{maint} 台\n\n"
-                f"可以问我具体某台机台的详细状态。"
-            )
-            return {
-                "answer": answer,
-                "sql": "SELECT state, COUNT(*) FROM machines GROUP BY state",
-            }
-
-        m = db.query(Machine).filter(Machine.id == machine_id).first()
-        if not m:
-            return {"answer": f"未找到机台 {machine_id}", "sql": ""}
-
-        state_cn = {"run": "运行中", "idle": "空闲", "maint": "维护中", "down": "停机"}.get(m.state, m.state)
-
-        answer = (
-            f"机台 {m.id}（{m.name}）当前状态：\n"
-            f"• 状态：{state_cn}\n"
-            f"• 工艺步骤：{m.process_step}\n"
-            f"• 温度：{m.temp} °C\n"
-            f"• 压力：{m.pressure} mTorr\n"
-            f"• RF 功率：{m.rf_power} W\n"
-            f"• 气体流量：{m.gas_flow} sccm\n"
-            f"• 累计晶圆：{m.wafer_count} 片\n"
-            f"• 告警次数：{m.alarm_count} 次\n"
-            f"• 更新时间：{m.updated_at}"
-        )
-        return {
-            "answer": answer,
-            "sql": f"SELECT * FROM machines WHERE id = '{machine_id}'",
-            "jump_timestamp": m.updated_at,
-        }
-
-    def _query_alarms(self, db, machine_id: str = None) -> Dict[str, Any]:
-        """查询告警统计"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, _ = _get_models()
-        q = db.query(Alarm)
-        if machine_id:
-            q = q.filter(Alarm.machine_id == machine_id)
-        alarms = q.order_by(Alarm.timestamp.desc()).limit(50).all()
-
-        crit = sum(1 for a in alarms if a.level == "crit")
-        warn = sum(1 for a in alarms if a.level == "warn")
-        info = sum(1 for a in alarms if a.level == "info")
-        unresolved = sum(1 for a in alarms if not a.resolved)
-
-        scope = f"机台 {machine_id}" if machine_id else "全厂"
-
-        # 表格数据
-        table_data = {
-            "headers": ["时间", "描述", "等级", "状态"],
-            "rows": [
-                [a.timestamp, a.description, a.level, "未解决" if not a.resolved else "已解决"]
-                for a in alarms[:10]
-            ],
-        }
-
-        answer = (
-            f"{scope} 告警统计（最近50条）：\n"
-            f"• 总计：{len(alarms)} 条\n"
-            f"• 严重：{crit} 条\n"
-            f"• 警告：{warn} 条\n"
-            f"• 信息：{info} 条\n"
-            f"• 未解决：{unresolved} 条\n\n"
-            f"最近 10 条告警见下表。"
-        )
-
-        where = f" WHERE machine_id='{machine_id}'" if machine_id else ""
-        jump = alarms[0].timestamp if alarms else None
-
-        return {
-            "answer": answer,
-            "sql": f"SELECT level, COUNT(*) FROM alarms{where} GROUP BY level",
-            "table_data": table_data,
-            "jump_timestamp": jump,
-        }
-
-    def _query_temp_trend(self, db, machine_id: str = None, question: str = "") -> Dict[str, Any]:
-        """查询温度趋势"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, _ = _get_models()
-        if not machine_id:
-            return {"answer": "请指定机台 ID 以查询温度趋势。", "sql": ""}
-
-        events = (
-            db.query(DT_EVENT_RAW)
-            .filter(
-                DT_EVENT_RAW.tool_id == machine_id,
-            )
-            .order_by(DT_EVENT_RAW.raw_id.desc())
-            .limit(100)
-            .all()
-        )
-
-        # 从payload中提取温度（PODOPENER场景可能没有，用machines表数据）
-        m = db.query(Machine).filter(Machine.id == machine_id).first()
-        if m:
-            answer = (
-                f"机台 {machine_id} 温度情况：\n"
-                f"• 当前温度：{m.temp} °C\n"
-                f"• 参考范围：60 - 75 °C\n"
-                f"• 状态：{('正常' if 60 <= m.temp <= 75 else '异常')}\n\n"
-                f"温度传感器实时采集，每10秒更新一次。"
-            )
-            return {
-                "answer": answer,
-                "sql": f"SELECT temp FROM machines WHERE id = '{machine_id}'",
-                "jump_timestamp": m.updated_at,
-            }
-
-        return {"answer": f"机台 {machine_id} 温度数据暂不可用。", "sql": ""}
-
-    def _query_yield(self, db, machine_id: str = None) -> Dict[str, Any]:
-        """查询产量"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, _ = _get_models()
-        q = db.query(Machine)
-        if machine_id:
-            q = q.filter(Machine.id == machine_id)
-        machines = q.all()
-        total = sum(m.wafer_count for m in machines)
-
-        lots = db.query(Lot)
-        if machine_id:
-            lots = lots.filter(Lot.machine_id == machine_id)
-        lot_count = lots.count()
-        done = lots.filter(Lot.status == "done").count()
-        processing = lots.filter(Lot.status == "processing").count()
-
-        scope = f"机台 {machine_id}" if machine_id else "全厂"
-
-        # 表格数据（最近5个Lot）
-        recent_lots = lots.order_by(Lot.start_time.desc()).limit(5).all()
-        table_data = {
-            "headers": ["Lot ID", "机台", "产品", "晶圆数", "状态"],
-            "rows": [
-                [l.id, l.machine_id, l.product, l.wafer_count, l.status]
-                for l in recent_lots
-            ],
-        }
-
-        answer = (
-            f"{scope} 产量统计：\n"
-            f"• 累计晶圆：{total} 片\n"
-            f"• Lot 批次：{lot_count} 个\n"
-            f"• 已完成：{done} 个\n"
-            f"• 加工中：{processing} 个\n\n"
-            f"最近 5 个 Lot 见下表。"
-        )
-
-        where = f" WHERE id='{machine_id}'" if machine_id else ""
-        return {
-            "answer": answer,
-            "sql": f"SELECT SUM(wafer_count) FROM machines{where}",
-            "table_data": table_data,
-        }
-
-    def _query_lot(self, db, question: str, machine_id: str = None) -> Dict[str, Any]:
-        """查询Lot信息"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, _ = _get_models()
-        match = re.search(r"LOT\w+", question.upper())
-        lot_id = match.group(0) if match else None
-
-        if lot_id:
-            lot = db.query(Lot).filter(Lot.id == lot_id).first()
-            if lot:
-                status_cn = {"done": "已完成", "processing": "加工中", "pending": "等待中", "hold": "暂停"}.get(lot.status, lot.status)
-                answer = (
-                    f"Lot {lot.id} 详情：\n"
-                    f"• 机台：{lot.machine_id}\n"
-                    f"• 产品：{lot.product}\n"
-                    f"• 晶圆数：{lot.wafer_count} 片\n"
-                    f"• 状态：{status_cn}\n"
-                    f"• 开始时间：{lot.start_time}\n"
-                    f"• 结束时间：{lot.end_time or '进行中'}\n"
-                    f"• 工艺配方：{lot.recipe_id or '未指定'}"
-                )
-                return {
-                    "answer": answer,
-                    "sql": f"SELECT * FROM lots WHERE id = '{lot_id}'",
-                    "jump_timestamp": lot.start_time,
-                }
-            return {"answer": f"未找到 Lot {lot_id}。", "sql": ""}
-
-        # 未指定Lot ID，列出最近的
-        q = db.query(Lot)
-        if machine_id:
-            q = q.filter(Lot.machine_id == machine_id)
-        lots = q.order_by(Lot.id.desc()).limit(10).all()
-
-        if not lots:
-            return {"answer": "未找到相关 Lot 记录。", "sql": ""}
-
-        table_data = {
-            "headers": ["Lot ID", "机台", "产品", "状态", "开始时间"],
-            "rows": [
-                [l.id, l.machine_id, l.product, l.status, l.start_time]
-                for l in lots
-            ],
-        }
-
-        answer = f"最近 {len(lots)} 个 Lot：\n"
-        answer += "（点击下方表格或输入 Lot ID 查看详情）"
-
-        return {
-            "answer": answer,
-            "sql": "SELECT * FROM lots ORDER BY start_time DESC LIMIT 10",
-            "table_data": table_data,
-            "jump_timestamp": lots[0].start_time if lots else None,
-        }
-
-    def _query_recipe(self, db, machine_id: str = None) -> Dict[str, Any]:
-        """查询工艺配方"""
-        Machine, Alarm, Lot, DT_EVENT_RAW, _ = _get_models()
-        if not machine_id:
-            return {"answer": "请指定机台 ID 以查询工艺配方。", "sql": ""}
-
-        m = db.query(Machine).filter(Machine.id == machine_id).first()
-        if not m:
-            return {"answer": f"未找到机台 {machine_id}", "sql": ""}
-
-        # PODOPENER特殊说明
-        if "PODOPENER" in machine_id or m.process_type == "PODOPENER":
-            answer = (
-                f"机台 {machine_id}（PODOPENER 开盖机）业务流程：\n\n"
-                f"【穿入流程 PACKING - 14步】\n"
-                f"1. POD_PLACED - POD放置到位\n"
-                f"2. COMPLETED_PORT_LOCK - 端口锁定\n"
-                f"3. READ_BATTERY - 读取电池状态\n"
-                f"4. READ_TAG - 读取RFID标签\n"
-                f"5. BATCH_INFO_FROM_ECUI - 获取批次信息\n"
-                f"6. OPEN_POD - 打开POD盖\n"
-                f"7. REACH_STAGE - 机械臂到达平台\n"
-                f"8. UI_CONFIRM - 操作员确认\n"
-                f"9. CLOSE_POD - 关闭POD盖\n"
-                f"10. ACK_UI_DOUBLECHECK - 二次确认\n"
-                f"11. REACH_POS - 机械臂到位\n"
-                f"12. WRITE_TAG - 写入RFID标签\n"
-                f"13. COMPLETED_PORT_UNLOCK - 端口解锁\n"
-                f"14. POD_REMOVED - POD移走\n\n"
-                f"【脱出流程 UNPACKING - 6步】\n"
-                f"1. UI_CONFIRM - 操作员确认\n"
-                f"2. CLOSE_POD - 关闭POD盖\n"
-                f"3. REACH_POS - 机械臂到位\n"
-                f"4. WRITE_TAG - 写入RFID标签\n"
-                f"5. COMPLETED_PORT_UNLOCK - 端口解锁\n"
-                f"6. POD_REMOVED - POD移走"
-            )
-            return {"answer": answer, "sql": ""}
-
-        answer = (
-            f"机台 {machine_id} 工艺信息：\n"
-            f"• 工艺类型：{m.process_type}\n"
-            f"• 当前步骤：{m.process_step}\n"
-            f"• 工艺配方：根据MES系统下发\n\n"
-            f"详细配方参数请查询MES系统或RCMS系统。"
-        )
-        return {"answer": answer, "sql": ""}
-
     # ==================== Provider: OpenAI 兼容模型 ====================
 
     def _call_openai_compatible(self, question: str, system_prompt: str,
                                 history_messages: List[Dict], machine_id: str = None) -> Dict[str, Any]:
-        """调用OpenAI兼容接口（支持GLM、GPT等）"""
+        """调用OpenAI兼容接口（支持GLM、GPT等），带 Function Calling 工具调用"""
         if not self.base_url or not self.api_key:
             return self._local_rule_engine(question, machine_id)
 
         # 构建消息列表
         messages = [{"role": "system", "content": system_prompt}]
-        # 加入历史消息（最近20轮）
         for msg in history_messages[-40:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
+
+        # 带 tools 的 payload（OpenAI Function Calling）
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "stream": False,
+            "tools": TOOL_DEFINITIONS,
+            "tool_choice": "auto",
+        }
+
+        tool_call_records = []
+        max_tool_rounds = 5  # 防止死循环
+
         try:
-            url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            }
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "stream": False,
-            }
-            resp = requests.post(url, json=payload, headers=headers, timeout=60)
-            resp.raise_for_status()
-            data = resp.json()
+            for round_idx in range(max_tool_rounds):
+                resp = requests.post(url, json=payload, headers=headers, timeout=60)
+                resp.raise_for_status()
+                data = resp.json()
 
-            answer = data["choices"][0]["message"]["content"]
+                msg = data["choices"][0]["message"]
 
-            # 提取jump_timestamp
-            jump_ts = None
-            jump_match = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
-            if jump_match:
-                jump_ts = jump_match.group(1).strip()
-                answer = answer.replace(jump_match.group(0), "").strip()
+                # 如果没有 tool_calls，说明 LLM 已经生成最终回答
+                if not msg.get("tool_calls"):
+                    answer = msg.get("content", "")
 
+                    # 提取 jump_timestamp
+                    jump_ts = None
+                    jump_match = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
+                    if jump_match:
+                        jump_ts = jump_match.group(1).strip()
+                        answer = answer.replace(jump_match.group(0), "").strip()
+
+                    return {
+                        "answer": answer,
+                        "sql": "",
+                        "jump_timestamp": jump_ts,
+                        "tool_calls": tool_call_records,
+                        "sources": [{"type": "llm", "model": self.model}],
+                    }
+
+                # 有 tool_calls：执行工具调用
+                # 先把 assistant 的 tool_calls 消息加入对话
+                messages.append(msg)
+
+                for tc in msg["tool_calls"]:
+                    func_name = tc["function"]["name"]
+                    try:
+                        func_args = json.loads(tc["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        func_args = {}
+
+                    # 补充 machine_id（如果用户没传但上下文有）
+                    if "machine_id" in func_args and not func_args["machine_id"] and machine_id:
+                        func_args["machine_id"] = machine_id
+
+                    # 执行工具
+                    handler = TOOL_HANDLERS.get(func_name)
+                    if handler:
+                        db = _get_db()
+                        try:
+                            result = handler(db, **func_args)
+                        finally:
+                            db.close()
+
+                        tool_call_records.append({
+                            "tool": func_name,
+                            "args": func_args,
+                            "status": "success",
+                        })
+
+                        # 把工具结果作为 tool 角色消息回传给 LLM
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": json.dumps(result, ensure_ascii=False, default=str),
+                        })
+                    else:
+                        # 未知工具
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": json.dumps({"error": f"未知工具: {func_name}"}, ensure_ascii=False),
+                        })
+                        tool_call_records.append({
+                            "tool": func_name,
+                            "args": func_args,
+                            "status": "unknown_tool",
+                        })
+
+                # 更新 payload 继续下一轮（让 LLM 看到工具结果后生成回答）
+                payload["messages"] = messages
+
+            # 超过最大轮数
             return {
-                "answer": answer,
+                "answer": "（工具调用轮数超限，请缩小问题范围后重试）",
                 "sql": "",
-                "jump_timestamp": jump_ts,
+                "tool_calls": tool_call_records,
                 "sources": [{"type": "llm", "model": self.model}],
             }
+
         except Exception as e:
             print(f"[AI] OpenAI兼容接口调用失败: {e}")
             raise
@@ -765,11 +594,23 @@ class AIMiddleware:
         """测试连接"""
         try:
             if provider_type == "openai":
-                url = f"{config.get('base_url', '').rstrip('/')}/v1/models"
-                headers = {"Authorization": f"Bearer {config.get('api_key', '')}"}
-                resp = requests.get(url, headers=headers, timeout=10)
-                resp.raise_for_status()
-                return {"success": True, "message": "连接成功"}
+                # 用最小 chat completions 请求测试（兼容所有 OpenAI 兼容接口）
+                base_url = config.get('base_url', '').rstrip('/')
+                url = f"{base_url}/v1/chat/completions"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {config.get('api_key', '')}",
+                }
+                payload = {
+                    "model": config.get('model', 'gpt-4o-mini'),
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 5,
+                    "stream": False,
+                }
+                resp = requests.post(url, json=payload, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    return {"success": True, "message": "连接成功，模型可正常响应"}
+                return {"success": False, "message": f"连接失败: HTTP {resp.status_code} - {resp.text[:200]}"}
 
             elif provider_type == "dify":
                 url = f"{config.get('base_url', '').rstrip('/')}/v1/parameters"

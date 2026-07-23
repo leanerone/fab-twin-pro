@@ -78,7 +78,7 @@ class DT_ALARM_EVENT(Base):
     alarm_severity = Column(String(255), nullable=False)
     start_ts_utc = Column(String(255), nullable=False, index=True)
     end_ts_utc = Column(String(255), nullable=True)
-    duration_sec = Column(Integer, nullable=True)
+    duration_sec = Column(Float, nullable=True)
     cycle_id = Column(String(255), nullable=True)
     lot_id = Column(String(255), nullable=True, index=True)
     source_event_start_id = Column(String(255), nullable=True)
