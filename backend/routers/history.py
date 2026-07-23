@@ -52,6 +52,16 @@ def _parse_ts(ts) -> Optional[datetime]:
     return None
 
 
+def _format_ts_for_query(dt: datetime) -> str:
+    """将 datetime 转换为字符串，用于与 VARCHAR2 列比较
+    
+    Oracle VARCHAR2 存储格式混合：有 'YYYY-MM-DD HH:MM:SS' 也有 'YYYY-MM-DDTHH:MM:SS'
+    使用 'YYYY-MM-DD' 格式做前缀匹配比较更安全
+    对于范围查询，使用 'YYYY-MM-DDTHH:MM:SS' (ISO T格式)
+    """
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
 def _normalize_ts(ts) -> str:
     """标准化时间戳为 'YYYY-MM-DD HH:MM:SS' 格式（用于API输出）"""
     dt = _parse_ts(ts)
@@ -145,10 +155,11 @@ def _get_ts_column():
     """获取用于时间查询的列
     
     生产环境中 event_ts_utc 多为 None，使用 received_ts_utc 查询
-    使用 coalesce 优先取 event_ts_utc，为空则取 received_ts_utc
+    Oracle 中这两个列是 VARCHAR2 类型，存储格式为 'YYYY-MM-DD HH:MM:SS'
+    使用 COALESCE + NVL 优先取 event_ts_utc，为空则取 received_ts_utc
     """
     from sqlalchemy import func
-    return func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
+    return func.nvl(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
 
 
 @router.get("/{tool_id}")
@@ -168,11 +179,11 @@ def get_history(
     if start_time:
         start_dt = _parse_ts(start_time)
         if start_dt:
-            query = query.filter(ts_col >= start_dt)
+            query = query.filter(ts_col >= _format_ts_for_query(start_dt))
     if end_time:
         end_dt = _parse_ts(end_time)
         if end_dt:
-            query = query.filter(ts_col <= end_dt)
+            query = query.filter(ts_col <= _format_ts_for_query(end_dt))
 
     query = query.order_by(ts_col.asc())
     total = query.count()
@@ -203,15 +214,16 @@ def get_timeline(
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    start_dt = datetime.strptime(f"{date} 00:00:00", "%Y-%m-%d %H:%M:%S")
-    end_dt = datetime.strptime(f"{date} 23:59:59", "%Y-%m-%d %H:%M:%S")
+    # VARCHAR2 列存储 ISO T 格式 'YYYY-MM-DDTHH:MM:SS'，用字符串前缀比较
+    start_str = f"{date}T00:00:00"
+    end_str = f"{date}T23:59:59"
 
     ts_col = _get_ts_column()
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .filter(ts_col >= start_dt)
-        .filter(ts_col <= end_dt)
+        .filter(ts_col >= start_str)
+        .filter(ts_col <= end_str)
         .order_by(ts_col.asc())
         .all()
     )
@@ -273,11 +285,11 @@ def get_alarm_history(
     if start_time:
         start_dt = _parse_ts(start_time)
         if start_dt:
-            query = query.filter(ts_col >= start_dt)
+            query = query.filter(ts_col >= _format_ts_for_query(start_dt))
     if end_time:
         end_dt = _parse_ts(end_time)
         if end_dt:
-            query = query.filter(ts_col <= end_dt)
+            query = query.filter(ts_col <= _format_ts_for_query(end_dt))
 
     query = query.order_by(ts_col.desc())
     rows = query.limit(limit * 3).all()
@@ -329,22 +341,23 @@ def get_event_detail(
     # 查找前后事件（用于连续回放）
     ts_col = _get_ts_column()
     current_ts = row.event_ts_utc or row.received_ts_utc
-    current_dt = _parse_ts(current_ts)
+    # VARCHAR2 列，直接用字符串比较
+    current_ts_str = _normalize_ts(current_ts) if current_ts else None
 
     prev_row = None
     next_row = None
-    if current_dt:
+    if current_ts_str:
         prev_row = (
             db.query(DT_EVENT_RAW)
             .filter(DT_EVENT_RAW.tool_id == tool_id)
-            .filter(ts_col < current_dt)
+            .filter(ts_col < current_ts_str)
             .order_by(ts_col.desc())
             .first()
         )
         next_row = (
             db.query(DT_EVENT_RAW)
             .filter(DT_EVENT_RAW.tool_id == tool_id)
-            .filter(ts_col > current_dt)
+            .filter(ts_col > current_ts_str)
             .order_by(ts_col.asc())
             .first()
         )

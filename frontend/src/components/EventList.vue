@@ -24,14 +24,21 @@ function tagClass(type) {
   return 'tag-' + (type || 'INFO').toUpperCase()
 }
 
-// 格式化时间
+// 格式化时间（只显示时分秒）
 function formatTime(timestamp) {
   if (!timestamp) return '--:--:--'
   try {
-    if (timestamp.includes('T')) {
-      return timestamp.slice(11, 19)
+    const d = new Date(timestamp)
+    if (isNaN(d.getTime())) {
+      // fallback: 手动提取时间部分
+      const sep = timestamp.includes('T') ? 'T' : ' '
+      const timePart = timestamp.split(sep)[1]
+      return timePart ? timePart.slice(0, 8) : '--:--:--'
     }
-    return timestamp.slice(0, 8)
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    const ss = String(d.getSeconds()).padStart(2, '0')
+    return `${hh}:${mm}:${ss}`
   } catch {
     return '--:--:--'
   }

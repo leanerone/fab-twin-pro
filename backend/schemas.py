@@ -8,21 +8,25 @@ class MachineOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    model: str
-    name: str
-    line: int
-    chamber_count: int
-    process_type: str
-    state: str
-    temp: float
-    pressure: float
-    gas_flow: float
-    rf_power: float
-    wafer_count: int
-    alarm_count: int
-    process_step: int
-    has_smif: bool
-    updated_at: str
+    model: Optional[str] = ""
+    name: Optional[str] = ""
+    line: Optional[int] = 0
+    chamber_count: Optional[int] = 4
+    process_type: Optional[str] = ""
+    state: Optional[str] = "idle"
+    temp: Optional[float] = 25.0
+    pressure: Optional[float] = 1.0
+    gas_flow: Optional[float] = 0.0
+    rf_power: Optional[float] = 0.0
+    wafer_count: Optional[int] = 0
+    alarm_count: Optional[int] = 0
+    process_step: Optional[int] = 0
+    has_smif: Optional[bool] = False
+    updated_at: Optional[str] = ""
+    x_pos: Optional[float] = 0.0
+    y_pos: Optional[float] = 0.0
+    floor_x: Optional[float] = 0.0
+    floor_y: Optional[float] = 0.0
 
 
 class EventOut(BaseModel):

@@ -800,12 +800,13 @@ function bisectLeft(arr, target, getKey) {
 function onDateChange(newDate) {
   if (!newDate) return
   playbackDate.value = newDate
-  // 实时模式：根据日期重新加载告警/Lot
-  loadAlarms()
-  loadLots()
+  // 回放模式：重新加载历史事件
   if (mode.value === 'playback') {
     switchToPlayback()
   }
+  // 重新加载告警/Lot
+  loadAlarms()
+  loadLots()
 }
 
 // 倍速变化

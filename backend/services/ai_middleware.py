@@ -117,14 +117,15 @@ class AIMiddleware:
         # 路由到不同provider
         result = None
         try:
-            if self.provider == "local" or not AI_MCP_ENABLED:
-                result = self._local_rule_engine(question, machine_id, user_role)
-            elif self.provider == "openai":
+            if self.provider == "openai" and self.base_url and self.api_key:
                 result = self._call_openai_compatible(question, system_prompt, session["messages"], machine_id)
+            elif self.provider == "openai":
+                # provider设为openai但未配置base_url/api_key，回退本地
+                print(f"[AI] provider=openai 但未配置 base_url 或 api_key，回退本地规则")
+                result = self._local_rule_engine(question, machine_id, user_role)
             elif self.provider == "dify":
                 result = self._call_dify(question, session_id, machine_id, user_role)
             elif self.provider == "hybrid":
-                # 混合模式：先尝试Dify，失败则本地回退
                 try:
                     result = self._call_dify(question, session_id, machine_id, user_role)
                 except Exception as e:
