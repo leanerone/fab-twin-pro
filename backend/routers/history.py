@@ -133,7 +133,7 @@ def get_history(
     event_category: Optional[str] = Query(None, description="事件分类过滤: alarm/pod/process/other"),
     limit: int = Query(500, ge=1, le=20000),
     offset: int = Query(0, ge=0),
-    before_raw_id: Optional[int] = Query(None, description="分页游标：返回 raw_id < 此值的事件，配合 next 翻页"),
+    before_raw_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """获取指定机台的历史事件时间轴

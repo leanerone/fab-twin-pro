@@ -78,20 +78,19 @@ export function useWebSocket() {
 
   wsInstance = {
     ws: null,
+    pingTimer: null,
     // 连接 WebSocket，传入 store 用于事件分发
     connect(store) {
       if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
         return
       }
       // WebSocket 连接策略：
-      // - IIS 部署（port 80/443）：URL Rewrite 不支持 WebSocket 升级握手，直连后端 8002
+      // - IIS 部署（port 80/443）：优先通过 IIS 代理 /ws/realtime（ARR 反向代理）
+      //   如果失败，fallback 直连后端 8002
       // - Vite dev/preview（其他端口）：走 Vite proxy（原生支持 ws 升级）
-      const isIIS = (location.port === '80' || location.port === '443' || location.port === '')
       const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const wsUrl = isIIS
-        ? `${wsProto}//${location.hostname}:8002/ws/realtime`
-        : `${wsProto}//${location.host}/ws/realtime`
-      console.log('[WS] Connecting to:', wsUrl, isIIS ? '(IIS mode, direct to backend)' : '(Vite proxy mode)')
+      const wsUrl = `${wsProto}//${location.host}/ws/realtime`
+      console.log('[WS] Connecting to:', wsUrl)
       try {
         this.ws = new WebSocket(wsUrl)
       } catch (e) {
@@ -104,6 +103,13 @@ export function useWebSocket() {
         reconnectAttempts = 0
         store.wsConnected = true
         console.log('[WS] 已连接实时事件流')
+        // 启动心跳 ping（每 25 秒），防止 IIS/代理因空闲断开
+        if (this.pingTimer) clearInterval(this.pingTimer)
+        this.pingTimer = setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 25000)
       }
 
       this.ws.onmessage = (evt) => {
@@ -161,6 +167,10 @@ export function useWebSocket() {
 
       this.ws.onclose = () => {
         store.wsConnected = false
+        if (this.pingTimer) {
+          clearInterval(this.pingTimer)
+          this.pingTimer = null
+        }
         console.log('[WS] 连接关闭，准备重连...')
         this._scheduleReconnect(store)
       }
@@ -178,6 +188,10 @@ export function useWebSocket() {
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
         reconnectTimer = null
+      }
+      if (this.pingTimer) {
+        clearInterval(this.pingTimer)
+        this.pingTimer = null
       }
       if (this.ws) {
         this.ws.onclose = null

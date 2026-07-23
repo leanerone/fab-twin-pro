@@ -56,9 +56,16 @@ app.include_router(rv_router, tags=["rv"])
 async def websocket_realtime(websocket: WebSocket):
     await manager.connect(websocket)
     try:
+        # 发送连接成功确认，防止代理因无双向通信而断开
+        await websocket.send_json({"type": "connected", "ts": datetime.now().isoformat()})
         while True:
             data = await websocket.receive_text()
+            # 处理前端 ping，回复 pong 保持连接
+            if data.strip() == '{"type":"ping"}':
+                await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
         manager.disconnect(websocket)
 
 # ========== 启动时初始化 ==========
