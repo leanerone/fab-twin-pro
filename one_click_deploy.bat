@@ -35,15 +35,35 @@ echo   Node.js: %NODE_VER%
 echo.
 
 echo [2/8] Loading env.bat...
+set DB_TYPE=
+set ORACLE_HOST=
+set ORACLE_USER=
+set ORACLE_SERVICE=
+set ORACLE_CLIENT_DIR=
+
 if exist "%BASE_DIR%\env.bat" (
+    echo   Found env.bat, loading...
     call "%BASE_DIR%\env.bat"
-    echo   DB_TYPE: %DB_TYPE%
-    echo   ORACLE_HOST: %ORACLE_HOST%
-    echo   ORACLE_USER: %ORACLE_USER%
-    echo   ORACLE_SERVICE: %ORACLE_SERVICE%
 ) else (
-    echo   [WARN] env.bat not found, defaulting to SQLite
-    set "DB_TYPE=sqlite"
+    echo   [WARN] env.bat not found
+)
+
+REM Verify variables were loaded
+echo   DB_TYPE=[%DB_TYPE%]
+echo   ORACLE_HOST=[%ORACLE_HOST%]
+echo   ORACLE_USER=[%ORACLE_USER%]
+echo   ORACLE_SERVICE=[%ORACLE_SERVICE%]
+
+if "%DB_TYPE%"=="" (
+    echo   [WARN] DB_TYPE empty, using defaults
+    set DB_TYPE=sqlite
+    set ORACLE_HOST=localhost
+    set ORACLE_PORT=1521
+    set ORACLE_SERVICE=ORCLPDB
+    set ORACLE_USER=fabtwin
+    set ORACLE_PASSWORD=fabtwin
+    set ORACLE_DSN_TYPE=service_name
+    set ORACLE_CLIENT_DIR=C:\oracle\WINDOWS.X64_193000_db_home
 )
 echo.
 
