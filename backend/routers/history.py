@@ -6,114 +6,26 @@
   1. ISO T 分隔: "2026-07-23T08:00:00" (本地seed数据)
   2. 空格分隔:   "2026-07-23 08:00:00"
   3. NLS 中文:   "2026-7-23 下午12:01:14" (量产Oracle，月日不补零+12小时制)
-- 由于格式不统一，不在SQL层做时间过滤，全部在Python层用 _parse_ts 解析过滤
+- 由于格式不统一，不在SQL层做时间过滤，全部在Python层用 parse_ts 解析过滤
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
 import json
-import re
 
 from database import get_db
 from models import DT_EVENT_RAW
+from services.time_utils import parse_ts, normalize_ts
 
 router = APIRouter(prefix="/api/history", tags=["history"])
-
-
-def _parse_ts(ts) -> Optional[datetime]:
-    """将各种格式的时间戳转换为 datetime 对象
-
-    支持格式（按优先级）：
-    1. datetime 对象（直接返回）
-    2. Oracle NLS 中文: "2026-7-23 下午12:01:14" / "2026-07-23 上午08:30:00"
-    3. "2026-07-21 00:00:00" (标准24小时制空格分隔)
-    4. "2026-07-21T00:00:00" (ISO T分隔)
-    5. "2026-07-21T00:00:00.000Z" (带Z后缀)
-    6. "2026-07-21" (仅日期)
-    7. 月日不补零的24小时制: "2026-7-23 8:00:00"
-    """
-    if not ts:
-        return None
-    if isinstance(ts, datetime):
-        return ts
-    ts = str(ts).strip()
-    if not ts:
-        return None
-
-    # 先去掉 Z 和时区后缀
-    ts_clean = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
-
-    # 格式1: Oracle NLS 中文 "2026-7-23 下午12:01:14"
-    nls_match = re.match(
-        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})$',
-        ts_clean
-    )
-    if nls_match:
-        year = int(nls_match.group(1))
-        month = int(nls_match.group(2))
-        day = int(nls_match.group(3))
-        ampm = nls_match.group(4)
-        hour = int(nls_match.group(5))
-        minute = int(nls_match.group(6))
-        second = int(nls_match.group(7))
-        if ampm == '下午' and hour != 12:
-            hour += 12
-        elif ampm == '上午' and hour == 12:
-            hour = 0
-        try:
-            return datetime(year, month, day, hour, minute, second)
-        except ValueError:
-            pass
-
-    # 格式2-5: 标准格式
-    formats = [
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S.%f",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d",
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(ts_clean, fmt)
-        except ValueError:
-            continue
-
-    # 格式7: 不补零的日期+时间（月日不补零，24小时制）
-    loose_match = re.match(
-        r'^(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{2}):(\d{2})$',
-        ts_clean
-    )
-    if loose_match:
-        try:
-            return datetime(
-                int(loose_match.group(1)),
-                int(loose_match.group(2)),
-                int(loose_match.group(3)),
-                int(loose_match.group(4)),
-                int(loose_match.group(5)),
-                int(loose_match.group(6)),
-            )
-        except ValueError:
-            pass
-
-    return None
-
-
-def _normalize_ts(ts) -> str:
-    """标准化时间戳为 'YYYY-MM-DD HH:MM:SS' 格式（用于API输出）"""
-    dt = _parse_ts(ts)
-    if dt is None:
-        return ""
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
     """解析VFEI事件payload"""
     try:
         return json.loads(payload_json) if payload_json else {}
-    except:
+    except Exception:
         return {"_raw": payload_json}
 
 
@@ -171,7 +83,7 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
         "tool_id": row.tool_id,
         "source_system": row.source_system,
         "source_message_id": row.source_message_id,
-        "timestamp": _normalize_ts(ts_value),
+        "timestamp": normalize_ts(ts_value),
         "parse_status": row.parse_status,
         "event_category": event_category,
         "event_name": event_name,
@@ -203,11 +115,11 @@ def get_history(
     """
     query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id == tool_id)
 
-    start_dt = _parse_ts(start_time) if start_time else None
-    end_dt = _parse_ts(end_time) if end_time else None
+    start_dt = parse_ts(start_time) if start_time else None
+    end_dt = parse_ts(end_time) if end_time else None
 
     # 按 raw_id 降序取最近N条（raw_id通常递增，近似时间顺序）
-    fetch_limit = min(limit * 5 + offset, 5000)
+    fetch_limit = min(limit * 4 + offset, 5000)
     rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(fetch_limit).all()
 
     # Python层解析和过滤
@@ -217,7 +129,7 @@ def get_history(
         ts = ev.get("timestamp", "")
         if not ts:
             continue
-        ev_dt = _parse_ts(ts)
+        ev_dt = parse_ts(ts)
         if not ev_dt:
             continue
         if start_dt and ev_dt < start_dt:
@@ -270,7 +182,7 @@ def get_timeline(
     for row in rows:
         ev = _event_to_dict(row)
         ts = ev.get("timestamp", "")
-        dt = _parse_ts(ts)
+        dt = parse_ts(ts)
         if not dt:
             continue
         # 只统计指定日期
@@ -389,7 +301,7 @@ def get_event_detail(
 
     ev["prev_event_id"] = prev_row.raw_id if prev_row else None
     ev["next_event_id"] = next_row.raw_id if next_row else None
-    ev["prev_timestamp"] = _normalize_ts(prev_row.event_ts_utc or prev_row.received_ts_utc) if prev_row else None
-    ev["next_timestamp"] = _normalize_ts(next_row.event_ts_utc or next_row.received_ts_utc) if next_row else None
+    ev["prev_timestamp"] = normalize_ts(prev_row.event_ts_utc or prev_row.received_ts_utc) if prev_row else None
+    ev["next_timestamp"] = normalize_ts(next_row.event_ts_utc or next_row.received_ts_utc) if next_row else None
 
     return ev

@@ -361,7 +361,7 @@ class AIMiddleware:
             .filter(
                 DT_EVENT_RAW.tool_id == machine_id,
             )
-            .order_by(DT_EVENT_RAW.event_ts_utc.desc())
+            .order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(100)
             .all()
         )
@@ -446,8 +446,7 @@ class AIMiddleware:
                     f"• 状态：{status_cn}\n"
                     f"• 开始时间：{lot.start_time}\n"
                     f"• 结束时间：{lot.end_time or '进行中'}\n"
-                    f"• 优先级：{lot.priority}\n"
-                    f"• 工艺配方：{lot.recipe or '未指定'}"
+                    f"• 工艺配方：{lot.recipe_id or '未指定'}"
                 )
                 return {
                     "answer": answer,
@@ -460,7 +459,7 @@ class AIMiddleware:
         q = db.query(Lot)
         if machine_id:
             q = q.filter(Lot.machine_id == machine_id)
-        lots = q.order_by(Lot.start_time.desc()).limit(10).all()
+        lots = q.order_by(Lot.id.desc()).limit(10).all()
 
         if not lots:
             return {"answer": "未找到相关 Lot 记录。", "sql": ""}

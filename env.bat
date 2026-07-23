@@ -3,7 +3,7 @@ REM FabTwin Environment Configuration
 REM Modify these values for your production Oracle database
 REM IMPORTANT: Do NOT use Chinese characters in this file
 
-REM Database Type: oracle or sqlite
+REM Database Type: oracle (only oracle is supported)
 set DB_TYPE=oracle
 
 REM Oracle Connection

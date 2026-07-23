@@ -56,7 +56,7 @@ echo   ORACLE_SERVICE=[%ORACLE_SERVICE%]
 
 if "%DB_TYPE%"=="" (
     echo   [ERROR] DB_TYPE is empty!
-    echo   Please edit env.bat and set your database connection settings.
+    echo   Please edit env.bat and set your Oracle database connection settings.
     echo.
     echo   Example env.bat content for Oracle:
     echo     set DB_TYPE=oracle
@@ -67,9 +67,6 @@ if "%DB_TYPE%"=="" (
     echo     set ORACLE_PASSWORD=apcuser
     echo     set ORACLE_DSN_TYPE=sid
     echo     set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
-    echo.
-    echo   Example env.bat content for SQLite (no Oracle):
-    echo     set DB_TYPE=sqlite
     echo.
     pause
     exit /b 1

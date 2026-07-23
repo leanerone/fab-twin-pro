@@ -11,12 +11,12 @@
 import asyncio
 import json
 import logging
-import re
 from datetime import datetime, timedelta
 
 from database import SessionLocal
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
 from services.realtime import manager
+from services.time_utils import parse_ts
 
 logger = logging.getLogger("fabtwin.db_poller")
 
@@ -24,81 +24,6 @@ logger = logging.getLogger("fabtwin.db_poller")
 _poller_task = None
 _last_poll_ts = None
 _running = False
-
-
-def _parse_ts(ts) -> datetime:
-    """将各种格式的时间戳转换为 datetime 对象
-
-    支持格式：
-    - datetime 对象（直接返回）
-    - Oracle NLS 中文: "2026-7-23 下午12:01:14"
-    - "2026-07-21T00:00:00" (ISO)
-    - "2026-07-21 00:00:00" (空格分隔)
-    - "2026-07-21T00:00:00.000Z" (带Z后缀)
-    """
-    if not ts:
-        return datetime.min
-    if isinstance(ts, datetime):
-        return ts
-    ts = str(ts).strip()
-    if not ts:
-        return datetime.min
-    ts_clean = re.sub(r'(Z|[+-]\d{2}:\d{2})$', '', ts)
-
-    # Oracle NLS 中文格式 "2026-7-23 下午12:01:14"
-    nls_match = re.match(
-        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})$',
-        ts_clean
-    )
-    if nls_match:
-        year = int(nls_match.group(1))
-        month = int(nls_match.group(2))
-        day = int(nls_match.group(3))
-        ampm = nls_match.group(4)
-        hour = int(nls_match.group(5))
-        minute = int(nls_match.group(6))
-        second = int(nls_match.group(7))
-        if ampm == '下午' and hour != 12:
-            hour += 12
-        elif ampm == '上午' and hour == 12:
-            hour = 0
-        try:
-            return datetime(year, month, day, hour, minute, second)
-        except ValueError:
-            pass
-
-    formats = [
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S.%f",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d",
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(ts_clean, fmt)
-        except ValueError:
-            continue
-
-    # 月日不补零的24小时制
-    loose_match = re.match(
-        r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$',
-        ts_clean
-    )
-    if loose_match:
-        try:
-            return datetime(
-                int(loose_match.group(1)),
-                int(loose_match.group(2)),
-                int(loose_match.group(3)),
-                int(loose_match.group(4)),
-                int(loose_match.group(5)),
-                int(loose_match.group(6)),
-            )
-        except ValueError:
-            pass
-
-    return datetime.min
 
 
 def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
@@ -132,13 +57,16 @@ def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
             "severity": "warn"
         }
 
+    ts_dt = parse_ts(raw_event.event_ts_utc or raw_event.received_ts_utc)
+    ts_str = ts_dt.strftime("%Y-%m-%d %H:%M:%S") if ts_dt else ""
+
     return {
         "raw_id": raw_event.raw_id,
         "tool_id": raw_event.tool_id,
         "event_name": event_name,
         "event_type": event_type,
         "category": category,
-        "timestamp": (_parse_ts(raw_event.event_ts_utc or raw_event.received_ts_utc)).strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": ts_str,
         "lot_id": payload.get("lot_id"),
         "port_id": payload.get("port_id"),
         "cassette_id": payload.get("cassette_id"),
@@ -183,7 +111,7 @@ async def poll_db_events():
                 pushed += 1
             # _last_poll_ts 设为最新事件时间，之后只推送更新的
             last_ev = recent_rows[-1]
-            _last_poll_ts = _parse_ts(last_ev.received_ts_utc)
+            _last_poll_ts = parse_ts(last_ev.received_ts_utc)
             logger.info(f"[DB Poller] 启动推送 {pushed} 条历史事件，_last_poll_ts={_last_poll_ts}")
             print(f"[DB Poller] 启动推送 {pushed} 条历史事件，_last_poll_ts={_last_poll_ts}", flush=True)
         else:
@@ -205,8 +133,8 @@ async def poll_db_events():
 
                 new_events = []
                 for ev in all_recent:
-                    ev_ts = _parse_ts(ev.received_ts_utc)
-                    if ev_ts > _last_poll_ts:
+                    ev_ts = parse_ts(ev.received_ts_utc)
+                    if ev_ts and _last_poll_ts and ev_ts > _last_poll_ts:
                         new_events.append(ev)
 
                 # 按raw_id正序排列（近似时间正序）
@@ -220,9 +148,9 @@ async def poll_db_events():
                             "type": "raw_event",
                             "data": event_data
                         })
-                        # 更新时间戳（使用datetime）
-                        ev_ts = _parse_ts(ev.received_ts_utc)
-                        if ev_ts > _last_poll_ts:
+                        # 更新时间戳
+                        ev_ts = parse_ts(ev.received_ts_utc)
+                        if ev_ts and ev_ts > _last_poll_ts:
                             _last_poll_ts = ev_ts
 
                     logger.info(f"[DB Poller] 推送 {len(new_events)} 条新事件，最新时间: {_last_poll_ts}")

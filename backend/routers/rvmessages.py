@@ -1,4 +1,10 @@
-"""RV消息API：接收RV实时消息，查询当前状态"""
+"""RV消息API：接收RV实时消息，查询当前状态
+
+关键设计：
+- 写入 DT_EVENT_RAW 时 received_ts_utc 用 ISO T 分隔格式
+  （parse_ts 可正确解析，与 NLS 中文格式兼容）
+- 查询历史时按 raw_id 降序，不用 VARCHAR2 时间排序
+"""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -8,6 +14,7 @@ import json
 from database import get_db
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
 from services.realtime import manager
+from services.time_utils import normalize_ts
 
 router = APIRouter(prefix="/api/rv", tags=["rv"])
 
@@ -98,13 +105,14 @@ def get_rv_history(
     limit: int = 100,
     db: Session = Depends(get_db),
 ):
-    """获取机台RV消息历史"""
-    from sqlalchemy import func
-    ts_col = func.coalesce(DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc)
+    """获取机台RV消息历史
+
+    按 raw_id 降序（近似时间倒序；VARCHAR2 时间排序不可靠）。
+    """
     rows = (
         db.query(DT_EVENT_RAW)
         .filter(DT_EVENT_RAW.tool_id == tool_id)
-        .order_by(ts_col.desc())
+        .order_by(DT_EVENT_RAW.raw_id.desc())
         .limit(limit)
         .all()
     )
@@ -114,7 +122,7 @@ def get_rv_history(
         payload = json.loads(row.payload_json) if row.payload_json else {}
         events.append({
             "raw_id": row.raw_id,
-            "event_ts_utc": row.event_ts_utc,
+            "event_ts_utc": normalize_ts(row.event_ts_utc or row.received_ts_utc),
             "event_name": payload.get("event_name", "UNKNOWN"),
             "lot_id": payload.get("lot_id"),
             "cassette_id": payload.get("cassette_id"),

@@ -34,7 +34,7 @@ for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PY_VER=%%i
 echo [OK] Python: %PY_VER%
 echo.
 
-REM ----- Load env.bat -----
+REM ----- Load env.bat (Oracle only, no SQLite fallback) -----
 if exist "%BASE_DIR%\env.bat" (
     echo [INFO] Loading env.bat...
     call "%BASE_DIR%\env.bat"
@@ -43,8 +43,9 @@ if exist "%BASE_DIR%\env.bat" (
     echo   ORACLE_USER: %ORACLE_USER%
     echo   ORACLE_CLIENT_DIR: %ORACLE_CLIENT_DIR%
 ) else (
-    echo [WARN] env.bat not found, using defaults
-    set "DB_TYPE=sqlite"
+    echo [ERROR] env.bat not found! Oracle connection required.
+    pause
+    exit /b 1
 )
 echo.
 

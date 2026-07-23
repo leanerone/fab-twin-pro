@@ -13,7 +13,7 @@ echo  FabTwin Development Start
 echo ================================================================
 echo.
 
-REM ----- Load env.bat -----
+REM ----- Load env.bat (Oracle only, no SQLite fallback) -----
 if exist "%BASE_DIR%\env.bat" (
     echo [INFO] Loading env.bat...
     call "%BASE_DIR%\env.bat"
@@ -23,8 +23,9 @@ if exist "%BASE_DIR%\env.bat" (
     echo   ORACLE_SERVICE: %ORACLE_SERVICE%
     echo   ORACLE_CLIENT_DIR: %ORACLE_CLIENT_DIR%
 ) else (
-    echo [WARN] env.bat not found, using defaults
-    set "DB_TYPE=sqlite"
+    echo [ERROR] env.bat not found! Oracle connection required.
+    pause
+    exit /b 1
 )
 echo.
 

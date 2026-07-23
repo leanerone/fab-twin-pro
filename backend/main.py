@@ -82,9 +82,8 @@ def on_startup():
 
     try:
         init_db()
-        from database import engine, DB_IS_SQLITE
+        from database import engine
         print(f"[DB] Connected to: {engine.url}")
-        print(f"[DB] Is SQLite: {DB_IS_SQLITE}")
         print("[DB] 数据库初始化完成")
 
         db = SessionLocal()

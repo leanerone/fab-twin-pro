@@ -8,10 +8,6 @@ print(f"DB_TYPE: {DB_TYPE}")
 print(f"DB: {ORACLE_HOST}:{ORACLE_PORT}/{ORACLE_SERVICE} ({ORACLE_USER})")
 print(f"DSN_TYPE: {ORACLE_DSN_TYPE}")
 
-if DB_TYPE == 'sqlite':
-    print("[OK] SQLite mode - no external connection needed")
-    sys.exit(0)
-
 try:
     import oracledb
     client_dir = os.environ.get("ORACLE_CLIENT_DIR", "")

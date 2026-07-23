@@ -1,15 +1,20 @@
-"""应用配置：数据库路径、API端口、CORS来源、Redis配置等"""
+"""应用配置：Oracle 数据库连接、API端口、CORS、Redis等
+
+量产环境唯一数据库：Oracle。
+不再支持 SQLite，避免本地/量产行为不一致。
+"""
 import os
+import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ========== 数据库配置 ==========
-# 支持 SQLite / Oracle 一键切换
-# 切换方式：设置环境变量 DB_TYPE=oracle 并配置 ORACLE_DSN
-# 本地开发默认使用 SQLite，生产部署切 Oracle 无需改代码
+# ========== 数据库配置（Oracle only）==========
 DB_TYPE = os.getenv("DB_TYPE", "oracle").strip().lower()
+if DB_TYPE != "oracle":
+    print(f"[FATAL] DB_TYPE={DB_TYPE} 不支持。本项目仅支持 Oracle，请设置 DB_TYPE=oracle", file=sys.stderr)
+    sys.exit(1)
 
-# Oracle 连接参数（始终定义，便于 database.py 导入；SQLite 模式下不使用）
+# Oracle 连接参数
 ORACLE_USER = os.getenv("ORACLE_USER", "fabtwin")
 ORACLE_PASSWORD = os.getenv("ORACLE_PASSWORD", "fabtwin")
 ORACLE_HOST = os.getenv("ORACLE_HOST", "localhost")
@@ -19,16 +24,12 @@ ORACLE_SERVICE = os.getenv("ORACLE_SERVICE", "ORCLPDB")
 # Set ORACLE_DSN_TYPE=sid for Oracle 10g/11g
 ORACLE_DSN_TYPE = os.getenv("ORACLE_DSN_TYPE", "service_name").lower()
 
-if DB_TYPE == "oracle":
-    if ORACLE_DSN_TYPE == "sid":
-        DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?sid={ORACLE_SERVICE}"
-    else:
-        DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?service_name={ORACLE_SERVICE}"
-    DB_IS_SQLITE = False
+if ORACLE_DSN_TYPE == "sid":
+    DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?sid={ORACLE_SERVICE}"
 else:
-    DB_PATH = os.path.join(BASE_DIR, "fabtwin.db")
-    DATABASE_URL = f"sqlite:///{DB_PATH}"
-    DB_IS_SQLITE = True
+    DATABASE_URL = f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@{ORACLE_HOST}:{ORACLE_PORT}/?service_name={ORACLE_SERVICE}"
+
+DB_IS_SQLITE = False  # 保留变量供兼容性检查，始终为 False
 
 # ========== Redis 缓存配置 ==========
 REDIS_HOST = "localhost"

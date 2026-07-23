@@ -41,7 +41,7 @@ if errorlevel 1 (
 )
 echo.
 
-REM ----- Load env.bat -----
+REM ----- Load env.bat (Oracle only, no SQLite fallback) -----
 if exist "%BASE_DIR%\env.bat" (
     echo [INFO] Loading env.bat...
     call "%BASE_DIR%\env.bat"
@@ -51,8 +51,18 @@ if exist "%BASE_DIR%\env.bat" (
     echo   ORACLE_SERVICE: %ORACLE_SERVICE%
     echo   ORACLE_CLIENT_DIR: %ORACLE_CLIENT_DIR%
 ) else (
-    echo [WARN] env.bat not found, using defaults
-    set "DB_TYPE=sqlite"
+    echo [ERROR] env.bat not found!
+    echo This project requires Oracle connection. Please create env.bat with:
+    echo   set DB_TYPE=oracle
+    echo   set ORACLE_HOST=10.30.8.119
+    echo   set ORACLE_PORT=1521
+    echo   set ORACLE_SERVICE=APCDB
+    echo   set ORACLE_USER=emuuser
+    echo   set ORACLE_PASSWORD=apcuser
+    echo   set ORACLE_DSN_TYPE=sid
+    echo   set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
+    pause
+    exit /b 1
 )
 echo.
 
