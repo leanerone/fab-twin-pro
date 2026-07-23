@@ -150,21 +150,42 @@ def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
 
 
 async def poll_db_events():
-    """主循环：定期轮询DB中的新事件"""
+    """主循环：定期轮询DB中的新事件
+
+    启动时先推送最近N条历史事件作为初始快照，让前端一连接就能看到内容。
+    之后才开始轮询新事件（时间戳大于_last_poll_ts的事件）。
+    """
     global _last_poll_ts, _running
 
     logger.info("[DB Poller] 启动DB事件轮询服务")
     print("[DB Poller] 启动DB事件轮询服务", flush=True)
     _running = True
 
-    # 初始时间：从数据库中最新事件的时间开始，避免推送历史积压
+    # 启动时：推送最近50条历史事件作为初始快照
     db = SessionLocal()
     try:
-        max_ts = db.query(DT_EVENT_RAW.received_ts_utc).order_by(DT_EVENT_RAW.received_ts_utc.desc()).first()
-        if max_ts and max_ts[0]:
-            _last_poll_ts = _parse_ts(max_ts[0])
-            logger.info(f"[DB Poller] 初始时间设置为数据库最新事件时间: {_last_poll_ts}")
-            print(f"[DB Poller] 初始时间设置为数据库最新事件时间: {_last_poll_ts}", flush=True)
+        recent_rows = (
+            db.query(DT_EVENT_RAW)
+            .order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(50)
+            .all()
+        )
+        if recent_rows:
+            # 按时间正序推送（raw_id升序，近似时间顺序）
+            recent_rows.sort(key=lambda r: r.raw_id)
+            pushed = 0
+            for ev in recent_rows:
+                event_data = _parse_event_payload(ev)
+                await manager.broadcast({
+                    "type": "raw_event",
+                    "data": event_data
+                })
+                pushed += 1
+            # _last_poll_ts 设为最新事件时间，之后只推送更新的
+            last_ev = recent_rows[-1]
+            _last_poll_ts = _parse_ts(last_ev.received_ts_utc)
+            logger.info(f"[DB Poller] 启动推送 {pushed} 条历史事件，_last_poll_ts={_last_poll_ts}")
+            print(f"[DB Poller] 启动推送 {pushed} 条历史事件，_last_poll_ts={_last_poll_ts}", flush=True)
         else:
             _last_poll_ts = datetime.now() - timedelta(seconds=10)
             logger.info(f"[DB Poller] 数据库无数据，初始时间设置为当前时间前10秒: {_last_poll_ts}")
@@ -177,9 +198,9 @@ async def poll_db_events():
         try:
             db = SessionLocal()
             try:
-                # 查询新事件（使用datetime比较）
+                # 查询最近事件（用raw_id降序，近似时间顺序；VARCHAR2时间排序不可靠）
                 all_recent = db.query(DT_EVENT_RAW).order_by(
-                    DT_EVENT_RAW.received_ts_utc.desc()
+                    DT_EVENT_RAW.raw_id.desc()
                 ).limit(100).all()
 
                 new_events = []
@@ -188,8 +209,8 @@ async def poll_db_events():
                     if ev_ts > _last_poll_ts:
                         new_events.append(ev)
 
-                # 按时间正序排列
-                new_events.sort(key=lambda e: _parse_ts(e.received_ts_utc))
+                # 按raw_id正序排列（近似时间正序）
+                new_events.sort(key=lambda e: e.raw_id)
 
                 if new_events:
                     for ev in new_events:
