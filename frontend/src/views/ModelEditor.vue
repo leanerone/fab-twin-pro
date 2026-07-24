@@ -368,6 +368,7 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div class="tab-content-wrapper">
     <!-- 模型管理 Tab -->
     <div v-show="activeTab === 'models'" class="models-panel">
       <div class="models-toolbar">
@@ -735,6 +736,7 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    </div>
 
     <!-- Toast -->
     <div class="toast-container">
@@ -746,14 +748,31 @@ onMounted(async () => {
 <style scoped>
 .model-editor {
   padding: 20px;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   color: var(--text);
   background: var(--bg);
 }
 .editor-header {
   margin-bottom: 20px;
+  flex-shrink: 0;
+}
+.tab-content-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+.models-panel,
+.config-panel,
+.debug-panel,
+.guide-panel,
+.events-panel {
+  height: 100%;
+  overflow-y: auto;
 }
 .editor-header h1 {
   font-size: 20px;

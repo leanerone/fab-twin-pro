@@ -35,5 +35,8 @@ modelStore.loadModels()
   flex: 1;
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 </style>
