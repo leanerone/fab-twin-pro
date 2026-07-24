@@ -14,6 +14,9 @@
   "tool_calls": "工具调用记录（可选）",
   "sources": "参考来源（可选）"
 }
+
+配置持久化：AI配置存储在DB ai_configs表中，启动时从DB加载，
+环境变量作为首次初始化默认值。
 """
 import re
 import json
@@ -56,33 +59,285 @@ def _get_db():
     return _db_session()
 
 
+# ========== 预定义 Provider 列表 ==========
+PROVIDER_PRESETS = [
+    {
+        "id": "local",
+        "name": "本地规则引擎",
+        "description": "无需API，基于关键字匹配和规则引擎回答",
+        "requires_key": False,
+        "requires_url": False,
+    },
+    {
+        "id": "zhipu",
+        "name": "智谱AI (GLM)",
+        "description": "国内大模型，支持GLM-5.2等",
+        "requires_key": True,
+        "requires_url": True,
+        "default_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-5.2",
+    },
+    {
+        "id": "openai",
+        "name": "OpenAI 官方",
+        "description": "GPT-4o、GPT-4o-mini等",
+        "requires_key": True,
+        "requires_url": True,
+        "default_url": "https://api.openai.com",
+        "default_model": "gpt-4o-mini",
+    },
+    {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "description": "国内大模型，DeepSeek-V3等",
+        "requires_key": True,
+        "requires_url": True,
+        "default_url": "https://api.deepseek.com",
+        "default_model": "deepseek-chat",
+    },
+    {
+        "id": "qwen",
+        "name": "通义千问 (Qwen)",
+        "description": "阿里云大模型",
+        "requires_key": True,
+        "requires_url": True,
+        "default_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen-plus",
+    },
+    {
+        "id": "custom",
+        "name": "自定义OpenAI兼容",
+        "description": "任意OpenAI兼容接口（本地私有化模型等）",
+        "requires_key": True,
+        "requires_url": True,
+    },
+]
+
+
+# ========== DB 配置键名映射 ==========
+CONFIG_KEYS = {
+    "provider": "AI使用的Provider类型",
+    "base_url": "OpenAI兼容接口地址",
+    "api_key": "API密钥",
+    "model": "模型名称",
+    "temperature": "生成温度",
+    "max_tokens": "最大token数",
+    "provider_name": "Provider显示名称（如智谱GLM、OpenAI官方）",
+    "dify_enabled": "是否启用Dify",
+    "dify_base_url": "Dify API地址",
+    "dify_api_key": "Dify API密钥",
+    "dify_app_id": "Dify应用ID",
+    "n8n_enabled": "是否启用N8N",
+    "n8n_base_url": "N8N服务地址",
+    "n8n_webhook_secret": "N8N Webhook密钥",
+}
+
+
 class AIMiddleware:
-    """AI 中间适配层 - 统一调度入口"""
+    """AI 中间适配层 - 统一调度入口
+
+    架构升级：支持多AI配置管理
+    - LLM配置存储在 ai_provider_configs 表中，支持多配置切换
+    - Dify/N8N配置仍存储在 ai_configs 键值对表中
+    - Token使用量记录在 ai_usage_logs 表中
+    """
 
     def __init__(self):
-        self.provider = AI_PROVIDER  # local / openai / dify / hybrid
+        # LLM配置（从 ai_provider_configs 加载）
+        self.provider = AI_PROVIDER
         self.base_url = AI_BASE_URL
         self.api_key = AI_API_KEY
         self.model = AI_MODEL
         self.temperature = AI_TEMPERATURE
         self.max_tokens = AI_MAX_TOKENS
+        self.provider_name = ""
+        self.current_config_id = None  # 当前使用的配置ID
 
-        # Dify配置
+        # Dify配置（从 ai_configs 键值对表加载）
         self.dify_enabled = DIFY_ENABLED
         self.dify_base_url = DIFY_BASE_URL
         self.dify_api_key = DIFY_API_KEY
         self.dify_app_id = DIFY_APP_ID
 
-        # N8N配置
+        # N8N配置（从 ai_configs 键值对表加载）
         self.n8n_enabled = N8N_ENABLED
         self.n8n_base_url = N8N_BASE_URL
         self.n8n_webhook_secret = N8N_WEBHOOK_SECRET
 
-        # 会话存储（内存中，后续可接DB）
-        self.sessions = {}  # session_id -> { messages: [...], created_at: ... }
+        # 会话存储（内存中）
+        self.sessions = {}
+
+        # 启动时加载配置
+        self._load_dify_n8n_from_db()  # 加载Dify/N8N
+        self._load_llm_config()         # 加载LLM默认配置
+
+    def _load_dify_n8n_from_db(self):
+        """从 ai_configs 键值对表加载 Dify/N8N 配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIConfig
+                configs = db.query(AIConfig).all()
+                if not configs:
+                    # DB中无配置，将环境变量默认值写入DB
+                    print("[AI] DB中无Dify/N8N配置，将环境变量默认值写入DB")
+                    self._save_dify_n8n_to_db()
+                    return
+
+                config_map = {c.config_key: c.config_value for c in configs}
+                if "dify_enabled" in config_map:
+                    self.dify_enabled = config_map["dify_enabled"].lower() == "true"
+                if "dify_base_url" in config_map and config_map["dify_base_url"]:
+                    self.dify_base_url = config_map["dify_base_url"]
+                if "dify_api_key" in config_map and config_map["dify_api_key"]:
+                    self.dify_api_key = config_map["dify_api_key"]
+                if "dify_app_id" in config_map and config_map["dify_app_id"]:
+                    self.dify_app_id = config_map["dify_app_id"]
+
+                if "n8n_enabled" in config_map:
+                    self.n8n_enabled = config_map["n8n_enabled"].lower() == "true"
+                if "n8n_base_url" in config_map and config_map["n8n_base_url"]:
+                    self.n8n_base_url = config_map["n8n_base_url"]
+                if "n8n_webhook_secret" in config_map and config_map["n8n_webhook_secret"]:
+                    self.n8n_webhook_secret = config_map["n8n_webhook_secret"]
+
+                print(f"[AI] Dify/N8N配置加载成功")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] Dify/N8N配置加载失败，使用环境变量默认值: {e}")
+
+    def _load_llm_config(self, config_id: int = None):
+        """从 ai_provider_configs 加载LLM配置
+
+        Args:
+            config_id: 指定配置ID，None则加载默认配置
+        """
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                if config_id:
+                    cfg = db.query(AIProviderConfig).filter(
+                        AIProviderConfig.id == config_id,
+                        AIProviderConfig.is_enabled == True
+                    ).first()
+                else:
+                    # 先找默认配置
+                    cfg = db.query(AIProviderConfig).filter(
+                        AIProviderConfig.is_default == True,
+                        AIProviderConfig.is_enabled == True
+                    ).first()
+                    if not cfg:
+                        # 再找第一个启用的配置
+                        cfg = db.query(AIProviderConfig).filter(
+                            AIProviderConfig.is_enabled == True
+                        ).order_by(AIProviderConfig.sort_order).first()
+
+                if cfg:
+                    self.provider = cfg.provider
+                    self.base_url = cfg.base_url
+                    self.api_key = cfg.api_key
+                    self.model = cfg.model
+                    self.temperature = cfg.temperature
+                    self.max_tokens = cfg.max_tokens
+                    self.current_config_id = cfg.id
+                    self.provider_name = self._infer_provider_name()
+                    print(f"[AI] LLM配置加载成功: [{cfg.name}] {cfg.provider}/{cfg.model}")
+                else:
+                    print(f"[AI] DB中无可用LLM配置，使用环境变量默认值: {self.provider}/{self.model}")
+                    self.current_config_id = None
+                    self.provider_name = self._infer_provider_name()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] LLM配置加载失败，使用环境变量默认值: {e}")
+            self.current_config_id = None
+            self.provider_name = self._infer_provider_name()
+
+    def _save_dify_n8n_to_db(self):
+        """将Dify/N8N配置保存到 ai_configs 键值对表"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIConfig
+                now = datetime.now().isoformat()
+                all_config = {
+                    "dify_enabled": str(self.dify_enabled),
+                    "dify_base_url": self.dify_base_url,
+                    "dify_api_key": self.dify_api_key,
+                    "dify_app_id": self.dify_app_id,
+                    "n8n_enabled": str(self.n8n_enabled),
+                    "n8n_base_url": self.n8n_base_url,
+                    "n8n_webhook_secret": self.n8n_webhook_secret,
+                }
+                for key, value in all_config.items():
+                    existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
+                    if existing:
+                        existing.config_value = value
+                        existing.updated_at = now
+                    else:
+                        db.add(AIConfig(
+                            config_key=key,
+                            config_value=value,
+                            description=CONFIG_KEYS.get(key, ""),
+                            updated_at=now,
+                            updated_by="system",
+                        ))
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] Dify/N8N配置保存失败: {e}")
+
+    def _save_to_db(self, key: str, value: str):
+        """保存单个配置项到 ai_configs 键值对表"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIConfig
+                now = datetime.now().isoformat()
+                existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
+                if existing:
+                    existing.config_value = value
+                    existing.updated_at = now
+                else:
+                    db.add(AIConfig(
+                        config_key=key,
+                        config_value=value,
+                        description=CONFIG_KEYS.get(key, ""),
+                        updated_at=now,
+                        updated_by="admin",
+                    ))
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 保存配置 {key} 失败: {e}")
+
+    def _save_dify_n8n_key(self, key: str, value: str):
+        """保存单个Dify/N8N配置项到 ai_configs"""
+        self._save_to_db(key, value)
+
+    def _infer_provider_name(self) -> str:
+        """根据base_url推断Provider名称"""
+        url = (self.base_url or "").lower()
+        if "bigmodel" in url or "zhipu" in url:
+            return "智谱AI (GLM)"
+        if "api.openai.com" in url:
+            return "OpenAI 官方"
+        if "deepseek" in url:
+            return "DeepSeek"
+        if "dashscope" in url or "qwen" in url:
+            return "通义千问 (Qwen)"
+        if self.provider == "local":
+            return "本地规则引擎"
+        if url:
+            return "自定义OpenAI兼容"
+        return ""
 
     def chat(self, question: str, session_id: str = None, machine_id: str = None,
-             context: Dict = None, user_role: str = "user") -> Dict[str, Any]:
+             context: Dict = None, user_role: str = "user", config_id: int = None) -> Dict[str, Any]:
         """统一聊天入口
 
         Args:
@@ -91,12 +346,17 @@ class AIMiddleware:
             machine_id: 关联机台ID
             context: 额外上下文数据
             user_role: 用户角色（user/admin）
+            config_id: 指定使用的AI配置ID（None则使用默认配置）
 
         Returns:
-            统一响应结构体
+            统一响应结构体（含 provider_name、model、usage）
         """
         if not session_id:
             session_id = f"sess_{uuid.uuid4().hex[:16]}"
+
+        # 如有指定config_id，切换到对应配置
+        if config_id and config_id != self.current_config_id:
+            self._load_llm_config(config_id)
 
         # 获取或创建会话
         if session_id not in self.sessions:
@@ -118,13 +378,21 @@ class AIMiddleware:
         system_prompt = self._build_system_prompt(machine_id, context, user_role)
 
         # 路由到不同provider
+        openai_compatible_providers = {"openai", "zhipu", "deepseek", "qwen", "custom"}
+
         result = None
+        success = True
+        error_msg = None
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
         try:
-            if self.provider == "openai" and self.base_url and self.api_key:
-                result = self._call_openai_compatible(question, system_prompt, session["messages"], machine_id)
-            elif self.provider == "openai":
-                # provider设为openai但未配置base_url/api_key，回退本地
-                print(f"[AI] provider=openai 但未配置 base_url 或 api_key，回退本地规则")
+            if self.provider in openai_compatible_providers and self.base_url and self.api_key:
+                result = self._call_openai_compatible(
+                    question, system_prompt, session["messages"], machine_id,
+                    usage_tracker=usage
+                )
+            elif self.provider in openai_compatible_providers:
+                print(f"[AI] provider={self.provider} 但未配置 base_url 或 api_key，回退本地规则")
                 result = self._local_rule_engine(question, machine_id, user_role)
             elif self.provider == "dify":
                 result = self._call_dify(question, session_id, machine_id, user_role)
@@ -138,10 +406,19 @@ class AIMiddleware:
                 result = self._local_rule_engine(question, machine_id, user_role)
         except Exception as e:
             print(f"[AI] 调用失败，回退本地规则: {e}")
+            success = False
+            error_msg = str(e)
             result = self._local_rule_engine(question, machine_id, user_role)
 
         # 确保返回格式统一
         result = self._normalize_response(result)
+
+        # 注入当前Provider信息到响应
+        result["provider"] = self.provider
+        result["provider_name"] = self.provider_name or self._infer_provider_name()
+        result["model"] = self.model
+        result["config_id"] = self.current_config_id
+        result["usage"] = usage
 
         # 保存AI回复
         session["messages"].append({
@@ -156,6 +433,24 @@ class AIMiddleware:
             session["messages"] = session["messages"][-100:]
 
         result["session_id"] = session_id
+
+        # 记录Token使用量（异步，不阻塞响应）
+        try:
+            self._log_usage(
+                session_id=session_id,
+                config_id=self.current_config_id,
+                provider=self.provider,
+                model=self.model,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                question_preview=question[:200],
+                success=success,
+                error_msg=error_msg,
+            )
+        except Exception as e:
+            print(f"[AI] 使用量记录失败: {e}")
+
         return result
 
     def _build_system_prompt(self, machine_id: str = None, context: Dict = None,
@@ -288,8 +583,13 @@ class AIMiddleware:
     # ==================== Provider: OpenAI 兼容模型 ====================
 
     def _call_openai_compatible(self, question: str, system_prompt: str,
-                                history_messages: List[Dict], machine_id: str = None) -> Dict[str, Any]:
-        """调用OpenAI兼容接口（支持GLM、GPT等），带 Function Calling 工具调用"""
+                                history_messages: List[Dict], machine_id: str = None,
+                                usage_tracker: Dict = None) -> Dict[str, Any]:
+        """调用OpenAI兼容接口（支持GLM、GPT等），带 Function Calling 工具调用
+
+        Args:
+            usage_tracker: 外部传入的dict，用于记录token使用量
+        """
         if not self.base_url or not self.api_key:
             return self._local_rule_engine(question, machine_id)
 
@@ -317,14 +617,38 @@ class AIMiddleware:
 
         tool_call_records = []
         max_tool_rounds = 5  # 防止死循环
+        tools_supported = True
 
         try:
             for round_idx in range(max_tool_rounds):
+                # 如果当前provider不支持tools，去掉tools参数重试
+                if not tools_supported and "tools" in payload:
+                    del payload["tools"]
+                    del payload["tool_choice"]
+
                 resp = requests.post(url, json=payload, headers=headers, timeout=60)
+
+                # 处理不支持tools的情况（如部分国内API）
+                if resp.status_code == 400 and tools_supported:
+                    err_text = resp.text.lower()
+                    if any(k in err_text for k in ["tools", "tool_choice", "function_call", "invalid parameter"]):
+                        print(f"[AI] Provider不支持Function Calling，回退到普通对话模式")
+                        tools_supported = False
+                        del payload["tools"]
+                        del payload["tool_choice"]
+                        resp = requests.post(url, json=payload, headers=headers, timeout=60)
+
                 resp.raise_for_status()
                 data = resp.json()
 
                 msg = data["choices"][0]["message"]
+
+                # 提取token使用量（每个round累加）
+                if usage_tracker is not None and "usage" in data:
+                    usage = data["usage"]
+                    usage_tracker["prompt_tokens"] += usage.get("prompt_tokens", 0)
+                    usage_tracker["completion_tokens"] += usage.get("completion_tokens", 0)
+                    usage_tracker["total_tokens"] += usage.get("total_tokens", 0)
 
                 # 如果没有 tool_calls，说明 LLM 已经生成最终回答
                 if not msg.get("tool_calls"):
@@ -542,49 +866,72 @@ class AIMiddleware:
         """获取当前AI配置（脱敏）"""
         return {
             "provider": self.provider,
+            "provider_name": self.provider_name or self._infer_provider_name(),
             "model": self.model,
             "base_url_masked": self._mask_url(self.base_url),
+            "has_api_key": bool(self.api_key),
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "dify_enabled": self.dify_enabled,
             "dify_base_url_masked": self._mask_url(self.dify_base_url),
-            "dify_app_id_masked": self._mask_key(self.dify_app_id) if self.dify_app_id else "",
+            "dify_app_id_masked": self._mask_key(self.dify_api_key) if self.dify_api_key else "",
             "n8n_enabled": self.n8n_enabled,
             "n8n_base_url_masked": self._mask_url(self.n8n_base_url),
         }
 
     def update_config(self, config: Dict[str, Any]) -> bool:
-        """更新AI配置（运行时更新，不持久化到配置文件）"""
+        """更新AI配置（运行时更新 + 持久化到DB）"""
         try:
             if "provider" in config:
                 self.provider = config["provider"]
+                self._save_to_db("provider", self.provider)
             if "base_url" in config:
                 self.base_url = config["base_url"]
+                self._save_to_db("base_url", self.base_url)
             if "api_key" in config:
                 self.api_key = config["api_key"]
+                self._save_to_db("api_key", self.api_key)
             if "model" in config:
                 self.model = config["model"]
+                self._save_to_db("model", self.model)
             if "temperature" in config:
                 self.temperature = float(config["temperature"])
+                self._save_to_db("temperature", str(self.temperature))
             if "max_tokens" in config:
                 self.max_tokens = int(config["max_tokens"])
+                self._save_to_db("max_tokens", str(self.max_tokens))
+
+            # 更新provider_name（根据base_url自动推断，或手动指定）
+            if "provider_name" in config:
+                self.provider_name = config["provider_name"]
+            elif "base_url" in config or "provider" in config:
+                self.provider_name = self._infer_provider_name()
+            self._save_to_db("provider_name", self.provider_name)
 
             if "dify_enabled" in config:
                 self.dify_enabled = bool(config["dify_enabled"])
+                self._save_to_db("dify_enabled", str(self.dify_enabled))
             if "dify_base_url" in config:
                 self.dify_base_url = config["dify_base_url"]
+                self._save_to_db("dify_base_url", self.dify_base_url)
             if "dify_api_key" in config:
                 self.dify_api_key = config["dify_api_key"]
+                self._save_to_db("dify_api_key", self.dify_api_key)
             if "dify_app_id" in config:
                 self.dify_app_id = config["dify_app_id"]
+                self._save_to_db("dify_app_id", self.dify_app_id)
 
             if "n8n_enabled" in config:
                 self.n8n_enabled = bool(config["n8n_enabled"])
+                self._save_to_db("n8n_enabled", str(self.n8n_enabled))
             if "n8n_base_url" in config:
                 self.n8n_base_url = config["n8n_base_url"]
+                self._save_to_db("n8n_base_url", self.n8n_base_url)
             if "n8n_webhook_secret" in config:
                 self.n8n_webhook_secret = config["n8n_webhook_secret"]
+                self._save_to_db("n8n_webhook_secret", self.n8n_webhook_secret)
 
+            print(f"[AI] 配置已更新并持久化: provider={self.provider}, model={self.model}")
             return True
         except Exception as e:
             print(f"[AI] 更新配置失败: {e}")
@@ -646,6 +993,340 @@ class AIMiddleware:
         if len(key) > 10:
             return key[:4] + "****" + key[-4:]
         return "****"
+
+    # ==================== 使用量统计 ====================
+
+    def _log_usage(self, session_id: str, config_id: int, provider: str, model: str,
+                   prompt_tokens: int, completion_tokens: int, total_tokens: int,
+                   question_preview: str, success: bool, error_msg: str = None):
+        """记录AI调用使用量到DB"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIUsageLog
+                db.add(AIUsageLog(
+                    session_id=session_id,
+                    config_id=config_id,
+                    provider=provider,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    question_preview=question_preview,
+                    success=success,
+                    error_msg=error_msg,
+                    created_at=datetime.now().isoformat(),
+                ))
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 使用量记录失败: {e}")
+
+    def get_usage_stats(self, days: int = 30) -> Dict[str, Any]:
+        """获取使用量统计"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIUsageLog
+                from sqlalchemy import func
+                from datetime import datetime, timedelta
+
+                # 计算起始日期
+                start_date = (datetime.now() - timedelta(days=days)).isoformat()
+
+                # 总调用次数和token
+                totals = db.query(
+                    func.count(AIUsageLog.id).label("total_calls"),
+                    func.coalesce(func.sum(AIUsageLog.prompt_tokens), 0).label("total_prompt"),
+                    func.coalesce(func.sum(AIUsageLog.completion_tokens), 0).label("total_completion"),
+                    func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+                ).filter(AIUsageLog.created_at >= start_date).first()
+
+                # 按Provider统计
+                provider_stats = db.query(
+                    AIUsageLog.provider,
+                    func.count(AIUsageLog.id).label("calls"),
+                    func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("tokens"),
+                ).filter(AIUsageLog.created_at >= start_date).group_by(AIUsageLog.provider).all()
+
+                provider_breakdown = {}
+                for p in provider_stats:
+                    provider_breakdown[p.provider] = {
+                        "calls": p.calls,
+                        "tokens": int(p.tokens),
+                    }
+
+                # 按天统计
+                daily = db.query(
+                    func.substr(AIUsageLog.created_at, 1, 10).label("day"),
+                    func.count(AIUsageLog.id).label("calls"),
+                    func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("tokens"),
+                ).filter(AIUsageLog.created_at >= start_date).group_by(func.substr(AIUsageLog.created_at, 1, 10)).order_by(func.substr(AIUsageLog.created_at, 1, 10)).all()
+
+                daily_stats = [{"date": d.day, "calls": d.calls, "tokens": int(d.tokens)} for d in daily]
+
+                return {
+                    "total_calls": totals.total_calls,
+                    "total_prompt_tokens": int(totals.total_prompt),
+                    "total_completion_tokens": int(totals.total_completion),
+                    "total_tokens": int(totals.total_tokens),
+                    "provider_breakdown": provider_breakdown,
+                    "daily_stats": daily_stats,
+                }
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 使用量统计失败: {e}")
+            return {
+                "total_calls": 0,
+                "total_prompt_tokens": 0,
+                "total_completion_tokens": 0,
+                "total_tokens": 0,
+                "provider_breakdown": {},
+                "daily_stats": [],
+            }
+
+    def get_usage_logs(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+        """获取使用日志列表"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIUsageLog
+                logs = db.query(AIUsageLog).order_by(AIUsageLog.created_at.desc()).offset(offset).limit(limit).all()
+                return [{
+                    "id": log.id,
+                    "session_id": log.session_id,
+                    "config_id": log.config_id,
+                    "provider": log.provider,
+                    "model": log.model,
+                    "prompt_tokens": log.prompt_tokens,
+                    "completion_tokens": log.completion_tokens,
+                    "total_tokens": log.total_tokens,
+                    "question_preview": log.question_preview,
+                    "success": log.success,
+                    "error_msg": log.error_msg,
+                    "created_at": log.created_at,
+                } for log in logs]
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 使用日志查询失败: {e}")
+            return []
+
+    # ==================== Provider 多配置管理 ====================
+
+    def list_provider_configs(self) -> List[Dict]:
+        """列出所有LLM Provider配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                configs = db.query(AIProviderConfig).order_by(AIProviderConfig.sort_order, AIProviderConfig.id).all()
+                return [{
+                    "id": c.id,
+                    "name": c.name,
+                    "provider": c.provider,
+                    "base_url": c.base_url,
+                    "has_api_key": bool(c.api_key),
+                    "model": c.model,
+                    "temperature": c.temperature,
+                    "max_tokens": c.max_tokens,
+                    "is_enabled": c.is_enabled,
+                    "is_default": c.is_default,
+                    "sort_order": c.sort_order,
+                    "description": c.description,
+                    "created_at": c.created_at,
+                    "updated_at": c.updated_at,
+                } for c in configs]
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 配置列表查询失败: {e}")
+            return []
+
+    def create_provider_config(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """创建新的LLM Provider配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                now = datetime.now().isoformat()
+
+                # 如果设为默认，取消其他默认
+                if data.get("is_default"):
+                    db.query(AIProviderConfig).filter(AIProviderConfig.is_default == True).update({"is_default": False})
+
+                cfg = AIProviderConfig(
+                    name=data["name"],
+                    provider=data["provider"],
+                    base_url=data.get("base_url", ""),
+                    api_key=data.get("api_key", ""),
+                    model=data.get("model", ""),
+                    temperature=float(data.get("temperature", 0.7)),
+                    max_tokens=int(data.get("max_tokens", 2048)),
+                    is_enabled=data.get("is_enabled", True),
+                    is_default=data.get("is_default", False),
+                    sort_order=int(data.get("sort_order", 0)),
+                    description=data.get("description", ""),
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(cfg)
+                db.commit()
+                db.refresh(cfg)
+
+                return {"success": True, "id": cfg.id, "message": "配置创建成功"}
+            finally:
+                db.close()
+        except Exception as e:
+            return {"success": False, "message": f"创建失败: {str(e)}"}
+
+    def update_provider_config(self, config_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+        """更新LLM Provider配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == config_id).first()
+                if not cfg:
+                    return {"success": False, "message": "配置不存在"}
+
+                # 如果设为默认，取消其他默认
+                if data.get("is_default"):
+                    db.query(AIProviderConfig).filter(AIProviderConfig.is_default == True).update({"is_default": False})
+
+                if "name" in data:
+                    cfg.name = data["name"]
+                if "provider" in data:
+                    cfg.provider = data["provider"]
+                if "base_url" in data:
+                    cfg.base_url = data["base_url"]
+                if "api_key" in data:
+                    cfg.api_key = data["api_key"]
+                if "model" in data:
+                    cfg.model = data["model"]
+                if "temperature" in data:
+                    cfg.temperature = float(data["temperature"])
+                if "max_tokens" in data:
+                    cfg.max_tokens = int(data["max_tokens"])
+                if "is_enabled" in data:
+                    cfg.is_enabled = bool(data["is_enabled"])
+                if "is_default" in data:
+                    cfg.is_default = bool(data["is_default"])
+                if "sort_order" in data:
+                    cfg.sort_order = int(data["sort_order"])
+                if "description" in data:
+                    cfg.description = data["description"]
+
+                cfg.updated_at = datetime.now().isoformat()
+                db.commit()
+
+                # 如果修改的是当前使用的配置，刷新当前配置
+                if self.current_config_id == config_id:
+                    self._load_llm_config(config_id)
+
+                return {"success": True, "message": "配置更新成功"}
+            finally:
+                db.close()
+        except Exception as e:
+            return {"success": False, "message": f"更新失败: {str(e)}"}
+
+    def delete_provider_config(self, config_id: int) -> Dict[str, Any]:
+        """删除LLM Provider配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == config_id).first()
+                if not cfg:
+                    return {"success": False, "message": "配置不存在"}
+
+                db.delete(cfg)
+                db.commit()
+
+                # 如果删除的是当前配置，重新加载默认配置
+                if self.current_config_id == config_id:
+                    self.current_config_id = None
+                    self._load_llm_config()
+
+                return {"success": True, "message": "配置已删除"}
+            finally:
+                db.close()
+        except Exception as e:
+            return {"success": False, "message": f"删除失败: {str(e)}"}
+
+    def set_default_provider_config(self, config_id: int) -> Dict[str, Any]:
+        """设置默认配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                # 取消所有默认
+                db.query(AIProviderConfig).filter(AIProviderConfig.is_default == True).update({"is_default": False})
+                # 设置指定为默认
+                cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == config_id).first()
+                if cfg:
+                    cfg.is_default = True
+                    cfg.is_enabled = True
+                    cfg.updated_at = datetime.now().isoformat()
+                    db.commit()
+                    # 刷新当前配置
+                    self._load_llm_config(config_id)
+                    return {"success": True, "message": f"已设为默认: {cfg.name}"}
+                return {"success": False, "message": "配置不存在"}
+            finally:
+                db.close()
+        except Exception as e:
+            return {"success": False, "message": f"设置失败: {str(e)}"}
+
+    def toggle_provider_config(self, config_id: int) -> Dict[str, Any]:
+        """启用/禁用配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == config_id).first()
+                if not cfg:
+                    return {"success": False, "message": "配置不存在"}
+
+                cfg.is_enabled = not cfg.is_enabled
+                cfg.updated_at = datetime.now().isoformat()
+                db.commit()
+
+                status = "启用" if cfg.is_enabled else "禁用"
+                return {"success": True, "message": f"配置已{status}", "is_enabled": cfg.is_enabled}
+            finally:
+                db.close()
+        except Exception as e:
+            return {"success": False, "message": f"操作失败: {str(e)}"}
+
+    def switch_config(self, config_id: int) -> Dict[str, Any]:
+        """切换当前使用的配置"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                cfg = db.query(AIProviderConfig).filter(
+                    AIProviderConfig.id == config_id,
+                    AIProviderConfig.is_enabled == True
+                ).first()
+                if not cfg:
+                    return {"success": False, "message": "配置不存在或未启用"}
+
+                self._load_llm_config(config_id)
+                return {
+                    "success": True,
+                    "message": f"已切换至: {cfg.name}",
+                    "provider": self.provider,
+                    "provider_name": self.provider_name,
+                    "model": self.model,
+                    "config_id": self.current_config_id,
+                }
+            finally:
+                db.close()
+        except Exception as e:
+            return {"success": False, "message": f"切换失败: {str(e)}"}
 
     # ==================== 会话管理 ====================
 

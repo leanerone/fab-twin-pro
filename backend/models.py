@@ -396,3 +396,59 @@ class EventActionMapping(Base):
 
     created_at = Column(String(255))
     updated_at = Column(String(255))
+
+
+# ========== AI 配置持久化表 ==========
+
+class AIConfig(Base):
+    """AI配置持久化：存储AI模型、API、Provider等配置
+    重启后从DB加载，不再依赖环境变量丢失
+    """
+    __tablename__ = "ai_configs"
+
+    id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    config_key = Column(String(255), nullable=False, unique=True, index=True)
+    config_value = Column(Text, default="")
+    description = Column(String(255), default="")
+    updated_at = Column(String(255))
+    updated_by = Column(String(255), default="system")
+
+
+class AIProviderConfig(Base):
+    """AI Provider多配置管理：支持保存多个LLM配置，切换使用
+    例如：智谱GLM生产环境、OpenAI测试环境、DeepSeek备用等
+    """
+    __tablename__ = "ai_provider_configs"
+
+    id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    name = Column(String(255), nullable=False)           # 配置名称（如"智谱GLM-生产"）
+    provider = Column(String(255), nullable=False, index=True)  # zhipu/openai/deepseek/qwen/custom/local
+    base_url = Column(String(512), default="")           # API地址
+    api_key = Column(String(512), default="")            # API密钥（加密存储）
+    model = Column(String(255), default="")              # 模型名称
+    temperature = Column(Float, default=0.7)             # 生成温度
+    max_tokens = Column(Integer, default=2048)           # 最大token数
+    is_enabled = Column(Boolean, default=True)           # 是否启用
+    is_default = Column(Boolean, default=False)          # 是否为默认配置
+    sort_order = Column(Integer, default=0)              # 排序
+    description = Column(String(512), default="")        # 配置说明
+    created_at = Column(String(255))
+    updated_at = Column(String(255))
+
+
+class AIUsageLog(Base):
+    """AI Token使用量统计：记录每次调用的token消耗"""
+    __tablename__ = "ai_usage_logs"
+
+    id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    session_id = Column(String(255), index=True)          # 会话ID
+    config_id = Column(Integer, nullable=True, index=True) # 使用的配置ID
+    provider = Column(String(255), index=True)            # 实际使用的provider
+    model = Column(String(255))                           # 实际使用的模型
+    prompt_tokens = Column(Integer, default=0)            # 输入token数
+    completion_tokens = Column(Integer, default=0)        # 输出token数
+    total_tokens = Column(Integer, default=0)             # 总token数
+    question_preview = Column(String(512), default="")    # 用户问题前200字符
+    success = Column(Boolean, default=True)               # 是否成功
+    error_msg = Column(String(512), nullable=True)        # 错误信息
+    created_at = Column(String(255), index=True)

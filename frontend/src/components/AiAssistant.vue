@@ -124,6 +124,10 @@ async function ask(questionText) {
       table_data: resp.table_data,
       tool_calls: resp.tool_calls,
       sources: resp.sources,
+      provider_name: resp.provider_name,
+      model: resp.model,
+      config_id: resp.config_id,
+      usage: resp.usage,
       time: new Date().toLocaleTimeString(),
     }
     messages.value.push(msg)
@@ -212,6 +216,13 @@ function scrollToBottom() {
           <button v-if="m.jump_timestamp" class="ai-jump-btn" @click="jumpToTime(m.jump_timestamp)">
             → 跳转到回放时间
           </button>
+          <!-- Provider与Token信息 -->
+          <div v-if="m.provider_name" class="msg-meta">
+            <span class="provider-badge">{{ m.provider_name }}{{ m.model ? ' · ' + m.model : '' }}</span>
+            <span v-if="m.usage && m.usage.total_tokens" class="token-badge" title="输入/输出/总Token">
+              {{ m.usage.prompt_tokens || 0 }} / {{ m.usage.completion_tokens || 0 }} / {{ m.usage.total_tokens }} token
+            </span>
+          </div>
         </div>
       </template>
       <div v-if="loading" class="chat-msg ai">查询中...</div>
@@ -427,5 +438,26 @@ function scrollToBottom() {
 }
 .chat-input-bar button:hover {
   opacity: 0.85;
+}
+.msg-meta {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.provider-badge {
+  font-size: 10px;
+  color: #8a94a6;
+  background: rgba(255,255,255,0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.token-badge {
+  font-size: 10px;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 </style>

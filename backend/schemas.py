@@ -95,6 +95,7 @@ class AIChatRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
     user_role: Optional[str] = "user"  # user / admin
     stream: Optional[bool] = False
+    config_id: Optional[int] = None  # 指定使用的AI配置ID（None则使用默认配置）
 
 
 class AITableData(BaseModel):
@@ -129,11 +130,16 @@ class AIChatResponse(BaseModel):
     sources: Optional[List[AISource]] = []
     session_id: Optional[str] = None
     provider: Optional[str] = None
+    provider_name: Optional[str] = None
+    model: Optional[str] = None
+    config_id: Optional[int] = None
+    usage: Optional[Dict[str, Any]] = None
 
 
 class AIConfigUpdate(BaseModel):
     """AI 配置更新请求"""
-    provider: Optional[str] = None  # local / openai / dify / hybrid
+    provider: Optional[str] = None  # local / openai / dify / hybrid / zhipu / deepseek / qwen / custom
+    provider_name: Optional[str] = None  # 显示名称（如智谱GLM、OpenAI官方）
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
@@ -151,8 +157,10 @@ class AIConfigUpdate(BaseModel):
 class AIConfigOut(BaseModel):
     """AI 配置输出（脱敏）"""
     provider: str
+    provider_name: str
     model: str
     base_url_masked: str
+    has_api_key: bool
     temperature: float
     max_tokens: int
     dify_enabled: bool
@@ -166,3 +174,83 @@ class AIConnectionTest(BaseModel):
     """连接测试请求"""
     provider_type: str  # openai / dify / n8n
     config: Dict[str, Any]
+
+
+# ========== AI Provider 多配置管理 ==========
+
+class AIProviderConfigIn(BaseModel):
+    """AI Provider配置创建/更新请求"""
+    name: str
+    provider: str  # zhipu / openai / deepseek / qwen / custom / local
+    base_url: Optional[str] = ""
+    api_key: Optional[str] = ""
+    model: Optional[str] = ""
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 2048
+    is_enabled: Optional[bool] = True
+    is_default: Optional[bool] = False
+    description: Optional[str] = ""
+    sort_order: Optional[int] = 0
+
+
+class AIProviderConfigOut(BaseModel):
+    """AI Provider配置响应"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    provider: str
+    base_url: str
+    has_api_key: bool  # 是否已设置api_key（不脱敏返回完整key）
+    model: str
+    temperature: float
+    max_tokens: int
+    is_enabled: bool
+    is_default: bool
+    sort_order: int
+    description: str
+    created_at: Optional[str] = ""
+    updated_at: Optional[str] = ""
+
+
+class AIProviderConfigUpdate(BaseModel):
+    """AI Provider配置部分更新"""
+    name: Optional[str] = None
+    provider: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    is_enabled: Optional[bool] = None
+    is_default: Optional[bool] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class AIUsageStats(BaseModel):
+    """AI使用统计"""
+    total_calls: int
+    total_prompt_tokens: int
+    total_completion_tokens: int
+    total_tokens: int
+    provider_breakdown: Dict[str, Dict[str, Any]]
+    daily_stats: List[Dict[str, Any]]
+
+
+class AIUsageLogOut(BaseModel):
+    """AI使用日志响应"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: Optional[str] = ""
+    config_id: Optional[int] = None
+    provider: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    question_preview: str
+    success: bool
+    error_msg: Optional[str] = None
+    created_at: str

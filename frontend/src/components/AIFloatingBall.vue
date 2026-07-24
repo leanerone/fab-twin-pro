@@ -8,6 +8,8 @@ const STORAGE_KEY = 'fabtwin_ai_floating_session'
 const POSITION_KEY = 'fabtwin_ai_floating_pos'
 const SIZE_KEY = 'fabtwin_ai_floating_size'
 
+const emit = defineEmits(['jump'])
+
 // 状态
 const chatOpen = ref(false)
 const minimized = ref(false)
@@ -28,6 +30,11 @@ const voiceInputRef = ref(null)
 const voiceOutputRef = ref(null)
 const isRecording = ref(false)
 const interimText = ref('')
+
+// 当前AI配置与模型切换
+const currentConfig = ref({ name: '本地规则引擎', provider_name: '本地规则引擎', model: '', config_id: null })
+const showModelSelector = ref(false)
+const availableConfigs = ref([])
 
 // 拖拽
 const isDragging = ref(false)
@@ -79,6 +86,9 @@ onMounted(() => {
     } catch (e) {}
   }
 
+  // 加载当前AI配置
+  loadCurrentConfig()
+
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)
 })
@@ -87,6 +97,56 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
 })
+
+// 监听配置面板关闭，刷新当前配置
+watch(showConfig, (newVal, oldVal) => {
+  if (!newVal && oldVal) {
+    loadCurrentConfig()
+  }
+})
+
+// ==================== AI配置管理 ====================
+
+async function loadCurrentConfig() {
+  try {
+    const res = await api.aiGetProviders()
+    currentConfig.value = {
+      name: res.current_name || '本地规则引擎',
+      provider_name: res.current_name || '本地规则引擎',
+      model: res.current || '',
+      config_id: res.current_config_id || null,
+    }
+  } catch (e) {
+    console.error('加载当前AI配置失败', e)
+  }
+}
+
+async function loadAvailableConfigs() {
+  try {
+    const res = await api.aiGetModelConfigs()
+    availableConfigs.value = res.configs || []
+  } catch (e) {
+    console.error('加载AI配置列表失败', e)
+  }
+}
+
+async function selectConfig(configId) {
+  try {
+    await api.aiSwitchModelConfig(configId)
+    await loadCurrentConfig()
+    await loadAvailableConfigs()
+    showModelSelector.value = false
+  } catch (e) {
+    console.error('切换配置失败', e)
+  }
+}
+
+function toggleModelSelector() {
+  showModelSelector.value = !showModelSelector.value
+  if (showModelSelector.value) {
+    loadAvailableConfigs()
+  }
+}
 
 // ==================== 会话持久化 ====================
 
@@ -155,6 +215,8 @@ function toggleChat() {
       x: Math.max(10, Math.min(window.innerWidth - chatSize.value.w - 10, ballPos.value.x - chatSize.value.w - 10)),
       y: Math.max(10, Math.min(window.innerHeight - chatSize.value.h - 10, ballPos.value.y - chatSize.value.h + 30)),
     }
+    // 每次打开聊天窗口时刷新当前配置
+    loadCurrentConfig()
     nextTick(() => {
       scrollToBottom()
     })
@@ -195,6 +257,7 @@ async function sendMessage(text) {
       question: q,
       session_id: sessionId.value,
       user_role: 'user',
+      config_id: currentConfig.value.config_id,
     })
 
     sessionId.value = resp.session_id || sessionId.value
@@ -207,12 +270,17 @@ async function sendMessage(text) {
       table_data: resp.table_data,
       tool_calls: resp.tool_calls,
       sources: resp.sources,
+      provider_name: resp.provider_name,
+      model: resp.model,
+      config_id: resp.config_id,
+      usage: resp.usage,
       time: new Date().toLocaleTimeString(),
     })
   } catch (e) {
     messages.value.push({
       role: 'assistant',
       content: '抱歉，请求失败：' + (e.message || '未知错误'),
+      provider_name: '系统',
       time: new Date().toLocaleTimeString(),
     })
   } finally {
@@ -263,6 +331,10 @@ function clearChat() {
 function openConfig() {
   showConfig.value = true
 }
+
+function jumpToTime(ts) {
+  emit('jump', ts)
+}
 </script>
 
 <template>
@@ -297,6 +369,27 @@ function openConfig() {
         <span class="chat-title">
           <span class="title-icon">🤖</span>
           FabTwin AI 助手
+          <span class="model-badge" @click.stop="toggleModelSelector" :title="'当前模型: ' + (currentConfig.provider_name || '本地规则引擎') + (currentConfig.model ? ' (' + currentConfig.model + ')' : '')">
+            {{ currentConfig.provider_name || '本地规则引擎' }}
+          </span>
+          <!-- 模型选择下拉 -->
+          <div v-if="showModelSelector" class="model-dropdown">
+            <div
+              v-for="cfg in availableConfigs.filter(c => c.is_enabled)"
+              :key="cfg.id"
+              class="model-option"
+              :class="{ active: cfg.id === currentConfig.config_id }"
+              @click.stop="selectConfig(cfg.id)"
+            >
+              {{ cfg.name }} <span class="model-tag">{{ cfg.model }}</span>
+            </div>
+            <div v-if="availableConfigs.filter(c => c.is_enabled).length === 0" class="model-option disabled">
+              暂无可用配置
+            </div>
+            <div class="model-option manage" @click.stop="openConfig(); showModelSelector = false">
+              ⚙️ 管理模型配置...
+            </div>
+          </div>
         </span>
         <div class="header-actions">
           <span class="header-btn" title="AI配置" @click.stop="openConfig">⚙️</span>
@@ -349,13 +442,20 @@ function openConfig() {
                 </table>
               </div>
               <!-- 跳转按钮 -->
-              <button v-if="msg.jump_timestamp" class="msg-jump-btn">
+              <button v-if="msg.jump_timestamp" class="msg-jump-btn" @click="jumpToTime(msg.jump_timestamp)">
                 📍 跳转到历史回放
               </button>
               <!-- 工具调用 -->
               <div v-if="msg.tool_calls && msg.tool_calls.length" class="msg-tools">
                 <span class="tool-tag" v-for="(t, ti) in msg.tool_calls" :key="ti" :class="t.status">
                   🔧 {{ t.tool }}: {{ t.status }}
+                </span>
+              </div>
+              <!-- Provider与Token信息 -->
+              <div v-if="msg.provider_name" class="msg-meta">
+                <span class="provider-badge">{{ msg.provider_name }}{{ msg.model ? ' · ' + msg.model : '' }}</span>
+                <span v-if="msg.usage && msg.usage.total_tokens" class="token-badge" title="输入/输出/总Token">
+                  {{ msg.usage.prompt_tokens || 0 }} / {{ msg.usage.completion_tokens || 0 }} / {{ msg.usage.total_tokens }} token
                 </span>
               </div>
             </div>
@@ -911,5 +1011,90 @@ function openConfig() {
   align-items: center;
   justify-content: center;
   z-index: 10000;
+}
+
+/* 模型徽章与下拉 */
+.model-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 212, 255, 0.12);
+  color: #00d4ff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.model-badge:hover {
+  background: rgba(0, 212, 255, 0.22);
+}
+.model-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  background: #1a1f2e;
+  border: 1px solid #2a3142;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 100;
+  padding: 6px 0;
+}
+.model-option {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #e0e6ed;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.model-option:hover {
+  background: rgba(0, 212, 255, 0.08);
+}
+.model-option.active {
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.12);
+}
+.model-option.manage {
+  border-top: 1px solid #2a3142;
+  margin-top: 4px;
+  color: #8a94a6;
+}
+.model-option.disabled {
+  color: #555;
+  cursor: default;
+}
+.model-tag {
+  font-size: 10px;
+  color: #8a94a6;
+  margin-left: 6px;
+}
+.chat-title {
+  position: relative;
+}
+
+/* 消息元信息 */
+.msg-meta {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.provider-badge {
+  font-size: 10px;
+  color: #8a94a6;
+  background: rgba(255,255,255,0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.token-badge {
+  font-size: 10px;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 </style>

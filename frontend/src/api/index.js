@@ -64,10 +64,22 @@ export const api = {
   aiQuery: (question, machineId) => request('POST', '/ai/query', { question, machine_id: machineId }),
   // AI 统一聊天接口
   aiChat: (data) => request('POST', '/ai/chat', data),
-  // AI 配置管理
+  // AI 配置管理（Dify/N8N）
   aiGetConfig: () => request('GET', '/ai/config'),
   aiUpdateConfig: (config) => request('PUT', '/ai/config', config),
   aiTestConnection: (providerType, config) => request('POST', '/ai/config/test', { provider_type: providerType, config }),
+  aiGetProviders: () => request('GET', '/ai/providers'),
+  // AI LLM 多配置管理
+  aiGetModelConfigs: () => request('GET', '/ai/model-configs'),
+  aiCreateModelConfig: (data) => request('POST', '/ai/model-configs', data),
+  aiUpdateModelConfig: (id, data) => request('PUT', `/ai/model-configs/${id}`, data),
+  aiDeleteModelConfig: (id) => request('DELETE', `/ai/model-configs/${id}`),
+  aiSetDefaultModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/default`),
+  aiToggleModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/toggle`),
+  aiSwitchModelConfig: (id) => request('POST', `/ai/model-configs/switch?config_id=${id}`),
+  // AI 使用量统计
+  aiGetUsageStats: (days = 30) => request('GET', `/ai/usage/stats?days=${days}`),
+  aiGetUsageLogs: (limit = 100, offset = 0) => request('GET', `/ai/usage/logs?limit=${limit}&offset=${offset}`),
   // AI 会话管理
   aiListSessions: (limit = 20) => request('GET', `/ai/sessions?limit=${limit}`),
   aiGetSession: (sessionId) => request('GET', `/ai/sessions/${sessionId}`),

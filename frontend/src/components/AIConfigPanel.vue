@@ -1,72 +1,140 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api } from '../api'
 
 const emit = defineEmits(['close'])
 
 const loading = ref(false)
 const testing = ref('')
-const activeTab = ref('provider')
+const activeTab = ref('configs')
 const toast = ref({ show: false, type: 'info', msg: '' })
 
-const config = ref({
-  provider: 'local',
+// 配置列表
+const configs = ref([])
+const providerPresets = ref([])
+const currentConfigId = ref(null)
+
+// 编辑/创建表单
+const showForm = ref(false)
+const editingId = ref(null)
+const form = ref({
+  name: '',
+  provider: 'zhipu',
   base_url: '',
   api_key: '',
-  model: 'glm-5.2',
+  model: '',
   temperature: 0.7,
   max_tokens: 2048,
-  dify_enabled: false,
-  dify_base_url: '',
-  dify_api_key: '',
-  dify_app_id: '',
-  n8n_enabled: false,
-  n8n_base_url: '',
-  n8n_webhook_secret: '',
+  description: '',
 })
 
-const providerOptions = [
-  { value: 'local', label: '本地规则引擎（默认，无需配置）' },
-  { value: 'openai', label: 'OpenAI 兼容模型（GLM/GPT/本地私有化）' },
-  { value: 'dify', label: 'Dify 应用' },
-  { value: 'hybrid', label: '混合模式（Dify优先，失败回退本地）' },
-]
+// 使用量统计
+const usageStats = ref({
+  total_calls: 0,
+  total_tokens: 0,
+  provider_breakdown: {},
+  daily_stats: [],
+})
+const usageDays = ref(30)
+
+const selectedPreset = computed(() => {
+  return providerPresets.value.find(p => p.id === form.value.provider) || null
+})
 
 function showToast(type, msg) {
   toast.value = { show: true, type, msg }
   setTimeout(() => { toast.value.show = false }, 3000)
 }
 
-async function loadConfig() {
+async function loadConfigs() {
   loading.value = true
   try {
-    const data = await api.aiGetConfig()
-    config.value.provider = data.provider
-    config.value.model = data.model
-    config.value.temperature = data.temperature
-    config.value.max_tokens = data.max_tokens
-    config.value.dify_enabled = data.dify_enabled
-    config.value.n8n_enabled = data.n8n_enabled
-  } catch (e) {
-    showToast('error', '加载配置失败')
+    // 独立加载，避免一个失败导致全部失败
+    let configsRes = { configs: [] }
+    let providersRes = { providers: [], current_config_id: null }
+    try {
+      configsRes = await api.aiGetModelConfigs()
+    } catch (e) {
+      console.error('加载模型配置失败', e)
+      showToast('error', '加载模型配置列表失败')
+    }
+    try {
+      providersRes = await api.aiGetProviders()
+    } catch (e) {
+      console.error('加载Provider预设失败', e)
+    }
+    configs.value = configsRes.configs || []
+    providerPresets.value = providersRes.providers || []
+    currentConfigId.value = providersRes.current_config_id || null
   } finally {
     loading.value = false
+  }
+}
+
+async function loadUsage() {
+  try {
+    const res = await api.aiGetUsageStats(usageDays.value)
+    usageStats.value = res
+  } catch (e) {
+    console.error('加载使用量统计失败', e)
+  }
+}
+
+function openCreate() {
+  editingId.value = null
+  form.value = {
+    name: '',
+    provider: 'zhipu',
+    base_url: '',
+    api_key: '',
+    model: '',
+    temperature: 0.7,
+    max_tokens: 2048,
+    description: '',
+  }
+  showForm.value = true
+}
+
+function openEdit(cfg) {
+  editingId.value = cfg.id
+  form.value = {
+    name: cfg.name,
+    provider: cfg.provider,
+    base_url: cfg.base_url,
+    api_key: '',
+    model: cfg.model,
+    temperature: cfg.temperature,
+    max_tokens: cfg.max_tokens,
+    description: cfg.description,
+  }
+  showForm.value = true
+}
+
+function onProviderChange() {
+  const preset = selectedPreset.value
+  if (!preset) return
+  if (preset.default_url && !form.value.base_url) {
+    form.value.base_url = preset.default_url
+  }
+  if (preset.default_model && !form.value.model) {
+    form.value.model = preset.default_model
   }
 }
 
 async function saveConfig() {
   loading.value = true
   try {
-    // 始终发送所有字段（包括空字符串），确保后端能正确更新 provider 等关键字段
-    const data = { ...config.value }
-    // 只过滤掉 null/undefined，保留空字符串（让后端知道用户清空了某个字段）
-    Object.keys(data).forEach(key => {
-      if (data[key] === null || data[key] === undefined) {
-        delete data[key]
-      }
-    })
-    await api.aiUpdateConfig(data)
-    showToast('success', '配置保存成功（运行时生效，重启后需在 env 中持久化）')
+    const data = { ...form.value }
+    if (!data.api_key) delete data.api_key
+    if (editingId.value) {
+      await api.aiUpdateModelConfig(editingId.value, data)
+      showToast('success', '配置已更新')
+    } else {
+      await api.aiCreateModelConfig(data)
+      showToast('success', '配置已创建')
+    }
+    showForm.value = false
+    await loadConfigs()
   } catch (e) {
     showToast('error', '保存失败：' + (e.message || '未知错误'))
   } finally {
@@ -74,27 +142,56 @@ async function saveConfig() {
   }
 }
 
-async function testConnection(type) {
-  testing.value = type
+async function deleteConfig(id, name) {
+  if (!confirm(`确定删除配置 "${name}" 吗？`)) return
   try {
-    let testConfig = {}
-    if (type === 'openai') {
-      testConfig = {
-        base_url: config.value.base_url,
-        api_key: config.value.api_key,
-        model: config.value.model,
-      }
-    } else if (type === 'dify') {
-      testConfig = {
-        base_url: config.value.dify_base_url,
-        api_key: config.value.dify_api_key,
-      }
-    } else if (type === 'n8n') {
-      testConfig = {
-        base_url: config.value.n8n_base_url,
-      }
+    await api.aiDeleteModelConfig(id)
+    showToast('success', '配置已删除')
+    await loadConfigs()
+  } catch (e) {
+    showToast('error', '删除失败')
+  }
+}
+
+async function setDefault(id) {
+  try {
+    await api.aiSetDefaultModelConfig(id)
+    showToast('success', '已设为默认配置')
+    await loadConfigs()
+  } catch (e) {
+    showToast('error', '设置失败')
+  }
+}
+
+async function toggleConfig(id) {
+  try {
+    await api.aiToggleModelConfig(id)
+    await loadConfigs()
+  } catch (e) {
+    showToast('error', '操作失败')
+  }
+}
+
+async function switchConfig(id) {
+  try {
+    const res = await api.aiSwitchModelConfig(id)
+    currentConfigId.value = id
+    showToast('success', res.message || '配置已切换')
+    await loadConfigs()
+  } catch (e) {
+    showToast('error', '切换失败')
+  }
+}
+
+async function testConnection() {
+  testing.value = 'openai'
+  try {
+    const testConfig = {
+      base_url: form.value.base_url,
+      api_key: form.value.api_key,
+      model: form.value.model,
     }
-    const result = await api.aiTestConnection(type, testConfig)
+    const result = await api.aiTestConnection('openai', testConfig)
     if (result.success) {
       showToast('success', result.message || '连接成功')
     } else {
@@ -107,8 +204,14 @@ async function testConnection(type) {
   }
 }
 
+function formatNumber(n) {
+  if (!n) return '0'
+  return n.toLocaleString('zh-CN')
+}
+
 onMounted(() => {
-  loadConfig()
+  loadConfigs()
+  loadUsage()
 })
 </script>
 
@@ -116,21 +219,19 @@ onMounted(() => {
   <div class="ai-config-panel">
     <div class="config-header">
       <span class="title">AI 配置中心</span>
-      <span class="close-btn" @click="emit('close')">✕</span>
+      <span class="close-btn" @click="emit('close')">&#10005;</span>
     </div>
 
-    <!-- Toast 提示 -->
+    <!-- Toast -->
     <transition name="toast">
       <div v-if="toast.show" :class="['toast', toast.type]">{{ toast.msg }}</div>
     </transition>
 
-    <!-- 标签页导航 -->
+    <!-- 标签页 -->
     <div class="tab-nav">
       <div v-for="tab in [
-        { name: 'provider', label: '全局设置' },
-        { name: 'openai', label: '大模型' },
-        { name: 'dify', label: 'Dify' },
-        { name: 'n8n', label: 'N8N 自动化' },
+        { name: 'configs', label: '模型配置' },
+        { name: 'usage', label: '使用统计' },
       ]" :key="tab.name"
         :class="['tab-item', { active: activeTab === tab.name }]"
         @click="activeTab = tab.name">
@@ -139,116 +240,151 @@ onMounted(() => {
     </div>
 
     <div class="tab-content">
-      <!-- 全局设置 -->
-      <div v-show="activeTab === 'provider'" class="tab-pane">
-        <div class="form-group">
-          <label>AI 提供方</label>
-          <select v-model="config.provider" class="form-input">
-            <option v-for="opt in providerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
-        </div>
-        <div class="hint">
-          切换 AI 服务提供方。本地规则引擎无需配置，其他模式需在对应标签页填写配置。
-        </div>
-      </div>
-
-      <!-- OpenAI兼容模型 -->
-      <div v-show="activeTab === 'openai'" class="tab-pane">
-        <div class="form-group">
-          <label>API 地址</label>
-          <input v-model="config.base_url" class="form-input" placeholder="如：https://open.bigmodel.cn/api/paas/v4" />
-          <div class="hint">支持所有 OpenAI 兼容接口：智谱GLM、GPT系列、本地私有化模型等</div>
-        </div>
-        <div class="form-group">
-          <label>API Key</label>
-          <input v-model="config.api_key" type="password" class="form-input" placeholder="输入API密钥" />
-        </div>
-        <div class="form-group">
-          <label>模型名称</label>
-          <input v-model="config.model" class="form-input" placeholder="如：glm-5.2 / gpt-4o / qwen-plus" />
-        </div>
-        <div class="form-row">
-          <div class="form-group half">
-            <label>温度 ({{ config.temperature }})</label>
-            <input type="range" v-model.number="config.temperature" min="0" max="1" step="0.1" class="form-range" />
+      <!-- 配置列表 -->
+      <div v-show="activeTab === 'configs'" class="tab-pane">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="btn btn-primary" @click="openCreate">+ 添加配置</button>
+            <button class="btn btn-ghost" @click="loadConfigs" :disabled="loading">{{ loading ? '刷新中...' : '刷新' }}</button>
           </div>
-          <div class="form-group half">
-            <label>最大 Token</label>
-            <input type="number" v-model.number="config.max_tokens" min="128" max="8192" step="128" class="form-input" />
+          <span class="hint-text">当前使用: {{ configs.find(c => c.id === currentConfigId)?.name || '本地规则引擎' }}</span>
+        </div>
+
+        <div class="config-list">
+          <div v-for="cfg in configs" :key="cfg.id"
+            :class="['config-card', { 'current': cfg.id === currentConfigId, 'disabled': !cfg.is_enabled }]">
+            <div class="card-header">
+              <div class="cfg-name">
+                <span class="badge" :class="cfg.is_default ? 'default' : ''">{{ cfg.is_default ? '默认' : '' }}</span>
+                {{ cfg.name }}
+              </div>
+              <div class="cfg-actions">
+                <button v-if="cfg.id !== currentConfigId && cfg.is_enabled" class="btn-icon" title="切换使用" @click="switchConfig(cfg.id)">&#9658;</button>
+                <button v-if="cfg.id === currentConfigId" class="btn-icon active" title="当前使用中">&#9679;</button>
+                <button class="btn-icon" title="设为默认" @click="setDefault(cfg.id)">&#9733;</button>
+                <button class="btn-icon" :title="cfg.is_enabled ? '禁用' : '启用'" @click="toggleConfig(cfg.id)">
+                  {{ cfg.is_enabled ? '&#10004;' : '&#10008;' }}
+                </button>
+                <button class="btn-icon" title="编辑" @click="openEdit(cfg)">&#9998;</button>
+                <button class="btn-icon danger" title="删除" @click="deleteConfig(cfg.id, cfg.name)">&#10005;</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <span class="tag">{{ providerPresets.find(p => p.id === cfg.provider)?.name || cfg.provider }}</span>
+              <span class="tag">{{ cfg.model || '未设置模型' }}</span>
+              <span class="tag dim">{{ cfg.base_url || '无API地址' }}</span>
+              <span class="tag" :class="cfg.has_api_key ? 'ok' : 'warn'">{{ cfg.has_api_key ? '已配置Key' : '未配置Key' }}</span>
+            </div>
+          </div>
+
+          <div v-if="configs.length === 0" class="empty">
+            暂无AI配置，点击"添加配置"创建第一个配置
           </div>
         </div>
-        <button class="btn btn-primary" :disabled="testing === 'openai'" @click="testConnection('openai')">
-          {{ testing === 'openai' ? '测试中...' : '测试连接' }}
-        </button>
       </div>
 
-      <!-- Dify -->
-      <div v-show="activeTab === 'dify'" class="tab-pane">
-        <div class="form-group">
-          <label class="switch-label">
-            <input type="checkbox" v-model="config.dify_enabled" />
-            <span>启用 Dify</span>
-          </label>
+      <!-- 使用量统计 -->
+      <div v-show="activeTab === 'usage'" class="tab-pane">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value">{{ formatNumber(usageStats.total_calls) }}</div>
+            <div class="stat-label">总调用次数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ formatNumber(usageStats.total_tokens) }}</div>
+            <div class="stat-label">总Token消耗</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ formatNumber(usageStats.total_prompt_tokens) }}</div>
+            <div class="stat-label">输入Token</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ formatNumber(usageStats.total_completion_tokens) }}</div>
+            <div class="stat-label">输出Token</div>
+          </div>
         </div>
-        <div class="form-group" :class="{ disabled: !config.dify_enabled }">
-          <label>Dify API 地址</label>
-          <input v-model="config.dify_base_url" :disabled="!config.dify_enabled" class="form-input" placeholder="如：http://localhost:3000/v1" />
-        </div>
-        <div class="form-group" :class="{ disabled: !config.dify_enabled }">
-          <label>Dify API Key</label>
-          <input v-model="config.dify_api_key" :disabled="!config.dify_enabled" type="password" class="form-input" placeholder="输入Dify应用密钥" />
-        </div>
-        <div class="form-group" :class="{ disabled: !config.dify_enabled }">
-          <label>应用 ID</label>
-          <input v-model="config.dify_app_id" :disabled="!config.dify_enabled" class="form-input" placeholder="输入Dify应用ID" />
-        </div>
-        <button class="btn btn-primary" :disabled="testing === 'dify' || !config.dify_enabled" @click="testConnection('dify')">
-          {{ testing === 'dify' ? '测试中...' : '测试连接' }}
-        </button>
-        <div class="hint">
-          通过 MCP 协议绑定 Dify 应用，支持调用预设工业智能应用：
-          设备故障诊断、工艺参数解读、EAP日志解析等。
-        </div>
-      </div>
 
-      <!-- N8N -->
-      <div v-show="activeTab === 'n8n'" class="tab-pane">
-        <div class="form-group">
-          <label class="switch-label">
-            <input type="checkbox" v-model="config.n8n_enabled" />
-            <span>启用 N8N</span>
-          </label>
-        </div>
-        <div class="form-group" :class="{ disabled: !config.n8n_enabled }">
-          <label>N8N 服务地址</label>
-          <input v-model="config.n8n_base_url" :disabled="!config.n8n_enabled" class="form-input" placeholder="如：http://localhost:5678" />
-        </div>
-        <div class="form-group" :class="{ disabled: !config.n8n_enabled }">
-          <label>Webhook 密钥</label>
-          <input v-model="config.n8n_webhook_secret" :disabled="!config.n8n_enabled" type="password" class="form-input" placeholder="可选，Webhook验证密钥" />
-        </div>
-        <button class="btn btn-primary" :disabled="testing === 'n8n' || !config.n8n_enabled" @click="testConnection('n8n')">
-          {{ testing === 'n8n' ? '测试中...' : '测试连接' }}
-        </button>
-        <div class="hint">
-          MCP 协议转发 AI 指令至 N8N Webhook，触发自动化工作流：
-          异常工单自动生成、设备数据批量导出、产线报表自动推送等。
+        <div class="section-title">Provider 分布</div>
+        <div class="provider-list">
+          <div v-for="(stat, provider) in usageStats.provider_breakdown" :key="provider" class="provider-row">
+            <span class="provider-name">{{ provider }}</span>
+            <span class="provider-bar"><span class="bar-fill" :style="{ width: Math.min((stat.tokens / Math.max(usageStats.total_tokens, 1)) * 100, 100) + '%' }"></span></span>
+            <span class="provider-stat">{{ formatNumber(stat.calls) }}次 / {{ formatNumber(stat.tokens) }}token</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="config-footer">
-      <button class="btn" @click="emit('close')">取消</button>
-      <button class="btn btn-primary" :disabled="loading" @click="saveConfig">
-        {{ loading ? '保存中...' : '保存配置' }}
-      </button>
+    <!-- 创建/编辑弹窗 -->
+    <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
+      <div class="modal">
+        <div class="modal-header">
+          <span>{{ editingId ? '编辑配置' : '添加配置' }}</span>
+          <span class="close-btn" @click="showForm = false">&#10005;</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>配置名称 *</label>
+            <input v-model="form.name" class="form-input" placeholder="如：智谱GLM-生产环境" />
+          </div>
+          <div class="form-group">
+            <label>AI Provider *</label>
+            <select v-model="form.provider" class="form-input" @change="onProviderChange">
+              <option v-for="p in providerPresets.filter(p => p.requires_key !== false || p.id === 'local')" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>API 地址</label>
+            <input v-model="form.base_url" class="form-input" :placeholder="selectedPreset?.default_url || 'https://...'" />
+            <div v-if="selectedPreset?.default_url" class="hint">
+              默认: {{ selectedPreset.default_url }}
+              <span class="link" @click="form.base_url = selectedPreset.default_url">使用默认</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>API Key {{ editingId ? '(留空则不修改)' : '' }}</label>
+            <input v-model="form.api_key" type="password" class="form-input" placeholder="输入API密钥" />
+          </div>
+          <div class="form-group">
+            <label>模型名称</label>
+            <input v-model="form.model" class="form-input" :placeholder="selectedPreset?.default_model || '如：glm-5.2'" />
+            <div v-if="selectedPreset?.default_model" class="hint">
+              推荐: {{ selectedPreset.default_model }}
+              <span class="link" @click="form.model = selectedPreset.default_model">使用推荐</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>温度 ({{ form.temperature }})</label>
+              <input type="range" v-model.number="form.temperature" min="0" max="1" step="0.1" class="form-range" />
+            </div>
+            <div class="form-group half">
+              <label>最大 Token</label>
+              <input type="number" v-model.number="form.max_tokens" min="128" max="8192" step="128" class="form-input" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>配置说明</label>
+            <input v-model="form.description" class="form-input" placeholder="可选：配置用途说明" />
+          </div>
+          <button class="btn btn-primary" :disabled="testing === 'openai'" @click="testConnection">
+            {{ testing === 'openai' ? '测试中...' : '测试连接' }}
+          </button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" @click="showForm = false">取消</button>
+          <button class="btn btn-primary" :disabled="loading || !form.name" @click="saveConfig">
+            {{ loading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .ai-config-panel {
-  width: 520px;
+  width: 600px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -267,13 +403,11 @@ onMounted(() => {
   border-bottom: 1px solid var(--border, #2a3142);
   background: rgba(0, 212, 255, 0.05);
 }
-
 .config-header .title {
   font-size: 15px;
   font-weight: 600;
   color: var(--text, #e0e6ed);
 }
-
 .close-btn {
   cursor: pointer;
   color: var(--text-dim, #8a94a6);
@@ -295,20 +429,13 @@ onMounted(() => {
   padding: 8px 16px;
   border-radius: 6px;
   font-size: 13px;
-  z-index: 100;
+  z-index: 200;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 .toast.success { background: #2ecc71; color: #fff; }
 .toast.error { background: #e74c3c; color: #fff; }
-.toast.info { background: #3498db; color: #fff; }
-
-.toast-enter-active, .toast-leave-active {
-  transition: opacity 0.3s, transform 0.3s;
-}
-.toast-enter-from, .toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-10px);
-}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.3s, transform 0.3s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
 
 /* 标签页 */
 .tab-nav {
@@ -326,9 +453,7 @@ onMounted(() => {
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
 }
-.tab-item:hover {
-  color: var(--text, #e0e6ed);
-}
+.tab-item:hover { color: var(--text, #e0e6ed); }
 .tab-item.active {
   color: #00d4ff;
   border-bottom-color: #00d4ff;
@@ -338,23 +463,237 @@ onMounted(() => {
 .tab-content {
   flex: 1;
   overflow-y: auto;
-  padding: 18px;
+  padding: 16px;
 }
 
+/* 工具栏 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.hint-text {
+  font-size: 12px;
+  color: var(--text-dim, #8a94a6);
+}
+
+/* 配置卡片 */
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.config-card {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.config-card.current {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.05);
+}
+.config-card.disabled {
+  opacity: 0.5;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.cfg-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e0e6ed);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #555;
+  color: #fff;
+}
+.badge.default {
+  background: #f0ad4e;
+  color: #1a1f2e;
+}
+.cfg-actions {
+  display: flex;
+  gap: 4px;
+}
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-dim, #8a94a6);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.btn-icon:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text, #e0e6ed);
+}
+.btn-icon.active {
+  color: #00d4ff;
+}
+.btn-icon.danger:hover {
+  color: #e74c3c;
+}
+.card-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-dim, #8a94a6);
+}
+.tag.dim {
+  background: transparent;
+  padding-left: 0;
+}
+.tag.ok {
+  color: #2ecc71;
+}
+.tag.warn {
+  color: #f0ad4e;
+}
+
+.empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim, #8a94a6);
+  font-size: 13px;
+}
+
+/* 统计 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 6px;
+  padding: 14px;
+  text-align: center;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: #00d4ff;
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-dim, #8a94a6);
+  margin-top: 4px;
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e0e6ed);
+  margin-bottom: 10px;
+}
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.provider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.provider-name {
+  width: 80px;
+  color: var(--text-dim, #8a94a6);
+}
+.provider-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: #00d4ff;
+  border-radius: 3px;
+}
+.provider-stat {
+  width: 120px;
+  text-align: right;
+  color: var(--text-dim, #8a94a6);
+  font-size: 11px;
+}
+
+/* 弹窗 */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+}
+.modal {
+  width: 480px;
+  max-height: 85%;
+  background: var(--bg-card, #1a1f2e);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #2a3142);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text, #e0e6ed);
+}
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border, #2a3142);
+}
+
+/* 表单 */
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .form-group label {
   display: block;
   font-size: 12px;
   color: var(--text-dim, #8a94a6);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   font-weight: 500;
 }
-.form-group.disabled {
-  opacity: 0.5;
-}
-
 .form-input {
   width: 100%;
   padding: 8px 10px;
@@ -369,51 +708,32 @@ onMounted(() => {
   outline: none;
   border-color: #00d4ff;
 }
-.form-input:disabled {
-  cursor: not-allowed;
-}
-
 .form-range {
   width: 100%;
   accent-color: #00d4ff;
 }
-
 .form-row {
   display: flex;
-  gap: 16px;
+  gap: 14px;
 }
 .form-group.half {
   flex: 1;
 }
-
 .hint {
   font-size: 11px;
   color: var(--text-dim, #8a94a6);
-  margin-top: 6px;
-  line-height: 1.5;
+  margin-top: 4px;
 }
-
-.switch-label {
-  display: flex !important;
-  align-items: center;
-  gap: 8px;
+.link {
+  color: #00d4ff;
   cursor: pointer;
-  margin-bottom: 0 !important;
-}
-.switch-label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: #00d4ff;
-  cursor: pointer;
-}
-.switch-label span {
-  color: var(--text, #e0e6ed);
-  font-size: 13px;
+  text-decoration: underline;
+  margin-left: 4px;
 }
 
 /* 按钮 */
 .btn {
-  padding: 8px 16px;
+  padding: 7px 14px;
   border: 1px solid var(--border, #2a3142);
   background: transparent;
   color: var(--text, #e0e6ed);
@@ -439,13 +759,19 @@ onMounted(() => {
   background: #00b8d9;
   border-color: #00b8d9;
 }
-
-.config-footer {
+.toolbar-left {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 18px;
-  border-top: 1px solid var(--border, #2a3142);
-  background: rgba(0,0,0,0.15);
+  gap: 8px;
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border, #2a3142);
+  color: var(--text-dim, #8a94a6);
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text, #e0e6ed);
+  border-color: var(--text-dim, #8a94a6);
 }
 </style>
