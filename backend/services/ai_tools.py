@@ -145,6 +145,7 @@ def get_machine_status(db: Session, machine_id: str = None) -> dict:
         "sql": f"SELECT * FROM machines WHERE id='{machine_id}' "
                f"UNION SELECT * FROM dt_event_raw WHERE tool_id='{machine_id}' ORDER BY raw_id DESC LIMIT 1",
         "jump_timestamp": latest_event.received_ts_utc if latest_event else m.updated_at,
+        "jump_machine_id": m.id,
     }
 
 
@@ -236,6 +237,7 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
         "sql": "SELECT * FROM dt_event_raw WHERE payload_json LIKE '%alarm_code%' ORDER BY raw_id DESC",
         "table_data": table_data,
         "jump_timestamp": alarms[0]["timestamp"] if alarms else None,
+        "jump_machine_id": machine_id,
     }
 
 
@@ -290,6 +292,7 @@ def _get_alarms_fallback(db: Session, machine_id: str = None, limit: int = 20) -
         "sql": "",
         "table_data": table_data,
         "jump_timestamp": alarms[0]["timestamp"] if alarms else None,
+        "jump_machine_id": machine_id,
     }
 
 
@@ -353,6 +356,7 @@ def get_event_timeline(db: Session, machine_id: str = None, limit: int = 20) -> 
         "sql": f"SELECT * FROM dt_event_raw WHERE tool_id IN {tuple(tool_ids)} ORDER BY raw_id DESC LIMIT {limit}",
         "table_data": table_data,
         "jump_timestamp": events[0].received_ts_utc if events else None,
+        "jump_machine_id": machine_id,
     }
 
 
@@ -531,6 +535,7 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None) -> dic
             "sql": f"SELECT * FROM dt_event_raw WHERE payload_json LIKE '%{lot_id}%'",
             "table_data": table_data,
             "jump_timestamp": events[0].received_ts_utc if events else None,
+            "jump_machine_id": first_event.tool_id,
         }
 
     # 未指定 Lot ID，从 DT_EVENT_RAW 聚合最近 Lot
@@ -565,6 +570,7 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None) -> dic
         "sql": "SELECT DISTINCT lot_id FROM dt_event_raw",
         "table_data": table_data,
         "jump_timestamp": list(lot_set.values())[0]["ts"] if lot_set else None,
+        "jump_machine_id": list(lot_set.values())[0]["tool_id"] if lot_set else None,
     }
 
 

@@ -511,6 +511,7 @@ class AIMiddleware:
                 "answer": result.get("answer", result.get("content", "")),
                 "sql": result.get("sql", ""),
                 "jump_timestamp": result.get("jump_timestamp", result.get("jumpTs", None)),
+                "jump_machine_id": result.get("jump_machine_id", result.get("jumpMachineId", None)),
                 "table_data": result.get("table_data", result.get("tableData", None)),
                 "tool_calls": result.get("tool_calls", []),
                 "sources": result.get("sources", []),
@@ -519,6 +520,7 @@ class AIMiddleware:
             "answer": str(result),
             "sql": "",
             "jump_timestamp": None,
+            "jump_machine_id": None,
             "table_data": None,
             "tool_calls": [],
             "sources": [],
@@ -680,6 +682,7 @@ class AIMiddleware:
                         "answer": answer,
                         "sql": "",
                         "jump_timestamp": jump_ts,
+                        "jump_machine_id": machine_id,
                         "tool_calls": tool_call_records,
                         "sources": [{"type": "llm", "model": self.model}],
                     }

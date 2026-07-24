@@ -34,6 +34,10 @@ watch(selectedDate, (newDate) => {
 const timeline = ref([])
 const events = ref([])
 const loading = ref(false)
+const loadingMore = ref(false)
+const hasMore = ref(false)
+const nextRawId = ref(null)
+const totalCount = ref(0)
 const selectedEventId = ref(null)
 const filterCategory = ref('') // '' = all, 'alarm', 'pod', 'process'
 
@@ -59,12 +63,16 @@ async function loadEvents() {
   try {
     const start = `${selectedDate.value}T00:00:00`
     const end = `${selectedDate.value}T23:59:59.999`
-    const params = { start_time: start, end_time: end, limit: 500 }
+    // 使用较大limit以覆盖当天所有事件；后端已支持 start_time 锚点自动定位
+    const params = { start_time: start, end_time: end, limit: 2000 }
     if (filterCategory.value) {
       params.event_category = filterCategory.value
     }
     const data = await api.getHistory(props.machineId, params)
     events.value = data.events || []
+    hasMore.value = !!(data.next_raw_id && events.value.length >= 2000)
+    nextRawId.value = data.next_raw_id
+    totalCount.value = data.total || events.value.length
   } catch (e) {
     console.error('[HistoryReplay] 加载事件失败:', e)
     events.value = []
@@ -73,9 +81,52 @@ async function loadEvents() {
   }
 }
 
+async function loadMore() {
+  if (!props.machineId || !hasMore.value || !nextRawId.value || loading.value) return
+  loadingMore.value = true
+  try {
+    const start = `${selectedDate.value}T00:00:00`
+    const end = `${selectedDate.value}T23:59:59.999`
+    const params = {
+      start_time: start,
+      end_time: end,
+      limit: 2000,
+      before_raw_id: nextRawId.value,
+    }
+    if (filterCategory.value) {
+      params.event_category = filterCategory.value
+    }
+    const data = await api.getHistory(props.machineId, params)
+    const more = data.events || []
+    // 追加，去重
+    const seen = new Set(events.value.map(e => e.raw_id))
+    for (const e of more) {
+      if (!seen.has(e.raw_id)) {
+        events.value.push(e)
+      }
+    }
+    events.value.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1))
+    hasMore.value = !!(data.next_raw_id && more.length >= 2000)
+    nextRawId.value = data.next_raw_id
+  } catch (e) {
+    console.error('[HistoryReplay] 加载更多事件失败:', e)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
 function refresh() {
   loadTimeline()
   loadEvents()
+}
+
+// 滚动到底部自动加载更多
+function onListScroll(e) {
+  if (!hasMore.value || loadingMore.value) return
+  const el = e.target
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+    loadMore()
+  }
 }
 
 function selectEvent(ev) {
@@ -202,7 +253,7 @@ watch(filterCategory, loadEvents)
     </div>
 
     <!-- 事件列表 -->
-    <div class="hr-list">
+    <div class="hr-list" @scroll.passive="onListScroll">
       <div v-if="loading" class="hr-loading">加载中...</div>
       <div v-else-if="filteredEvents.length === 0" class="hr-empty">暂无事件</div>
       <div
@@ -232,6 +283,11 @@ watch(filterCategory, loadEvents)
           <div v-else class="hr-item-desc">{{ ev.event_type }}</div>
         </div>
         <div class="hr-item-arrow">▶</div>
+      </div>
+      <div v-if="hasMore" class="hr-load-more">
+        <button @click="loadMore" :disabled="loadingMore">
+          {{ loadingMore ? '加载中...' : `加载更多 (已显示 ${events.length})` }}
+        </button>
       </div>
     </div>
   </div>
@@ -454,5 +510,29 @@ watch(filterCategory, loadEvents)
 }
 .hr-item:hover .hr-item-arrow {
   opacity: 1;
+}
+
+.hr-load-more {
+  padding: 8px 12px;
+  text-align: center;
+}
+.hr-load-more button {
+  background: #1e2d44;
+  border: 1px solid #2a4060;
+  border-radius: 4px;
+  color: #94a3b8;
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.15s;
+}
+.hr-load-more button:hover:not(:disabled) {
+  background: #2a4060;
+  color: #e5e7eb;
+}
+.hr-load-more button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

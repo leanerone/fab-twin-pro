@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { useModelStore } from '../stores/model'
 import { api } from '../api'
@@ -36,6 +36,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const route = useRoute()
 const appStore = useAppStore()
 const modelStore = useModelStore()
 
@@ -873,9 +874,34 @@ watch(() => props.id, () => {
   loadMachine()
 })
 
+// 处理AI跳转（query参数或全局store）
+function applyAIJump() {
+  let ts = ''
+  if (route.query && route.query.ts) {
+    ts = String(route.query.ts)
+    // 清理URL中的ts参数，避免刷新重复触发
+    const q = { ...route.query }
+    delete q.ts
+    router.replace({ path: route.path, query: q })
+  } else {
+    const pending = appStore.consumePendingJump()
+    if (pending && pending.timestamp) {
+      // 仅当目标机台与当前机台一致（或未指定）时执行
+      if (!pending.machine_id || pending.machine_id === props.id) {
+        ts = pending.timestamp
+      }
+    }
+  }
+  if (!ts) return
+  // 等历史数据加载完成后跳转
+  setTimeout(() => jumpToTime(ts), 500)
+}
+
 onMounted(() => {
   loadMachine()
   updateRunAnimation()
+  // 延迟到机器数据加载完成后再处理跳转
+  setTimeout(applyAIJump, 800)
 })
 </script>
 

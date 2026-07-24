@@ -23,6 +23,8 @@ export const useAppStore = defineStore('app', {
     recentEvents: [],
     // 后端是否可用（tibrv 连接状态）
     tibrvConnected: false,
+    // 待处理的AI跳转请求：{ machine_id, timestamp }
+    pendingJump: null,
   }),
   getters: {
     // 当前选中的机台对象
@@ -66,6 +68,16 @@ export const useAppStore = defineStore('app', {
     // 选择机台
     selectMachine(id) {
       this.selectedMachineId = id
+    },
+    // 设置AI跳转请求
+    setPendingJump(jump) {
+      this.pendingJump = jump
+    },
+    // 消费AI跳转请求（获取后置null）
+    consumePendingJump() {
+      const j = this.pendingJump
+      this.pendingJump = null
+      return j
     },
     // 应用 WebSocket 推送的实时事件，更新机台状态
     applyRealtimeEvent(ev) {

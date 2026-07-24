@@ -125,6 +125,7 @@ class AIChatResponse(BaseModel):
     answer: str
     sql: Optional[str] = ""
     jump_timestamp: Optional[str] = None
+    jump_machine_id: Optional[str] = None
     table_data: Optional[AITableData] = None
     tool_calls: Optional[List[AIToolCall]] = []
     sources: Optional[List[AISource]] = []

@@ -1,19 +1,31 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '../api'
 import VoiceInput from './VoiceInput.vue'
-import AIConfigPanel from './AIConfigPanel.vue'
 
 const STORAGE_KEY = 'fabtwin_ai_floating_session'
 const POSITION_KEY = 'fabtwin_ai_floating_pos'
 const SIZE_KEY = 'fabtwin_ai_floating_size'
 
 const emit = defineEmits(['jump'])
+const route = useRoute()
 
 // 状态
 const chatOpen = ref(false)
 const minimized = ref(false)
-const showConfig = ref(false)
+
+// 当前路由对应的机台ID（用于AI跳转时定位）
+const currentMachineId = ref('')
+watch(
+  () => route,
+  (r) => {
+    // 兼容 /machine/:id 和 /floor/:floor/machine/:id 等
+    const params = r.params || {}
+    currentMachineId.value = params.id || params.machineId || ''
+  },
+  { immediate: true, deep: true }
+)
 
 // 位置和尺寸
 const ballPos = ref({ x: 20, y: 100 })
@@ -96,13 +108,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
-})
-
-// 监听配置面板关闭，刷新当前配置
-watch(showConfig, (newVal, oldVal) => {
-  if (!newVal && oldVal) {
-    loadCurrentConfig()
-  }
 })
 
 // ==================== AI配置管理 ====================
@@ -258,6 +263,7 @@ async function sendMessage(text) {
       session_id: sessionId.value,
       user_role: 'user',
       config_id: currentConfig.value.config_id,
+      machine_id: currentMachineId.value || null,
     })
 
     sessionId.value = resp.session_id || sessionId.value
@@ -267,6 +273,7 @@ async function sendMessage(text) {
       content: resp.answer,
       sql: resp.sql,
       jump_timestamp: resp.jump_timestamp,
+      jump_machine_id: resp.jump_machine_id,
       table_data: resp.table_data,
       tool_calls: resp.tool_calls,
       sources: resp.sources,
@@ -328,18 +335,21 @@ function clearChat() {
   }
 }
 
-function openConfig() {
-  showConfig.value = true
-}
-
-function jumpToTime(ts) {
-  emit('jump', ts)
+function jumpToTime(payload) {
+  // payload: { machine_id, timestamp } 或 兼容纯字符串时间戳
+  if (!payload) return
+  if (typeof payload === 'string') {
+    emit('jump', { machine_id: currentMachineId.value, timestamp: payload })
+  } else {
+    emit('jump', payload)
+  }
 }
 </script>
 
 <template>
-  <!-- AI 悬浮球 -->
+  <!-- AI 悬浮球（聊天窗口打开或最小化时隐藏，避免重复图标） -->
   <div
+    v-if="!chatOpen"
     class="ai-floating-ball"
     :style="{ left: ballPos.x + 'px', top: ballPos.y + 'px' }"
     @mousedown="startDrag($event, 'ball')"
@@ -386,13 +396,9 @@ function jumpToTime(ts) {
             <div v-if="availableConfigs.filter(c => c.is_enabled).length === 0" class="model-option disabled">
               暂无可用配置
             </div>
-            <div class="model-option manage" @click.stop="openConfig(); showModelSelector = false">
-              ⚙️ 管理模型配置...
-            </div>
           </div>
         </span>
         <div class="header-actions">
-          <span class="header-btn" title="AI配置" @click.stop="openConfig">⚙️</span>
           <span class="header-btn" title="清空对话" @click.stop="clearChat">🗑️</span>
           <span class="header-btn" title="最小化" @click.stop="minimizeChat">─</span>
           <span class="header-btn" title="关闭" @click.stop="closeChat">✕</span>
@@ -442,8 +448,8 @@ function jumpToTime(ts) {
                 </table>
               </div>
               <!-- 跳转按钮 -->
-              <button v-if="msg.jump_timestamp" class="msg-jump-btn" @click="jumpToTime(msg.jump_timestamp)">
-                📍 跳转到历史回放
+              <button v-if="msg.jump_timestamp" class="msg-jump-btn" @click="jumpToTime({ machine_id: msg.jump_machine_id || currentMachineId, timestamp: msg.jump_timestamp })">
+                📍 跳转到{{ msg.jump_machine_id && msg.jump_machine_id !== currentMachineId ? msg.jump_machine_id : '历史回放' }}
               </button>
               <!-- 工具调用 -->
               <div v-if="msg.tool_calls && msg.tool_calls.length" class="msg-tools">
@@ -526,11 +532,6 @@ function jumpToTime(ts) {
       <span class="min-icon">🤖</span>
       <span class="min-text">AI 助手</span>
       <span class="min-close" @click.stop="closeChat">✕</span>
-    </div>
-
-    <!-- 配置面板弹窗 -->
-    <div v-if="showConfig" class="config-modal" @click.self="showConfig = false">
-      <AIConfigPanel @close="showConfig = false" />
     </div>
   </Teleport>
 </template>
@@ -1002,17 +1003,6 @@ function jumpToTime(ts) {
   color: var(--text, #e0e6ed);
 }
 
-/* 配置弹窗 */
-.config-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
 /* 模型徽章与下拉 */
 .model-badge {
   display: inline-block;
@@ -1056,11 +1046,6 @@ function jumpToTime(ts) {
 .model-option.active {
   color: #00d4ff;
   background: rgba(0, 212, 255, 0.12);
-}
-.model-option.manage {
-  border-top: 1px solid #2a3142;
-  margin-top: 4px;
-  color: #8a94a6;
 }
 .model-option.disabled {
   color: #555;
