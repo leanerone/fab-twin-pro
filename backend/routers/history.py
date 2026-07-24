@@ -293,25 +293,15 @@ def get_timeline(
     except ValueError:
         target_dt = datetime.now()
 
-    # 找 target_dt 开始的 raw_id 锚点
+    # 找 target_dt 开始的 raw_id 锚点（与 get_history 保持一致，不设 next_anchor 上限）
+    # 不设上限的原因：当 anchor == next_anchor（数据库里没有比 anchor 更新的事件）时，
+    # 区间查询会漏掉该日事件。统一在 Python 层按日期过滤。
     anchor = _find_raw_id_anchor(db, tool_ids, target_dt)
     if anchor is not None:
-        # 拉取从 anchor 开始的所有事件，限定到当天结束
-        next_day_dt = target_dt.replace(hour=23, minute=59, second=59)
-        # 找下一天的锚点（也即当天的终点 raw_id）
-        next_anchor = _find_raw_id_anchor(db, tool_ids, next_day_dt)
-        if next_anchor is not None:
-            # anchor <= next_anchor，取两者之间的事件
-            rows = db.query(DT_EVENT_RAW).filter(
-                DT_EVENT_RAW.tool_id.in_(tool_ids),
-                DT_EVENT_RAW.raw_id >= anchor,
-                DT_EVENT_RAW.raw_id <= next_anchor
-            ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
-        else:
-            rows = db.query(DT_EVENT_RAW).filter(
-                DT_EVENT_RAW.tool_id.in_(tool_ids),
-                DT_EVENT_RAW.raw_id >= anchor
-            ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
+        rows = db.query(DT_EVENT_RAW).filter(
+            DT_EVENT_RAW.tool_id.in_(tool_ids),
+            DT_EVENT_RAW.raw_id >= anchor
+        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
     else:
         # 兜底：拉取最近 5000 条
         rows = (
