@@ -163,10 +163,10 @@ def get_history(
         # 方法：以 raw_id 降序扫描，按 Python 解析的 ts 定位到第一个 ts <= start_dt 的位置
         anchor_raw_id = _find_raw_id_anchor(db, tool_ids, start_dt)
         if anchor_raw_id is not None:
-            # 拉取 anchor 之后的所有事件
+            # 拉取 anchor 之后的所有事件（raw_id 随时间递增，>= anchor 才是目标时间之后）
             rows = db.query(DT_EVENT_RAW).filter(
                 DT_EVENT_RAW.tool_id.in_(tool_ids),
-                DT_EVENT_RAW.raw_id <= anchor_raw_id
+                DT_EVENT_RAW.raw_id >= anchor_raw_id
             ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
         else:
             # 兜底：拉取最近 20000 条
@@ -222,13 +222,12 @@ def get_history(
 
 
 def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
-    """在 raw_id 降序中定位到 ts <= target_dt 的最大 raw_id
+    """在 raw_id 中定位到 ts <= target_dt 的最大 raw_id
 
     解决 VARCHAR2 时间字段无法在SQL层做时间比较的问题：
-    按 raw_id 降序扫描，找到第一个 ts <= target_dt 的位置，返回该 raw_id
-    后续查询以这个 raw_id 为上限，可获取从该时间点往后的所有事件
-
-    二分查找（性能优化）：按 raw_id 范围二分定位
+    二分查找定位 ts <= target_dt 的最大 raw_id，作为时间锚点。
+    由于 raw_id 随时间递增，后续查询应以 raw_id >= anchor 为条件，
+    获取从该时间点往后的所有事件。
     """
     from models import DT_EVENT_RAW
     try:
@@ -302,15 +301,16 @@ def get_timeline(
         # 找下一天的锚点（也即当天的终点 raw_id）
         next_anchor = _find_raw_id_anchor(db, tool_ids, next_day_dt)
         if next_anchor is not None:
+            # anchor <= next_anchor，取两者之间的事件
             rows = db.query(DT_EVENT_RAW).filter(
                 DT_EVENT_RAW.tool_id.in_(tool_ids),
-                DT_EVENT_RAW.raw_id <= anchor,
-                DT_EVENT_RAW.raw_id > next_anchor
+                DT_EVENT_RAW.raw_id >= anchor,
+                DT_EVENT_RAW.raw_id <= next_anchor
             ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
         else:
             rows = db.query(DT_EVENT_RAW).filter(
                 DT_EVENT_RAW.tool_id.in_(tool_ids),
-                DT_EVENT_RAW.raw_id <= anchor
+                DT_EVENT_RAW.raw_id >= anchor
             ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
     else:
         # 兜底：拉取最近 5000 条
