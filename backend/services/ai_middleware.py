@@ -236,7 +236,7 @@ class AIMiddleware:
 
                 if cfg:
                     self.provider = cfg.provider
-                    self.base_url = cfg.base_url
+                    self.base_url = (cfg.base_url or "").rstrip('/')
                     self.api_key = cfg.api_key
                     self.model = cfg.model
                     self.temperature = cfg.temperature
@@ -318,6 +318,21 @@ class AIMiddleware:
     def _save_dify_n8n_key(self, key: str, value: str):
         """保存单个Dify/N8N配置项到 ai_configs"""
         self._save_to_db(key, value)
+
+    def _build_chat_url(self, base_url: str) -> str:
+        """根据 base_url 构建 chat completions 完整 URL
+
+        兼容用户填写时带或不带 /v1 后缀的情况：
+        - https://api.openai.com       → https://api.openai.com/v1/chat/completions
+        - https://api.openai.com/v1    → https://api.openai.com/v1/chat/completions
+        - https://api.openai.com/v1/   → https://api.openai.com/v1/chat/completions
+        """
+        url = (base_url or "").rstrip('/')
+        if not url:
+            return ""
+        if url.endswith('/v1'):
+            return f"{url}/chat/completions"
+        return f"{url}/v1/chat/completions"
 
     def _infer_provider_name(self) -> str:
         """根据base_url推断Provider名称"""
@@ -602,7 +617,7 @@ class AIMiddleware:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
-        url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
+        url = self._build_chat_url(self.base_url)
 
         # 带 tools 的 payload（OpenAI Function Calling）
         payload = {
@@ -886,7 +901,7 @@ class AIMiddleware:
                 self.provider = config["provider"]
                 self._save_to_db("provider", self.provider)
             if "base_url" in config:
-                self.base_url = config["base_url"]
+                self.base_url = (config["base_url"] or "").rstrip('/')
                 self._save_to_db("base_url", self.base_url)
             if "api_key" in config:
                 self.api_key = config["api_key"]
@@ -942,8 +957,9 @@ class AIMiddleware:
         try:
             if provider_type == "openai":
                 # 用最小 chat completions 请求测试（兼容所有 OpenAI 兼容接口）
-                base_url = config.get('base_url', '').rstrip('/')
-                url = f"{base_url}/v1/chat/completions"
+                url = self._build_chat_url(config.get('base_url', ''))
+                if not url:
+                    return {"success": False, "message": "API 地址不能为空"}
                 headers = {
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {config.get('api_key', '')}",
@@ -1160,7 +1176,7 @@ class AIMiddleware:
                 cfg = AIProviderConfig(
                     name=data["name"],
                     provider=data["provider"],
-                    base_url=data.get("base_url", ""),
+                    base_url=(data.get("base_url", "") or "").rstrip('/'),
                     api_key=data.get("api_key", ""),
                     model=data.get("model", ""),
                     temperature=float(data.get("temperature", 0.7)),
@@ -1201,7 +1217,7 @@ class AIMiddleware:
                 if "provider" in data:
                     cfg.provider = data["provider"]
                 if "base_url" in data:
-                    cfg.base_url = data["base_url"]
+                    cfg.base_url = (data["base_url"] or "").rstrip('/')
                 if "api_key" in data:
                     cfg.api_key = data["api_key"]
                 if "model" in data:

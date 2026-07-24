@@ -35,6 +35,12 @@ const routes = [
     component: () => import('../views/UserManagement.vue'),
     meta: { requiresAuth: true, requirePermission: 'user_manage' },
   },
+  {
+    path: '/ai-config',
+    name: 'ai-config',
+    component: () => import('../views/AIConfigView.vue'),
+    meta: { requiresAuth: true, requirePermission: 'ai_config' },
+  },
 ]
 
 const router = createRouter({

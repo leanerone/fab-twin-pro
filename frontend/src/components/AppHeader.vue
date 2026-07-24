@@ -34,6 +34,10 @@ function goUserManagement() {
   router.push('/users')
 }
 
+function goAIConfig() {
+  router.push('/ai-config')
+}
+
 function toggleUserMenu() {
   showUserMenu.value = !showUserMenu.value
 }
@@ -54,6 +58,7 @@ const isDashboard = computed(() => route.name === 'dashboard')
 const isDetail = computed(() => route.name === 'machine-detail')
 const isModelEditor = computed(() => route.name === 'model-editor')
 const isUserManagement = computed(() => route.name === 'user-management')
+const isAIConfig = computed(() => route.name === 'ai-config')
 
 onMounted(() => {
   updateClock()
@@ -90,6 +95,14 @@ onUnmounted(() => {
         @click="goUserManagement"
       >
         用户管理
+      </button>
+      <button
+        v-if="authStore.hasPermission('ai_config') || authStore.isAdmin"
+        class="nav-tab"
+        :class="{ active: isAIConfig }"
+        @click="goAIConfig"
+      >
+        🤖 AI配置
       </button>
     </nav>
     <div class="header-right">

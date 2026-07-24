@@ -2,6 +2,9 @@
 import { ref, onMounted, computed } from 'vue'
 import { api } from '../api'
 
+const props = defineProps({
+  fullPage: { type: Boolean, default: false }
+})
 const emit = defineEmits(['close'])
 
 const loading = ref(false)
@@ -114,7 +117,8 @@ function onProviderChange() {
   const preset = selectedPreset.value
   if (!preset) return
   if (preset.default_url && !form.value.base_url) {
-    form.value.base_url = preset.default_url
+    // 默认地址也去除 /v1 后缀，保持统一
+    form.value.base_url = preset.default_url.replace(/\/v1\/?$/, '')
   }
   if (preset.default_model && !form.value.model) {
     form.value.model = preset.default_model
@@ -122,9 +126,19 @@ function onProviderChange() {
 }
 
 async function saveConfig() {
+  if (!form.value.name) {
+    showToast('error', '配置名称必填')
+    return
+  }
+  if (!form.value.provider) {
+    showToast('error', '请选择 AI Provider')
+    return
+  }
   loading.value = true
   try {
     const data = { ...form.value }
+    // 去除 base_url 末尾斜杠和 /v1 后缀，由后端统一拼接
+    data.base_url = (data.base_url || '').replace(/\/v1\/?$/, '').trim()
     if (!data.api_key) delete data.api_key
     if (editingId.value) {
       await api.aiUpdateModelConfig(editingId.value, data)
@@ -136,6 +150,7 @@ async function saveConfig() {
     showForm.value = false
     await loadConfigs()
   } catch (e) {
+    console.error('保存配置失败', e)
     showToast('error', '保存失败：' + (e.message || '未知错误'))
   } finally {
     loading.value = false
@@ -184,6 +199,10 @@ async function switchConfig(id) {
 }
 
 async function testConnection() {
+  if (!form.value.base_url) {
+    showToast('error', '请先填写 API 基础地址')
+    return
+  }
   testing.value = 'openai'
   try {
     const testConfig = {
@@ -216,10 +235,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="ai-config-panel">
+  <div :class="['ai-config-panel', { 'full-page': props.fullPage }]">
     <div class="config-header">
       <span class="title">AI 配置中心</span>
-      <span class="close-btn" @click="emit('close')">&#10005;</span>
+      <span v-if="!props.fullPage" class="close-btn" @click="emit('close')">&#10005;</span>
     </div>
 
     <!-- Toast -->
@@ -323,34 +342,45 @@ onMounted(() => {
           <span class="close-btn" @click="showForm = false">&#10005;</span>
         </div>
         <div class="modal-body">
-          <div class="form-group">
-            <label>配置名称 *</label>
-            <input v-model="form.name" class="form-input" placeholder="如：智谱GLM-生产环境" />
+          <div class="hint-box">
+            系统会自动在 API 地址后拼接 <code>/v1/chat/completions</code> 进行调用，因此基础地址只需填写到版本号之前。例如 OpenAI 填写 <code>https://api.openai.com</code> 即可，无需加 <code>/v1</code>。
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex: 1.2;">
+              <label>配置名称 *</label>
+              <input v-model="form.name" class="form-input" placeholder="如：智谱GLM-生产环境" />
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>AI Provider *</label>
+              <select v-model="form.provider" class="form-input" @change="onProviderChange">
+                <option v-for="p in providerPresets.filter(p => p.requires_key !== false || p.id === 'local')" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
-            <label>AI Provider *</label>
-            <select v-model="form.provider" class="form-input" @change="onProviderChange">
-              <option v-for="p in providerPresets.filter(p => p.requires_key !== false || p.id === 'local')" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>API 地址</label>
+            <label>API 基础地址</label>
             <input v-model="form.base_url" class="form-input" :placeholder="selectedPreset?.default_url || 'https://...'" />
             <div v-if="selectedPreset?.default_url" class="hint">
-              默认: {{ selectedPreset.default_url }}
-              <span class="link" @click="form.base_url = selectedPreset.default_url">使用默认</span>
+              默认: {{ selectedPreset.default_url.replace(/\/v1\/?$/, '') }}
+              <span class="link" @click="form.base_url = selectedPreset.default_url.replace(/\/v1\/?$/, '')">使用默认</span>
             </div>
           </div>
           <div class="form-group">
             <label>API Key {{ editingId ? '(留空则不修改)' : '' }}</label>
             <input v-model="form.api_key" type="password" class="form-input" placeholder="输入API密钥" />
           </div>
-          <div class="form-group">
-            <label>模型名称</label>
-            <input v-model="form.model" class="form-input" :placeholder="selectedPreset?.default_model || '如：glm-5.2'" />
-            <div v-if="selectedPreset?.default_model" class="hint">
-              推荐: {{ selectedPreset.default_model }}
-              <span class="link" @click="form.model = selectedPreset.default_model">使用推荐</span>
+          <div class="form-row">
+            <div class="form-group" style="flex: 1.2;">
+              <label>模型名称</label>
+              <input v-model="form.model" class="form-input" :placeholder="selectedPreset?.default_model || '如：glm-5.2'" />
+              <div v-if="selectedPreset?.default_model" class="hint">
+                推荐: {{ selectedPreset.default_model }}
+                <span class="link" @click="form.model = selectedPreset.default_model">使用推荐</span>
+              </div>
+            </div>
+            <div class="form-group half">
+              <label>最大 Token</label>
+              <input type="number" v-model.number="form.max_tokens" min="128" max="8192" step="128" class="form-input" />
             </div>
           </div>
           <div class="form-row">
@@ -359,13 +389,9 @@ onMounted(() => {
               <input type="range" v-model.number="form.temperature" min="0" max="1" step="0.1" class="form-range" />
             </div>
             <div class="form-group half">
-              <label>最大 Token</label>
-              <input type="number" v-model.number="form.max_tokens" min="128" max="8192" step="128" class="form-input" />
+              <label>配置说明</label>
+              <input v-model="form.description" class="form-input" placeholder="可选：配置用途说明" />
             </div>
-          </div>
-          <div class="form-group">
-            <label>配置说明</label>
-            <input v-model="form.description" class="form-input" placeholder="可选：配置用途说明" />
           </div>
           <button class="btn btn-primary" :disabled="testing === 'openai'" @click="testConnection">
             {{ testing === 'openai' ? '测试中...' : '测试连接' }}
@@ -384,8 +410,9 @@ onMounted(() => {
 
 <style scoped>
 .ai-config-panel {
-  width: 600px;
-  max-height: 80vh;
+  width: 720px;
+  max-width: 95vw;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-card, #1a1f2e);
@@ -393,6 +420,14 @@ onMounted(() => {
   border-radius: 10px;
   overflow: hidden;
   position: relative;
+}
+.ai-config-panel.full-page {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
 }
 
 .config-header {
@@ -651,8 +686,9 @@ onMounted(() => {
   z-index: 150;
 }
 .modal {
-  width: 480px;
-  max-height: 85%;
+  width: 640px;
+  max-width: 95vw;
+  max-height: 90vh;
   background: var(--bg-card, #1a1f2e);
   border: 1px solid var(--border, #2a3142);
   border-radius: 8px;
@@ -673,36 +709,37 @@ onMounted(() => {
 .modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px;
 }
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 12px 16px;
+  gap: 12px;
+  padding: 14px 20px;
   border-top: 1px solid var(--border, #2a3142);
 }
 
 /* 表单 */
 .form-group {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 .form-group label {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-dim, #8a94a6);
-  margin-bottom: 5px;
+  margin-bottom: 6px;
   font-weight: 500;
 }
 .form-input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--bg, #0f1419);
   border: 1px solid var(--border, #2a3142);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--text, #e0e6ed);
-  font-size: 13px;
+  font-size: 14px;
   box-sizing: border-box;
+  min-height: 38px;
 }
 .form-input:focus {
   outline: none;
@@ -714,21 +751,31 @@ onMounted(() => {
 }
 .form-row {
   display: flex;
-  gap: 14px;
+  gap: 18px;
 }
 .form-group.half {
   flex: 1;
 }
 .hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-dim, #8a94a6);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .link {
   color: #00d4ff;
   cursor: pointer;
   text-decoration: underline;
   margin-left: 4px;
+}
+.hint-box {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-dim, #8a94a6);
+  margin-bottom: 18px;
+  line-height: 1.5;
 }
 
 /* 按钮 */

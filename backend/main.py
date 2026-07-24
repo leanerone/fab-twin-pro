@@ -16,7 +16,7 @@ logging.basicConfig(
 
 from config import API_HOST, API_PORT, CORS_ORIGINS, SIMULATION_ENABLED, DB_POLLER_ENABLED
 from database import init_db, SessionLocal
-from models import Machine
+from models import Machine, AIConfig, AIProviderConfig, AIUsageLog
 from seed_data import init_seed_data
 from routers import machines, events, lots, alarms, ai, oht, recipes, floors, models, history, auth, users
 from routers.rvmessages import router as rv_router
