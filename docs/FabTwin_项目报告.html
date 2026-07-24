@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FabTwin Pro 半导体工厂数字孪生平台 - 项目报告</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f5f7fa; font-family:'Microsoft YaHei','SimSun',Arial,sans-serif; color:#333; line-height:1.6;">
+
+<!-- ========== 封面 ========== -->
+<div style="max-width:960px; margin:0 auto; padding:40px 30px;">
+<div style="background:linear-gradient(135deg,#1a3a5c,#2d6da8); padding:60px 40px; border-radius:8px; text-align:center; margin-bottom:30px;">
+<h1 style="color:#fff; font-size:32px; margin:0 0 10px 0; letter-spacing:2px;">FabTwin Pro</h1>
+<h2 style="color:#b8d4f0; font-size:20px; margin:0 0 20px 0; font-weight:normal;">半导体工厂数字孪生平台</h2>
+<div style="width:60px; height:3px; background:#4fc3f7; margin:0 auto 20px auto;"></div>
+<p style="color:#d0e4f5; font-size:14px; margin:0;">项目进度报告 &nbsp;|&nbsp; 2026年7月24日</p>
+</div>
+
+<!-- ========== 一、项目概述 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">一、项目概述</h2>
+
+<div style="margin-bottom:16px;">
+<p style="font-size:14px; margin:0 0 8px 0;"><b>项目定位：</b>构建半导体晶圆工厂数字孪生平台，实现机台实时监控、历史数据回放、楼层平面图可视化及AI辅助分析。</p>
+<p style="font-size:14px; margin:0 0 8px 0;"><b>当前版本：</b>ver1.4（已完成核心功能开发）</p>
+<p style="font-size:14px; margin:0;"><b>项目团队：</b>后端/前端开发 + 3D模型/数据对接</p>
+</div>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px; margin-top:10px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">技术栈</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">说明</th>
+</tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>后端</b></td><td style="padding:8px 12px; border:1px solid #ddd;">Python 3.10+ / FastAPI / SQLAlchemy 2.0 / Oracle 19c</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>前端</b></td><td style="padding:8px 12px; border:1px solid #ddd;">Vue 3.4 + Vite 5 + Three.js（3D）+ Canvas/SVG（2D）</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>通信</b></td><td style="padding:8px 12px; border:1px solid #ddd;">REST API + WebSocket 实时推送</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>AI</b></td><td style="padding:8px 12px; border:1px solid #ddd;">多Provider支持（智谱GLM / DeepSeek / OpenAI等）</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>数据库</b></td><td style="padding:8px 12px; border:1px solid #ddd;">Oracle 19c（生产）/ SQLite（开发调试），19张业务表 + 3张AI表</td></tr>
+</table>
+</div>
+
+<!-- ========== 二、版本里程碑 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">二、版本里程碑</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:70px;">版本</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:100px;">时间</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">核心交付</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:70px;">状态</th>
+</tr>
+<tr><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver0.x</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">7月上旬</td><td style="padding:8px 12px; border:1px solid #ddd;">Demo验证：主页看板 + 楼层3D + 2D编辑器 + DRM 3D模型</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">完成</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver1.0</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">7月18日</td><td style="padding:8px 12px; border:1px solid #ddd;">PODOPENER端到端：2D/3D视图 + 20事件映射 + 历史回放 + 模拟器</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">完成</td></tr>
+<tr><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver1.1</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">7月19日</td><td style="padding:8px 12px; border:1px solid #ddd;">时间戳/回放/3D事件匹配修复</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">完成</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver1.2</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">7月19日</td><td style="padding:8px 12px; border:1px solid #ddd;">事件-动画统一配置层改造（配置文件 + 加载器 + 调试面板）</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">完成</td></tr>
+<tr><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; background:#e8f5e9;">ver1.3</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; background:#e8f5e9;">7月24日</td><td style="padding:8px 12px; border:1px solid #ddd; background:#e8f5e9;"><b>AI配置管理系统：多Provider + 数据库持久化 + Token统计</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; background:#e8f5e9; color:#4caf50; font-weight:bold;">完成</td></tr>
+<tr style="background:#e8f5e9;"><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver1.4</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">7月24日</td><td style="padding:8px 12px; border:1px solid #ddd;"><b>数据库脚本优化：精简SQL + AI表手动创建</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">完成</td></tr>
+<tr><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver2.0</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">8月</td><td style="padding:8px 12px; border:1px solid #ddd;">TIBRV真实事件对接 + SECS/GEM + 多机型配置化扩展</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#ff9800; font-weight:bold;">计划中</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">ver3.0</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">Q4</td><td style="padding:8px 12px; border:1px solid #ddd;">Dify + n8n AI升级 + 用户权限 + 生产级优化</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#9e9e9e; font-weight:bold;">待规划</td></tr>
+</table>
+</div>
+
+<!-- ========== 三、核心功能展示 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">三、核心功能</h2>
+
+<!-- 3.1 -->
+<h3 style="color:#2d6da8; font-size:16px; margin:20px 0 10px 0;">3.1 机台实时监控与可视化</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#e3f2fd;">
+<td style="padding:8px 12px; border:1px solid #ddd; width:140px;"><b>主页看板</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">7个KPI卡片（运行/空闲/告警/产量/WIP/节拍/OEE）+ 楼层切换 + 机台列表</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>多视图渲染</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">支持5种视图模式：Three.js 3D / 等角2.5D / SVG 2D / VPO 2D / VPO 3D</td>
+</tr>
+<tr style="background:#f9fbfd;">
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>机型覆盖</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">PODOPENER开盖机 / TEL DRM UNITY刻蚀机 / OXE刻蚀机，共33台机台</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>实时推送</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">WebSocket实时广播，端到端延迟 &le; 1秒，指数退避自动重连</td>
+</tr>
+</table>
+
+<!-- 3.2 -->
+<h3 style="color:#2d6da8; font-size:16px; margin:20px 0 10px 0;">3.2 历史数据回放</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#e3f2fd;">
+<td style="padding:8px 12px; border:1px solid #ddd; width:140px;"><b>回放功能</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">日期选择 + 6档倍速控制（0.5x~16x）+ 24h柱状时间轴 + 事件拖拽跳转</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>事件数据</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">PODOPENER 7天10920条历史事件，含20种事件类型 + 5类告警</td>
+</tr>
+<tr style="background:#f9fbfd;">
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>查询性能</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">单日历史查询响应 &le; 2秒</td>
+</tr>
+</table>
+
+<!-- 3.3 -->
+<h3 style="color:#2d6da8; font-size:16px; margin:20px 0 10px 0;">3.3 楼层平面图与3D场景</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#e3f2fd;">
+<td style="padding:8px 12px; border:1px solid #ddd; width:140px;"><b>3D楼层视图</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">机台3D模型 + 状态灯 + 区域标注 + 天车轨迹动画 + 点击跳转详情</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>2D平面图编辑</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">5种编辑工具 + 拖拽调整 + JSON导入导出 + 天车2D动画</td>
+</tr>
+<tr style="background:#f9fbfd;">
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>楼层支持</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">4层楼层（1F-4F），37个区域，含设备区/过道/STK/PUMP等</td>
+</tr>
+</table>
+
+<!-- 3.4 -->
+<h3 style="color:#2d6da8; font-size:16px; margin:20px 0 10px 0;">3.4 AI辅助查询（新完成）</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#e8f5e9;">
+<td style="padding:8px 12px; border:1px solid #ddd; width:140px;"><b>多Provider支持</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">智谱GLM / DeepSeek / 通义千问 / OpenAI，一键切换，配置持久化到Oracle</td>
+</tr>
+<tr style="background:#e8f5e9;">
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;"><b>Token使用统计</b></td>
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;">按Provider分布 + 每日统计 + 可视化图表，成本可控</td>
+</tr>
+<tr style="background:#e8f5e9;">
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;"><b>模型实时切换</b></td>
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;">悬浮窗口下拉菜单，响应显示当前Provider和Model</td>
+</tr>
+<tr style="background:#e8f5e9;">
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;"><b>本地规则引擎</b></td>
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;">Lot查询 + 机台状态 + 告警统计 + 温度趋势 + 产量统计 + 异常检测（7类）</td>
+</tr>
+<tr style="background:#e8f5e9;">
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;"><b>Function Calling</b></td>
+<td style="background:#e8f5e9; padding:8px 12px; border:1px solid #ddd;">支持AI工具调用，不支持的Provider自动降级重试</td>
+</tr>
+</table>
+
+<!-- 3.5 -->
+<h3 style="color:#2d6da8; font-size:16px; margin:20px 0 10px 0;">3.5 事件-动画配置系统</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#e3f2fd;">
+<td style="padding:8px 12px; border:1px solid #ddd; width:140px;"><b>统一配置层</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">JSON配置文件驱动动画，新机型接入无需改代码（podopener.json + schema）</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>调试面板</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">5个子Tab：时间轴/事件列表/手动触发/配置热编辑/动画录制</td>
+</tr>
+<tr style="background:#f9fbfd;">
+<td style="padding:8px 12px; border:1px solid #ddd;"><b>事件映射</b></td>
+<td style="padding:8px 12px; border:1px solid #ddd;">PODOPENER PACKING 14阶段 + UNPACKING 12阶段全部映射</td>
+</tr>
+</table>
+</div>
+
+<!-- ========== 四、系统架构 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">四、系统架构</h2>
+
+<div style="background:#f5f7fa; border:1px solid #ddd; border-radius:6px; padding:20px; font-family:'Consolas','Courier New',monospace; font-size:12px; line-height:1.8; overflow-x:auto;">
+<pre style="margin:0; white-space:pre-wrap;">
++-----------------------------------------------------------+
+|                     用户浏览器 (Vue3)                       |
+|   看板 / 机台详情 / 平面图编辑 / 历史回放 / AI助手         |
++-----------------------------+-----------------------------+
+          REST API                     WebSocket
++-----------------------------+-----------------------------+
+|                    FastAPI 后端 (端口8001)                  |
+|  +----------+ +----------+ +----------+ +----------+      |
+|  | 12个路由 | | DB轮询   | | WS管理器 | | AI中间件 |      |
+|  | 模块     | | 服务     | | (广播)   | | (多Prov) |      |
+|  +----------+ +----------+ +----------+ +----------+      |
+|  +----------+ +----------+                                |
+|  | 模拟器   | | 缓存     |                                |
+|  | (双模式) | | (Redis)  |                                |
+|  +----------+ +----------+                                |
++-----------------------------+-----------------------------+
+                     | SQLAlchemy ORM
++-----------------------------+-----------------------------+
+|                   Oracle 19c 数据库                        |
+|  DT系列表(量产) | 业务扩展表(19张) | AI配置表(3张)         |
++-----------------------------+-----------------------------+
+                     | ODS同步(预留)
++-----------------------------+-----------------------------+
+|              TIBRV / MES / RCMS / FDC (源系统)             |
++-----------------------------------------------------------+</pre>
+</div>
+</div>
+
+<!-- ========== 五、数据驱动模式 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">五、数据驱动模式</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:120px;">模式</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">数据流</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:80px;">用途</th>
+</tr>
+<tr>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; font-weight:bold;">模拟器模式</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">内部模拟器 &rarr; DB &rarr; 轮询 &rarr; WS &rarr; 前端</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">Demo演示</td>
+</tr>
+<tr style="background:#f9fbfd;">
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; font-weight:bold;">DB轮询模式</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">WinForm/EAP写入 &rarr; DB &rarr; 轮询 &rarr; WS &rarr; 前端</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">测试联调</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; font-weight:bold;">TIBRV模式</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">TIBRV &rarr; Redis/MQTT &rarr; 后端 &rarr; WS &rarr; 前端</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#ff9800;">生产目标</td>
+</tr>
+</table>
+
+<p style="font-size:13px; color:#666; margin:12px 0 0 0;">注：模拟器与DB轮询模式可同时启用、互不干扰；TIBRV模式为ver2.0目标。</p>
+</div>
+
+<!-- ========== 六、项目完成度总览 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">六、项目完成度总览</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">功能模块</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:80px;">完成度</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">关键指标</th>
+</tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>主页看板</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">85%</td><td style="padding:8px 12px; border:1px solid #ddd;">7个KPI + 楼层切换 + 机台列表</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>机台详情页</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">95%</td><td style="padding:8px 12px; border:1px solid #ddd;">5种视图 + 6个Tab + 实时/回放双模式</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>PODOPENER 2D/3D</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">95%</td><td style="padding:8px 12px; border:1px solid #ddd;">20个事件全部映射动画</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>历史回放</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">90%</td><td style="padding:8px 12px; border:1px solid #ddd;">7天数据 + 6档倍速 + 时间轴拖拽</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>事件-动画配置层</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">100%</td><td style="padding:8px 12px; border:1px solid #ddd;">JSON配置驱动 + 调试面板5Tab</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>AI配置管理</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">100%</td><td style="padding:8px 12px; border:1px solid #ddd;">多Provider + Token统计 + 模型切换</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>楼层3D/平面图</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">80%</td><td style="padding:8px 12px; border:1px solid #ddd;">4层楼层 + 区域 + 天车动画</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>部署系统</b></td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50; font-weight:bold;">95%</td><td style="padding:8px 12px; border:1px solid #ddd;">一键部署 + IIS/Direct双模式</td></tr>
+</table>
+
+<div style="margin-top:16px; padding:12px 16px; background:#e8f5e9; border-radius:6px; font-size:13px;">
+<b>综合完成度：ver1.x 核心功能约 90%</b>，已具备完整的演示和联调能力。
+</div>
+</div>
+
+<!-- ========== 七、下一步计划 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">七、下一步计划</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:80px;">阶段</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">重点任务</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:80px;">优先级</th>
+</tr>
+<tr style="background:#fff8e1;">
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; font-weight:bold;">ver2.0</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">TIBRV真实事件对接 + SECS/GEM协议适配 + 多机型配置化扩展</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#f44336; font-weight:bold;">高</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&nbsp;</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">ModelEditor可视化动作编排 + OXE/DRM配置化改造 + 用户权限管理</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#ff9800; font-weight:bold;">中</td>
+</tr>
+<tr style="background:#f9fbfd;">
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; font-weight:bold;">ver3.0</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">Dify本地部署 + RAG知识库 + n8n工作流编排 + 智能异常诊断</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#ff9800; font-weight:bold;">中</td>
+</tr>
+<tr>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&nbsp;</td>
+<td style="padding:8px 12px; border:1px solid #ddd;">3D模型LOD优化 + Redis缓存 + 告警通知 + 生产级部署</td>
+<td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#9e9e9e; font-weight:bold;">低</td>
+</tr>
+</table>
+</div>
+
+<!-- ========== 八、关键风险与应对 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">八、关键风险与应对</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">风险项</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:60px;">概率</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:60px;">影响</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">应对措施</th>
+</tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;">Oracle连接稳定性</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">中</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#f44336;">高</td><td style="padding:8px 12px; border:1px solid #ddd;">连接池 + 重试机制 + SQLite兜底</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;">TIBRV环境不可用</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">中</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#f44336;">高</td><td style="padding:8px 12px; border:1px solid #ddd;">ODS同步替代 + 模拟器双兜底</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;">3D模型精度不足</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">中</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">中</td><td style="padding:8px 12px; border:1px solid #ddd;">Blender建模 + 模型评审机制</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;">历史数据量增长</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">中</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#f44336;">高</td><td style="padding:8px 12px; border:1px solid #ddd;">数据分区 + 归档策略 + 分页优化</td></tr>
+</table>
+</div>
+
+<!-- ========== 九、需要协调的资源 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">九、需要协调的资源</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">资源/支持</th>
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">用途</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:80px;">当前状态</th>
+</tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>Oracle 19c数据库</b></td><td style="padding:8px 12px; border:1px solid #ddd;">生产数据存储，已验证连接</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#4caf50;">可用</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>TIBRV消息总线</b></td><td style="padding:8px 12px; border:1px solid #ddd;">真实事件流接入</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#ff9800;">待对接</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>3D Blender模型</b></td><td style="padding:8px 12px; border:1px solid #ddd;">精细3D模型GLB文件</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#ff9800;">进行中</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;"><b>MES/RCMS/FDC API</b></td><td style="padding:8px 12px; border:1px solid #ddd;">跨系统数据整合</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#9e9e9e;">待开通</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;"><b>服务器资源</b></td><td style="padding:8px 12px; border:1px solid #ddd;">Dify + n8n本地部署</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd; color:#9e9e9e;">待分配</td></tr>
+</table>
+</div>
+
+<!-- ========== 十、关键指标 ========== -->
+<div style="background:#fff; border-radius:8px; padding:30px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+<h2 style="color:#1a3a5c; font-size:20px; border-left:4px solid #2d6da8; padding-left:12px; margin:0 0 20px 0;">十、关键性能指标</h2>
+
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+<tr style="background:#1a3a5c; color:#fff;">
+<th style="padding:8px 12px; text-align:left; border:1px solid #ddd;">指标</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:120px;">当前值</th>
+<th style="padding:8px 12px; text-align:center; border:1px solid #ddd; width:120px;">目标值</th>
+</tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;">机台类型支持数</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">3种</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">10+</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;">历史事件数据</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">10920条/7天</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">30天+</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;">实时事件延迟</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&le; 1秒</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&le; 500ms</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;">历史回放查询</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&le; 2秒</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&le; 1秒</td></tr>
+<tr><td style="padding:8px 12px; border:1px solid #ddd;">后端冷启动</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">~3秒</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">&lt; 5秒</td></tr>
+<tr style="background:#f9fbfd;"><td style="padding:8px 12px; border:1px solid #ddd;">数据库表数</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">22张</td><td style="padding:8px 12px; text-align:center; border:1px solid #ddd;">- </td></tr>
+</table>
+</div>
+
+<!-- ========== 页脚 ========== -->
+<div style="text-align:center; padding:20px; color:#999; font-size:12px;">
+FabTwin Pro 项目报告 &nbsp;|&nbsp; 2026年7月24日 &nbsp;|&nbsp; ver1.4
+</div>
+
+</div>
+</body>
+</html>
