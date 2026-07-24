@@ -138,8 +138,17 @@ Base = declarative_base()
 
 
 def init_db():
-    """根据模型定义创建所有数据表"""
-    Base.metadata.create_all(bind=engine)
+    """根据模型定义创建所有数据表
+
+    注意：AI 相关表（ai_configs / ai_provider_configs / ai_usage_logs）
+    不在代码中自动创建，由 DBA 手动执行 sql/create_ai_tables.sql 完成。
+    """
+    ai_table_names = {'ai_configs', 'ai_provider_configs', 'ai_usage_logs'}
+    tables_to_create = [
+        t for t in Base.metadata.sorted_tables
+        if t.name not in ai_table_names
+    ]
+    Base.metadata.create_all(bind=engine, tables=tables_to_create)
 
 
 def get_db():
