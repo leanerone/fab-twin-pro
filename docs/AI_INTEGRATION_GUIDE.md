@@ -11,6 +11,7 @@
 │  - 平面图              │  - WebSocket 推送                   │
 │  - 历史回放            │  - DB 轮询服务                      │
 │  - AI助手组件          │  - 事件解析服务                     │
+│  - AI配置管理面板      │  - AI中间件服务                     │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -20,10 +21,123 @@
 │  - DT_EVENT_RAW_CUR: 当前状态表                             │
 │  - MACHINES: 机台基础信息                                   │
 │  - MACHINE_MODEL_CONFIGS: 模型配置                          │
+│  - AI_CONFIGS: AI全局配置表                                 │
+│  - AI_PROVIDER_CONFIGS: AI Provider配置表                   │
+│  - AI_USAGE_LOGS: AI Token使用日志表                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 二、AI 接入点规划
+## 二、AI配置管理系统（已完成）
+
+### 2.1 系统概述
+
+AI配置管理系统实现了多Provider配置、Token统计、模型切换等功能,配置持久化到Oracle数据库。
+
+### 2.2 数据库表结构
+
+```sql
+-- AI全局配置表
+CREATE TABLE AI_CONFIGS (
+    ID           NUMBER        NOT NULL,
+    CONFIG_KEY   VARCHAR2(255) NOT NULL,
+    CONFIG_VALUE CLOB          DEFAULT '',
+    DESCRIPTION  VARCHAR2(255) DEFAULT '',
+    UPDATED_AT   VARCHAR2(255),
+    UPDATED_BY   VARCHAR2(255) DEFAULT 'system',
+    CONSTRAINT PK_AI_CONFIGS PRIMARY KEY (ID),
+    CONSTRAINT UK_AI_CONFIGS_KEY UNIQUE (CONFIG_KEY)
+);
+
+-- AI Provider配置表
+CREATE TABLE AI_PROVIDER_CONFIGS (
+    ID           NUMBER        NOT NULL,
+    NAME         VARCHAR2(255) NOT NULL,
+    PROVIDER     VARCHAR2(255) NOT NULL,
+    BASE_URL     VARCHAR2(512) DEFAULT '',
+    API_KEY      VARCHAR2(512) DEFAULT '',
+    MODEL        VARCHAR2(255) DEFAULT '',
+    TEMPERATURE  FLOAT         DEFAULT 0.7,
+    MAX_TOKENS   NUMBER        DEFAULT 2048,
+    IS_ENABLED   NUMBER(1)     DEFAULT 1,
+    IS_DEFAULT   NUMBER(1)     DEFAULT 0,
+    SORT_ORDER   NUMBER        DEFAULT 0,
+    DESCRIPTION  VARCHAR2(512) DEFAULT '',
+    CREATED_AT   VARCHAR2(255),
+    UPDATED_AT   VARCHAR2(255),
+    CONSTRAINT PK_AI_PROVIDER_CONFIGS PRIMARY KEY (ID)
+);
+
+-- AI Token使用日志表
+CREATE TABLE AI_USAGE_LOGS (
+    ID                 NUMBER        NOT NULL,
+    SESSION_ID         VARCHAR2(255),
+    CONFIG_ID          NUMBER,
+    PROVIDER           VARCHAR2(255),
+    MODEL              VARCHAR2(255),
+    PROMPT_TOKENS      NUMBER        DEFAULT 0,
+    COMPLETION_TOKENS  NUMBER        DEFAULT 0,
+    TOTAL_TOKENS       NUMBER        DEFAULT 0,
+    QUESTION_PREVIEW   VARCHAR2(512) DEFAULT '',
+    SUCCESS            NUMBER(1)     DEFAULT 1,
+    ERROR_MSG          VARCHAR2(512),
+    CREATED_AT         VARCHAR2(255),
+    CONSTRAINT PK_AI_USAGE_LOGS PRIMARY KEY (ID)
+);
+```
+
+### 2.3 后端API端点
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/ai/providers` | GET | 获取Provider配置列表 |
+| `/api/ai/providers` | POST | 创建Provider配置 |
+| `/api/ai/providers/{id}` | PUT | 更新Provider配置 |
+| `/api/ai/providers/{id}` | DELETE | 删除Provider配置 |
+| `/api/ai/providers/{id}/toggle` | POST | 启用/禁用Provider |
+| `/api/ai/providers/{id}/usage` | GET | 查询Provider Token使用量 |
+| `/api/ai/usage/stats` | GET | 获取Token使用统计 |
+
+### 2.4 前端组件
+
+**AIConfigPanel.vue** - AI配置管理面板
+- 配置增删改查
+- 启用/禁用Provider
+- 默认Provider设置
+- Token使用统计Tab（按Provider分布、每日统计、可视化图表）
+- 位置：放在用户管理页面旁边
+
+**悬浮窗口模型切换**
+- 下拉菜单切换不同Provider和Model
+- 响应显示当前Provider和Model信息
+- Token使用量实时显示
+
+### 2.5 关键特性
+
+- **多Provider支持**：智谱GLM、DeepSeek、通义千问、OpenAI等
+- **配置持久化**：保存到Oracle数据库，重启不丢失
+- **Token统计**：实时记录和统计Token使用量
+- **模型切换**：支持在不同Provider和Model间切换
+- **Function Calling降级**：不支持工具的Provider自动重试
+- **自动检测**：根据base_url自动推断Provider名称
+
+### 2.6 部署说明
+
+1. **手动创建AI表**：
+```bash
+# 执行SQL脚本
+sql/create_ai_tables.sql
+```
+
+2. **配置默认Provider**：
+   - 访问AI配置管理面板
+   - 添加Provider配置（如智谱GLM）
+   - 设置为默认Provider
+
+3. **验证配置**：
+   - 悬浮窗口显示当前Provider和Model
+   - Token使用量实时更新
+
+## 三、AI 接入点规划
 
 ### 2.1 现有 AI 组件
 - `frontend/src/components/AiAssistant.vue` - 前端 AI 对话组件
