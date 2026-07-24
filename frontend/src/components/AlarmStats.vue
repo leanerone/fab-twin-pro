@@ -15,6 +15,21 @@ const props = defineProps({
   },
 })
 
+const emit = defineEmits(['click-alarm'])
+
+function formatAlarmTime(ts) {
+  if (!ts) return '--'
+  // 显示完整日期时间：MM-DD HH:MM:SS
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ts.slice(5, 19) || ts
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  const s = String(d.getSeconds()).padStart(2, '0')
+  return `${m}-${day} ${h}:${min}:${s}`
+}
+
 // 各分类百分比
 const total = computed(() => props.stats.total || 1)
 const critPct = computed(() => Math.round((props.stats.crit / total.value) * 100))
@@ -88,10 +103,17 @@ const alarmRate = computed(() => {
       <span v-if="alarms.length" class="badge">{{ alarms.length }}</span>
     </div>
     <div class="alarm-list">
-      <div v-for="a in alarms" :key="a.id || (a.timestamp + a.alarm_code)" class="alarm-row" :class="a.level">
+      <div
+        v-for="a in alarms"
+        :key="a.id || (a.timestamp + a.alarm_code)"
+        class="alarm-row clickable"
+        :class="a.level"
+        @click="emit('click-alarm', a)"
+        title="点击查看该告警时间点"
+      >
         <div class="dot"></div>
         <div class="atext">{{ a.description }}</div>
-        <div class="atime">{{ (a.timestamp || '').slice(11, 19) }}</div>
+        <div class="atime">{{ formatAlarmTime(a.timestamp) }}</div>
       </div>
       <div v-if="!alarms.length" class="empty-state">暂无告警</div>
     </div>
@@ -204,5 +226,12 @@ const alarmRate = computed(() => {
   font-size: 10px;
   color: var(--text-dim);
   font-family: monospace;
+}
+.alarm-row.clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.alarm-row.clickable:hover {
+  background: rgba(0, 212, 255, 0.08);
 }
 </style>

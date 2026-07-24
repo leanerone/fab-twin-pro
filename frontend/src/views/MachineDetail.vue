@@ -60,6 +60,7 @@ const lots = ref([])
 const alarmStats = ref({ total: 0, crit: 0, warn: 0, temperature: 0, pressure: 0, rf_drift: 0, gas_leak: 0, resolved: 0, unresolved: 0 })
 const selectedLotId = ref('')
 const transferTrigger = ref(0)
+const loading = ref(false)
 
 // === 视图模式（根据机台型号自动选择） ===
 const viewMode = ref('loading')           // loading / 3d / 2d / iso / vpo / vpo3d
@@ -523,10 +524,15 @@ async function loadMachine() {
   loadLatestEvents()
 }
 
-// 加载告警
+// 加载告警（按选中日期过滤）
 async function loadAlarms() {
-  // 使用历史告警API（DT_EVENT_RAW表中的EC_ALARM_REPORT事件）
-  const data = await api.getAlarmHistory(machineId.value, { limit: 100 })
+  const start = `${playbackDate.value}T00:00:00`
+  const end = `${playbackDate.value}T23:59:59.999`
+  const data = await api.getAlarmHistory(machineId.value, {
+    start_time: start,
+    end_time: end,
+    limit: 100,
+  })
   const alarmList = data?.alarms || []
   alarms.value = alarmList.map(a => ({
     id: a.raw_id,
@@ -798,16 +804,27 @@ function bisectLeft(arr, target, getKey) {
 }
 
 // 日期变化
-function onDateChange(newDate) {
+async function onDateChange(newDate) {
   if (!newDate) return
   playbackDate.value = newDate
-  // 回放模式：重新加载历史事件
-  if (mode.value === 'playback') {
-    switchToPlayback()
+  loading.value = true
+  try {
+    // 回放模式：重新加载历史事件
+    if (mode.value === 'playback') {
+      await switchToPlayback()
+    }
+    // 重新加载告警/Lot（并行）
+    await Promise.all([loadAlarms(), loadLots()])
+  } finally {
+    loading.value = false
   }
-  // 重新加载告警/Lot
-  loadAlarms()
-  loadLots()
+}
+
+// 告警点击跳转
+function onAlarmClick(alarm) {
+  if (alarm && alarm.timestamp) {
+    jumpToTime(alarm.timestamp)
+  }
 }
 
 // 倍速变化
@@ -1063,7 +1080,7 @@ onMounted(() => {
 
       <!-- 告警 Tab -->
       <div v-show="rightTab === 'alarms'" class="dr-section">
-        <AlarmStats :stats="alarmStats" :alarms="alarms" />
+        <AlarmStats :stats="alarmStats" :alarms="alarms" @click-alarm="onAlarmClick" />
       </div>
 
       <!-- 事件 Tab -->
@@ -1094,6 +1111,11 @@ onMounted(() => {
       </div>
 
 
+      <!-- 全局加载遮罩 -->
+      <div v-if="loading" class="dr-loading-overlay">
+        <div class="dr-loading-spinner"></div>
+        <div class="dr-loading-text">数据加载中...</div>
+      </div>
     </div>
   </div>
 </template>
@@ -1294,6 +1316,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
 }
 .dr-tabs {
   display: flex;
@@ -1369,5 +1392,31 @@ onMounted(() => {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* 加载遮罩 */
+.dr-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 7, 18, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 50;
+  pointer-events: none;
+}
+.dr-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(0, 212, 255, 0.2);
+  border-top-color: #00d4ff;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+.dr-loading-text {
+  font-size: 12px;
+  color: #94a3b8;
 }
 </style>

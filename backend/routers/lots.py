@@ -6,10 +6,12 @@
 - payload_json 用 Python 层 json.loads 解析 lot_id，不用 SQL LIKE
   （避免 SQL 注入 + JSON 格式变化导致漏匹配）
 """
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException, Query
 import json
+from datetime import datetime
 
 from database import get_db
 from models import Lot, MachineEvent, DT_EVENT_RAW, MachineToolMapping
@@ -17,6 +19,41 @@ from schemas import LotOut, EventOut
 from services.time_utils import parse_ts, normalize_ts, extract_date
 
 router = APIRouter(prefix="/api/lots", tags=["lots"])
+
+
+def _find_raw_id_anchor(db, tool_ids: set, target_dt: datetime) -> Optional[int]:
+    """在 raw_id 中定位到 ts <= target_dt 的最大 raw_id（与 history.py 逻辑一致）"""
+    try:
+        min_max = db.query(
+            func.min(DT_EVENT_RAW.raw_id),
+            func.max(DT_EVENT_RAW.raw_id)
+        ).filter(DT_EVENT_RAW.tool_id.in_(tool_ids)).first()
+        if not min_max or min_max[0] is None:
+            return None
+        rid_min, rid_max = min_max[0], min_max[1]
+    except Exception:
+        return None
+    lo, hi = rid_min, rid_max
+    best_anchor = None
+    for _ in range(30):
+        if lo > hi:
+            break
+        mid = (lo + hi) // 2
+        row = db.query(DT_EVENT_RAW).filter(
+            DT_EVENT_RAW.tool_id.in_(tool_ids),
+            DT_EVENT_RAW.raw_id == mid
+        ).first()
+        if not row:
+            hi = mid - 1
+            continue
+        ts = row.event_ts_utc or row.received_ts_utc
+        row_dt = parse_ts(ts) if ts else 0
+        if row_dt and row_dt <= target_dt:
+            best_anchor = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best_anchor
 
 
 def _resolve_tool_ids(db: Session, machine_id: str) -> set:
@@ -66,14 +103,33 @@ def list_lots(
     # 解析 machine_id 对应的所有 tool_id（含映射关系）
     tool_ids = _resolve_tool_ids(db, machine_id)
 
-    # 取该机台所有事件（不限制 5000），按 raw_id 倒序便于 Python 层处理
-    rows = (
-        db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-        .order_by(DT_EVENT_RAW.raw_id.desc())
-        .limit(50000)
-        .all()
-    )
+    # 使用 raw_id 锚点优化：当指定了 date 时，定位到目标日期的 raw_id，缩小查询范围
+    anchor = None
+    if date:
+        try:
+            target_dt = datetime.strptime(date, "%Y-%m-%d")
+            anchor = _find_raw_id_anchor(db, tool_ids, target_dt)
+        except ValueError:
+            pass
+
+    if anchor is not None:
+        rows = (
+            db.query(DT_EVENT_RAW)
+            .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+            .filter(DT_EVENT_RAW.raw_id >= anchor)
+            .order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(20000)
+            .all()
+        )
+    else:
+        # 兜底：拉取最近事件
+        rows = (
+            db.query(DT_EVENT_RAW)
+            .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+            .order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(20000)
+            .all()
+        )
 
     # 解析 payload_json 提取 lot_id，在 Python 层过滤日期
     lot_set = {}  # lot_id -> {start_dt, end_dt, start_time, end_time, ...}
