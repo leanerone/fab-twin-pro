@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useAnimationConfig } from '../composables/useAnimationConfig.js'
+import ModelUpload from '../components/ModelUpload.vue'
 
 const authStore = useAuthStore()
 
@@ -395,6 +396,17 @@ onMounted(async () => {
           </div>
           <div class="model-desc">{{ model.description }}</div>
         </div>
+      </div>
+
+      <!-- 模型文件上传与预览 -->
+      <div v-if="selectedModel" class="upload-section">
+        <ModelUpload
+          :model-id="selectedModel.model_id"
+          :model-name="selectedModel.model_name"
+        />
+      </div>
+      <div v-else class="select-hint">
+        <p>👈 请先点击上方卡片选择一个机型，然后上传模型文件</p>
       </div>
 
       <div v-if="authStore.hasPermission('model_edit')" class="create-panel">
@@ -824,6 +836,23 @@ onMounted(async () => {
   cursor: pointer;
 }
 .btn-small:hover { border-color: var(--accent); }
+
+/* 模型上传区域 */
+.upload-section {
+  margin-top: 16px;
+}
+.select-hint {
+  text-align: center;
+  padding: 24px;
+  background: var(--panel-2);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.select-hint p { margin: 0; }
+
 .btn-delete {
   background: transparent;
   color: var(--text-dim);
