@@ -207,3 +207,111 @@ async def delete_model_file(
     db.commit()
 
     return {"status": "success", "message": f"文件 {file_id} 已删除"}
+
+
+@router.post("/parse-html")
+async def parse_html_file(
+    file: UploadFile = File(...),
+):
+    """解析 HTML 文件，提取 UNITS 定义和部件配置
+    
+    v2.0 新增：
+    - 支持上传 HTML 文件
+    - 自动提取 UNITS 定义（部件坐标/尺寸）
+    - 生成 parts_config_json 初稿
+    - 兼容 OXE_2D.html 风格
+    """
+    if not file.filename.endswith('.html'):
+        raise HTTPException(status_code=400, detail="只支持 .html 文件")
+    
+    try:
+        content = await file.read()
+        html_content = content.decode('utf-8', errors='ignore')
+        
+        # 导入解析器
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from services.html_parser import parse_html_file as parse_html
+        
+        result = parse_html(html_content, model_id='PARSED')
+        
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "source_info": result.get('source_info', {}),
+            "units": result.get('units', {}),
+            "parts_config": result.get('parts_config', []),
+            "api_calls": result.get('api_calls', []),
+            "functions": result.get('functions', []),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
+
+@router.post("/export-svg/{model_id}")
+async def export_svg_config(
+    model_id: str,
+    db: Session = Depends(get_db),
+):
+    """导出 SVG 配置文件
+    
+    v2.0 新增：
+    - 根据机型配置生成 SVG 文件
+    - 用于导入 Inkscape 进行精修
+    - 每个部件带 id 属性，与 part_id 一致
+    """
+    model = db.query(MachineModelConfig).filter(
+        MachineModelConfig.model_id == model_id
+    ).first()
+    
+    if not model:
+        raise HTTPException(status_code=404, detail=f"机型 {model_id} 不存在")
+    
+    try:
+        parts_config = json.loads(model.parts_config_json) if model.parts_config_json else []
+    except (json.JSONDecodeError, TypeError):
+        parts_config = []
+    
+    # 生成 SVG 内容
+    svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <style>
+    .part {{ fill: #374151; stroke: #1f2937; stroke-width: 2; }}
+    .label {{ font-family: monospace; font-size: 10px; fill: #6b7280; }}
+  </style>
+  
+  <!-- 标题 -->
+  <text x="20" y="30" style="font-size: 16px; font-weight: bold;">{model.model_name}</text>
+  <text x="20" y="50" style="font-size: 12px; fill: #6b7280;">Model ID: {model_id}</text>
+  
+  <!-- 部件（从 parts_config 生成） -->
+'''
+    
+    for part in parts_config:
+        part_id = part.get('part_id', 'unknown')
+        part_name = part.get('part_name', part_id)
+        view_2d = part.get('view_2d_iso', part.get('view_2d', {}))
+        
+        x = view_2d.get('x', 500)
+        y = view_2d.get('y', 500)
+        w = view_2d.get('width', view_2d.get('w', 50))
+        h = view_2d.get('height', view_2d.get('h', 50))
+        
+        svg_content += f'''
+  <!-- {part_name} -->
+  <g id="{part_id}">
+    <rect class="part" x="{x - w/2}" y="{y - h/2}" width="{w}" height="{h}" rx="4"/>
+    <text class="label" x="{x}" y="{y + 4}">{part_id}</text>
+  </g>
+'''
+    
+    svg_content += '''
+</svg>'''
+    
+    return {
+        "status": "success",
+        "model_id": model_id,
+        "svg_content": svg_content,
+        "parts_count": len(parts_config),
+        "download_filename": f"{model_id}-export.svg",
+    }

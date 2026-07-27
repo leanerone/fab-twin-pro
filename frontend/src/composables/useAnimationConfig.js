@@ -1,35 +1,21 @@
 /**
- * 机台动画统一配置加载器
- * 替代 useEventActionMapping.js 中硬编码的 EVENT_ACTION_DEFAULTS
- *
+ * 机台动画统一配置加载器 v2.0
+ * 
+ * v2.0 重构：
+ * - 从 DB 运行时加载配置（通过 API）
+ * - 删除 import.meta.glob 静态加载
+ * - 支持热更新，无需重新构建
+ * 
  * 用法：
- *   const { config, getPhaseByEvent, getAnimation, getTarget, loading } = useAnimationConfig('podopener')
- *   await loadConfig()
+ *   const { config, loadConfig, getPhaseByEvent, getAnimation, getTarget } = useAnimationConfig()
+ *   await loadConfig('PODOPENER-2200')  // 从 DB 加载指定机型配置
  *   const phaseInfo = getPhaseByEvent('POD_PLACED', 'PACKING')
- *   // => { phase: 'POD_PLACE', anim: 'pod.enter', phaseIndex: 0, phaseDef: {...} }
  */
-import { ref, readonly } from 'vue'
 
-// 用 import.meta.glob 预加载所有配置（Vite 构建时会打包进 bundle，dev 和 build 都可用）
-// eager: true 表示同步加载，避免异步等待
-const configModules = import.meta.glob('../configs/machine-animations/*.json', { eager: true, as: 'raw' })
+import { ref, readonly, computed } from 'vue'
+import { api } from '../api'
 
-// 把 raw 字符串解析为 JSON 对象，按 machine_type（小写）建立索引
-const builtInConfigs = {}
-for (const [path, raw] of Object.entries(configModules)) {
-  // path 形如 '../configs/machine-animations/podopener.json'
-  const match = path.match(/\/([^/]+)\.json$/)
-  if (!match) continue
-  const typeName = match[1].toLowerCase()
-  if (typeName === '_schema') continue  // 跳过 schema 文件
-  try {
-    builtInConfigs[typeName] = JSON.parse(raw)
-  } catch (e) {
-    console.error('[useAnimationConfig] 解析配置失败:', path, e)
-  }
-}
-
-// 全局配置缓存（按 machine_type 缓存，可被 updateConfig 热更新覆盖）
+// 全局配置缓存（按 model_id 缓存）
 const configCache = new Map()
 
 // Schema 校验（轻量级，仅校验关键字段）
@@ -66,36 +52,116 @@ function validateConfig(config) {
   return errors
 }
 
-export function useAnimationConfig(machineType) {
+/**
+ * 从 API 加载机型配置
+ * @param {string} modelId - 机型 ID（如 'PODOPENER-2200'）
+ * @returns {Promise<object|null>} 配置对象或 null
+ */
+async function loadConfigFromAPI(modelId) {
+  try {
+    const modelData = await api.getModel(modelId)
+    if (!modelData) {
+      console.warn(`[useAnimationConfig] 未找到机型: ${modelId}`)
+      return null
+    }
+    
+    // 优先从 animation_config 字段读取（v2.0 新字段）
+    let animConfig = modelData.animation_config
+    
+    // 如果 animation_config 为空，尝试从 views_config 读取（兼容旧数据）
+    if (!animConfig || Object.keys(animConfig).length === 0) {
+      console.log(`[useAnimationConfig] ${modelId} animation_config 为空，尝试兼容模式`)
+      // 从静态文件 fallback（仅用于兼容）
+      animConfig = await loadConfigFromStatic(modelId)
+    }
+    
+    return animConfig
+  } catch (e) {
+    console.error(`[useAnimationConfig] 加载配置失败: ${modelId}`, e)
+    return null
+  }
+}
+
+/**
+ * 从静态文件加载配置（仅用于兼容旧版本）
+ * @param {string} modelId - 机型 ID
+ * @returns {Promise<object|null>}
+ */
+async function loadConfigFromStatic(modelId) {
+  // 机型 ID 到配置文件名的映射
+  const modelToConfig = {
+    'PODOPENER-2200': 'podopener',
+    'PODOPENER-1': 'podopener',
+    'PODOPENER': 'podopener',
+  }
+  
+  const configName = modelToConfig[modelId] || modelId.toLowerCase()
+  
+  try {
+    const response = await fetch(`/configs/machine-animations/${configName}.json`)
+    if (!response.ok) {
+      console.warn(`[useAnimationConfig] 静态文件不存在: ${configName}.json`)
+      return null
+    }
+    return await response.json()
+  } catch (e) {
+    console.error(`[useAnimationConfig] 加载静态配置失败: ${configName}`, e)
+    return null
+  }
+}
+
+export function useAnimationConfig(initialModelId = null) {
   const config = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  const currentModelId = ref(initialModelId)
 
-  async function loadConfig(type = machineType) {
-    if (!type) {
-      error.value = 'machineType 未指定'
+  /**
+   * 加载配置
+   * @param {string} modelId - 机型 ID（如 'PODOPENER-2200'）
+   */
+  async function loadConfig(modelId = null) {
+    const targetModelId = modelId || currentModelId.value
+    if (!targetModelId) {
+      error.value = 'modelId 未指定'
       return null
     }
-    const typeLower = type.toLowerCase()
+    
+    currentModelId.value = targetModelId
+    
     // 命中缓存
-    if (configCache.has(typeLower)) {
-      config.value = configCache.get(typeLower)
+    if (configCache.has(targetModelId)) {
+      config.value = configCache.get(targetModelId)
       return config.value
     }
+    
     loading.value = true
     error.value = null
+    
     try {
-      // 优先从内置配置（Vite 打包）加载
-      const data = builtInConfigs[typeLower]
+      const data = await loadConfigFromAPI(targetModelId)
+      
       if (!data) {
-        throw new Error(`未找到机台类型 "${type}" 的配置文件（查找: configs/machine-animations/${typeLower}.json）`)
+        throw new Error(`未找到机型 "${targetModelId}" 的配置`)
       }
+      
+      // 校验配置
       const errs = validateConfig(data)
       if (errs.length > 0) {
         throw new Error(`配置校验失败: ${errs.join('; ')}`)
       }
-      configCache.set(typeLower, data)
+      
+      // 缓存配置
+      configCache.set(targetModelId, data)
       config.value = data
+      
+      console.log(`[useAnimationConfig] 加载成功: ${targetModelId}`, {
+        machine_type: data.machine_type,
+        flows: Object.keys(data.flows || {}),
+        animations: Object.keys(data.animations || {}).length,
+        targets: Object.keys(data.targets || {}).length,
+      })
+      
       return data
     } catch (e) {
       error.value = e.message
@@ -165,7 +231,6 @@ export function useAnimationConfig(machineType) {
 
   /**
    * 根据事件名推断流程类型（PACKING/UNPACKING）
-   * 优先匹配 PACKING，其次 UNPACKING
    */
   function inferFlowByEvent(eventName) {
     if (!config.value) return 'PACKING'
@@ -182,22 +247,68 @@ export function useAnimationConfig(machineType) {
     if (errs.length > 0) {
       throw new Error(`配置校验失败: ${errs.join('; ')}`)
     }
-    configCache.set(newConfig.machine_type, newConfig)
+    configCache.set(currentModelId.value, newConfig)
     config.value = newConfig
   }
 
   /**
-   * 导出当前配置为 JSON 字符串（调试面板"导出"按钮用）
+   * 导出当前配置为 JSON 字符串
    */
   function exportConfig() {
     if (!config.value) return ''
     return JSON.stringify(config.value, null, 2)
   }
 
+  /**
+   * 清除缓存
+   */
+  function clearCache() {
+    configCache.clear()
+    config.value = null
+  }
+
+  /**
+   * 获取所有可用流程
+   */
+  const availableFlows = computed(() => {
+    if (!config.value) return []
+    return Object.keys(config.value.flows || {})
+  })
+
+  /**
+   * 获取所有部件目标
+   */
+  const availableTargets = computed(() => {
+    if (!config.value) return []
+    return Object.keys(config.value.targets || {})
+  })
+
+  /**
+   * 获取所有动画原语
+   */
+  const availableAnimations = computed(() => {
+    if (!config.value) return []
+    return Object.keys(config.value.animations || {})
+  })
+
+  // 如果提供了初始 modelId，立即加载
+  if (initialModelId) {
+    loadConfig(initialModelId)
+  }
+
   return {
+    // 状态
     config: readonly(config),
     loading: readonly(loading),
     error: readonly(error),
+    currentModelId: readonly(currentModelId),
+    
+    // 计算属性
+    availableFlows,
+    availableTargets,
+    availableAnimations,
+    
+    // 方法
     loadConfig,
     getPhaseByEvent,
     getAnimation,
@@ -207,6 +318,7 @@ export function useAnimationConfig(machineType) {
     inferFlowByEvent,
     updateConfig,
     exportConfig,
+    clearCache,
   }
 }
 

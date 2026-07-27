@@ -32,6 +32,12 @@ def _parse_json(s: str, default):
 
 
 def _model_to_dict(m: MachineModelConfig) -> dict:
+    """将 MachineModelConfig ORM 对象转换为字典
+    
+    v2.0 新增字段：
+    - animation_config: 统一动画配置（flows/animations/targets）
+    - source_files: 来源文件信息（HTML/SVG/GLB 解析状态）
+    """
     return {
         "model_id": m.model_id,
         "model_name": m.model_name,
@@ -44,6 +50,9 @@ def _model_to_dict(m: MachineModelConfig) -> dict:
         "parts_config": _parse_json(m.parts_config_json, []),
         "state_mapping": _parse_json(m.state_mapping_json, []),
         "hotspots_config": _parse_json(m.hotspots_config_json, []),
+        # v2.0 新增
+        "animation_config": _parse_json(getattr(m, 'animation_config_json', None) or '{}', {}),
+        "source_files": _parse_json(getattr(m, 'source_files_json', None) or '{}', {}),
         "created_at": m.created_at,
         "updated_at": m.updated_at,
     }
@@ -95,7 +104,12 @@ def get_model(model_id: str, db: Session = Depends(get_db)):
 
 @router.post("")
 def create_model(payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
-    """新建机台型号"""
+    """新建机台型号
+    
+    v2.0 新增支持：
+    - animation_config: 统一动画配置
+    - source_files: 来源文件信息
+    """
     model_id = payload.get("model_id")
     if not model_id:
         raise HTTPException(status_code=400, detail="model_id 不能为空")
@@ -115,6 +129,9 @@ def create_model(payload: dict, db: Session = Depends(get_db), _: User = Depends
         parts_config_json=json.dumps(payload.get("parts_config", []), ensure_ascii=False),
         state_mapping_json=json.dumps(payload.get("state_mapping", []), ensure_ascii=False),
         hotspots_config_json=json.dumps(payload.get("hotspots_config", []), ensure_ascii=False),
+        # v2.0 新增
+        animation_config_json=json.dumps(payload.get("animation_config", {}), ensure_ascii=False),
+        source_files_json=json.dumps(payload.get("source_files", {}), ensure_ascii=False),
         created_at=now,
         updated_at=now,
     )
@@ -126,7 +143,12 @@ def create_model(payload: dict, db: Session = Depends(get_db), _: User = Depends
 
 @router.put("/{model_id}")
 def update_model(model_id: str, payload: dict, db: Session = Depends(get_db), _: User = Depends(require_model_edit)):
-    """更新机台型号配置"""
+    """更新机台型号配置
+    
+    v2.0 新增支持：
+    - animation_config: 统一动画配置
+    - source_files: 来源文件信息
+    """
     m = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail=f"机台型号 {model_id} 不存在")
@@ -150,6 +172,11 @@ def update_model(model_id: str, payload: dict, db: Session = Depends(get_db), _:
         m.state_mapping_json = json.dumps(payload["state_mapping"], ensure_ascii=False)
     if "hotspots_config" in payload:
         m.hotspots_config_json = json.dumps(payload["hotspots_config"], ensure_ascii=False)
+    # v2.0 新增
+    if "animation_config" in payload:
+        m.animation_config_json = json.dumps(payload["animation_config"], ensure_ascii=False)
+    if "source_files" in payload:
+        m.source_files_json = json.dumps(payload["source_files"], ensure_ascii=False)
     m.updated_at = _now_iso()
     db.commit()
     db.refresh(m)

@@ -8,7 +8,7 @@ import ModelUpload from '../components/ModelUpload.vue'
 const authStore = useAuthStore()
 
 // === 顶部 Tab ===
-const activeTab = ref('models')  // models / config / debug / guide / events
+const activeTab = ref('models')  // models / config / debug / voxel
 const models = ref([])
 const selectedModel = ref(null)
 const newModel = ref({
@@ -26,7 +26,7 @@ const selectedAnimConfig = ref('podopener')
 const animConfigStore = useAnimationConfig('podopener')
 const editingConfig = ref(null)
 const editDirty = ref(false)
-const editSubTab = ref('phases')  // phases / events / animations / targets
+const editSubTab = ref(null)  // 不再需要子Tab，采用左右两栏布局
 
 // === 动画调试 ===
 const debugFlow = ref('PACKING')
@@ -209,134 +209,55 @@ function jumpToPhase(phaseKey) {
   if (evt) manualTriggerEvent(evt)
 }
 
-// === 开发指南 ===
-const guideSections = [
-  {
-    id: 'overview',
-    title: '📋 模型开发流程概述',
-    content: `FabTwin 平台模型开发 6 步标准流程：
+// === 体素编辑器 ===
+const voxelParts = ref([])
+const selectedVoxelIndex = ref(null)
 
-1. 2D 绘图（Inkscape）→ 2. 3D 建模（箱体拼装器/Blender）→ 3. 动画设置 → 4. 配置注册 → 5. 事件绑定 → 6. 上线验证
+function addVoxelPart(type) {
+  const defaultPart = type === 'box' ? {
+    name: `box_${voxelParts.value.length + 1}`,
+    type: 'box',
+    position: { x: 0, y: 0, z: 0 },
+    size: { width: 1, height: 1, depth: 1 },
+    color: '#4a90e2'
+  } : {
+    name: `cylinder_${voxelParts.value.length + 1}`,
+    type: 'cylinder',
+    position: { x: 0, y: 0, z: 0 },
+    size: { radius: 0.5, height: 1 },
+    color: '#e94a4a'
+  }
+  voxelParts.value.push(defaultPart)
+  selectedVoxelIndex.value = voxelParts.value.length - 1
+  toast(`已添加${type === 'box' ? '盒子' : '圆柱'}部件`, 'success')
+}
 
-核心概念：
-- 统一配置层：configs/machine-animations/{type}.json 定义所有机台的事件-阶段-动画映射
-- 2D/3D 视图共用同一套配置，避免偏差
-- 调试面板：可视化时间轴 + 手动触发 + 配置热编辑`,
-  },
-  {
-    id: 'step1',
-    title: '🔧 第一步：分析机台结构',
-    content: `在开始建模前，需要收集：
-1. 机台外观照片（前/后/左/右/顶 5 视角）
-2. 机台尺寸图（厂商手册）
-3. 部件清单（哪些部件需要动）
-4. 事件清单（VFEI/SECS 事件名 + 触发时机）
-5. 工艺步骤和动作序列
+function removeVoxelPart(idx) {
+  voxelParts.value.splice(idx, 1)
+  if (selectedVoxelIndex.value === idx) {
+    selectedVoxelIndex.value = voxelParts.value.length > 0 ? Math.max(0, idx - 1) : null
+  } else if (selectedVoxelIndex.value > idx) {
+    selectedVoxelIndex.value -= 1
+  }
+  toast('已删除部件', 'info')
+}
 
-建议先画一张简单的草图或用 PowerPoint 标注各部件位置。`,
-  },
-  {
-    id: 'step2',
-    title: '🎨 第二步：2D 绘图（Inkscape）',
-    content: `软件选择：Inkscape（免费、中文、SVG原生导出）
-
-操作步骤：
-1. 新建文档 1000×1000 px
-2. 用矩形工具画底座、立柱、面板
-3. 每个可动部件单独分组，命名 id（如 pod2dLayer、latch2d）
-4. 图层管理：背景层 / 主体层 / 可动部件层 / 标注层
-5. 文件 → 另存为 → 2d.svg
-6. 放入项目：public/models/machines/{型号}/2d.svg
-
-关键约定：
-- 可动部件必须命名 id（前端通过 id 抓取）
-- 坐标系原点在左上角（SVG 标准）
-- 导出时勾选"嵌入字体"`,
-  },
-  {
-    id: 'step3',
-    title: '🧊 第三步：3D 建模（箱体拼装器优先）',
-    content: `两种方式（按难度）：
-
-方式A：箱体拼装器（推荐入门）
-- 基于 ModelEditor.vue 扩展的可视化建模工具
-- 只用 box 和 cylinder 拼装机台
-- 实时预览，导出 JSON
-- 学习成本：0.5 天
-
-方式B：Blender 建模（功能完整）
-- 专业 3D 建模，支持复杂曲面
-- 导出 glb/gltf 格式
-- 学习成本：3-5 天
-
-命名规范（强制）：
-- 每个可动部件必须命名，且与配置 targets.view_3d 完全一致
-- 例：podShell / latch / scanLine / cassette / robotArm`,
-  },
-  {
-    id: 'step4',
-    title: '⚙️ 第四步：配置动画映射',
-    content: `在本页面"动画配置"Tab 中编辑 podopener.json：
-
-配置结构：
-- flows：流程定义（PACKING/UNPACKING 等）
-  - phases：阶段序列（key + label + duration_ms）
-  - event_to_phase：事件 → 阶段映射
-- animations：动画原语库（参数化定义移动/旋转/闪烁等）
-- targets：部件目标绑定（2D id / 3D 对象名共用一个 key）
-
-常用动画原语：
-- translate：平移 { target, axis, from, to, duration_ms }
-- rotate：旋转 { target, axis, from, to, duration_ms }
-- scan：扫描线 { target, from, to, duration_ms }
-- flash：闪烁 { target, color, duration_ms }
-- signal：信号波动 { target, color, duration_ms }
-- visibility：显隐 { target, from, to }`,
-  },
-  {
-    id: 'step5',
-    title: '🧪 第五步：调试验证',
-    content: `在本页面"动画调试"Tab 中验证：
-
-1. 选择流程（PACKING/UNPACKING）
-2. 点击事件按钮手动触发
-3. 在机台详情页观察 2D/3D 动画
-4. 检查时间轴对齐情况
-5. 调整 duration_ms 直至满意
-6. 导出 JSON 覆盖到 configs/ 目录
-
-验证清单：
-- 所有 14 个事件都能触发对应动画
-- 2D 和 3D 视图动画一致
-- 阶段时长合理（不太快也不太慢）
-- 状态灯颜色正确`,
-  },
-  {
-    id: 'step6',
-    title: '🚀 第六步：上线发布',
-    content: `上线 Checklist：
-- [ ] 2D SVG 文件已放入 public/models/machines/{type}/
-- [ ] 3D glb/json 文件已放入同目录
-- [ ] configs/machine-animations/{type}.json 已创建并通过校验
-- [ ] 后端 machine_models 表已注册
-- [ ] MachineDetail.vue 视图路由已添加
-- [ ] 调试面板验证所有事件全部对齐
-- [ ] 提交 Git，打 tag v{型号}-v1`,
-  },
-]
-
-const eventCodeReference = [
-  { category: 'POD操作', codes: ['POD_PLACED', 'POD_REMOVED', 'OPEN_POD', 'CLOSE_POD', 'COMPLETED_PORT_LOCK', 'COMPLETED_PORT_UNLOCK'] },
-  { category: '标签操作', codes: ['READ_TAG', 'WRITE_TAG', 'READ_BATTERY'] },
-  { category: '信号确认', codes: ['BATCH_INFO_FROM_ECUI', 'UI_CONFIRM', 'ACK_UI_DOUBLECHECK'] },
-  { category: '机械臂', codes: ['REACH_STAGE', 'REACH_POS'] },
-  { category: 'ARM动作', codes: ['ARM_MOVE', 'ARM_EXTEND', 'ARM_RETRACT', 'ARM_ROTATE'] },
-  { category: '腔体操作', codes: ['CHAMBER_OPEN', 'CHAMBER_CLOSE', 'CHAMBER_VENT', 'CHAMBER_PUMP'] },
-  { category: '晶圆传送', codes: ['WAFER_LOAD', 'WAFER_UNLOAD', 'WAFER_TRANSFER', 'WaferLoaded', 'WaferUnloaded'] },
-  { category: '工艺状态', codes: ['PROCESS_START', 'PROCESS_END', 'PROCESS_PAUSE', 'PROCESS_RESUME', 'PS', 'PE'] },
-  { category: '报警事件', codes: ['EC_ALARM_REPORT', 'ALARM', 'ALARM_REPORT', 'ALARM_HIGH', 'ALARM_LOW', 'ALARM_CLEAR'] },
-  { category: '状态变化', codes: ['STATE_CHANGE', 'IDLE', 'LOT_START', 'LOT_END'] },
-]
+function exportVoxelConfig() {
+  if (voxelParts.value.length === 0) {
+    toast('没有可导出的部件', 'warn')
+    return
+  }
+  const config = { parts: voxelParts.value }
+  const text = JSON.stringify(config, null, 2)
+  const blob = new Blob([text], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `voxel-model-${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  toast('体素配置已导出', 'success')
+}
 
 // === 生命周期 ===
 onMounted(async () => {
@@ -351,14 +272,13 @@ onMounted(async () => {
     <div class="editor-header">
       <h1>🛠️ 模型编辑器</h1>
       <div class="header-tabs">
-        <button 
+        <button
           v-for="tab in [
             { key: 'models', label: '📦 模型管理' },
             { key: 'config', label: '⚙️ 动画配置' },
             { key: 'debug', label: '🔍 动画调试' },
-            { key: 'guide', label: '📖 开发指南' },
-            { key: 'events', label: '📝 事件代码' },
-          ]" 
+            { key: 'voxel', label: '🧊 体素建模' },
+          ]"
           :key="tab.key"
           class="tab-btn"
           :class="{ active: activeTab === tab.key }"
@@ -508,124 +428,106 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="config-subtabs">
-          <button 
-            v-for="t in [
-              { k: 'phases', l: '阶段定义' },
-              { k: 'events', l: '事件映射' },
-              { k: 'animations', l: '动画原语' },
-              { k: 'targets', l: '部件目标' },
-            ]"
-            :key="t.k"
-            :class="{ active: editSubTab === t.k }"
-            @click="editSubTab = t.k"
-          >{{ t.l }}</button>
-        </div>
-
-        <!-- 阶段定义 -->
-        <div v-show="editSubTab === 'phases'" class="sub-content">
-          <div v-for="(flow, flowKey) in editingConfig.flows" :key="flowKey" class="flow-section">
-            <h4>📋 {{ flowKey }} 流程（{{ flow.phases?.length || 0 }} 个阶段）</h4>
-            <div class="phase-list">
-              <div v-for="(p, idx) in flow.phases" :key="p.key" class="phase-edit-row">
-                <span class="phase-index">{{ idx + 1 }}</span>
-                <span class="phase-key">{{ p.key }}</span>
-                <span class="phase-label">{{ p.label }}</span>
-                <div class="phase-duration">
-                  <input type="number" v-model.number="p.duration_ms" min="100" step="100"
-                         @change="onPhaseDurationChange(flowKey, idx, $event.target.value)" />
-                  <span class="unit">ms</span>
+        <!-- 左右两栏布局 -->
+        <div class="config-split-view">
+          <!-- 左侧：部件清单 -->
+          <div class="config-left-panel">
+            <h4>🎯 部件清单（{{ Object.keys(editingConfig.targets || {}).length }} 个）</h4>
+            <div class="target-list">
+              <div v-for="(tgt, key) in editingConfig.targets" :key="key" class="target-row">
+                <span class="target-key">{{ key }}</span>
+                <div class="target-views">
+                  <div class="target-view">
+                    <span class="view-label">2D:</span>
+                    <span class="view-value">{{ tgt.view_2d || '-' }}</span>
+                  </div>
+                  <div class="target-view">
+                    <span class="view-label">3D:</span>
+                    <span class="view-value">{{ tgt.view_3d || '-' }}</span>
+                  </div>
                 </div>
+                <span v-if="tgt.desc" class="target-desc">{{ tgt.desc }}</span>
+              </div>
+            </div>
+
+            <!-- 动画原语库 -->
+            <h4 style="margin-top: 24px;">🎬 动画原语库（{{ Object.keys(editingConfig.animations || {}).length }} 个）</h4>
+            <div class="anim-list">
+              <div v-for="(anim, key) in editingConfig.animations" :key="key" class="anim-card">
+                <div class="anim-header">
+                  <span class="anim-key">{{ key }}</span>
+                  <span class="anim-action">{{ anim.action }}</span>
+                </div>
+                <div class="anim-fields">
+                  <div class="anim-field">
+                    <label>target</label>
+                    <input :value="anim.target" @change="onAnimChange(key, 'target', $event.target.value)" />
+                  </div>
+                  <div v-if="anim.axis" class="anim-field">
+                    <label>axis</label>
+                    <span class="anim-value">{{ anim.axis }}</span>
+                  </div>
+                  <div v-if="anim.from !== undefined" class="anim-field">
+                    <label>from</label>
+                    <input type="number" :value="anim.from"
+                           @change="onAnimChange(key, 'from', parseFloat($event.target.value))" />
+                  </div>
+                  <div v-if="anim.to !== undefined" class="anim-field">
+                    <label>to</label>
+                    <input type="number" :value="anim.to"
+                           @change="onAnimChange(key, 'to', parseFloat($event.target.value))" />
+                  </div>
+                  <div v-if="anim.duration_ms" class="anim-field">
+                    <label>duration</label>
+                    <input type="number" :value="anim.duration_ms"
+                           @change="onAnimChange(key, 'duration_ms', parseInt($event.target.value))" />
+                    <span class="unit">ms</span>
+                  </div>
+                  <div v-if="anim.color" class="anim-field">
+                    <label>color</label>
+                    <input type="color" :value="anim.color"
+                           @change="onAnimChange(key, 'color', $event.target.value)" />
+                  </div>
+                </div>
+                <div v-if="anim.note" class="anim-note">{{ anim.note }}</div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- 事件映射 -->
-        <div v-show="editSubTab === 'events'" class="sub-content">
-          <div v-for="(flow, flowKey) in editingConfig.flows" :key="flowKey" class="flow-section">
-            <div class="flow-header">
-              <h4>🔗 {{ flowKey }} 事件映射（{{ Object.keys(flow.event_to_phase || {}).length }} 个）</h4>
-              <button class="btn-small" @click="addEventMapping(flowKey)">+ 添加事件</button>
-            </div>
-            <div class="event-map-list">
-              <div v-for="(def, evt) in flow.event_to_phase" :key="evt" class="event-edit-row">
-                <span class="event-key">{{ evt }}</span>
-                <span class="arrow">→</span>
-                <select v-model="def.phase" @change="onEventPhaseChange(flowKey, evt, $event.target.value)">
-                  <option v-for="p in flow.phases" :key="p.key" :value="p.key">
-                    {{ p.key }} ({{ p.label }})
-                  </option>
-                </select>
-                <span v-if="def.anim" class="anim-tag">{{ def.anim }}</span>
-                <button class="btn-delete" @click="removeEventMapping(flowKey, evt)" title="删除">×</button>
+          <!-- 右侧：事件动作 -->
+          <div class="config-right-panel">
+            <div v-for="(flow, flowKey) in editingConfig.flows" :key="flowKey" class="flow-section">
+              <h4>📋 {{ flowKey }} 流程（{{ flow.phases?.length || 0 }} 个阶段）</h4>
+              <div class="phase-list">
+                <div v-for="(p, idx) in flow.phases" :key="p.key" class="phase-edit-row">
+                  <span class="phase-index">{{ idx + 1 }}</span>
+                  <span class="phase-key">{{ p.key }}</span>
+                  <span class="phase-label">{{ p.label }}</span>
+                  <div class="phase-duration">
+                    <input type="number" v-model.number="p.duration_ms" min="100" step="100"
+                           @change="onPhaseDurationChange(flowKey, idx, $event.target.value)" />
+                    <span class="unit">ms</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- 动画原语 -->
-        <div v-show="editSubTab === 'animations'" class="sub-content">
-          <h4>🎬 动画原语库（{{ Object.keys(editingConfig.animations || {}).length }} 个）</h4>
-          <div class="anim-list">
-            <div v-for="(anim, key) in editingConfig.animations" :key="key" class="anim-card">
-              <div class="anim-header">
-                <span class="anim-key">{{ key }}</span>
-                <span class="anim-action">{{ anim.action }}</span>
+              <div class="flow-header" style="margin-top: 16px;">
+                <h4>🔗 事件映射（{{ Object.keys(flow.event_to_phase || {}).length }} 个）</h4>
+                <button class="btn-small" @click="addEventMapping(flowKey)">+ 添加事件</button>
               </div>
-              <div class="anim-fields">
-                <div class="anim-field">
-                  <label>target</label>
-                  <input :value="anim.target" @change="onAnimChange(key, 'target', $event.target.value)" />
-                </div>
-                <div v-if="anim.axis" class="anim-field">
-                  <label>axis</label>
-                  <span class="anim-value">{{ anim.axis }}</span>
-                </div>
-                <div v-if="anim.from !== undefined" class="anim-field">
-                  <label>from</label>
-                  <input type="number" :value="anim.from"
-                         @change="onAnimChange(key, 'from', parseFloat($event.target.value))" />
-                </div>
-                <div v-if="anim.to !== undefined" class="anim-field">
-                  <label>to</label>
-                  <input type="number" :value="anim.to"
-                         @change="onAnimChange(key, 'to', parseFloat($event.target.value))" />
-                </div>
-                <div v-if="anim.duration_ms" class="anim-field">
-                  <label>duration</label>
-                  <input type="number" :value="anim.duration_ms"
-                         @change="onAnimChange(key, 'duration_ms', parseInt($event.target.value))" />
-                  <span class="unit">ms</span>
-                </div>
-                <div v-if="anim.color" class="anim-field">
-                  <label>color</label>
-                  <input type="color" :value="anim.color"
-                         @change="onAnimChange(key, 'color', $event.target.value)" />
+              <div class="event-map-list">
+                <div v-for="(def, evt) in flow.event_to_phase" :key="evt" class="event-edit-row">
+                  <span class="event-key">{{ evt }}</span>
+                  <span class="arrow">→</span>
+                  <select v-model="def.phase" @change="onEventPhaseChange(flowKey, evt, $event.target.value)">
+                    <option v-for="p in flow.phases" :key="p.key" :value="p.key">
+                      {{ p.key }} ({{ p.label }})
+                    </option>
+                  </select>
+                  <span v-if="def.anim" class="anim-tag">{{ def.anim }}</span>
+                  <button class="btn-delete" @click="removeEventMapping(flowKey, evt)" title="删除">×</button>
                 </div>
               </div>
-              <div v-if="anim.note" class="anim-note">{{ anim.note }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 部件目标 -->
-        <div v-show="editSubTab === 'targets'" class="sub-content">
-          <h4>🎯 部件目标绑定（{{ Object.keys(editingConfig.targets || {}).length }} 个）</h4>
-          <div class="target-list">
-            <div v-for="(tgt, key) in editingConfig.targets" :key="key" class="target-row">
-              <span class="target-key">{{ key }}</span>
-              <div class="target-views">
-                <div class="target-view">
-                  <span class="view-label">2D:</span>
-                  <span class="view-value">{{ tgt.view_2d || '-' }}</span>
-                </div>
-                <div class="target-view">
-                  <span class="view-label">3D:</span>
-                  <span class="view-value">{{ tgt.view_3d || '-' }}</span>
-                </div>
-              </div>
-              <span v-if="tgt.desc" class="target-desc">{{ tgt.desc }}</span>
             </div>
           </div>
         </div>
@@ -713,37 +615,91 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 开发指南 Tab -->
-    <div v-show="activeTab === 'guide'" class="guide-panel">
-      <div class="guide-container">
-        <div class="guide-sidebar">
-          <button 
-            v-for="section in guideSections" 
-            :key="section.id"
-            class="section-btn"
-          >
-            {{ section.title }}
-          </button>
+    <!-- 体素编辑器 Tab -->
+    <div v-show="activeTab === 'voxel'" class="voxel-panel">
+      <div class="voxel-toolbar">
+        <h3>🧊 体素建模编辑器</h3>
+        <div class="voxel-actions">
+          <button class="btn-primary" @click="addVoxelPart('box')">+ 添加盒子</button>
+          <button class="btn-primary" @click="addVoxelPart('cylinder')">+ 添加圆柱</button>
+          <button class="btn-export" @click="exportVoxelConfig">💾 导出 JSON</button>
         </div>
-        <div class="guide-content">
-          <div v-for="section in guideSections" :key="section.id" class="guide-section">
-            <h2>{{ section.title }}</h2>
-            <div class="section-body">
-              <pre>{{ section.content }}</pre>
+      </div>
+
+      <div class="voxel-grid">
+        <!-- 左侧：部件列表 -->
+        <div class="voxel-left">
+          <h4>📦 部件列表（{{ voxelParts.length }}）</h4>
+          <div class="voxel-parts-list">
+            <div v-for="(part, idx) in voxelParts" :key="idx" class="voxel-part-item"
+                 :class="{ selected: selectedVoxelIndex === idx }"
+                 @click="selectedVoxelIndex = idx">
+              <span class="part-type">{{ part.type }}</span>
+              <span class="part-name">{{ part.name }}</span>
+              <button class="btn-delete" @click.stop="removeVoxelPart(idx)">×</button>
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- 事件代码 Tab -->
-    <div v-show="activeTab === 'events'" class="events-panel">
-      <h2>📝 事件代码参考</h2>
-      <div class="events-grid">
-        <div v-for="cat in eventCodeReference" :key="cat.category" class="event-category">
-          <div class="category-title">{{ cat.category }}</div>
-          <div class="event-codes">
-            <span v-for="code in cat.codes" :key="code" class="event-code">{{ code }}</span>
+        <!-- 右侧：属性编辑 -->
+        <div class="voxel-right">
+          <div v-if="selectedVoxelIndex !== null && voxelParts[selectedVoxelIndex]" class="voxel-editor">
+            <h4>✏️ 编辑部件属性</h4>
+            <div class="voxel-form">
+              <div class="form-row">
+                <label>名称：</label>
+                <input v-model="voxelParts[selectedVoxelIndex].name" type="text" />
+              </div>
+              <div class="form-row">
+                <label>类型：</label>
+                <span class="type-badge">{{ voxelParts[selectedVoxelIndex].type }}</span>
+              </div>
+              <div class="form-row">
+                <label>位置 X：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].position.x" type="number" step="0.1" />
+              </div>
+              <div class="form-row">
+                <label>位置 Y：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].position.y" type="number" step="0.1" />
+              </div>
+              <div class="form-row">
+                <label>位置 Z：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].position.z" type="number" step="0.1" />
+              </div>
+              <div class="form-row" v-if="voxelParts[selectedVoxelIndex].type === 'box'">
+                <label>宽度：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].size.width" type="number" step="0.1" />
+              </div>
+              <div class="form-row" v-if="voxelParts[selectedVoxelIndex].type === 'box'">
+                <label>高度：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].size.height" type="number" step="0.1" />
+              </div>
+              <div class="form-row" v-if="voxelParts[selectedVoxelIndex].type === 'box'">
+                <label>深度：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].size.depth" type="number" step="0.1" />
+              </div>
+              <div class="form-row" v-if="voxelParts[selectedVoxelIndex].type === 'cylinder'">
+                <label>半径：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].size.radius" type="number" step="0.1" />
+              </div>
+              <div class="form-row" v-if="voxelParts[selectedVoxelIndex].type === 'cylinder'">
+                <label>高度：</label>
+                <input v-model.number="voxelParts[selectedVoxelIndex].size.height" type="number" step="0.1" />
+              </div>
+              <div class="form-row">
+                <label>颜色：</label>
+                <input v-model="voxelParts[selectedVoxelIndex].color" type="color" />
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty-hint">
+            👈 请选择左侧部件进行编辑，或点击上方按钮添加新部件
+          </div>
+
+          <!-- 预览区域 -->
+          <div class="voxel-preview">
+            <h4>👁️ 配置预览</h4>
+            <pre class="preview-code">{{ JSON.stringify({ parts: voxelParts }, null, 2) }}</pre>
           </div>
         </div>
       </div>
@@ -781,8 +737,7 @@ onMounted(async () => {
 .models-panel,
 .config-panel,
 .debug-panel,
-.guide-panel,
-.events-panel {
+.voxel-panel {
   height: 100%;
   overflow-y: auto;
 }
@@ -1003,6 +958,31 @@ onMounted(async () => {
   background: rgba(0, 212, 255, 0.1);
 }
 .sub-content { padding: 16px; }
+
+/* 左右两栏布局 */
+.config-split-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  height: calc(100% - 120px);
+  overflow-y: auto;
+}
+@media (max-width: 1000px) {
+  .config-split-view { grid-template-columns: 1fr; }
+}
+.config-left-panel,
+.config-right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.config-left-panel h4,
+.config-right-panel h4 {
+  color: var(--accent);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
 .flow-section { margin-bottom: 24px; }
 .flow-section > h4 { color: var(--accent); margin-bottom: 10px; font-size: 14px; }
 .flow-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -1129,6 +1109,136 @@ onMounted(async () => {
 .view-label { color: var(--text-dim); }
 .view-value { font-family: monospace; color: var(--text); }
 .target-desc { color: var(--text-dim); font-size: 11px; }
+
+/* 体素编辑器 */
+.voxel-panel { background: var(--panel); border-radius: 8px; }
+.voxel-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.voxel-toolbar h3 { margin: 0; font-size: 15px; color: var(--accent); }
+.voxel-actions { display: flex; gap: 8px; }
+.voxel-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  padding: 16px;
+  height: calc(100% - 80px);
+}
+@media (max-width: 900px) {
+  .voxel-grid { grid-template-columns: 1fr; }
+}
+.voxel-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 12px;
+}
+.voxel-left h4 {
+  color: var(--accent);
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+.voxel-parts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.voxel-part-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.voxel-part-item:hover { border-color: var(--accent); }
+.voxel-part-item.selected {
+  background: rgba(0, 212, 255, 0.1);
+  border-color: var(--accent);
+}
+.part-type {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent);
+  border-radius: 10px;
+}
+.part-name { flex: 1; font-size: 12px; color: var(--text); }
+.voxel-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+.voxel-editor { background: var(--bg); border-radius: 6px; padding: 12px; }
+.voxel-editor h4 {
+  color: var(--accent);
+  font-size: 13px;
+  margin: 0 0 12px 0;
+}
+.voxel-form { display: flex; flex-direction: column; gap: 8px; }
+.voxel-form .form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.voxel-form .form-row label {
+  min-width: 80px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.voxel-form .form-row input {
+  flex: 1;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.voxel-form .form-row input:focus { border-color: var(--accent); }
+.type-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.voxel-preview {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 12px;
+}
+.voxel-preview h4 {
+  color: var(--accent);
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+.preview-code {
+  background: var(--panel-2);
+  border-radius: 4px;
+  padding: 10px;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text);
+  overflow-x: auto;
+  margin: 0;
+}
 
 /* 动画调试 */
 .debug-panel { background: var(--panel); border-radius: 8px; }

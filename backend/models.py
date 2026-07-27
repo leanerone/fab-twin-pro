@@ -355,6 +355,10 @@ class MachineToolMapping(Base):
 class MachineModelConfig(Base):
     """机台型号配置：定义一种机型的2D/3D视图、部件、事件动作映射
     新机台型号接入无需改代码，通过配置完成
+
+    v2.0 新增字段：
+    - animation_config_json: 统一动画配置（原 configs/machine-animations/*.json）
+    - source_files_json: 来源文件路径及解析状态
     """
     __tablename__ = "machine_model_configs"
 
@@ -370,6 +374,11 @@ class MachineModelConfig(Base):
     parts_config_json = Column(Text, default="[]")
     state_mapping_json = Column(Text, default="[]")
     hotspots_config_json = Column(Text, default="[]")
+
+    # v2.0 新增：统一动画配置（flows/animations/targets）
+    animation_config_json = Column(Text, default="{}")
+    # v2.0 新增：来源文件（HTML/SVG/GLB 解析状态）
+    source_files_json = Column(Text, default="{}")
 
     created_at = Column(String(255))
     updated_at = Column(String(255))

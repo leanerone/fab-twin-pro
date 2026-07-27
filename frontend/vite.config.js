@@ -6,11 +6,11 @@ import path from 'path'
 // preview 模式（vite preview）也需要相同的代理配置
 const proxyConfig = {
   '/api': {
-    target: 'http://localhost:8002',
+    target: 'http://localhost:8003',
     changeOrigin: true,
   },
   '/ws': {
-    target: 'ws://localhost:8002',
+    target: 'ws://localhost:8003',
     ws: true,
     changeOrigin: true,
   },
