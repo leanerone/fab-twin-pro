@@ -1,0 +1,249 @@
+{
+  "name": "FabTwin - 批量导出设备数据",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "export_machine_data",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "export_machine_data"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "machine_id",
+              "name": "machine_id",
+              "value": "={{ $json.body.machine_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $json.body.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_role",
+              "name": "user_role",
+              "value": "={{ $json.body.user_role || 'user' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "解析请求参数",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://your-fabtwin-backend/api/machines",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "获取机台列表",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://your-fabtwin-backend/api/ai/alarms",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "=200"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "获取告警数据",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://your-fabtwin-backend/api/ai/lot-info",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": {
+          "machine_id": "={{ $json.machine_id }}",
+          "limit": "=50"
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "machine_id",
+              "value": "={{ $json.machine_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-3",
+      "name": "获取 Lot 数据",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 600]
+    },
+    {
+      "parameters": {
+      "jsCode": "// 合并所有数据生成报表\nconst machines = $('获取机台列表').item;\nconst alarms = $('获取告警数据').item;\nconst lots = $('获取 Lot 数据').item;\n\nreturn {\n  json: {\n    answer: `📊 设备数据导出完成\\n\\n- 机台总数：${machines.length || 0} 台\\n- 告警总数：${alarms.length || 0} 条\\n- Lot 总数：${lots.length || 0} 批\\n\\n数据已准备好，可下载 CSV 报表。`,\n    data: {\n      machines: machines,\n      alarms: alarms,\n      lots: lots\n    },\n    workflow: 'export_machine_data',\n    status: 'success'\n  }\n};\n",
+      "options": {}
+    },
+      "id": "code-1",
+      "name": "合并数据生成报表",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 400]
+    },
+    {
+      "parameters": {
+      "respondWith": "json",
+      "responseBody": "={\n  \"answer\": $json.answer,\n  \"data\": $json.data,\n  \"workflow\": \"export_machine_data\",\n  \"status\": \"success\"\n}",
+      "options": {}
+    },
+      "id": "respond-1",
+      "name": "返回结果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 400]
+    }
+  ],
+  "connections": {
+    "Webhook 触发": {
+      "main": [
+        [
+          {
+            "node": "解析请求参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析请求参数": {
+      "main": [
+        [
+          {
+            "node": "获取机台列表",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "获取告警数据",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "获取 Lot 数据",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "获取机台列表": {
+      "main": [
+        [
+          {
+            "node": "合并数据生成报表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取告警数据": {
+      "main": [
+        [
+          {
+            "node": "合并数据生成报表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取 Lot 数据": {
+      "main": [
+        [
+          {
+            "node": "合并数据生成报表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "合并数据生成报表": {
+      "main": [
+        [
+          {
+            "node": "返回结果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    "fabtwin",
+    "export",
+    "machine-data"
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-07-27T00:00:00.000Z",
+  "versionId": "1"
+}

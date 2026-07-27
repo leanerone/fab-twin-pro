@@ -1,0 +1,215 @@
+{
+  "name": "FabTwin - 通用查询工作流",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "general_query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "general_query"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $json.body.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "machine_id",
+              "name": "machine_id",
+              "value": "={{ $json.body.machine_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_role",
+              "name": "user_role",
+              "value": "={{ $json.body.user_role || 'user' }}",
+              "type": "string"
+            },
+            {
+              "id": "workflow_type",
+              "name": "workflow_type",
+              "value": "={{ $json.body.workflow_type || 'general_query' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "解析请求参数",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://your-fabtwin-backend/api/ai/chat",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": {
+          "question": "={{ $json.question }}",
+          "machine_id": "={{ $json.machine_id }}",
+          "user_role": "={{ $json.user_role }}",
+          "session_id": "=n8n_general_query"
+        },
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "question",
+              "value": "={{ $json.question }}"
+            },
+            {
+              "name": "machine_id",
+              "value": "={{ $json.machine_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "调用 FabTwin AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.jump_timestamp }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-1",
+      "name": "是否有跳转时间戳",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+      "respondWith": "json",
+      "responseBody": "={\n  \"answer\": $json.answer + \"\\n\\n⏰ 跳转时间：\" + $json.jump_timestamp + \"\\n📍 目标机台：\" + ($json.jump_machine_id || '当前'),\n  \"jump_timestamp\": $json.jump_timestamp,\n  \"jump_machine_id\": $json.jump_machine_id,\n  \"workflow\": \"general_query\",\n  \"status\": \"success\"\n}",
+      "options": {}
+    },
+      "id": "respond-1",
+      "name": "返回带跳转结果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"answer\": $json.answer,\n  \"workflow\": \"general_query\",\n  \"status\": \"success\"\n}",
+        "options": {}
+      },
+      "id": "respond-2",
+      "name": "返回普通结果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 450]
+    }
+  ],
+  "connections": {
+    "Webhook 触发": {
+      "main": [
+        [
+          {
+            "node": "解析请求参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析请求参数": {
+      "main": [
+        [
+          {
+            "node": "调用 FabTwin AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调用 FabTwin AI": {
+      "main": [
+        [
+          {
+            "node": "是否有跳转时间戳",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否有跳转时间戳": {
+      "main": [
+        [
+          {
+            "node": "返回带跳转结果",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "返回普通结果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    "fabtwin",
+    "general-query",
+    "ai-chat"
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-07-27T00:00:00.000Z",
+  "versionId": "1"
+}

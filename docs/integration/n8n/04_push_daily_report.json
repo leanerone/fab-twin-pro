@@ -1,0 +1,213 @@
+{
+  "name": "FabTwin - 产线日报自动推送",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "push_daily_report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "push_daily_report"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "machine_id",
+              "name": "machine_id",
+              "value": "={{ $json.body.machine_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $json.body.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_role",
+              "name": "user_role",
+              "value": "={{ $json.body.user_role || 'user' }}",
+              "type": "string"
+            },
+            {
+              "id": "report_date",
+              "name": "report_date",
+              "value": "={{ new Date().toISOString().split('T')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "解析请求参数",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://your-fabtwin-backend/api/ai/yield-stats",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "machine_id",
+              "value": "={{ $json.machine_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "获取产量统计",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://your-fabtwin-backend/api/ai/alarms",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "=100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "获取告警汇总",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 450]
+    },
+    {
+      "parameters": {
+      "jsCode": "// 生成日报内容\nconst yieldStats = $('获取产量统计').item || {};\nconst alarms = $('获取告警汇总').item || [];\nconst reportDate = $('解析请求参数').first().json.report_date;\n\nconst criticalCount = alarms.filter(a => a.level === 'critical').length;\nconst warningCount = alarms.filter(a => a.level === 'warning').length;\n\nconst reportText = `\n📋 产线日报 - ${reportDate}\n\n【产量概览】\n• Lot 总数：${yieldStats.total_lots || 0} 批\n• 完成率：${yieldStats.completion_rate || 0}%\n• 晶圆总数：${yieldStats.total_wafers || 0} 片\n\n【告警统计】\n• 严重告警：${criticalCount} 条\n• 警告：${warningCount} 条\n• 总计：${alarms.length} 条\n\n【重点关注】\n${criticalCount > 0 ? '⚠️ 存在严重告警，请立即处理！' : '✅ 无严重告警，运行平稳'}\n\n---\n由 FabTwin Pro 自动生成\n`;\n\nreturn {\n  json: {\n    answer: reportText,\n    data: {\n      report_date: reportDate,\n      yield_stats: yieldStats,\n      alarms: alarms\n    },\n    workflow: 'push_daily_report',\n    status: 'success'\n  }\n};\n",
+      "options": {}
+    },
+      "id": "code-1",
+      "name": "生成日报内容",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+      "respondWith": "json",
+      "responseBody": "={\n  \"answer\": $json.answer,\n  \"data\": $json.data,\n  \"workflow\": \"push_daily_report\",\n  \"status\": \"success\"\n}",
+      "options": {}
+    },
+      "id": "respond-1",
+      "name": "返回结果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "Webhook 触发": {
+      "main": [
+        [
+          {
+            "node": "解析请求参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析请求参数": {
+      "main": [
+        [
+          {
+            "node": "获取产量统计",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "获取告警汇总",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "获取产量统计": {
+      "main": [
+        [
+          {
+            "node": "生成日报内容",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取告警汇总": {
+      "main": [
+        [
+          {
+            "node": "生成日报内容",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "生成日报内容": {
+      "main": [
+        [
+          {
+            "node": "返回结果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    "fabtwin",
+    "daily-report",
+    "notification"
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-07-27T00:00:00.000Z",
+  "versionId": "1"
+}

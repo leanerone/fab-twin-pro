@@ -1,0 +1,174 @@
+{
+  "name": "FabTwin - 导出告警报表",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "export_alarm_report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "export_alarm_report"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "machine_id",
+              "name": "machine_id",
+              "value": "={{ $json.body.machine_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "question",
+              "name": "question",
+              "value": "={{ $json.body.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_role",
+              "name": "user_role",
+              "value": "={{ $json.body.user_role || 'user' }}",
+              "type": "string"
+            },
+            {
+              "id": "limit",
+              "name": "limit",
+              "value": "=500",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "解析请求参数",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://your-fabtwin-backend/api/ai/alarms",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "machine_id",
+              "value": "={{ $json.machine_id }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.limit }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "调用告警 API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "fileFormat": "csv",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "spreadsheet-1",
+      "name": "生成 CSV 报表",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"answer\": \"告警报表已生成，共 \" + $json.length + \" 条告警记录。\\n\\n报表已自动导出为 CSV 格式。\\n\\n- 统计概览：\\n  • 严重告警：\" + $json.filter(a => a.level === 'critical').length + \" 条\\n  • 警告：\" + $json.filter(a => a.level === 'warning').length + \" 条\\n  • 信息：\" + $json.filter(a => a.level === 'info').length + \" 条\",\n  \"data\": $json,\n  \"workflow\": \"export_alarm_report\",\n  \"status\": \"success\"\n}",
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "返回结果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "Webhook 触发": {
+      "main": [
+        [
+          {
+            "node": "解析请求参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析请求参数": {
+      "main": [
+        [
+          {
+            "node": "调用告警 API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调用告警 API": {
+      "main": [
+        [
+          {
+            "node": "生成 CSV 报表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "生成 CSV 报表": {
+      "main": [
+        [
+          {
+            "node": "返回结果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    "fabtwin",
+    "alarm",
+    "export"
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-07-27T00:00:00.000Z",
+  "versionId": "1"
+}
