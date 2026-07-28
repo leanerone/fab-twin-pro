@@ -174,6 +174,16 @@ INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDAT
 INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
     ('n8n_webhook_secret', '', 'N8N Webhook密钥', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'system');
 
+-- v2.1: N8N MCP Server 配置（MCP 协议调用 N8N 工作流）
+INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
+    ('mcp_n8n_enabled', 'false', '是否启用 N8N MCP Server', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'system');
+INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
+    ('mcp_n8n_url', 'http://10.30.116.137/mcp-server/http', 'N8N MCP Server 地址', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'system');
+INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
+    ('mcp_n8n_token', '', 'N8N MCP Bearer Token（固定值）', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'system');
+INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
+    ('mcp_n8n_timeout', '30', 'N8N MCP HTTP 超时（秒）', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'system');
+
 COMMIT;
 
 -- ============================================
@@ -187,5 +197,5 @@ COMMIT;
 -- 完成说明
 -- ============================================
 -- 共创建 3 张表 + 3 个序列 + 3 个触发器
--- 默认配置: 1 条本地规则引擎Provider + 7 条Dify/N8N键值对
+-- 默认配置: 1 条本地规则引擎Provider + 7 条Dify/N8N键值对 + 4 条MCP配置键值对（v2.1新增）
 -- 后续可通过前端"AI配置管理"面板添加智谱GLM/OpenAI等Provider配置

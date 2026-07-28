@@ -482,95 +482,223 @@ def _get_yield_stats_fallback(db: Session, machine_id: str = None) -> dict:
     return {"answer": answer, "sql": "", "table_data": table_data}
 
 
-# ==================== 工具5: Lot 查询（从 DT_EVENT_RAW 提取） ====================
+# ==================== 工具5: Lot 查询（MES + 设备事件双源融合） ====================
 
-def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None) -> dict:
-    """查询 Lot 信息（从 DT_EVENT_RAW 的 payload 提取）"""
-    if lot_id:
-        # 从 DT_EVENT_RAW 查该 Lot 的所有事件
-        events = db.query(DT_EVENT_RAW).filter(
-            DT_EVENT_RAW.payload_json.like(f'%{lot_id}%')
-        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(50).all()
+def get_mes_lot_info(db: Session, lot_id: str) -> dict:
+    """通过 MCP 调用 N8N MES_LotInfo_Query 查询 Lot MES 信息
 
-        if not events:
-            return {"answer": f"未找到 Lot {lot_id} 的相关事件。", "sql": ""}
+    数据源：N8N MCP Server（MES_ExecuteQuery_Tool）
+    返回字段：product / process / route / step / lotjobstatus / currentquantity / cassette 等
+    """
+    if not lot_id:
+        return {"answer": "请提供 Lot ID。", "sql": ""}
 
-        # 从第一个事件提取基本信息
-        first_event = events[0]
-        payload = _parse_payload(first_event.payload_json)
+    # 从 ai_configs 读 MCP 配置
+    try:
+        from services.mcp_client import get_mcp_client, get_mcp_config
+    except ImportError:
+        return {"answer": "⚠️ MCP 客户端模块未安装。", "sql": ""}
 
-        answer = f"Lot {lot_id} 详情（从事件流提取）：\n"
-        answer += f"• 关联机台：{first_event.tool_id}\n"
-        if not _is_null(payload.get("cassette_id")):
-            answer += f"• Cassette：{payload.get('cassette_id')}\n"
-        if not _is_null(payload.get("pod_id")):
-            answer += f"• POD：{payload.get('pod_id')}\n"
-        if not _is_null(payload.get("machine_state")):
-            answer += f"• 最后状态：{payload.get('machine_state')}\n"
-        if not _is_null(payload.get("machine_mode")):
-            answer += f"• 运行模式：{payload.get('machine_mode')}\n"
+    cfg = get_mcp_config()
+    if not cfg["enabled"]:
+        return {"answer": "⚠️ N8N MCP 未启用，请在 AI 配置面板中开启。", "sql": ""}
+    if not cfg["token"]:
+        return {"answer": "⚠️ N8N MCP Token 未配置，请在 AI 配置面板中录入。", "sql": ""}
 
-        # 统计涉及的机台
-        tools = set(e.tool_id for e in events)
-        if len(tools) > 1:
-            answer += f"• 涉及机台：{', '.join(tools)}\n"
+    try:
+        client = get_mcp_client()
+        if not client:
+            return {"answer": "⚠️ MCP 客户端初始化失败。", "sql": ""}
 
-        # 最近 10 条事件
-        answer += f"\n最近 {min(10, len(events))} 条事件："
-        table_data = {
-            "headers": ["时间", "机台", "事件", "状态"],
-            "rows": [],
-        }
-        for e in events[:10]:
-            p = _parse_payload(e.payload_json)
-            table_data["rows"].append([
-                e.received_ts_utc,
-                e.tool_id,
-                p.get("event_name", ""),
-                p.get("machine_state", ""),
-            ])
+        raw = client.call_tool("MES_LotInfo_Query", {"lot": lot_id})
+    except Exception as e:
+        return {"answer": f"⚠️ MCP 调用失败：{e}", "sql": ""}
 
+    # N8N 返回可能是数组或 dict
+    data = None
+    if isinstance(raw, list) and raw:
+        data = raw[0]
+    elif isinstance(raw, dict):
+        # 可能直接是 data[0] 或就是 data 本身
+        if "data" in raw and isinstance(raw["data"], list) and raw["data"]:
+            data = raw
+        else:
+            data = raw
+
+    if not data:
+        return {"answer": f"Lot {lot_id} 在 MES 中未查询到数据。", "sql": ""}
+
+    if not data.get("success", True):
+        return {"answer": f"Lot {lot_id} 查询失败：{data.get('message', '未知错误')}", "sql": ""}
+
+    # 提取行数据
+    rows = data.get("data", {}).get("rows", []) if isinstance(data.get("data"), dict) else []
+    if not rows and isinstance(data.get("data"), list):
+        rows = data["data"]
+
+    if not rows:
+        # 兼容直接返回字段的情况
+        message = data.get("message", "")
         return {
-            "answer": answer,
-            "sql": f"SELECT * FROM dt_event_raw WHERE payload_json LIKE '%{lot_id}%'",
-            "table_data": table_data,
-            "jump_timestamp": events[0].received_ts_utc if events else None,
-            "jump_machine_id": first_event.tool_id,
+            "answer": f"Lot {lot_id} MES 信息：\n{message}" if message else f"Lot {lot_id} 在 MES 中无详细记录。",
+            "sql": "",
         }
 
-    # 未指定 Lot ID，从 DT_EVENT_RAW 聚合最近 Lot
-    tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
+    row = rows[0] if isinstance(rows[0], dict) else {}
 
-    q = db.query(DT_EVENT_RAW)
-    if tool_ids:
-        q = q.filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-    events = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(1000).all()
+    # 构造自然语言回答
+    answer = f"📦 Lot **{lot_id}** MES 信息：\n"
+    answer += f"• 产品型号：{row.get('product', 'N/A')}\n"
+    answer += f"• 工艺：{row.get('process', 'N/A')}（版本 {row.get('processversion', 'N/A')}）\n"
+    answer += f"• 工艺路线：{row.get('route', 'N/A')}\n"
+    answer += f"• 当前步骤：{row.get('step', 'N/A')}\n"
 
-    # 提取唯一 lot_id
-    lot_set = {}
-    for e in events:
-        payload = _parse_payload(e.payload_json)
-        lot = payload.get("lot_id")
-        if lot and lot.upper() not in ("NULL", ""):
-            if lot not in lot_set:
-                lot_set[lot] = {"tool_id": e.tool_id, "ts": e.received_ts_utc}
+    status = row.get("lotjobstatus", "N/A")
+    status_cn = {"RUN": "运行中", "HOLD": "暂停", "COMPLETE": "已完成", "WAIT": "等待中"}.get(status, status)
+    answer += f"• 状态：{status}（{status_cn}）\n"
+    answer += f"• 晶圆数量：{row.get('currentquantity', 'N/A')}\n"
+    answer += f"• 花篮号：{row.get('cassette', 'N/A')}\n"
+    answer += f"• Lot 类型：{row.get('lottype', 'N/A')}\n"
+    answer += f"• Wafer 类型：{row.get('wafertype', 'N/A')}\n"
+    answer += f"• 是否返工：{row.get('isrework', 'N/A')}\n"
 
-    if not lot_set:
-        return {"answer": "未找到相关 Lot 记录。", "sql": ""}
-
+    # 表格数据（完整字段）
     table_data = {
-        "headers": ["Lot ID", "机台", "最后事件时间"],
-        "rows": [[lot, info["tool_id"], info["ts"]] for lot, info in list(lot_set.items())[:10]],
+        "headers": list(row.keys()),
+        "rows": [[str(v) if v is not None else "" for v in row.values()]],
     }
-
-    answer = f"最近 {len(lot_set)} 个 Lot：\n（点击下方表格或输入 Lot ID 查看详情）"
 
     return {
         "answer": answer,
-        "sql": "SELECT DISTINCT lot_id FROM dt_event_raw",
+        "sql": f"-- MCP call: MES_LotInfo_Query(lot='{lot_id}')",
         "table_data": table_data,
-        "jump_timestamp": list(lot_set.values())[0]["ts"] if lot_set else None,
-        "jump_machine_id": list(lot_set.values())[0]["tool_id"] if lot_set else None,
+    }
+
+
+def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
+                 use_mes: bool = True) -> dict:
+    """查询 Lot 信息（MES + 设备事件双源融合）
+
+    Args:
+        lot_id: Lot ID
+        machine_id: 关联机台（可选）
+        use_mes: 是否尝试调用 MES（True 时先查 MES）
+    """
+    if not lot_id:
+        # 未指定 Lot ID，从 DT_EVENT_RAW 聚合最近 Lot
+        tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
+
+        q = db.query(DT_EVENT_RAW)
+        if tool_ids:
+            q = q.filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+        events = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(1000).all()
+
+        lot_set = {}
+        for e in events:
+            payload = _parse_payload(e.payload_json)
+            lot = payload.get("lot_id")
+            if lot and lot.upper() not in ("NULL", ""):
+                if lot not in lot_set:
+                    lot_set[lot] = {"tool_id": e.tool_id, "ts": e.received_ts_utc}
+
+        if not lot_set:
+            return {"answer": "未找到相关 Lot 记录。请提供具体 Lot ID（如 NT938、VC001、PC00H.29）。", "sql": ""}
+
+        table_data = {
+            "headers": ["Lot ID", "机台", "最后事件时间"],
+            "rows": [[lot, info["tool_id"], info["ts"]] for lot, info in list(lot_set.items())[:10]],
+        }
+
+        answer = f"最近 {len(lot_set)} 个 Lot：\n（点击下方表格或输入 Lot ID 查看详情）"
+
+        return {
+            "answer": answer,
+            "sql": "SELECT DISTINCT lot_id FROM dt_event_raw",
+            "table_data": table_data,
+            "jump_timestamp": list(lot_set.values())[0]["ts"] if lot_set else None,
+            "jump_machine_id": list(lot_set.values())[0]["tool_id"] if lot_set else None,
+        }
+
+    # 有 lot_id：先查 MES（如果启用），再查设备事件，最后融合
+    answer_parts = []
+    jump_machine_id = None
+    jump_timestamp = None
+    table_data = None
+
+    # 1. 查 MES
+    if use_mes:
+        try:
+            from services.mcp_client import get_mcp_config
+            mcp_cfg = get_mcp_config()
+            if mcp_cfg["enabled"] and mcp_cfg["token"]:
+                mes_result = get_mes_lot_info(db, lot_id)
+                if mes_result.get("answer"):
+                    answer_parts.append(mes_result["answer"])
+        except Exception as e:
+            answer_parts.append(f"⚠️ MES 查询失败：{e}")
+    else:
+        answer_parts.append(f"(跳过 MES 查询)")
+
+    # 2. 查 FabTwin 设备事件
+    events = db.query(DT_EVENT_RAW).filter(
+        DT_EVENT_RAW.payload_json.like(f'%{lot_id}%')
+    ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(50).all()
+
+    if events:
+        # 聚合：按机台分组
+        machine_events = {}
+        all_tools = set()
+        for e in events:
+            mid = e.tool_id
+            all_tools.add(mid)
+            payload = _parse_payload(e.payload_json)
+            if mid not in machine_events:
+                machine_events[mid] = {
+                    "timestamp": e.received_ts_utc,
+                    "event": payload.get("event_name", ""),
+                    "state": payload.get("machine_state", ""),
+                    "mode": payload.get("machine_mode", "") if not _is_null(payload.get("machine_mode")) else "",
+                    "cassette": payload.get("cassette_id", "") if not _is_null(payload.get("cassette_id")) else "",
+                }
+
+        # 构造回答
+        fab_answer = f"🏭 FabTwin 设备事件（共 {len(events)} 条，涉及 {len(all_tools)} 台机台）：\n"
+        for mid, info in machine_events.items():
+            fab_answer += f"  • {mid}：{info['event']} @ {info['timestamp']}\n"
+
+        answer_parts.append(fab_answer)
+
+        # 构造表格（机台时间线）
+        timeline_rows = []
+        for mid, info in machine_events.items():
+            timeline_rows.append([
+                info["timestamp"], mid, info["event"], info["state"], info["mode"]
+            ])
+
+        table_data = {
+            "headers": ["时间", "机台", "事件", "状态", "模式"],
+            "rows": timeline_rows[:10],
+        }
+
+        # 跳转：默认跳到最新事件所在机台
+        first_mid = list(machine_events.keys())[0]
+        jump_machine_id = first_mid
+        jump_timestamp = machine_events[first_mid]["timestamp"]
+
+    else:
+        answer_parts.append(f"FabTwin 设备事件流中暂无 {lot_id} 的记录。")
+
+    # 3. 合并回答
+    final_answer = "\n\n".join(answer_parts)
+    if jump_machine_id:
+        final_answer += f"\n\n📍 最近事件在 **{jump_machine_id}** ({jump_timestamp})，可点击下方表格行跳转查看历史回放。"
+
+    return {
+        "answer": final_answer,
+        "sql": f"SELECT * FROM dt_event_raw WHERE payload_json LIKE '%{lot_id}%' ORDER BY raw_id DESC",
+        "table_data": table_data,
+        "jump_timestamp": jump_timestamp,
+        "jump_machine_id": jump_machine_id,
     }
 
 
@@ -684,13 +812,13 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_lot_info",
-            "description": "查询Lot批次信息。可按lot_id查询单个批次，或按machine_id列出该机台最近的Lot。",
+            "description": "查询Lot完整追溯信息（MES产品/工艺/状态 + FabTwin设备事件时间线融合）。返回Lot经过的所有机台、时间、事件，并支持跳转历史回放。适用：用户问'Lot追溯'、'Lot走过哪些机台'、'Lot在哪台机台上'。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "lot_id": {
                         "type": "string",
-                        "description": "Lot ID，如 V3TY2。不传则列出最近的Lot。"
+                        "description": "Lot ID，如 PC00H.29、NT938、NT938.15、VC001"
                     },
                     "machine_id": {
                         "type": "string",
@@ -698,6 +826,23 @@ TOOL_DEFINITIONS = [
                     }
                 },
                 "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_mes_lot_info",
+            "description": "查询MES系统Lot详细信息（产品型号、工艺、路线、步骤、状态、晶圆数量、花篮号）。适用：用户提到具体Lot ID并询问产品/状态/晶圆数/工艺信息时，必须调用此工具。数据源：N8N MCP MES_LotInfo_Query。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lot": {
+                        "type": "string",
+                        "description": "Lot ID，如 PC00H.29、NT938、NT938.15、VC001"
+                    }
+                },
+                "required": ["lot"]
             }
         }
     },
@@ -727,5 +872,6 @@ TOOL_HANDLERS = {
     "get_event_timeline": get_event_timeline,
     "get_yield_stats": get_yield_stats,
     "get_lot_info": get_lot_info,
+    "get_mes_lot_info": lambda db, **kw: get_mes_lot_info(db, lot_id=kw.get("lot") or kw.get("lot_id")),
     "get_recipe_info": get_recipe_info,
 }

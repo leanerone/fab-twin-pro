@@ -472,24 +472,46 @@ class AIMiddleware:
                              user_role: str = "user") -> str:
         """构建系统提示词"""
         prompt = """你是一个半导体工厂数字孪生平台的AI助手，名为FabTwin AI。
-你可以回答关于机台状态、生产数据、报警信息、工艺配方、Lot追踪等问题。
+你可以回答关于机台状态、生产数据、报警信息、Lot追踪、工艺配方等问题。
 
 重要说明：
 - 当前系统采集的是VFEI事件流（POD开盖/关盖/端口锁定等），不含温度/压力/RF等传感器数据
+- 但已接入 MES 系统（通过 N8N MCP），可查询 Lot 的产品/工艺/步骤/状态/晶圆数量等真实数据
 - 不要编造任何数据，所有数据必须通过工具调用获取
 - 如果工具返回的数据不足以回答问题，请如实告知用户
+
+可用工具及调用策略：
+
+1. get_mes_lot_info: 查询 MES 系统 Lot 信息（产品/工艺/步骤/状态/晶圆数量/花篮）
+   - 必填参数：lot (Lot ID)
+   - 适用：用户提到具体 Lot ID（如 PC00H.29、NT938、VC001）并询问产品、状态、晶圆数量、工艺信息
+
+2. get_lot_info: 查询 Lot 完整追溯信息（MES + FabTwin 设备事件融合）
+   - 参数：lot_id (Lot ID)
+   - 适用：用户问"Lot 追溯"、"Lot 走过哪些机台"、"Lot 在哪台机台上"、"Lot 完整信息"
+
+3. get_machine_status: 查询机台实时状态（最新VFEI事件、运行模式、当前Lot）
+   - 参数：machine_id (机台ID，如 PODOPENER-1)
+
+4. get_machine_alarms: 查询告警记录（从事件流中提取 alarm_code 非空的事件）
+
+5. get_event_timeline: 查询机台事件时间线（事件类型分布和运行模式分布）
+
+6. get_yield_stats: 查询产量统计（Lot数量、晶圆总数）
+
+7. get_recipe_info: 查询工艺配方（当前返回提示信息）
+
+Lot ID 格式说明：
+- 主 Lot：N 或 V 开头，如 NT938, VC001
+- 控片/测试 Lot：P 开头，如 P0093
+- 分片 Lot：主Lot.序号，如 NT938.15（从 25 片中分出第 15 片）
+- 其他格式：PC00H.29 等
 
 回答要求：
 1. 语言简洁专业，使用中文回答
 2. 数据准确，不要编造数据
 3. 如果涉及时间跳转，在回答最后标注 [JUMP: 时间戳]
-4. 你可以通过 function calling 调用以下工具查询真实数据：
-   - get_machine_status: 查询机台实时状态（最新VFEI事件、运行模式、当前Lot）
-   - get_machine_alarms: 查询告警记录（从事件流中提取 alarm_code 非空的事件）
-   - get_event_timeline: 查询事件时间线（事件类型分布和运行模式分布）
-   - get_yield_stats: 查询产量统计（Lot数量、晶圆总数）
-   - get_lot_info: 查询Lot批次详情
-   - get_recipe_info: 查询工艺配方（温度/压力/RF功率等参数）
+4. 对于 Lot 查询，优先调用 get_lot_info（含 MES+设备事件融合）
 """
         if machine_id:
             prompt += f"\n当前关联机台: {machine_id}"
@@ -585,9 +607,19 @@ class AIMiddleware:
         return None
 
     def _extract_lot_id(self, question: str) -> str:
-        """从自然语言中提取 Lot ID"""
-        # 匹配 LOT12345 / V3TY2 / V3FYS 等格式
-        match = re.search(r'\b(LOT[A-Z0-9]+|V\d[A-Z0-9]+)\b', question.upper())
+        """从自然语言中提取 Lot ID
+
+        支持格式：
+        - 主 Lot：NT938, VC001, P0093（N/V 开头为生产 Lot，P 开头为控片/测试）
+        - 分片 Lot：NT938.15（从主 Lot 分出的单片，25 片中第 15 片）
+        - 其他：PC00H.29（带点号）
+        """
+        # 优先匹配带点号的分片 Lot（如 NT938.15、PC00H.29）
+        match = re.search(r'\b([A-Z]+\d+\.\d+)\b', question.upper())
+        if match:
+            return match.group(1)
+        # 再匹配主 Lot（如 NT938, VC001, P0093）
+        match = re.search(r'\b([A-Z]+\d+)\b', question.upper())
         if match:
             return match.group(1)
         return None

@@ -53,6 +53,18 @@ const difyConfig = ref({
 const testingDify = ref(false)
 const testingN8n = ref(false)
 
+// MCP Server (N8N) 配置
+const mcpConfig = ref({
+  mcp_n8n_enabled: false,
+  mcp_n8n_url: 'http://10.30.116.137/mcp-server/http',
+  mcp_n8n_token: '',
+  mcp_n8n_timeout: 30,
+})
+const testingMcp = ref(false)
+const mcpTools = ref([])
+const mcpTokenSet = ref(false)
+const mcpTokenPreview = ref('')
+
 const selectedPreset = computed(() => {
   return providerPresets.value.find(p => p.id === form.value.provider) || null
 })
@@ -168,6 +180,75 @@ async function testN8nConnection() {
     showToast('error', '测试失败：' + (e.message || '未知错误'))
   } finally {
     testingN8n.value = false
+  }
+}
+
+// ========== MCP Server (N8N) 配置 ==========
+async function loadMcpConfig() {
+  try {
+    const res = await fetch('/api/ai/mcp/config')
+    const data = await res.json()
+    mcpConfig.value.mcp_n8n_enabled = data.enabled || false
+    mcpConfig.value.mcp_n8n_url = data.url || 'http://10.30.116.137/mcp-server/http'
+    mcpConfig.value.mcp_n8n_timeout = data.timeout || 30
+    mcpTokenSet.value = data.token_set || false
+    mcpTokenPreview.value = data.token_preview || ''
+    // 如果已配置 Token，输入框显示占位符而非真实值
+    if (mcpTokenSet.value) {
+      mcpConfig.value.mcp_n8n_token = ''
+    }
+  } catch (e) {
+    console.error('加载 MCP 配置失败', e)
+  }
+}
+
+async function saveMcpConfig() {
+  loading.value = true
+  try {
+    const payload = { ...mcpConfig.value }
+    // 如果 Token 输入框为空且之前已配置，不覆盖
+    if (!payload.mcp_n8n_token && mcpTokenSet.value) {
+      delete payload.mcp_n8n_token
+    }
+    const res = await fetch('/api/ai/mcp/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.success) {
+      showToast('success', 'MCP 配置已保存')
+      await loadMcpConfig()
+    } else {
+      showToast('error', data.detail || '保存失败')
+    }
+  } catch (e) {
+    showToast('error', '保存失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function testMcpConnection() {
+  if (!mcpConfig.value.mcp_n8n_url) {
+    showToast('error', '请先填写 MCP Server 地址')
+    return
+  }
+  testingMcp.value = true
+  try {
+    const res = await fetch('/api/ai/mcp/test', { method: 'POST' })
+    const data = await res.json()
+    if (data.success) {
+      showToast('success', data.message || 'MCP 连接成功')
+      mcpTools.value = data.tools || []
+    } else {
+      showToast('error', data.message || 'MCP 连接失败')
+      mcpTools.value = []
+    }
+  } catch (e) {
+    showToast('error', '测试失败：' + (e.message || '未知错误'))
+  } finally {
+    testingMcp.value = false
   }
 }
 
@@ -320,12 +401,16 @@ onMounted(() => {
   loadConfigs()
   loadUsage()
   loadDifyConfig()
+  loadMcpConfig()
 })
 
 function onTabChange(tab) {
   activeTab.value = tab
   if (tab === 'dify' && !difyConfig.value.dify_base_url && !difyConfig.value.n8n_base_url) {
     loadDifyConfig()
+  }
+  if (tab === 'dify') {
+    loadMcpConfig()
   }
   if (tab === 'usage') {
     loadUsage()
@@ -464,9 +549,60 @@ function onTabChange(tab) {
           </div>
         </div>
 
+        <hr class="divider" />
+
+        <!-- MCP Server (N8N) 配置 -->
+        <div class="dify-section">
+          <div class="section-header">
+            <span class="section-title">MCP Server (N8N 工具调用)</span>
+            <label class="switch">
+              <input type="checkbox" v-model="mcpConfig.mcp_n8n_enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="hint-box">
+            通过 MCP 协议（Model Context Protocol）调用 N8N 上的工作流工具（如 MES_LotInfo_Query）。
+            配置后，AI 助手可通过 GPT-4o 的 Function Calling 自动调用 N8N 工具查询 MES 数据。
+          </div>
+          <div class="form-group">
+            <label>MCP Server 地址</label>
+            <input v-model="mcpConfig.mcp_n8n_url" class="form-input" placeholder="http://10.30.116.137/mcp-server/http" />
+          </div>
+          <div class="form-group">
+            <label>Bearer Token</label>
+            <input
+              v-model="mcpConfig.mcp_n8n_token"
+              type="password"
+              class="form-input"
+              :placeholder="mcpTokenSet ? `已配置（${mcpTokenPreview}），留空则不修改` : '请填入 N8N MCP Token'"
+            />
+          </div>
+          <div class="form-group">
+            <label>超时时间（秒）</label>
+            <input v-model.number="mcpConfig.mcp_n8n_timeout" type="number" min="5" max="120" class="form-input" />
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" :disabled="testingMcp" @click="testMcpConnection">
+              {{ testingMcp ? '测试中...' : '测试连接' }}
+            </button>
+            <button class="btn btn-primary" :disabled="loading" @click="saveMcpConfig">
+              {{ loading ? '保存中...' : '保存 MCP 配置' }}
+            </button>
+          </div>
+
+          <!-- 已发现的工具列表 -->
+          <div v-if="mcpTools.length" class="mcp-tools-list">
+            <h4>已发现工具（{{ mcpTools.length }}）</h4>
+            <div v-for="t in mcpTools" :key="t.name" class="mcp-tool-item">
+              <span class="tool-name">{{ t.name }}</span>
+              <span class="tool-desc">{{ t.description || '无描述' }}</span>
+            </div>
+          </div>
+        </div>
+
         <div class="form-actions" style="margin-top: 16px;">
           <button class="btn btn-primary" :disabled="loading" @click="saveDifyConfig">
-            {{ loading ? '保存中...' : '保存配置' }}
+            {{ loading ? '保存中...' : '保存全部配置' }}
           </button>
         </div>
       </div>
@@ -1049,5 +1185,39 @@ function onTabChange(tab) {
 .switch input:checked + .slider::before {
   transform: translateX(20px);
   background: #00d4ff;
+}
+
+/* MCP 工具列表样式 */
+.mcp-tools-list {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 8px;
+}
+.mcp-tools-list h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #00d4ff;
+}
+.mcp-tool-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.mcp-tool-item:last-child {
+  border-bottom: none;
+}
+.mcp-tool-item .tool-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+.mcp-tool-item .tool-desc {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
 }
 </style>

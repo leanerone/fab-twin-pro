@@ -438,11 +438,23 @@ function jumpToTime(payload) {
                   <thead>
                     <tr>
                       <th v-for="h in msg.table_data.headers" :key="h">{{ h }}</th>
+                      <th v-if="msg.jump_machine_id" class="col-action">操作</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(row, ri) in msg.table_data.rows" :key="ri">
+                    <tr v-for="(row, ri) in msg.table_data.rows" :key="ri"
+                        :class="{ 'row-clickable': msg.jump_machine_id }">
                       <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+                      <td v-if="msg.jump_machine_id" class="col-action">
+                        <button
+                          v-if="msg.table_data.headers.includes('机台') || ri === 0"
+                          class="row-jump-btn"
+                          @click="jumpToTime({
+                            machine_id: row[msg.table_data.headers.indexOf('机台')] || msg.jump_machine_id,
+                            timestamp: row[msg.table_data.headers.indexOf('时间')] || msg.jump_timestamp
+                          })"
+                        >📍 跳转</button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -763,6 +775,31 @@ function jumpToTime(payload) {
 
 .msg-table tr:last-child td {
   border-bottom: none;
+}
+
+.msg-table tr.row-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.msg-table tr.row-clickable:hover {
+  background: rgba(0, 212, 255, 0.08);
+}
+.msg-table .col-action {
+  text-align: center;
+  width: 60px;
+}
+.row-jump-btn {
+  padding: 3px 8px;
+  background: rgba(0, 212, 255, 0.15);
+  color: #00d4ff;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row-jump-btn:hover {
+  background: rgba(0, 212, 255, 0.25);
 }
 
 .msg-jump-btn {

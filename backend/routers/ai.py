@@ -217,6 +217,108 @@ def clear_session(session_id: str):
     return {"success": True, "message": "会话已清除"}
 
 
+# ========== MCP (N8N) 配置与工具发现 ==========
+
+@router.get("/mcp/config")
+def get_mcp_config():
+    """获取 N8N MCP Server 配置（Token 脱敏）"""
+    from services.mcp_client import get_mcp_config as _get_cfg
+    cfg = _get_cfg()
+    # Token 脱敏：只返回是否已配置
+    token_set = bool(cfg["token"])
+    return {
+        "enabled": cfg["enabled"],
+        "url": cfg["url"],
+        "token_set": token_set,
+        "token_preview": (cfg["token"][:4] + "****" + cfg["token"][-4:]) if token_set and len(cfg["token"]) > 8 else ("****" if token_set else ""),
+        "timeout": cfg["timeout"],
+    }
+
+
+@router.put("/mcp/config")
+def update_mcp_config(config: dict):
+    """更新 N8N MCP Server 配置"""
+    from services.mcp_client import _get_db
+    from models import AIConfig
+    from datetime import datetime
+
+    allowed_keys = {"mcp_n8n_enabled", "mcp_n8n_url", "mcp_n8n_token", "mcp_n8n_timeout"}
+    updates = {k: v for k, v in config.items() if k in allowed_keys}
+    if not updates:
+        raise HTTPException(status_code=400, detail="无有效配置项")
+
+    db = _get_db()
+    try:
+        for key, value in updates.items():
+            # enabled 转 true/false 字符串
+            if key == "mcp_n8n_enabled":
+                value = "true" if value else "false"
+            elif key == "mcp_n8n_timeout":
+                value = str(int(value))
+            else:
+                value = str(value)
+
+            existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
+            if existing:
+                existing.config_value = value
+                existing.updated_at = datetime.utcnow()
+                existing.updated_by = "admin"
+            else:
+                new_cfg = AIConfig(
+                    config_key=key,
+                    config_value=value,
+                    description=f"MCP N8N 配置: {key}",
+                    updated_at=datetime.utcnow(),
+                    updated_by="admin",
+                )
+                db.add(new_cfg)
+        db.commit()
+        return {"success": True, "message": "MCP 配置已更新", "updated_keys": list(updates.keys())}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
+    finally:
+        db.close()
+
+
+@router.post("/mcp/test")
+def test_mcp_connection():
+    """测试 N8N MCP Server 连接并返回已发现工具列表"""
+    from services.mcp_client import get_mcp_client, get_mcp_config, MCPError
+
+    cfg = get_mcp_config()
+    if not cfg["enabled"]:
+        return {"success": False, "message": "MCP 未启用", "tools": []}
+    if not cfg["url"]:
+        return {"success": False, "message": "MCP Server URL 未配置", "tools": []}
+    if not cfg["token"]:
+        return {"success": False, "message": "MCP Token 未配置", "tools": []}
+
+    try:
+        client = get_mcp_client()
+        if not client:
+            return {"success": False, "message": "客户端初始化失败", "tools": []}
+        tools = client.list_tools()
+        return {
+            "success": True,
+            "message": f"连接成功，发现 {len(tools)} 个工具",
+            "tools": tools,
+            "server_url": cfg["url"],
+        }
+    except MCPError as e:
+        return {"success": False, "message": f"MCP 连接失败: {e}", "tools": []}
+    except Exception as e:
+        return {"success": False, "message": f"测试失败: {e}", "tools": []}
+
+
+@router.get("/mcp/tools")
+def list_registered_mcp_tools():
+    """列出 FabTwin 后端已注册的 MCP 工具（来自 mcp_registry.py）"""
+    from services.mcp_registry import list_registered_mcp_tools as _list
+    tools = _list()
+    return {"tools": tools, "total": len(tools)}
+
+
 # ========== 语音识别接口（本地 Whisper，离线运行） ==========
 
 @router.post("/speech-to-text")
