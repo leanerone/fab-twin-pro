@@ -25,21 +25,48 @@ class MCPError(Exception):
 
 
 class MCPClient:
-    """轻量 MCP HTTP 客户端
+    """轻量 MCP HTTP/SSE 客户端
 
     不依赖官方 mcp SDK，仅用 requests 实现 JSON-RPC 2.0 调用。
+    支持 SSE 响应格式（N8N MCP Server 使用）和纯 JSON 响应格式。
     """
 
     def __init__(self, base_url: str, token: str, timeout: int = 30):
         self.base_url = (base_url or "").rstrip('/')
         self.token = token or ""
         self.timeout = timeout or 30
+        self._initialized = False
+        self._server_info = None
         self._headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
         if self.token:
             self._headers["Authorization"] = f"Bearer {self.token}"
+
+    def _ensure_initialized(self):
+        """确保已完成 MCP initialize 握手"""
+        if not self._initialized:
+            self._initialize()
+
+    def _initialize(self):
+        """执行 MCP initialize 握手"""
+        try:
+            result = self._request("initialize", {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {},
+                },
+                "clientInfo": {
+                    "name": "fabtwin-mcp-client",
+                    "version": "1.0.0",
+                },
+            })
+            self._server_info = result
+            self._initialized = True
+            logger.info("[MCP] initialize 成功: %s", result.get("serverInfo", {}))
+        except Exception as e:
+            logger.warning("[MCP] initialize 跳过（服务端可能不严格要求）: %s", e)
 
     def _request(self, method: str, params: Optional[Dict] = None) -> Dict[str, Any]:
         """发送 JSON-RPC 2.0 请求
@@ -82,17 +109,7 @@ class MCPClient:
         if resp.status_code != 200:
             raise MCPError(f"MCP HTTP {resp.status_code}: {resp.text[:300]}")
 
-        # 兼容 SSE 响应（data: {...}）
-        text = resp.text.strip()
-        if text.startswith("data:"):
-            # 取最后一条 data 行
-            data_line = None
-            for line in text.splitlines():
-                line = line.strip()
-                if line.startswith("data:"):
-                    data_line = line[5:].strip()
-            if data_line:
-                text = data_line
+        text = self._parse_sse_or_json(resp.text)
 
         try:
             data = json.loads(text)
@@ -105,12 +122,60 @@ class MCPClient:
 
         return data.get("result", {})
 
+    def _parse_sse_or_json(self, raw_text: str) -> str:
+        """解析 MCP 响应，支持纯 JSON 和 SSE 两种格式
+
+        N8N MCP Server 返回 SSE 格式（event: message + data: {...}），
+        而部分 MCP Server 返回纯 JSON。本方法统一解析为 JSON 字符串。
+
+        SSE 格式示例：
+            event: message
+            data: {"jsonrpc":"2.0","id":1,"result":{"tools":[...]}}
+
+        Args:
+            raw_text: 原始响应文本
+
+        Returns:
+            JSON 字符串
+        """
+        text = raw_text.strip()
+        if not text:
+            return "{}"
+
+        lines = text.splitlines()
+
+        data_lines = []
+        in_data = False
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                in_data = False
+                continue
+            if stripped.startswith("data:"):
+                data_lines.append(stripped[5:].strip())
+                in_data = True
+            elif stripped.startswith("event:"):
+                in_data = False
+                continue
+            elif stripped.startswith("id:"):
+                in_data = False
+                continue
+            elif in_data:
+                data_lines.append(stripped)
+
+        if data_lines:
+            return "".join(data_lines)
+
+        return text
+
     def list_tools(self) -> List[Dict[str, Any]]:
         """列出 MCP Server 注册的所有工具
 
         Returns:
             工具列表，每项含 name/description/inputSchema
         """
+        self._ensure_initialized()
         result = self._request("tools/list")
         tools = result.get("tools", []) if isinstance(result, dict) else []
         logger.info("[MCP] 发现 %d 个工具: %s", len(tools), [t.get("name") for t in tools])
@@ -126,6 +191,7 @@ class MCPClient:
         Returns:
             工具返回值（已自动解析 content[0].text 为 JSON）
         """
+        self._ensure_initialized()
         params: Dict[str, Any] = {"name": name}
         if arguments:
             params["arguments"] = arguments
