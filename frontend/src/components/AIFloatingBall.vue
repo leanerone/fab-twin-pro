@@ -347,13 +347,13 @@ function jumpToTime(payload) {
 </script>
 
 <template>
-  <!-- AI 悬浮球（聊天窗口打开或最小化时隐藏，避免重复图标） -->
+  <!-- AI 悬浮球（聊天窗口关闭或最小化时显示） -->
   <div
-    v-if="!chatOpen"
+    v-if="!chatOpen || minimized"
     class="ai-floating-ball"
     :style="{ left: ballPos.x + 'px', top: ballPos.y + 'px' }"
     @mousedown="startDrag($event, 'ball')"
-    @click="toggleChat"
+    @click="minimized ? restoreChat() : toggleChat()"
   >
     <div class="ball-inner">
       <span class="ball-icon">🤖</span>
@@ -520,18 +520,6 @@ function jumpToTime(payload) {
 
       <!-- 调整大小手柄 -->
       <div class="resize-handle" @mousedown="startDrag($event, 'resize')"></div>
-    </div>
-
-    <!-- 最小化状态 -->
-    <div
-      v-if="chatOpen && minimized"
-      class="ai-chat-minimized"
-      :style="{ left: chatPos.x + 'px', top: chatPos.y + 'px' }"
-      @click="restoreChat"
-    >
-      <span class="min-icon">🤖</span>
-      <span class="min-text">AI 助手</span>
-      <span class="min-close" @click.stop="closeChat">✕</span>
     </div>
   </Teleport>
 </template>

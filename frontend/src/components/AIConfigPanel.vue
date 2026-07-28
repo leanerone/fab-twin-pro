@@ -40,6 +40,19 @@ const usageStats = ref({
 })
 const usageDays = ref(30)
 
+// Dify/N8N 配置
+const difyConfig = ref({
+  dify_enabled: false,
+  dify_base_url: '',
+  dify_api_key: '',
+  dify_app_id: '',
+  n8n_enabled: false,
+  n8n_base_url: '',
+  n8n_webhook_secret: '',
+})
+const testingDify = ref(false)
+const testingN8n = ref(false)
+
 const selectedPreset = computed(() => {
   return providerPresets.value.find(p => p.id === form.value.provider) || null
 })
@@ -80,6 +93,81 @@ async function loadUsage() {
     usageStats.value = res
   } catch (e) {
     console.error('加载使用量统计失败', e)
+  }
+}
+
+// Dify/N8N 配置加载与保存
+async function loadDifyConfig() {
+  try {
+    const res = await api.aiGetConfig()
+    difyConfig.value = {
+      dify_enabled: res.dify_enabled || false,
+      dify_base_url: res.dify_base_url || '',
+      dify_api_key: res.dify_api_key || '',
+      dify_app_id: res.dify_app_id || '',
+      n8n_enabled: res.n8n_enabled || false,
+      n8n_base_url: res.n8n_base_url || '',
+      n8n_webhook_secret: res.n8n_webhook_secret || '',
+    }
+  } catch (e) {
+    console.error('加载Dify/N8N配置失败', e)
+  }
+}
+
+async function saveDifyConfig() {
+  loading.value = true
+  try {
+    await api.aiUpdateConfig(difyConfig.value)
+    showToast('success', 'Dify/N8N 配置已保存')
+  } catch (e) {
+    showToast('error', '保存失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function testDifyConnection() {
+  if (!difyConfig.value.dify_base_url) {
+    showToast('error', '请先填写 Dify 服务地址')
+    return
+  }
+  testingDify.value = true
+  try {
+    const result = await api.aiTestConnection('dify', {
+      base_url: difyConfig.value.dify_base_url,
+      api_key: difyConfig.value.dify_api_key,
+    })
+    if (result.success) {
+      showToast('success', result.message || 'Dify 连接成功')
+    } else {
+      showToast('error', result.message || 'Dify 连接失败')
+    }
+  } catch (e) {
+    showToast('error', '测试失败：' + (e.message || '未知错误'))
+  } finally {
+    testingDify.value = false
+  }
+}
+
+async function testN8nConnection() {
+  if (!difyConfig.value.n8n_base_url) {
+    showToast('error', '请先填写 N8N 服务地址')
+    return
+  }
+  testingN8n.value = true
+  try {
+    const result = await api.aiTestConnection('n8n', {
+      base_url: difyConfig.value.n8n_base_url,
+    })
+    if (result.success) {
+      showToast('success', result.message || 'N8N 连接成功')
+    } else {
+      showToast('error', result.message || 'N8N 连接失败')
+    }
+  } catch (e) {
+    showToast('error', '测试失败：' + (e.message || '未知错误'))
+  } finally {
+    testingN8n.value = false
   }
 }
 
@@ -231,7 +319,18 @@ function formatNumber(n) {
 onMounted(() => {
   loadConfigs()
   loadUsage()
+  loadDifyConfig()
 })
+
+function onTabChange(tab) {
+  activeTab.value = tab
+  if (tab === 'dify' && !difyConfig.value.dify_base_url && !difyConfig.value.n8n_base_url) {
+    loadDifyConfig()
+  }
+  if (tab === 'usage') {
+    loadUsage()
+  }
+}
 </script>
 
 <template>
@@ -250,10 +349,11 @@ onMounted(() => {
     <div class="tab-nav">
       <div v-for="tab in [
         { name: 'configs', label: '模型配置' },
+        { name: 'dify', label: 'Dify/N8N' },
         { name: 'usage', label: '使用统计' },
       ]" :key="tab.name"
         :class="['tab-item', { active: activeTab === tab.name }]"
-        @click="activeTab = tab.name">
+        @click="onTabChange(tab.name)">
         {{ tab.label }}
       </div>
     </div>
@@ -299,6 +399,75 @@ onMounted(() => {
           <div v-if="configs.length === 0" class="empty">
             暂无AI配置，点击"添加配置"创建第一个配置
           </div>
+        </div>
+      </div>
+
+      <!-- Dify/N8N 配置 -->
+      <div v-show="activeTab === 'dify'" class="tab-pane">
+        <!-- Dify 配置 -->
+        <div class="dify-section">
+          <div class="section-header">
+            <span class="section-title">Dify 应用对接</span>
+            <label class="switch">
+              <input type="checkbox" v-model="difyConfig.dify_enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="hint-box">
+            Dify 是开源的 LLM 应用开发平台。配置后，AI 助手的问题将转发到 Dify 应用处理。
+          </div>
+          <div class="form-group">
+            <label>Dify 服务地址</label>
+            <input v-model="difyConfig.dify_base_url" class="form-input" placeholder="如：http://localhost:3000" />
+          </div>
+          <div class="form-group">
+            <label>Dify API Key</label>
+            <input v-model="difyConfig.dify_api_key" type="password" class="form-input" placeholder="Dify 应用的 API Key" />
+          </div>
+          <div class="form-group">
+            <label>Dify App ID（可选）</label>
+            <input v-model="difyConfig.dify_app_id" class="form-input" placeholder="Dify 应用 ID" />
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" :disabled="testingDify" @click="testDifyConnection">
+              {{ testingDify ? '测试中...' : '测试连接' }}
+            </button>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- N8N 配置 -->
+        <div class="dify-section">
+          <div class="section-header">
+            <span class="section-title">N8N 工作流联动</span>
+            <label class="switch">
+              <input type="checkbox" v-model="difyConfig.n8n_enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="hint-box">
+            N8N 是开源的工作流自动化工具。配置后，可通过 AI 助手触发 N8N 工作流（如导出报表、生成工单等），需管理员权限。
+          </div>
+          <div class="form-group">
+            <label>N8N 服务地址</label>
+            <input v-model="difyConfig.n8n_base_url" class="form-input" placeholder="如：http://localhost:5678" />
+          </div>
+          <div class="form-group">
+            <label>Webhook Secret（可选）</label>
+            <input v-model="difyConfig.n8n_webhook_secret" type="password" class="form-input" placeholder="N8N Webhook 验证密钥" />
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" :disabled="testingN8n" @click="testN8nConnection">
+              {{ testingN8n ? '测试中...' : '测试连接' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="form-actions" style="margin-top: 16px;">
+          <button class="btn btn-primary" :disabled="loading" @click="saveDifyConfig">
+            {{ loading ? '保存中...' : '保存配置' }}
+          </button>
         </div>
       </div>
 
@@ -820,5 +989,65 @@ onMounted(() => {
 .btn-ghost:hover:not(:disabled) {
   color: var(--text, #e0e6ed);
   border-color: var(--text-dim, #8a94a6);
+}
+
+/* Dify/N8N 配置区 */
+.dify-section {
+  margin-bottom: 16px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.divider {
+  border: none;
+  border-top: 1px solid var(--border, #2a3142);
+  margin: 20px 0;
+}
+.form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* 开关组件 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #2a3142;
+  border-radius: 24px;
+  transition: 0.3s;
+}
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: #8a94a6;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+.switch input:checked + .slider {
+  background: rgba(0, 212, 255, 0.3);
+}
+.switch input:checked + .slider::before {
+  transform: translateX(20px);
+  background: #00d4ff;
 }
 </style>
