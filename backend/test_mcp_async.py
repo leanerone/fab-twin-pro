@@ -4,7 +4,13 @@
 1. execute_workflow 发起执行，拿到 executionId
 2. get_execution(includeData=true) 获取完整输出
 """
-import sys, os, json, time
+import sys, os, json, time, io
+
+# Windows 控制台 UTF-8 编码修复
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from services.mcp_client import MCPClient, MCPError
 
@@ -147,14 +153,34 @@ def main():
             
             if result:
                 print(f"\n  ═══ MES 返回数据 ═══")
-                # 只打印关键字段
                 if isinstance(result, dict):
+                    # 从顶层提取
                     print(f"  lot: {result.get('lot', '?')}")
-                    print(f"  product: {result.get('product', '?')}")
-                    print(f"  step: {result.get('step', '?')}")
-                    print(f"  status: {result.get('lotjobstatus', result.get('status', '?'))}")
-                    print(f"  quantity: {result.get('currentquantity', '?')}")
                     print(f"  message: {result.get('message', '?')}")
+
+                    # 从 data.rows[0] 提取关键字段
+                    row_data = {}
+                    if "data" in result and isinstance(result["data"], dict):
+                        rows = result["data"].get("rows", [])
+                        if rows and isinstance(rows, list) and rows[0]:
+                            row_data = rows[0] if isinstance(rows[0], dict) else {}
+
+                    if row_data:
+                        print(f"  product: {row_data.get('product', '?')}")
+                        print(f"  step: {row_data.get('step', '?')}")
+                        status = row_data.get('lotjobstatus', row_data.get('status', '?'))
+                        print(f"  status: {status}")
+                        print(f"  quantity: {row_data.get('currentquantity', '?')}")
+                        print(f"  process: {row_data.get('process', '?')}")
+                        print(f"  route: {row_data.get('route', '?')}")
+                        print(f"  cassette: {row_data.get('cassette', '?')}")
+                        print(f"  wafertype: {row_data.get('wafertype', '?')}")
+                    else:
+                        # 兼容顶层直接返回字段的情况
+                        print(f"  product: {result.get('product', '?')}")
+                        print(f"  step: {result.get('step', '?')}")
+                        print(f"  status: {result.get('lotjobstatus', result.get('status', '?'))}")
+                        print(f"  quantity: {result.get('currentquantity', '?')}")
                     # 如果有 data 字段，提取 rows
                     if "data" in result and isinstance(result["data"], dict):
                         rows = result["data"].get("rows", [])
