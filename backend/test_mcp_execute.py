@@ -26,12 +26,12 @@ def main():
 
     client = MCPClient(url, token, timeout=60)
 
-    # MES_ExecuteQuery_Tool 的 workflowId
-    workflow_id = "AMyvIGVdJAlIzH9d"
+    # MES_LotInfo_Query 的 workflowId
+    workflow_id = "ymOYQpVMhHr7cWJH"
     lot_id = "PC00H.29"
 
     print("=" * 60)
-    print(f"MES_ExecuteQuery_Tool 执行测试")
+    print(f"MES_LotInfo_Query 执行测试")
     print(f"workflowId: {workflow_id}")
     print(f"lot: {lot_id}")
     print("=" * 60)
