@@ -510,8 +510,9 @@ Lot ID 格式说明：
 回答要求：
 1. 语言简洁专业，使用中文回答
 2. 数据准确，不要编造数据
-3. 如果涉及时间跳转，在回答最后标注 [JUMP: 时间戳]
+3. 如果工具返回中包含 jump_timestamp 和 jump_machine_id，系统会自动处理跳转。你不需要输出任何特殊标记。
 4. 对于 Lot 查询，优先调用 get_lot_info（含 MES+设备事件融合）
+5. 如果工具返回 table_data，你可以在回答中引用表格内容，但不要重复输出完整表格
 """
         if machine_id:
             prompt += f"\n当前关联机台: {machine_id}"
@@ -534,6 +535,7 @@ Lot ID 格式说明：
                 "sql": result.get("sql", ""),
                 "jump_timestamp": result.get("jump_timestamp", result.get("jumpTs", None)),
                 "jump_machine_id": result.get("jump_machine_id", result.get("jumpMachineId", None)),
+                "machine_online": result.get("machine_online", None),
                 "table_data": result.get("table_data", result.get("tableData", None)),
                 "tool_calls": result.get("tool_calls", []),
                 "sources": result.get("sources", []),
@@ -543,6 +545,7 @@ Lot ID 格式说明：
             "sql": "",
             "jump_timestamp": None,
             "jump_machine_id": None,
+            "machine_online": None,
             "table_data": None,
             "tool_calls": [],
             "sources": [],
@@ -668,6 +671,11 @@ Lot ID 格式说明：
         max_tool_rounds = 5  # 防止死循环
         tools_supported = True
 
+        # 收集工具结果中的跳转/表格数据（用于最终响应）
+        collected_jump_machine_id = None
+        collected_jump_timestamp = None
+        collected_table_data = None
+
         try:
             for round_idx in range(max_tool_rounds):
                 # 如果当前provider不支持tools，去掉tools参数重试
@@ -710,11 +718,22 @@ Lot ID 格式说明：
                         jump_ts = jump_match.group(1).strip()
                         answer = answer.replace(jump_match.group(0), "").strip()
 
+                    # 优先使用工具结果中的跳转信息
+                    final_jump_ts = collected_jump_timestamp or jump_ts
+                    final_jump_mid = collected_jump_machine_id or machine_id
+
+                    # 也尝试从answer中解析jump_machine_id
+                    mid_match = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
+                    if mid_match and not collected_jump_machine_id:
+                        final_jump_mid = mid_match.group(1).strip()
+                        answer = answer.replace(mid_match.group(0), "").strip()
+
                     return {
                         "answer": answer,
                         "sql": "",
-                        "jump_timestamp": jump_ts,
-                        "jump_machine_id": machine_id,
+                        "jump_timestamp": final_jump_ts,
+                        "jump_machine_id": final_jump_mid,
+                        "table_data": collected_table_data,
                         "tool_calls": tool_call_records,
                         "sources": [{"type": "llm", "model": self.model}],
                     }
@@ -749,11 +768,33 @@ Lot ID 格式说明：
                             "status": "success",
                         })
 
+                        # 收集工具结果中的跳转/表格数据
+                        if isinstance(result, dict):
+                            if result.get("jump_machine_id") and not collected_jump_machine_id:
+                                collected_jump_machine_id = result["jump_machine_id"]
+                            if result.get("jump_timestamp") and not collected_jump_timestamp:
+                                collected_jump_timestamp = result["jump_timestamp"]
+                            if result.get("table_data") and not collected_table_data:
+                                collected_table_data = result["table_data"]
+
+                        # 把工具结果中的answer提取出来，附加到LLM可见的上下文末尾
+                        # 这样即使LLM遗漏了工具返回的结构化跳转信息，也能通过answer文本传递
+                        tool_content = json.dumps(result, ensure_ascii=False, default=str)
+                        # 在tool内容末尾附加跳转元信息（供LLM参考）
+                        if isinstance(result, dict):
+                            extra = {}
+                            if result.get("jump_machine_id"):
+                                extra["jump_machine_id"] = result["jump_machine_id"]
+                            if result.get("jump_timestamp"):
+                                extra["jump_timestamp"] = result["jump_timestamp"]
+                            if extra:
+                                tool_content += f"\n[META] {json.dumps(extra, ensure_ascii=False)}"
+
                         # 把工具结果作为 tool 角色消息回传给 LLM
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc["id"],
-                            "content": json.dumps(result, ensure_ascii=False, default=str),
+                            "content": tool_content,
                         })
                     else:
                         # 未知工具

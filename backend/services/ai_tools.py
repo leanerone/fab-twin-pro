@@ -760,17 +760,27 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
     else:
         answer_parts.append(f"FabTwin 设备事件流中暂无 {lot_id} 的记录。")
 
-    # 3. 合并回答
+    # 3. 检查跳转目标机台是否在平台上
+    machine_online = None
+    if jump_machine_id:
+        exists = db.query(Machine).filter(Machine.id == jump_machine_id).first()
+        machine_online = exists is not None
+
+    # 4. 合并回答
     final_answer = "\n\n".join(answer_parts)
     if jump_machine_id:
-        final_answer += f"\n\n📍 最近事件在 **{jump_machine_id}** ({jump_timestamp})，可点击下方表格行跳转查看历史回放。"
+        if machine_online:
+            final_answer += f"\n\n📍 最近事件在 **{jump_machine_id}** ({jump_timestamp})，可点击下方表格行跳转查看历史回放。"
+        else:
+            final_answer += f"\n\n⚠️ 最近事件在 **{jump_machine_id}** ({jump_timestamp})，该机台暂未上线平台，暂不支持跳转查看历史回放。"
 
     return {
         "answer": final_answer,
         "sql": f"SELECT * FROM dt_event_raw WHERE payload_json LIKE '%{lot_id}%' ORDER BY raw_id DESC",
         "table_data": table_data,
-        "jump_timestamp": jump_timestamp,
-        "jump_machine_id": jump_machine_id,
+        "jump_timestamp": jump_timestamp if machine_online else None,
+        "jump_machine_id": jump_machine_id if machine_online else None,
+        "machine_online": machine_online,
     }
 
 

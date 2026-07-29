@@ -274,6 +274,7 @@ async function sendMessage(text) {
       sql: resp.sql,
       jump_timestamp: resp.jump_timestamp,
       jump_machine_id: resp.jump_machine_id,
+      machine_online: resp.machine_online,
       table_data: resp.table_data,
       tool_calls: resp.tool_calls,
       sources: resp.sources,
@@ -335,14 +336,13 @@ function clearChat() {
   }
 }
 
-function jumpToTime(payload) {
+function jumpToTime(payload, machineOnline = null) {
   // payload: { machine_id, timestamp } 或 兼容纯字符串时间戳
   if (!payload) return
-  if (typeof payload === 'string') {
-    emit('jump', { machine_id: currentMachineId.value, timestamp: payload })
-  } else {
-    emit('jump', payload)
-  }
+  const enriched = typeof payload === 'string'
+    ? { machine_id: currentMachineId.value, timestamp: payload, machine_online: machineOnline }
+    : { ...payload, machine_online: machineOnline }
+  emit('jump', enriched)
 }
 </script>
 
@@ -449,10 +449,12 @@ function jumpToTime(payload) {
                         <button
                           v-if="msg.table_data.headers.includes('机台') || ri === 0"
                           class="row-jump-btn"
+                          :class="{ disabled: msg.machine_online === false }"
                           @click="jumpToTime({
                             machine_id: row[msg.table_data.headers.indexOf('机台')] || msg.jump_machine_id,
                             timestamp: row[msg.table_data.headers.indexOf('时间')] || msg.jump_timestamp
-                          })"
+                          }, msg.machine_online)"
+                          :title="msg.machine_online === false ? '该机台暂未上线平台' : ''"
                         >📍 跳转</button>
                       </td>
                     </tr>
@@ -460,8 +462,14 @@ function jumpToTime(payload) {
                 </table>
               </div>
               <!-- 跳转按钮 -->
-              <button v-if="msg.jump_timestamp" class="msg-jump-btn" @click="jumpToTime({ machine_id: msg.jump_machine_id || currentMachineId, timestamp: msg.jump_timestamp })">
-                📍 跳转到{{ msg.jump_machine_id && msg.jump_machine_id !== currentMachineId ? msg.jump_machine_id : '历史回放' }}
+              <button
+                v-if="msg.jump_timestamp || msg.jump_machine_id"
+                class="msg-jump-btn"
+                :class="{ disabled: msg.machine_online === false }"
+                @click="jumpToTime({ machine_id: msg.jump_machine_id || currentMachineId, timestamp: msg.jump_timestamp }, msg.machine_online)"
+                :title="msg.machine_online === false ? '该机台暂未上线平台' : ''"
+              >
+                {{ msg.machine_online === false ? '⚠️ 机台暂未上线' : `📍 跳转到${msg.jump_machine_id && msg.jump_machine_id !== currentMachineId ? msg.jump_machine_id : '历史回放'}` }}
               </button>
               <!-- 工具调用 -->
               <div v-if="msg.tool_calls && msg.tool_calls.length" class="msg-tools">
@@ -801,6 +809,15 @@ function jumpToTime(payload) {
 .row-jump-btn:hover {
   background: rgba(0, 212, 255, 0.25);
 }
+.row-jump-btn.disabled {
+  background: rgba(156, 163, 175, 0.15);
+  color: #9ca3af;
+  border-color: rgba(156, 163, 175, 0.3);
+  cursor: not-allowed;
+}
+.row-jump-btn.disabled:hover {
+  background: rgba(156, 163, 175, 0.15);
+}
 
 .msg-jump-btn {
   margin-top: 8px;
@@ -813,9 +830,16 @@ function jumpToTime(payload) {
   font-weight: 600;
   cursor: pointer;
 }
-
 .msg-jump-btn:hover {
   opacity: 0.9;
+}
+.msg-jump-btn.disabled {
+  background: #6b7280;
+  color: #fff;
+  cursor: not-allowed;
+}
+.msg-jump-btn.disabled:hover {
+  opacity: 1;
 }
 
 .msg-tools {
