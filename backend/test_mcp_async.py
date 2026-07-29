@@ -96,47 +96,92 @@ def main():
                 status = node_runs[-1].get("executionStatus", "?")
             print(f"  - {node_name}: {run_count}次, {exec_time}ms, {status}")
 
-    # 4. 提取最后一个节点的最终输出
-    print(f"\n[4] 提取最终输出（最后一个节点）...")
+    # 4. 提取最终输出（优先 Build Success Response / Respond to Webhook）
+    print(f"\n[4] 提取最终输出...")
     if isinstance(final_result, dict):
         data = final_result.get("data", {})
         if isinstance(data, dict):
             result_data = data.get("resultData", {})
             run_data = result_data.get("runData", {})
             
-            # 找到最后一个有输出的节点（排除触发节点）
-            skip_nodes = {"Webhook", "Execute Workflow Trigger", "When Executed by Another Workflow", "Start", "Merge", "IF", "If"}
-            last_node_output = None
-            last_node_name = ""
+            # 优先级：Build Success Response > Respond to Webhook > 最后一个非触发节点
+            priority_nodes = ["Build Success Response", "Respond to Webhook", "Respond"]
+            skip_nodes = {"Webhook", "Execute Workflow Trigger", "When Executed by Another Workflow", 
+                         "Start", "Merge", "IF", "If", "Need Clarification?", "Query Success?", "Normalize Request"}
             
-            for node_name, node_runs in run_data.items():
-                if node_name in skip_nodes:
-                    continue
-                if isinstance(node_runs, list) and node_runs:
-                    last_run = node_runs[-1]
-                    if isinstance(last_run, dict):
-                        output_data = last_run.get("data", {}).get("main", [])
-                        if output_data and isinstance(output_data, list):
-                            # 取最后一个输出项
-                            for item_list in reversed(output_data):
-                                if isinstance(item_list, list) and item_list:
-                                    for item in item_list:
-                                        if isinstance(item, dict) and "json" in item:
-                                            last_node_output = item["json"]
-                                            last_node_name = node_name
-                                            break
-                                    if last_node_output:
-                                        break
-                            if last_node_output:
-                                break
+            def extract_output(node_runs):
+                """从节点运行数据中提取 json 输出"""
+                if not isinstance(node_runs, list) or not node_runs:
+                    return None
+                last_run = node_runs[-1]
+                if not isinstance(last_run, dict):
+                    return None
+                output_data = last_run.get("data", {}).get("main", [])
+                if not isinstance(output_data, list):
+                    return None
+                for item_list in reversed(output_data):
+                    if isinstance(item_list, list) and item_list:
+                        for item in item_list:
+                            if isinstance(item, dict) and "json" in item:
+                                return item["json"]
+                return None
             
-            if last_node_output:
-                print(f"  最终输出来自节点: [{last_node_name}]")
-                print(f"\n  最终数据:")
-                print(json.dumps(last_node_output, ensure_ascii=False, indent=2)[:3000])
+            # 优先查找
+            result = None
+            for target in priority_nodes:
+                if target in run_data:
+                    result = extract_output(run_data[target])
+                    if result:
+                        print(f"  从 [{target}] 提取到数据")
+                        break
+            
+            # 兜底：找最后一个非跳过节点
+            if not result:
+                for node_name, node_runs in reversed(run_data.items()):
+                    if node_name in skip_nodes:
+                        continue
+                    result = extract_output(node_runs)
+                    if result:
+                        print(f"  兜底：从 [{node_name}] 提取到数据")
+                        break
+            
+            if result:
+                print(f"\n  ═══ MES 返回数据 ═══")
+                # 只打印关键字段
+                if isinstance(result, dict):
+                    print(f"  lot: {result.get('lot', '?')}")
+                    print(f"  product: {result.get('product', '?')}")
+                    print(f"  step: {result.get('step', '?')}")
+                    print(f"  status: {result.get('lotjobstatus', result.get('status', '?'))}")
+                    print(f"  quantity: {result.get('currentquantity', '?')}")
+                    print(f"  message: {result.get('message', '?')}")
+                    # 如果有 data 字段，提取 rows
+                    if "data" in result and isinstance(result["data"], dict):
+                        rows = result["data"].get("rows", [])
+                        if rows and isinstance(rows, list):
+                            print(f"\n  详细数据 (rows[{len(rows)}]):")
+                            if rows:
+                                row = rows[0]
+                                for k in ["lot", "product", "process", "route", "step", 
+                                         "lotjobstatus", "currentquantity", "cassette",
+                                         "wafertype", "isrework"]:
+                                    if k in row:
+                                        print(f"    {k}: {row[k]}")
+                    # 打印完整 JSON（截断）
+                    print(f"\n  完整响应:")
+                    print(json.dumps(result, ensure_ascii=False, indent=2)[:2000])
+                else:
+                    print(json.dumps(result, ensure_ascii=False, indent=2)[:2000])
             else:
-                print("  ⚠ 未找到最终输出节点")
-                print("  可用节点:", list(run_data.keys()))
+                print("  ⚠ 未找到输出数据")
+                print("  所有节点:", list(run_data.keys()))
+                # 打印所有节点的输出结构
+                for node_name, node_runs in run_data.items():
+                    if isinstance(node_runs, list) and node_runs:
+                        last_run = node_runs[-1]
+                        if isinstance(last_run, dict):
+                            output_data = last_run.get("data", {}).get("main", [])
+                            print(f"    {node_name}: main={len(output_data)} items, {sum(len(x) if isinstance(x,list) else 0 for x in output_data)} total outputs")
 
 if __name__ == "__main__":
     main()
