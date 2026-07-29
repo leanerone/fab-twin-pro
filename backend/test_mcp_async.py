@@ -1,8 +1,8 @@
-"""完整 MES_LotInfo_Query 异步调用流程测试
+"""完整 MES_LotInfo_Query 异步调用流程测试（含 includeData）
 
 步骤：
 1. execute_workflow 发起执行，拿到 executionId
-2. get_execution 轮询结果（最多等 10 秒）
+2. get_execution(includeData=true) 获取完整输出
 """
 import sys, os, json, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -50,15 +50,16 @@ def main():
 
     print(f"  executionId: {execution_id}")
 
-    # 2. 轮询执行结果
-    print(f"\n[2] get_execution (轮询结果，最多 10 秒)...")
+    # 2. 轮询执行结果（带 includeData=true）
+    print(f"\n[2] get_execution (includeData=true, 轮询最多 10 秒)...")
     final_result = None
     for i in range(5):
         time.sleep(2)
         try:
             exec_result = client.call_tool("get_execution", {
                 "executionId": str(execution_id),
-                "workflowId": workflow_id
+                "workflowId": workflow_id,
+                "includeData": True
             })
             status = exec_result.get("status", "?")
             print(f"  [{i+1}] status={status}")
@@ -73,12 +74,13 @@ def main():
             print(f"  [{i+1}] 错误: {e}")
 
     if not final_result:
-        # 再查一次（可能数据在别的字段）
+        # 再查一次
         print("\n[3] 再查一次，打印完整响应...")
         try:
             exec_result = client.call_tool("get_execution", {
                 "executionId": str(execution_id),
-                "workflowId": workflow_id
+                "workflowId": workflow_id,
+                "includeData": True
             })
             print(f"  完整响应:\n{json.dumps(exec_result, ensure_ascii=False, indent=2)[:4000]}")
             return
@@ -96,23 +98,33 @@ def main():
     else:
         print(result_str)
 
-    # 提取关键字段
+    # 4. 提取 N8N 输出数据
+    print(f"\n[4] 提取 N8N 输出数据...")
     if isinstance(final_result, dict):
-        # 尝试找 workflow 运行结果
-        for key in ["result", "data", "output", "execution", "workflowOutput"]:
-            if key in final_result:
-                val = final_result[key]
-                print(f"\n  [{key}]: {json.dumps(val, ensure_ascii=False)[:1000]}")
-
-        # 找 ItemData（N8N 输出）
-        if "data" in final_result and isinstance(final_result["data"], list):
-            print(f"\n  N8N ItemData 长度: {len(final_result['data'])}")
-            if final_result["data"]:
-                first = final_result["data"][0]
-                if isinstance(first, dict):
-                    for k in ["json", "binary", "pairedItem"]:
-                        if k in first:
-                            print(f"    {k}: {json.dumps(first[k], ensure_ascii=False)[:500]}")
+        # N8N 执行数据通常在 data.resultData.runData 或 data.resultData 里
+        data = final_result.get("data", {})
+        if isinstance(data, dict):
+            result_data = data.get("resultData", {})
+            run_data = result_data.get("runData", {})
+            
+            print(f"  resultData keys: {list(result_data.keys())}")
+            
+            # 找最后一个节点的输出
+            for node_name, node_runs in run_data.items():
+                if node_name in ("Webhook", "Execute Workflow Trigger", "When Executed by Another Workflow"):
+                    continue
+                if isinstance(node_runs, list) and node_runs:
+                    last_run = node_runs[-1]
+                    if isinstance(last_run, dict):
+                        output_data = last_run.get("data", {}).get("main", [])
+                        if output_data and isinstance(output_data, list):
+                            for item_list in output_data:
+                                if isinstance(item_list, list) and item_list:
+                                    for item in item_list:
+                                        if isinstance(item, dict) and "json" in item:
+                                            json_data = item["json"]
+                                            print(f"\n  节点 [{node_name}] 输出:")
+                                            print(json.dumps(json_data, ensure_ascii=False, indent=2)[:2000])
 
 if __name__ == "__main__":
     main()
