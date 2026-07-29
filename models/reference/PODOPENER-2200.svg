@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+  <g id="machine-body">
+    <rect x="342.2" y="123.8" width="115.5" height="241.5" fill="#b7ad99" stroke="#1a1a2e" stroke-width="1" rx="2"><title>后面板</title></rect>
+<rect x="365.0" y="76.2" width="70.0" height="17.5" fill="#17202a" stroke="#1a1a2e" stroke-width="1" rx="3"><title>工艺腔体 (cylinder)</title></rect>
+<rect x="309.0" y="386.7" width="182.0" height="13.3" fill="#4b535c" stroke="#1a1a2e" stroke-width="1" rx="2"><title>底座底板</title></rect>
+<rect x="333.5" y="97.6" width="6.3" height="266.0" fill="#5f6972" stroke="#1a1a2e" stroke-width="1" rx="2"><title>左侧导轨</title></rect>
+<rect x="460.2" y="97.6" width="6.3" height="266.0" fill="#5f6972" stroke="#1a1a2e" stroke-width="1" rx="2"><title>右侧导轨</title></rect>
+<rect x="347.5" y="348.2" width="105.0" height="16.8" fill="#cbd5e1" stroke="#1a1a2e" stroke-width="1" rx="2"><title>前载台</title></rect>
+<rect x="359.8" y="352.0" width="80.5" height="4.9" fill="#94a3b8" stroke="#1a1a2e" stroke-width="1" rx="3"><title>Wafer入口 (cylinder)</title></rect>
+<rect x="373.8" y="277.5" width="52.5" height="105.0" fill="#f59e0b" stroke="#1a1a2e" stroke-width="1" rx="3"><title>POD/晶舟 (cylinder)</title></rect>
+<rect x="365.4" y="353.8" width="69.3" height="39.2" fill="#111827" stroke="#1a1a2e" stroke-width="1" rx="2"><title>操作控制盒</title></rect>
+  </g>
+  <g id="labels">
+    <text x="400.0" y="67.5" text-anchor="middle" fill="#fff" font-size="12" font-family="Arial" pointer-events="none">工艺腔体</text>
+<text x="400.0" y="312.5" text-anchor="middle" fill="#fff" font-size="12" font-family="Arial" pointer-events="none">POD/晶舟</text>
+<text x="400.0" y="351.0" text-anchor="middle" fill="#fff" font-size="12" font-family="Arial" pointer-events="none">Wafer入口</text>
+<text x="400.0" y="382.5" text-anchor="middle" fill="#fff" font-size="12" font-family="Arial" pointer-events="none">操作控制盒</text>
+  </g>
+  <text x="790" y="990" text-anchor="end" fill="#64748b" font-size="10" font-family="Arial">
+    FabTwin - PODOPENER-2200 正视图参考
+  </text>
+</svg>

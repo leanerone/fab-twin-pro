@@ -1,0 +1,405 @@
+{
+  "machine_type": "TEL-DRM-UNIT",
+  "version": "1.0.0",
+  "description": "TEL DRM UNITY 刻蚀机（OXE）2.5D 等角视图配置",
+  "vendor": "TEL",
+  "process_type": "ETCH",
+  "views": {
+    "view_3d": {
+      "type": "threejs",
+      "model_source": "OXE-DRM.glb",
+      "default_camera": {
+        "position": [
+          7,
+          5,
+          8
+        ],
+        "target": [
+          0,
+          1.8,
+          0
+        ]
+      }
+    },
+    "view_2d": {
+      "type": "isometric",
+      "svg_source": "OXE-DRM.svg",
+      "projection": {
+        "scale": 30,
+        "angle_x": 30,
+        "angle_y": 45
+      },
+      "view_label": "等角 2.5D 视图"
+    }
+  },
+  "parts": [
+    {
+      "part_id": "loadport_1",
+      "part_name": "Load Port 1",
+      "part_type": "loadport",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          120,
+          180,
+          60
+        ],
+        "position": [
+          -285,
+          -80,
+          180
+        ],
+        "color": "#2a3a5a"
+      },
+      "view_2d_iso": {
+        "x": 100,
+        "y": 50,
+        "width": 60,
+        "height": 40,
+        "isometric_depth": 20
+      }
+    },
+    {
+      "part_id": "loadport_2",
+      "part_name": "Load Port 2",
+      "part_type": "loadport",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          120,
+          180,
+          60
+        ],
+        "position": [
+          -285,
+          80,
+          180
+        ],
+        "color": "#2a3a5a"
+      },
+      "view_2d_iso": {
+        "x": 100,
+        "y": 150,
+        "width": 60,
+        "height": 40,
+        "isometric_depth": 20
+      }
+    },
+    {
+      "part_id": "efem",
+      "part_name": "EFEM 传输腔",
+      "part_type": "efem",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          200,
+          300,
+          200
+        ],
+        "position": [
+          -150,
+          0,
+          200
+        ],
+        "color": "#374151"
+      },
+      "view_2d_iso": {
+        "x": 200,
+        "y": 100,
+        "width": 100,
+        "height": 120,
+        "isometric_depth": 30
+      }
+    },
+    {
+      "part_id": "efem_robot",
+      "part_name": "EFEM 机械臂",
+      "part_type": "robot",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          30,
+          30,
+          120
+        ],
+        "position": [
+          -150,
+          0,
+          220
+        ],
+        "color": "#60a5fa"
+      },
+      "animated": true
+    },
+    {
+      "part_id": "aligner",
+      "part_name": "Aligner 对中器",
+      "part_type": "aligner",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          50,
+          50,
+          40
+        ],
+        "position": [
+          -150,
+          -100,
+          180
+        ],
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "part_id": "vacuum_lock_1",
+      "part_name": "真空锁 1",
+      "part_type": "vacuum_lock",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          100,
+          120,
+          80
+        ],
+        "position": [
+          -20,
+          -80,
+          200
+        ],
+        "color": "#475569"
+      }
+    },
+    {
+      "part_id": "vacuum_lock_2",
+      "part_name": "真空锁 2",
+      "part_type": "vacuum_lock",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          100,
+          120,
+          80
+        ],
+        "position": [
+          -20,
+          80,
+          200
+        ],
+        "color": "#475569"
+      }
+    },
+    {
+      "part_id": "transfer_chamber",
+      "part_name": "传输腔 (VTM)",
+      "part_type": "vtm",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          220,
+          220,
+          180
+        ],
+        "position": [
+          120,
+          0,
+          220
+        ],
+        "color": "#1e293b"
+      },
+      "view_2d_iso": {
+        "x": 350,
+        "y": 100,
+        "width": 100,
+        "height": 120,
+        "isometric_depth": 30
+      }
+    },
+    {
+      "part_id": "vtm_robot",
+      "part_name": "VTM 机械臂",
+      "part_type": "robot",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          25,
+          25,
+          100
+        ],
+        "position": [
+          120,
+          0,
+          230
+        ],
+        "color": "#f59e0b"
+      },
+      "animated": true
+    },
+    {
+      "part_id": "chamber_1",
+      "part_name": "工艺腔 PM1",
+      "part_type": "chamber",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          120,
+          120,
+          150
+        ],
+        "position": [
+          250,
+          -150,
+          230
+        ],
+        "color": "#1e3a5f"
+      },
+      "view_2d_iso": {
+        "x": 480,
+        "y": 40,
+        "width": 60,
+        "height": 60,
+        "isometric_depth": 25
+      }
+    },
+    {
+      "part_id": "chamber_2",
+      "part_name": "工艺腔 PM2",
+      "part_type": "chamber",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          120,
+          120,
+          150
+        ],
+        "position": [
+          250,
+          150,
+          230
+        ],
+        "color": "#1e3a5f"
+      },
+      "view_2d_iso": {
+        "x": 480,
+        "y": 170,
+        "width": 60,
+        "height": 60,
+        "isometric_depth": 25
+      }
+    },
+    {
+      "part_id": "wafer",
+      "part_name": "晶圆",
+      "part_type": "wafer",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          50,
+          50,
+          3
+        ],
+        "position": [
+          -150,
+          0,
+          280
+        ],
+        "color": "#60a5fa"
+      },
+      "animated": true
+    }
+  ],
+  "hotspots": [
+    {
+      "hotspot_id": "lp1",
+      "name": "Load Port 1",
+      "part_ids": [
+        "loadport_1"
+      ]
+    },
+    {
+      "hotspot_id": "lp2",
+      "name": "Load Port 2",
+      "part_ids": [
+        "loadport_2"
+      ]
+    },
+    {
+      "hotspot_id": "efem",
+      "name": "EFEM",
+      "part_ids": [
+        "efem",
+        "efem_robot"
+      ]
+    },
+    {
+      "hotspot_id": "vtm",
+      "name": "传输腔",
+      "part_ids": [
+        "transfer_chamber",
+        "vtm_robot"
+      ]
+    },
+    {
+      "hotspot_id": "pm1",
+      "name": "工艺腔 1",
+      "part_ids": [
+        "chamber_1"
+      ]
+    },
+    {
+      "hotspot_id": "pm2",
+      "name": "工艺腔 2",
+      "part_ids": [
+        "chamber_2"
+      ]
+    }
+  ],
+  "states": [
+    {
+      "state_id": "idle",
+      "state_name": "待机",
+      "color": "#9ca3af"
+    },
+    {
+      "state_id": "running",
+      "state_name": "运行",
+      "color": "#22c55e",
+      "part_overrides": [
+        {
+          "part_id": "chamber_1",
+          "emissive": "#22c55e",
+          "emissive_intensity": 0.5
+        },
+        {
+          "part_id": "chamber_2",
+          "emissive": "#22c55e",
+          "emissive_intensity": 0.5
+        }
+      ]
+    },
+    {
+      "state_id": "hold",
+      "state_name": "暂停",
+      "color": "#f59e0b"
+    },
+    {
+      "state_id": "alarm",
+      "state_name": "告警",
+      "color": "#ef4444",
+      "part_overrides": [
+        {
+          "part_id": "transfer_chamber",
+          "emissive": "#ef4444",
+          "emissive_intensity": 0.8,
+          "pulse": true
+        }
+      ]
+    }
+  ],
+  "notes_for_modeler": {
+    "svg": "OXE-DRM.svg 是等角视图参考，模型开发人员应替换为精细绘制的 SVG",
+    "glb": "OXE-DRM.glb 是简化立方体组合，模型开发人员应替换为精细 3D 模型",
+    "naming": "GLB 中的 mesh/node 名称必须与 parts 中的 part_id 一一对应",
+    "coordinates": "所有坐标单位:mm，EFEM 在左侧，VTM 在中间，PM 在右侧",
+    "animation": "机械臂(efem_robot/vtm_robot)和晶圆(wafer)标记为 animated，需要骨骼或变形动画支持"
+  }
+}

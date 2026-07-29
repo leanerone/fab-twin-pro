@@ -1,0 +1,286 @@
+{
+  "machine_type": "PODOPENER-2200",
+  "version": "1.0.0",
+  "description": "VPO 2200 PODOPENER 穿入/脱出流程统一动画配置（2D/3D 共用）",
+  "vendor": "TEL",
+  "process_type": "PODOPENER",
+  "views": {
+    "view_3d": {
+      "type": "vpo",
+      "model_source": "PODOPENER-2200.glb",
+      "default_camera": {
+        "position": [
+          700,
+          -300,
+          400
+        ],
+        "target": [
+          0,
+          0,
+          400
+        ]
+      }
+    },
+    "view_2d": {
+      "type": "vpo",
+      "svg_source": "PODOPENER-2200.svg",
+      "view_label": "正视图"
+    }
+  },
+  "parts": [
+    {
+      "part_id": "base_plate",
+      "part_name": "底座底板",
+      "part_type": "structure",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          520,
+          680,
+          38
+        ],
+        "position": [
+          0,
+          -10,
+          19
+        ],
+        "color": "#4b535c"
+      }
+    },
+    {
+      "part_id": "front_stage",
+      "part_name": "前载台",
+      "part_type": "stage",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          300,
+          240,
+          48
+        ],
+        "position": [
+          0,
+          -36,
+          124
+        ],
+        "color": "#cbd5e1"
+      }
+    },
+    {
+      "part_id": "left_rail",
+      "part_name": "左侧导轨",
+      "part_type": "rail",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          18,
+          306,
+          760
+        ],
+        "position": [
+          -181,
+          -22,
+          484
+        ],
+        "color": "#5f6972"
+      }
+    },
+    {
+      "part_id": "right_rail",
+      "part_name": "右侧导轨",
+      "part_type": "rail",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          18,
+          306,
+          760
+        ],
+        "position": [
+          181,
+          -22,
+          484
+        ],
+        "color": "#5f6972"
+      }
+    },
+    {
+      "part_id": "rear_panel",
+      "part_name": "后面板",
+      "part_type": "panel",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          330,
+          32,
+          690
+        ],
+        "position": [
+          0,
+          112,
+          444
+        ],
+        "color": "#b7ad99"
+      }
+    },
+    {
+      "part_id": "wafer_port",
+      "part_name": "Wafer入口",
+      "part_type": "port",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          230,
+          230,
+          14
+        ],
+        "position": [
+          0,
+          -142,
+          130
+        ],
+        "color": "#94a3b8"
+      }
+    },
+    {
+      "part_id": "chamber",
+      "part_name": "工艺腔体",
+      "part_type": "chamber",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          200,
+          200,
+          50
+        ],
+        "position": [
+          0,
+          0,
+          900
+        ],
+        "color": "#17202a"
+      }
+    },
+    {
+      "part_id": "control_box",
+      "part_name": "操作控制盒",
+      "part_type": "control",
+      "view_3d": {
+        "type": "box",
+        "size": [
+          198,
+          92,
+          112
+        ],
+        "position": [
+          0,
+          -472,
+          76
+        ],
+        "color": "#111827"
+      }
+    },
+    {
+      "part_id": "pod",
+      "part_name": "POD/晶舟",
+      "part_type": "pod",
+      "view_3d": {
+        "type": "cylinder",
+        "size": [
+          150,
+          150,
+          300
+        ],
+        "position": [
+          0,
+          -300,
+          200
+        ],
+        "color": "#f59e0b"
+      },
+      "animated": true
+    }
+  ],
+  "hotspots": [
+    {
+      "hotspot_id": "machine_body",
+      "name": "机身主体",
+      "part_ids": [
+        "left_rail",
+        "right_rail",
+        "rear_panel"
+      ]
+    },
+    {
+      "hotspot_id": "wafer_port_front",
+      "name": "Wafer入口",
+      "part_ids": [
+        "wafer_port"
+      ]
+    },
+    {
+      "hotspot_id": "operator_control",
+      "name": "控制盒",
+      "part_ids": [
+        "control_box"
+      ]
+    }
+  ],
+  "states": [
+    {
+      "state_id": "idle",
+      "state_name": "待机",
+      "color": "#9ca3af",
+      "part_overrides": [
+        {
+          "part_id": "chamber",
+          "emissive_intensity": 0
+        }
+      ]
+    },
+    {
+      "state_id": "running",
+      "state_name": "运行",
+      "color": "#22c55e",
+      "part_overrides": [
+        {
+          "part_id": "chamber",
+          "emissive": "#22c55e",
+          "emissive_intensity": 0.5
+        }
+      ]
+    },
+    {
+      "state_id": "hold",
+      "state_name": "暂停",
+      "color": "#f59e0b",
+      "part_overrides": [
+        {
+          "part_id": "wafer_port",
+          "emissive": "#f59e0b",
+          "emissive_intensity": 0.3
+        }
+      ]
+    },
+    {
+      "state_id": "alarm",
+      "state_name": "告警",
+      "color": "#ef4444",
+      "part_overrides": [
+        {
+          "part_id": "chamber",
+          "emissive": "#ef4444",
+          "emissive_intensity": 0.8,
+          "pulse": true
+        }
+      ]
+    }
+  ],
+  "notes_for_modeler": {
+    "svg": "PODOPENER-2200.svg 是正视图参考，模型开发人员应替换为精细绘制的 SVG",
+    "glb": "PODOPENER-2200.glb 是简化立方体组合，模型开发人员应替换为精细 3D 模型",
+    "naming": "GLB 中的 mesh/node 名称必须与 parts 中的 part_id 一一对应",
+    "animation": "动画配置见 podopener.json（单独文件）",
+    "coordinates": "所有坐标单位:mm，原点位于机台底座中心"
+  }
+}

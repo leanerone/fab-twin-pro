@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg2)"/>
+  <g id="connections">
+    <line x1="160" y1="70" x2="200" y2="120" stroke="#60a5fa" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+<line x1="160" y1="170" x2="200" y2="140" stroke="#60a5fa" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+<line x1="300" y1="130" x2="350" y2="130" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+<line x1="450" y1="100" x2="480" y2="70" stroke="#22c55e" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+<line x1="450" y1="160" x2="480" y2="200" stroke="#22c55e" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+  </g>
+  <g id="machine-body">
+    <polygon points="130.0,50 160,60.0 130.0,70 100,60.0" fill="#32456c" stroke="#0f172a" stroke-width="0.5"><title>Load Port 1 (顶面)</title></polygon>
+<polygon points="100,60.0 130.0,70 130.0,110 100,100.0" fill="#2a3a5a" stroke="#0f172a" stroke-width="0.5"><title>Load Port 1 (左面)</title></polygon>
+<polygon points="160,60.0 130.0,70 130.0,110 160,100.0" fill="#1f2b43" stroke="#0f172a" stroke-width="0.5"><title>Load Port 1 (右面)</title></polygon>
+<polygon points="130.0,150 160,160.0 130.0,170 100,160.0" fill="#32456c" stroke="#0f172a" stroke-width="0.5"><title>Load Port 2 (顶面)</title></polygon>
+<polygon points="100,160.0 130.0,170 130.0,210 100,200.0" fill="#2a3a5a" stroke="#0f172a" stroke-width="0.5"><title>Load Port 2 (左面)</title></polygon>
+<polygon points="160,160.0 130.0,170 130.0,210 160,200.0" fill="#1f2b43" stroke="#0f172a" stroke-width="0.5"><title>Load Port 2 (右面)</title></polygon>
+<polygon points="250.0,100 300,115.0 250.0,130 200,115.0" fill="#424e61" stroke="#0f172a" stroke-width="0.5"><title>EFEM (顶面)</title></polygon>
+<polygon points="200,115.0 250.0,130 250.0,250 200,235.0" fill="#374151" stroke="#0f172a" stroke-width="0.5"><title>EFEM (左面)</title></polygon>
+<polygon points="300,115.0 250.0,130 250.0,250 300,235.0" fill="#29303c" stroke="#0f172a" stroke-width="0.5"><title>EFEM (右面)</title></polygon>
+<polygon points="400.0,100 450,115.0 400.0,130 350,115.0" fill="#243146" stroke="#0f172a" stroke-width="0.5"><title>VTM (顶面)</title></polygon>
+<polygon points="350,115.0 400.0,130 400.0,250 350,235.0" fill="#1e293b" stroke="#0f172a" stroke-width="0.5"><title>VTM (左面)</title></polygon>
+<polygon points="450,115.0 400.0,130 400.0,250 450,235.0" fill="#161e2c" stroke="#0f172a" stroke-width="0.5"><title>VTM (右面)</title></polygon>
+<polygon points="510.0,40 540,52.5 510.0,65 480,52.5" fill="#244572" stroke="#0f172a" stroke-width="0.5"><title>PM1 (顶面)</title></polygon>
+<polygon points="480,52.5 510.0,65 510.0,125 480,112.5" fill="#1e3a5f" stroke="#0f172a" stroke-width="0.5"><title>PM1 (左面)</title></polygon>
+<polygon points="540,52.5 510.0,65 510.0,125 540,112.5" fill="#162b47" stroke="#0f172a" stroke-width="0.5"><title>PM1 (右面)</title></polygon>
+<polygon points="510.0,170 540,182.5 510.0,195 480,182.5" fill="#244572" stroke="#0f172a" stroke-width="0.5"><title>PM2 (顶面)</title></polygon>
+<polygon points="480,182.5 510.0,195 510.0,255 480,242.5" fill="#1e3a5f" stroke="#0f172a" stroke-width="0.5"><title>PM2 (左面)</title></polygon>
+<polygon points="540,182.5 510.0,195 510.0,255 540,242.5" fill="#162b47" stroke="#0f172a" stroke-width="0.5"><title>PM2 (右面)</title></polygon>
+  </g>
+  <g id="labels">
+    <text x="130" y="35" text-anchor="middle" fill="#e2e8f0" font-size="11" font-family="Arial" font-weight="bold">LP1</text>
+<text x="130" y="135" text-anchor="middle" fill="#e2e8f0" font-size="11" font-family="Arial" font-weight="bold">LP2</text>
+<text x="250" y="85" text-anchor="middle" fill="#e2e8f0" font-size="11" font-family="Arial" font-weight="bold">EFEM</text>
+<text x="400" y="85" text-anchor="middle" fill="#e2e8f0" font-size="11" font-family="Arial" font-weight="bold">VTM</text>
+<text x="510" y="55" text-anchor="middle" fill="#e2e8f0" font-size="11" font-family="Arial" font-weight="bold">PM1</text>
+<text x="510" y="185" text-anchor="middle" fill="#e2e8f0" font-size="11" font-family="Arial" font-weight="bold">PM2</text>
+  </g>
+  <text x="790" y="490" text-anchor="end" fill="#64748b" font-size="10" font-family="Arial">
+    FabTwin - OXE DRM UNITY 等角视图参考
+  </text>
+</svg>
