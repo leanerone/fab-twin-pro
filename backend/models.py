@@ -449,6 +449,7 @@ class AIUsageLog(Base):
     """AI Token使用量统计：记录每次调用的token消耗、工具调用和执行详情"""
     __tablename__ = "ai_usage_logs"
 
+    # 普通（非LOB）字段在前
     id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
     session_id = Column(String(255), index=True)          # 会话ID
     config_id = Column(Integer, nullable=True, index=True) # 使用的配置ID
@@ -459,9 +460,10 @@ class AIUsageLog(Base):
     completion_tokens = Column(Integer, default=0)        # 输出token数
     total_tokens = Column(Integer, default=0)             # 总token数
     question_preview = Column(String(512), default="")    # 用户问题前200字符
-    answer_preview = Column(Text, nullable=True)          # AI回答内容（前500字符）
     success = Column(Boolean, default=True)               # 是否成功
+    created_at = Column(String(255), index=True)
+    # CLOB/Text 字段必须在最后（Oracle ORA-24816 限制）
+    answer_preview = Column(Text, nullable=True)          # AI回答内容（前500字符）
     error_msg = Column(Text, nullable=True)               # 错误信息（详细）
     tool_calls = Column(Text, nullable=True)              # 工具调用记录（JSON）
     execution_log = Column(Text, nullable=True)           # 执行日志（JSON，包含各步骤详情）
-    created_at = Column(String(255), index=True)

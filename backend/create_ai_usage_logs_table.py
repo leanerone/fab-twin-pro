@@ -118,7 +118,7 @@ def create_or_migrate_ai_usage_logs():
                 if col_name in existing_cols:
                     print(f"  ✅ 字段 {col_name} 已存在")
                     continue
-                
+
                 alter_sql = f"ALTER TABLE AI_USAGE_LOGS ADD {col_name} {col_type}"
                 print(f"  ➕ 添加字段: {col_name} ({col_type})")
                 try:
@@ -127,6 +127,21 @@ def create_or_migrate_ai_usage_logs():
                     print(f"     ✅ 成功")
                 except Exception as e:
                     print(f"     ❌ 失败: {e}")
+
+            # 修改 ERROR_MSG 从 VARCHAR2(512) 改为 CLOB（支持长错误信息）
+            try:
+                result = conn.execute(text("""
+                    SELECT DATA_TYPE FROM USER_TAB_COLUMNS
+                    WHERE TABLE_NAME = 'AI_USAGE_LOGS' AND COLUMN_NAME = 'ERROR_MSG'
+                """))
+                row = result.fetchone()
+                if row and row[0] != 'CLOB':
+                    print("  🔧 修改 ERROR_MSG: VARCHAR2(512) -> CLOB")
+                    conn.execute(text("ALTER TABLE AI_USAGE_LOGS MODIFY ERROR_MSG CLOB"))
+                    conn.commit()
+                    print("     ✅ 成功")
+            except Exception as e:
+                print(f"  ⚠️ 修改 ERROR_MSG 失败（可能需要先清空数据）: {e}")
         
         # 验证
         print("\n🔍 验证表结构...")

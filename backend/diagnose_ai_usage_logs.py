@@ -69,7 +69,7 @@ def diagnose():
             if cols:
                 print(f"  共 {len(cols)} 个字段:")
                 for col in cols:
-                    print(f"    - {col[0]:20s} {col[1]:12s} 长度={col[2]:6s} 可空={col[3]}")
+                    print(f"    - {str(col[0]):20s} {str(col[1]):12s} 长度={col[2]} 可空={col[3]}")
             else:
                 print("  表不存在或无字段")
         except Exception as e:
@@ -85,10 +85,11 @@ def diagnose():
 
             if count > 0:
                 result = conn.execute(text("""
-                    SELECT ID, SESSION_ID, PROVIDER, MODEL, SUCCESS, CREATED_AT
-                    FROM AI_USAGE_LOGS
-                    ORDER BY CREATED_AT DESC
-                    FETCH FIRST 5 ROWS ONLY
+                    SELECT * FROM (
+                        SELECT ID, SESSION_ID, PROVIDER, MODEL, SUCCESS, CREATED_AT
+                        FROM AI_USAGE_LOGS
+                        ORDER BY CREATED_AT DESC
+                    ) WHERE ROWNUM <= 5
                 """))
                 print("  最近5条记录:")
                 for row in result.fetchall():
