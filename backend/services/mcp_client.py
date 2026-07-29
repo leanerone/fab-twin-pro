@@ -45,12 +45,19 @@ class MCPClient:
             self._headers["Authorization"] = f"Bearer {self.token}"
 
     def _ensure_initialized(self):
-        """确保已完成 MCP initialize 握手"""
+        """确保已完成 MCP initialize 握手
+
+        N8N MCP Server 可能不支持 initialize 方法，
+        失败后标记为已初始化，不阻止后续 tools/list 和 tools/call。
+        """
         if not self._initialized:
             self._initialize()
+            # 无论 initialize 成功还是失败，都标记为已初始化
+            # 避免后续每次调用都重复尝试 initialize
+            self._initialized = True
 
     def _initialize(self):
-        """执行 MCP initialize 握手"""
+        """执行 MCP initialize 握手（可选）"""
         try:
             result = self._request("initialize", {
                 "protocolVersion": "2024-11-05",
@@ -63,10 +70,9 @@ class MCPClient:
                 },
             })
             self._server_info = result
-            self._initialized = True
             logger.info("[MCP] initialize 成功: %s", result.get("serverInfo", {}))
         except Exception as e:
-            logger.warning("[MCP] initialize 跳过（服务端可能不严格要求）: %s", e)
+            logger.warning("[MCP] initialize 跳过（N8N MCP 可能不支持）: %s", e)
 
     def _request(self, method: str, params: Optional[Dict] = None) -> Dict[str, Any]:
         """发送 JSON-RPC 2.0 请求
