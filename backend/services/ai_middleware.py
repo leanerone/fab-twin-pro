@@ -914,7 +914,7 @@ Lot ID 格式说明：
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc["id"],
-                            "content": json.dumps({"error": f"未知工具: {func_name}"}, ensure_ascii=False),
+                            "content": json.dumps({"error": f"未知工具: {func_name}"}, ensure_ascii=False, default=str),
                         })
                         unknown_record = {
                             "tool": func_name,
