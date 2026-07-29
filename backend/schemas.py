@@ -107,6 +107,7 @@ class AITableData(BaseModel):
 class AIToolCall(BaseModel):
     """工具调用记录"""
     tool: str
+    args: Optional[Dict[str, Any]] = None
     workflow: Optional[str] = None
     status: str  # success / failed / pending
     error: Optional[str] = None
