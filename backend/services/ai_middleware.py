@@ -699,9 +699,15 @@ Lot ID 格式说明：
             db.close()
 
     def _extract_machine_id(self, question: str) -> str:
-        """从自然语言中提取机台ID"""
-        # 匹配 PODOPENER-1 / OXE-01 / VPO-2200-01 / WAT-01 等格式
-        match = re.search(r'\b([A-Z]{2,}[-_]?\d+)\b', question.upper())
+        """从自然语言中提取机台ID
+
+        匹配格式：PODOPENER-1 / OXE-01 / VPO-2200-01 / WAT-01
+        注意：使用负向查找替代 \b，因为 Python 3 中 CJK 字符属于 \w，
+              \b 在 "1狀" 之间不会产生词边界。
+        """
+        q = question.upper()
+        # 机台ID：至少2个字母 + 连字符/下划线 + 数字（必须有分隔符，与Lot ID区分）
+        match = re.search(r'(?<![A-Z0-9_-])([A-Z]{2,}[-_]\d+)(?![A-Z0-9_-])', q)
         if match:
             return match.group(1)
         return None
@@ -710,18 +716,22 @@ Lot ID 格式说明：
         """从自然语言中提取 Lot ID
 
         支持格式：
-        - 主 Lot：NT938, VC001, P0093（N/V 开头为生产 Lot，P 开头为控片/测试）
-        - 分片 Lot：NT938.15（从主 Lot 分出的单片，25 片中第 15 片）
-        - 其他：PC00H.29（带点号）
+        - 分片 Lot：NT938.15, PC00H.29（带点号）
+        - 主 Lot：NT938, VC001, P0093, V3WTG, PN70C（字母数字混合）
+        注意：使用负向查找替代 \b，避免中文环境下失效。
         """
-        # 优先匹配带点号的分片 Lot（如 NT938.15、PC00H.29）
-        match = re.search(r'\b([A-Z]+\d+\.\d+)\b', question.upper())
+        q = question.upper()
+        # 优先匹配带点号的分片 Lot
+        match = re.search(r'(?<![A-Z0-9])[A-Z0-9]+\.[0-9]+(?![A-Z0-9])', q)
         if match:
-            return match.group(1)
-        # 再匹配主 Lot（如 NT938, VC001, P0093）
-        match = re.search(r'\b([A-Z]+\d+)\b', question.upper())
+            return match.group(0)
+        # 再匹配主 Lot：至少一个字母后跟数字，支持字母数字混合格式
+        match = re.search(r'(?<![A-Z0-9])[A-Z]+\d+[A-Z0-9]*(?![A-Z0-9])', q)
         if match:
-            return match.group(1)
+            lot = match.group(0)
+            # 排除纯数字和过短的字符串（<4位一般不是Lot ID）
+            if not lot.isdigit() and len(lot) >= 4:
+                return lot
         return None
 
     def _is_n8n_command(self, question: str) -> bool:
@@ -891,7 +901,7 @@ Lot ID 格式说明：
                             if result.get("jump_timestamp"):
                                 extra["jump_timestamp"] = result["jump_timestamp"]
                             if extra:
-                                tool_content += f"\n[META] {json.dumps(extra, ensure_ascii=False)}"
+                                tool_content += f"\n[META] {json.dumps(extra, ensure_ascii=False, default=str)}"
 
                         # 把工具结果作为 tool 角色消息回传给 LLM
                         messages.append({
