@@ -399,31 +399,64 @@ class AIMiddleware:
         success = True
         error_msg = None
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        
+        # 执行日志追踪
+        execution_log = []
+        tool_calls_record = []
+        execution_log.append({"step": "start", "provider": self.provider, "timestamp": datetime.now().isoformat()})
+
+        # 记录路由决策
+        if self.provider in openai_compatible_providers and self.base_url and self.api_key:
+            execution_log.append({"step": "route", "decision": "llm", "provider": self.provider, "model": self.model})
+        elif self.provider in openai_compatible_providers:
+            execution_log.append({"step": "route", "decision": "fallback_local", "reason": "缺少 base_url 或 api_key"})
+        else:
+            execution_log.append({"step": "route", "decision": "local_rule_engine", "provider": self.provider})
 
         try:
             if self.provider in openai_compatible_providers and self.base_url and self.api_key:
+                execution_log.append({"step": "call_llm", "url": self._build_chat_url(self.base_url)})
                 result = self._call_openai_compatible(
                     question, system_prompt, session["messages"], machine_id,
-                    usage_tracker=usage
+                    usage_tracker=usage, tool_calls_recorder=tool_calls_record
                 )
+                execution_log.append({"step": "llm_done", "tool_calls_count": len(tool_calls_record)})
             elif self.provider in openai_compatible_providers:
                 print(f"[AI] provider={self.provider} 但未配置 base_url 或 api_key，回退本地规则")
-                result = self._local_rule_engine(question, machine_id, user_role)
+                execution_log.append({"step": "fallback", "reason": "缺少 base_url 或 api_key"})
+                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
             elif self.provider == "dify":
+                execution_log.append({"step": "call_dify"})
                 result = self._call_dify(question, session_id, machine_id, user_role)
             elif self.provider == "hybrid":
                 try:
+                    execution_log.append({"step": "call_dify_hybrid"})
                     result = self._call_dify(question, session_id, machine_id, user_role)
                 except Exception as e:
                     print(f"[AI] Dify调用失败，回退本地规则: {e}")
-                    result = self._local_rule_engine(question, machine_id, user_role)
+                    execution_log.append({"step": "fallback", "reason": f"Dify失败: {str(e)[:100]}"})
+                    success = False
+                    error_msg = f"Dify调用失败，回退本地规则: {str(e)}"
+                    result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
             else:
-                result = self._local_rule_engine(question, machine_id, user_role)
+                execution_log.append({"step": "call_local_rule"})
+                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
         except Exception as e:
             print(f"[AI] 调用失败，回退本地规则: {e}")
+            execution_log.append({"step": "error", "error": str(e)[:200]})
             success = False
             error_msg = str(e)
-            result = self._local_rule_engine(question, machine_id, user_role)
+            try:
+                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
+            except Exception as e2:
+                print(f"[AI] 本地规则引擎也失败: {e2}")
+                execution_log.append({"step": "error", "error": f"本地规则引擎也失败: {str(e2)[:200]}"})
+                result = {
+                    "answer": f"抱歉，AI 服务暂时不可用。\n错误详情：{str(e)[:200]}\n\n请稍后重试，或联系管理员检查 AI 配置。",
+                    "sql": "",
+                }
+                success = False
+                error_msg = f"双重失败: LLM={str(e)[:100]}, 本地={str(e2)[:100]}"
 
         # 确保返回格式统一
         result = self._normalize_response(result)
@@ -434,6 +467,7 @@ class AIMiddleware:
         result["model"] = self.model
         result["config_id"] = self.current_config_id
         result["usage"] = usage
+        result["tool_calls"] = tool_calls_record
 
         # 保存AI回复
         session["messages"].append({
@@ -449,22 +483,28 @@ class AIMiddleware:
 
         result["session_id"] = session_id
 
-        # 记录Token使用量（异步，不阻塞响应）
+        # 记录使用量和执行日志
         try:
             self._log_usage(
                 session_id=session_id,
                 config_id=self.current_config_id,
                 provider=self.provider,
+                provider_name=self.provider_name or self._infer_provider_name(),
                 model=self.model,
                 prompt_tokens=usage.get("prompt_tokens", 0),
                 completion_tokens=usage.get("completion_tokens", 0),
                 total_tokens=usage.get("total_tokens", 0),
-                question_preview=question[:200],
+                question_preview=question[:500],
+                answer_preview=result.get("answer", "")[:500],
                 success=success,
                 error_msg=error_msg,
+                tool_calls=tool_calls_record,
+                execution_log=execution_log,
             )
         except Exception as e:
             print(f"[AI] 使用量记录失败: {e}")
+            import traceback
+            traceback.print_exc()
 
         return result
 
@@ -554,15 +594,25 @@ Lot ID 格式说明：
     # ==================== Provider: 本地规则引擎 ====================
 
     def _local_rule_engine(self, question: str, machine_id: str = None,
-                           user_role: str = "user") -> Dict[str, Any]:
+                           user_role: str = "user", execution_log: list = None, 
+                           tool_calls_record: list = None) -> Dict[str, Any]:
         """本地规则引擎 - 关键字匹配路由到 ai_tools 数据访问层"""
         db = _get_db()
         try:
             q = question.lower()
 
+            # 记录执行步骤
+            if execution_log is not None:
+                execution_log.append({"step": "parse_question", "question_preview": question[:100]})
+
             # N8N 指令识别（仅管理员）
             if user_role == "admin" and self._is_n8n_command(q):
-                return self._trigger_n8n_workflow(question, machine_id, user_role)
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "n8n_command"})
+                result = self._trigger_n8n_workflow(question, machine_id, user_role)
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "n8n_workflow", "status": "success"})
+                return result
 
             # 从问题中提取机台ID（支持 PODOPENER-1 / OXE-1 / VPO-01 等格式）
             extracted_mid = self._extract_machine_id(question) or machine_id
@@ -570,34 +620,81 @@ Lot ID 格式说明：
             # 从问题中提取 Lot ID
             extracted_lot = self._extract_lot_id(question)
 
+            if execution_log is not None:
+                execution_log.append({
+                    "step": "extract_entities",
+                    "machine_id": extracted_mid,
+                    "lot_id": extracted_lot
+                })
+
             # Lot 查询
             if extracted_lot or any(k in q for k in ["lot", "批次"]):
-                return get_lot_info(db, lot_id=extracted_lot, machine_id=extracted_mid)
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "get_lot_info", "lot_id": extracted_lot})
+                result = get_lot_info(db, lot_id=extracted_lot, machine_id=extracted_mid)
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "get_lot_info", "args": {"lot_id": extracted_lot, "machine_id": extracted_mid}, "status": "success"})
+                return result
 
             # 报警/告警
             if any(k in q for k in ["报警", "告警", "alarm", "异常"]):
                 if user_role == "admin" and ("导出" in q or "报表" in q):
-                    return self._trigger_n8n_workflow(question, machine_id, user_role, "export_alarm_report")
-                return get_machine_alarms(db, machine_id=extracted_mid)
+                    if execution_log is not None:
+                        execution_log.append({"step": "match_intent", "intent": "n8n_export_alarm"})
+                    result = self._trigger_n8n_workflow(question, machine_id, user_role, "export_alarm_report")
+                    if tool_calls_record is not None:
+                        tool_calls_record.append({"tool": "n8n_workflow", "status": "success"})
+                    return result
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "get_machine_alarms", "machine_id": extracted_mid})
+                result = get_machine_alarms(db, machine_id=extracted_mid)
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "get_machine_alarms", "args": {"machine_id": extracted_mid}, "status": "success"})
+                return result
 
             # 事件时间线（替代温度趋势，因为DB无传感器数据）
             if any(k in q for k in ["温度", "temperature", "temp", "趋势", "事件", "event", "时间线"]):
-                return get_event_timeline(db, machine_id=extracted_mid)
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "get_event_timeline", "machine_id": extracted_mid})
+                result = get_event_timeline(db, machine_id=extracted_mid)
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "get_event_timeline", "args": {"machine_id": extracted_mid}, "status": "success"})
+                return result
 
             # 产量/晶圆
             if any(k in q for k in ["产量", "晶圆", "wafer", "yield", "加工多少", "生产了多少"]):
-                return get_yield_stats(db, machine_id=extracted_mid)
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "get_yield_stats", "machine_id": extracted_mid})
+                result = get_yield_stats(db, machine_id=extracted_mid)
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "get_yield_stats", "args": {"machine_id": extracted_mid}, "status": "success"})
+                return result
 
             # 工艺/配方
             if any(k in q for k in ["工艺", "配方", "recipe", "步骤"]):
-                return get_recipe_info(db, machine_id=extracted_mid)
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "get_recipe_info", "machine_id": extracted_mid})
+                result = get_recipe_info(db, machine_id=extracted_mid)
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "get_recipe_info", "args": {"machine_id": extracted_mid}, "status": "success"})
+                return result
 
             # 工单/故障（管理员）
             if user_role == "admin" and any(k in q for k in ["工单", "work order", "故障单"]):
-                return self._trigger_n8n_workflow(question, machine_id, user_role, "generate_work_order")
+                if execution_log is not None:
+                    execution_log.append({"step": "match_intent", "intent": "n8n_generate_work_order"})
+                result = self._trigger_n8n_workflow(question, machine_id, user_role, "generate_work_order")
+                if tool_calls_record is not None:
+                    tool_calls_record.append({"tool": "n8n_workflow", "status": "success"})
+                return result
 
             # 状态/运行情况（默认）
-            return get_machine_status(db, machine_id=extracted_mid)
+            if execution_log is not None:
+                execution_log.append({"step": "match_intent", "intent": "get_machine_status", "machine_id": extracted_mid})
+            result = get_machine_status(db, machine_id=extracted_mid)
+            if tool_calls_record is not None:
+                tool_calls_record.append({"tool": "get_machine_status", "args": {"machine_id": extracted_mid}, "status": "success"})
+            return result
         finally:
             db.close()
 
@@ -636,14 +733,16 @@ Lot ID 格式说明：
 
     def _call_openai_compatible(self, question: str, system_prompt: str,
                                 history_messages: List[Dict], machine_id: str = None,
-                                usage_tracker: Dict = None) -> Dict[str, Any]:
+                                usage_tracker: Dict = None, 
+                                tool_calls_recorder: list = None) -> Dict[str, Any]:
         """调用OpenAI兼容接口（支持GLM、GPT等），带 Function Calling 工具调用
 
         Args:
             usage_tracker: 外部传入的dict，用于记录token使用量
+            tool_calls_recorder: 外部传入的list，用于记录工具调用
         """
         if not self.base_url or not self.api_key:
-            return self._local_rule_engine(question, machine_id)
+            return self._local_rule_engine(question, machine_id, tool_calls_record=tool_calls_recorder)
 
         # 构建消息列表
         messages = [{"role": "system", "content": system_prompt}]
@@ -762,11 +861,15 @@ Lot ID 格式说明：
                         finally:
                             db.close()
 
-                        tool_call_records.append({
+                        tool_call_record = {
                             "tool": func_name,
                             "args": func_args,
                             "status": "success",
-                        })
+                        }
+                        tool_call_records.append(tool_call_record)
+                        # 同步到外部记录器
+                        if tool_calls_recorder is not None:
+                            tool_calls_recorder.append(tool_call_record)
 
                         # 收集工具结果中的跳转/表格数据
                         if isinstance(result, dict):
@@ -803,11 +906,14 @@ Lot ID 格式说明：
                             "tool_call_id": tc["id"],
                             "content": json.dumps({"error": f"未知工具: {func_name}"}, ensure_ascii=False),
                         })
-                        tool_call_records.append({
+                        unknown_record = {
                             "tool": func_name,
                             "args": func_args,
                             "status": "unknown_tool",
-                        })
+                        }
+                        tool_call_records.append(unknown_record)
+                        if tool_calls_recorder is not None:
+                            tool_calls_recorder.append(unknown_record)
 
                 # 更新 payload 继续下一轮（让 LLM 看到工具结果后生成回答）
                 payload["messages"] = messages
@@ -1090,23 +1196,33 @@ Lot ID 格式说明：
 
     def _log_usage(self, session_id: str, config_id: int, provider: str, model: str,
                    prompt_tokens: int, completion_tokens: int, total_tokens: int,
-                   question_preview: str, success: bool, error_msg: str = None):
-        """记录AI调用使用量到DB"""
+                   question_preview: str, success: bool, error_msg: str = None,
+                   provider_name: str = None, answer_preview: str = None,
+                   tool_calls: list = None, execution_log: list = None):
+        """记录AI调用使用量和执行详情到DB"""
         try:
             db = _get_db()
             try:
                 from models import AIUsageLog
+                # 将列表转为 JSON 字符串存储
+                tool_calls_json = json.dumps(tool_calls, ensure_ascii=False, default=str) if tool_calls else None
+                execution_log_json = json.dumps(execution_log, ensure_ascii=False, default=str) if execution_log else None
+                
                 db.add(AIUsageLog(
                     session_id=session_id,
                     config_id=config_id,
                     provider=provider,
+                    provider_name=provider_name,
                     model=model,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     question_preview=question_preview,
+                    answer_preview=answer_preview,
                     success=success,
                     error_msg=error_msg,
+                    tool_calls=tool_calls_json,
+                    execution_log=execution_log_json,
                     created_at=datetime.now().isoformat(),
                 ))
                 db.commit()
@@ -1114,6 +1230,8 @@ Lot ID 格式说明：
                 db.close()
         except Exception as e:
             print(f"[AI] 使用量记录失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     def get_usage_stats(self, days: int = 30) -> Dict[str, Any]:
         """获取使用量统计"""
@@ -1181,31 +1299,69 @@ Lot ID 格式说明：
                 "daily_stats": [],
             }
 
-    def get_usage_logs(self, limit: int = 100, offset: int = 0) -> List[Dict]:
-        """获取使用日志列表"""
+    def get_usage_logs(self, limit: int = 100, offset: int = 0, include_details: bool = True) -> List[Dict]:
+        """获取使用日志列表
+
+        Args:
+            limit: 返回条数上限
+            offset: 偏移量
+            include_details: 是否包含详细执行日志（tool_calls, execution_log, answer）
+        """
         try:
             db = _get_db()
             try:
                 from models import AIUsageLog
                 logs = db.query(AIUsageLog).order_by(AIUsageLog.created_at.desc()).offset(offset).limit(limit).all()
-                return [{
-                    "id": log.id,
-                    "session_id": log.session_id,
-                    "config_id": log.config_id,
-                    "provider": log.provider,
-                    "model": log.model,
-                    "prompt_tokens": log.prompt_tokens,
-                    "completion_tokens": log.completion_tokens,
-                    "total_tokens": log.total_tokens,
-                    "question_preview": log.question_preview,
-                    "success": log.success,
-                    "error_msg": log.error_msg,
-                    "created_at": log.created_at,
-                } for log in logs]
+                
+                result = []
+                for log in logs:
+                    item = {
+                        "id": log.id,
+                        "session_id": log.session_id,
+                        "config_id": log.config_id,
+                        "provider": log.provider,
+                        "provider_name": log.provider_name,
+                        "model": log.model,
+                        "prompt_tokens": log.prompt_tokens,
+                        "completion_tokens": log.completion_tokens,
+                        "total_tokens": log.total_tokens,
+                        "question_preview": log.question_preview,
+                        "success": log.success,
+                        "created_at": log.created_at,
+                    }
+                    
+                    # 解析 JSON 字段
+                    if include_details:
+                        item["answer_preview"] = log.answer_preview
+                        item["error_msg"] = log.error_msg
+                        
+                        # 解析 tool_calls
+                        if log.tool_calls:
+                            try:
+                                item["tool_calls"] = json.loads(log.tool_calls)
+                            except (json.JSONDecodeError, TypeError):
+                                item["tool_calls"] = []
+                        else:
+                            item["tool_calls"] = []
+                        
+                        # 解析 execution_log
+                        if log.execution_log:
+                            try:
+                                item["execution_log"] = json.loads(log.execution_log)
+                            except (json.JSONDecodeError, TypeError):
+                                item["execution_log"] = []
+                        else:
+                            item["execution_log"] = []
+                    
+                    result.append(item)
+                
+                return result
             finally:
                 db.close()
         except Exception as e:
             print(f"[AI] 使用日志查询失败: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     # ==================== Provider 多配置管理 ====================

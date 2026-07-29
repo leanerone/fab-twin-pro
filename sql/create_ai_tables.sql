@@ -71,20 +71,24 @@ CREATE INDEX IDX_AI_PROVIDER_CONFIGS_PROVIDER ON AI_PROVIDER_CONFIGS (PROVIDER);
 
 -- --------------------------------------------
 -- 表: AI_USAGE_LOGS
--- 用途: 记录每次 AI 调用的 Token 使用量
+-- 用途: 记录每次 AI 调用的 Token 使用量、工具调用和执行详情
 -- --------------------------------------------
 CREATE TABLE AI_USAGE_LOGS (
     ID                 NUMBER        NOT NULL,
     SESSION_ID         VARCHAR2(255),
     CONFIG_ID          NUMBER,
     PROVIDER           VARCHAR2(255),
+    PROVIDER_NAME      VARCHAR2(255),
     MODEL              VARCHAR2(255),
     PROMPT_TOKENS      NUMBER        DEFAULT 0,
     COMPLETION_TOKENS  NUMBER        DEFAULT 0,
     TOTAL_TOKENS       NUMBER        DEFAULT 0,
     QUESTION_PREVIEW   VARCHAR2(512) DEFAULT '',
+    ANSWER_PREVIEW     CLOB,
     SUCCESS            NUMBER(1)     DEFAULT 1,
-    ERROR_MSG          VARCHAR2(512),
+    ERROR_MSG          CLOB,
+    TOOL_CALLS         CLOB,
+    EXECUTION_LOG      CLOB,
     CREATED_AT         VARCHAR2(255),
     CONSTRAINT PK_AI_USAGE_LOGS PRIMARY KEY (ID)
 );
