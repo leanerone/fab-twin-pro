@@ -44,6 +44,15 @@ def _is_null(val) -> bool:
     return False
 
 
+def _format_ts(ts) -> str:
+    """将 datetime 对象格式化为字符串，确保 schema 兼容"""
+    if ts is None:
+        return None
+    if isinstance(ts, datetime):
+        return ts.strftime("%Y-%m-%d %H:%M:%S")
+    return str(ts)
+
+
 def _resolve_tool_ids(db: Session, machine_id: str) -> list:
     """获取机台对应的 tool_id 列表（前缀匹配 + MachineToolMapping）"""
     tool_ids = [machine_id]
@@ -145,7 +154,7 @@ def get_machine_status(db: Session, machine_id: str = None) -> dict:
         "answer": answer,
         "sql": f"SELECT * FROM machines WHERE id='{machine_id}' "
                f"UNION SELECT * FROM dt_event_raw WHERE tool_id='{machine_id}' ORDER BY raw_id DESC LIMIT 1",
-        "jump_timestamp": latest_event.received_ts_utc if latest_event else m.updated_at,
+        "jump_timestamp": _format_ts(latest_event.received_ts_utc if latest_event else m.updated_at),
         "jump_machine_id": m.id,
     }
 
@@ -356,7 +365,7 @@ def get_event_timeline(db: Session, machine_id: str = None, limit: int = 20) -> 
         "answer": answer,
         "sql": f"SELECT * FROM dt_event_raw WHERE tool_id IN {tuple(tool_ids)} ORDER BY raw_id DESC LIMIT {limit}",
         "table_data": table_data,
-        "jump_timestamp": events[0].received_ts_utc if events else None,
+        "jump_timestamp": _format_ts(events[0].received_ts_utc) if events else None,
         "jump_machine_id": machine_id,
     }
 
@@ -687,7 +696,7 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
             "answer": answer,
             "sql": "SELECT DISTINCT lot_id FROM dt_event_raw",
             "table_data": table_data,
-            "jump_timestamp": list(lot_set.values())[0]["ts"] if lot_set else None,
+            "jump_timestamp": _format_ts(list(lot_set.values())[0]["ts"]) if lot_set else None,
             "jump_machine_id": list(lot_set.values())[0]["tool_id"] if lot_set else None,
         }
 
@@ -755,7 +764,7 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
         # 跳转：默认跳到最新事件所在机台
         first_mid = list(machine_events.keys())[0]
         jump_machine_id = first_mid
-        jump_timestamp = machine_events[first_mid]["timestamp"]
+        jump_timestamp = _format_ts(machine_events[first_mid]["timestamp"])
 
     else:
         answer_parts.append(f"FabTwin 设备事件流中暂无 {lot_id} 的记录。")
