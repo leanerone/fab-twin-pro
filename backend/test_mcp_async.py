@@ -51,7 +51,7 @@ def main():
     print(f"  executionId: {execution_id}")
 
     # 2. 轮询执行结果（带 includeData=true）
-    print(f"\n[2] get_execution (includeData=true, 轮询最多 10 秒)...")
+    print(f"\n[2] get_execution (includeData=true, 最多 5 次)...")
     final_result = None
     for i in range(5):
         time.sleep(2)
@@ -61,42 +61,40 @@ def main():
                 "workflowId": workflow_id,
                 "includeData": True
             })
-            status = exec_result.get("status", "?")
+            status = exec_result.get("execution", {}).get("status", "?")
             print(f"  [{i+1}] status={status}")
 
             if status in ("success", "finished", "completed"):
                 final_result = exec_result
                 break
             elif status in ("error", "failed", "crashed"):
-                print(f"  ✗ 执行失败: {json.dumps(exec_result, ensure_ascii=False)[:500]}")
+                print(f"  ✗ 执行失败: {status}")
                 return
         except MCPError as e:
             print(f"  [{i+1}] 错误: {e}")
 
     if not final_result:
-        # 再查一次
-        print("\n[3] 再查一次，打印完整响应...")
-        try:
-            exec_result = client.call_tool("get_execution", {
-                "executionId": str(execution_id),
-                "workflowId": workflow_id,
-                "includeData": True
-            })
-            print(f"  完整响应:\n{json.dumps(exec_result, ensure_ascii=False, indent=2)[:4000]}")
-            return
-        except MCPError as e:
-            print(f"  ✗ 失败: {e}")
-            return
+        print("  ⚠ 超时或状态未变，继续尝试...")
+        final_result = exec_result  # 用最后一次的结果
 
-    # 3. 打印最终结果
+    # 3. 打印最终结果统计
     print(f"\n{'='*60}")
-    print("执行成功！最终结果：")
-    print(f"{'='*60}")
-    result_str = json.dumps(final_result, ensure_ascii=False, indent=2)
-    if len(result_str) > 4000:
-        print(result_str[:4000])
-    else:
-        print(result_str)
+    print(f"执行成功！状态: {final_result.get('execution', {}).get('status', '?')}")
+    print(f"耗时: {final_result.get('execution', {}).get('startedAt', '?')} ~ {final_result.get('execution', {}).get('stoppedAt', '?')}")
+    
+    # 统计节点
+    data = final_result.get("data", {})
+    if isinstance(data, dict):
+        result_data = data.get("resultData", {})
+        run_data = result_data.get("runData", {})
+        print(f"节点数: {len(run_data)}")
+        for node_name, node_runs in run_data.items():
+            run_count = len(node_runs) if isinstance(node_runs, list) else 0
+            exec_time = sum(r.get("executionTime", 0) for r in node_runs) if isinstance(node_runs, list) else 0
+            status = "success"
+            if isinstance(node_runs, list) and node_runs:
+                status = node_runs[-1].get("executionStatus", "?")
+            print(f"  - {node_name}: {run_count}次, {exec_time}ms, {status}")
 
     # 4. 提取最后一个节点的最终输出
     print(f"\n[4] 提取最终输出（最后一个节点）...")
