@@ -98,33 +98,47 @@ def main():
     else:
         print(result_str)
 
-    # 4. 提取 N8N 输出数据
-    print(f"\n[4] 提取 N8N 输出数据...")
+    # 4. 提取最后一个节点的最终输出
+    print(f"\n[4] 提取最终输出（最后一个节点）...")
     if isinstance(final_result, dict):
-        # N8N 执行数据通常在 data.resultData.runData 或 data.resultData 里
         data = final_result.get("data", {})
         if isinstance(data, dict):
             result_data = data.get("resultData", {})
             run_data = result_data.get("runData", {})
             
-            print(f"  resultData keys: {list(result_data.keys())}")
+            # 找到最后一个有输出的节点（排除触发节点）
+            skip_nodes = {"Webhook", "Execute Workflow Trigger", "When Executed by Another Workflow", "Start", "Merge", "IF", "If"}
+            last_node_output = None
+            last_node_name = ""
             
-            # 找最后一个节点的输出
             for node_name, node_runs in run_data.items():
-                if node_name in ("Webhook", "Execute Workflow Trigger", "When Executed by Another Workflow"):
+                if node_name in skip_nodes:
                     continue
                 if isinstance(node_runs, list) and node_runs:
                     last_run = node_runs[-1]
                     if isinstance(last_run, dict):
                         output_data = last_run.get("data", {}).get("main", [])
                         if output_data and isinstance(output_data, list):
-                            for item_list in output_data:
+                            # 取最后一个输出项
+                            for item_list in reversed(output_data):
                                 if isinstance(item_list, list) and item_list:
                                     for item in item_list:
                                         if isinstance(item, dict) and "json" in item:
-                                            json_data = item["json"]
-                                            print(f"\n  节点 [{node_name}] 输出:")
-                                            print(json.dumps(json_data, ensure_ascii=False, indent=2)[:2000])
+                                            last_node_output = item["json"]
+                                            last_node_name = node_name
+                                            break
+                                    if last_node_output:
+                                        break
+                            if last_node_output:
+                                break
+            
+            if last_node_output:
+                print(f"  最终输出来自节点: [{last_node_name}]")
+                print(f"\n  最终数据:")
+                print(json.dumps(last_node_output, ensure_ascii=False, indent=2)[:3000])
+            else:
+                print("  ⚠ 未找到最终输出节点")
+                print("  可用节点:", list(run_data.keys()))
 
 if __name__ == "__main__":
     main()
