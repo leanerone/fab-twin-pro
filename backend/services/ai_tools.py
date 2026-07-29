@@ -17,6 +17,7 @@
 """
 import json
 import re
+import time
 from datetime import datetime
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
@@ -484,8 +485,50 @@ def _get_yield_stats_fallback(db: Session, machine_id: str = None) -> dict:
 
 # ==================== 工具5: Lot 查询（MES + 设备事件双源融合） ====================
 
+def _extract_n8n_output(run_data: dict) -> dict:
+    """从 N8N get_execution 的 runData 中提取最终输出"""
+    if not isinstance(run_data, dict):
+        return None
+
+    priority_nodes = ["Build Success Response", "Respond to Webhook", "Respond"]
+    skip_nodes = {"Webhook", "Execute Workflow Trigger", "When Executed by Another Workflow",
+                  "Start", "Merge", "IF", "If", "Need Clarification?", "Query Success?", "Normalize Request"}
+
+    def _extract(node_runs):
+        if not isinstance(node_runs, list) or not node_runs:
+            return None
+        last_run = node_runs[-1]
+        if not isinstance(last_run, dict):
+            return None
+        output_data = last_run.get("data", {}).get("main", [])
+        if not isinstance(output_data, list):
+            return None
+        for item_list in reversed(output_data):
+            if isinstance(item_list, list) and item_list:
+                for item in item_list:
+                    if isinstance(item, dict) and "json" in item:
+                        return item["json"]
+        return None
+
+    # 优先查找
+    for target in priority_nodes:
+        if target in run_data:
+            result = _extract(run_data[target])
+            if result:
+                return result
+
+    # 兜底：找最后一个非跳过节点
+    for node_name, node_runs in reversed(run_data.items()):
+        if node_name in skip_nodes:
+            continue
+        result = _extract(node_runs)
+        if result:
+            return result
+    return None
+
+
 def get_mes_lot_info(db: Session, lot_id: str) -> dict:
-    """通过 MCP 调用 N8N MES_LotInfo_Query 查询 Lot MES 信息
+    """通过 MCP 调用 N8N MES_LotInfo_Query 查询 Lot MES 信息（异步 execute_workflow + get_execution）
 
     数据源：N8N MCP Server（MES_ExecuteQuery_Tool）
     返回字段：product / process / route / step / lotjobstatus / currentquantity / cassette 等
@@ -493,9 +536,8 @@ def get_mes_lot_info(db: Session, lot_id: str) -> dict:
     if not lot_id:
         return {"answer": "请提供 Lot ID。", "sql": ""}
 
-    # 从 ai_configs 读 MCP 配置
     try:
-        from services.mcp_client import get_mcp_client, get_mcp_config
+        from services.mcp_client import get_mcp_client, get_mcp_config, MCPError
     except ImportError:
         return {"answer": "⚠️ MCP 客户端模块未安装。", "sql": ""}
 
@@ -510,35 +552,66 @@ def get_mes_lot_info(db: Session, lot_id: str) -> dict:
         if not client:
             return {"answer": "⚠️ MCP 客户端初始化失败。", "sql": ""}
 
-        raw = client.call_tool("MES_LotInfo_Query", {"lot": lot_id})
-    except Exception as e:
+        workflow_id = "ymOYQpVMhHr7cWJH"
+
+        # 1. 发起执行
+        exec_resp = client.call_tool("execute_workflow", {
+            "workflowId": workflow_id,
+            "inputs": {
+                "type": "webhook",
+                "webhookData": {
+                    "method": "POST",
+                    "body": {"lot": lot_id}
+                }
+            }
+        })
+        execution_id = exec_resp.get("executionId")
+        if not execution_id:
+            return {"answer": "⚠️ MCP 未返回 executionId", "sql": ""}
+
+        # 2. 轮询结果（最多 5 次，每次 2 秒）
+        final_result = None
+        for i in range(5):
+            time.sleep(2)
+            exec_result = client.call_tool("get_execution", {
+                "executionId": str(execution_id),
+                "workflowId": workflow_id,
+                "includeData": True
+            })
+            status = exec_result.get("execution", {}).get("status", "?")
+            if status in ("success", "finished", "completed"):
+                final_result = exec_result
+                break
+            elif status in ("error", "failed", "crashed"):
+                return {"answer": f"⚠️ MES 工作流执行失败: {status}", "sql": ""}
+
+        if not final_result:
+            return {"answer": "⚠️ MES 工作流执行超时", "sql": ""}
+
+        # 3. 提取最终输出
+        data = final_result.get("data", {})
+        result_data = data.get("resultData", {})
+        run_data = result_data.get("runData", {})
+        result = _extract_n8n_output(run_data)
+
+        if not result:
+            return {"answer": f"⚠️ 无法从 N8N 输出中提取 Lot {lot_id} 的数据", "sql": ""}
+
+    except MCPError as e:
         return {"answer": f"⚠️ MCP 调用失败：{e}", "sql": ""}
+    except Exception as e:
+        return {"answer": f"⚠️ MES 查询异常：{e}", "sql": ""}
 
-    # N8N 返回可能是数组或 dict
-    data = None
-    if isinstance(raw, list) and raw:
-        data = raw[0]
-    elif isinstance(raw, dict):
-        # 可能直接是 data[0] 或就是 data 本身
-        if "data" in raw and isinstance(raw["data"], list) and raw["data"]:
-            data = raw
-        else:
-            data = raw
-
-    if not data:
-        return {"answer": f"Lot {lot_id} 在 MES 中未查询到数据。", "sql": ""}
-
-    if not data.get("success", True):
-        return {"answer": f"Lot {lot_id} 查询失败：{data.get('message', '未知错误')}", "sql": ""}
+    if not result.get("success", True):
+        return {"answer": f"Lot {lot_id} 查询失败：{result.get('message', '未知错误')}", "sql": ""}
 
     # 提取行数据
-    rows = data.get("data", {}).get("rows", []) if isinstance(data.get("data"), dict) else []
-    if not rows and isinstance(data.get("data"), list):
-        rows = data["data"]
+    rows = result.get("data", {}).get("rows", []) if isinstance(result.get("data"), dict) else []
+    if not rows and isinstance(result.get("data"), list):
+        rows = result["data"]
 
     if not rows:
-        # 兼容直接返回字段的情况
-        message = data.get("message", "")
+        message = result.get("message", "")
         return {
             "answer": f"Lot {lot_id} MES 信息：\n{message}" if message else f"Lot {lot_id} 在 MES 中无详细记录。",
             "sql": "",
@@ -562,7 +635,6 @@ def get_mes_lot_info(db: Session, lot_id: str) -> dict:
     answer += f"• Wafer 类型：{row.get('wafertype', 'N/A')}\n"
     answer += f"• 是否返工：{row.get('isrework', 'N/A')}\n"
 
-    # 表格数据（完整字段）
     table_data = {
         "headers": list(row.keys()),
         "rows": [[str(v) if v is not None else "" for v in row.values()]],
@@ -570,7 +642,7 @@ def get_mes_lot_info(db: Session, lot_id: str) -> dict:
 
     return {
         "answer": answer,
-        "sql": f"-- MCP call: MES_LotInfo_Query(lot='{lot_id}')",
+        "sql": f"-- MCP execute_workflow: MES_LotInfo_Query(lot='{lot_id}')",
         "table_data": table_data,
     }
 
