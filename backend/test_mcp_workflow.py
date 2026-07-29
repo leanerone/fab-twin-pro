@@ -32,6 +32,18 @@ def main():
     print("N8N 工作流探测")
     print("=" * 60)
 
+    # ── 第0步: 打印 search_workflows 的参数 schema ──
+    print("\n[第0步] 查看 search_workflows 和 execute_workflow 的参数定义...")
+    try:
+        tools = client.list_tools()
+        for t in tools:
+            if t.get("name") in ("search_workflows", "execute_workflow"):
+                print(f"\n  工具: {t['name']}")
+                schema = t.get("inputSchema", {})
+                print(f"  Schema: {json.dumps(schema, ensure_ascii=False, indent=2)}")
+    except Exception as e:
+        print(f"  ⚠ 获取 schema 失败: {e}")
+
     # ── 第1步: 搜索工作流 ──
     print("\n[第1步] search_workflows - 搜索所有工作流...")
     try:

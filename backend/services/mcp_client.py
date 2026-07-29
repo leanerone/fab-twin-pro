@@ -199,10 +199,22 @@ class MCPClient:
         """
         self._ensure_initialized()
         params: Dict[str, Any] = {"name": name}
-        if arguments:
+        # 即使 arguments 是空字典 {}，也要传给 MCP Server
+        # 因为部分工具（如 search_workflows）要求 arguments 字段必须存在
+        if arguments is not None:
             params["arguments"] = arguments
+        else:
+            params["arguments"] = {}
 
         result = self._request("tools/call", params)
+
+        # 检测 MCP 错误响应（isError 标志）
+        if isinstance(result, dict) and result.get("isError"):
+            content = result.get("content", [])
+            err_text = ""
+            if content and isinstance(content, list) and isinstance(content[0], dict):
+                err_text = content[0].get("text", "")
+            raise MCPError(f"MCP 工具调用错误: {err_text or result}")
 
         # MCP 标准响应：content 数组，每项 {type, text}
         content = result.get("content", []) if isinstance(result, dict) else []
@@ -210,6 +222,9 @@ class MCPClient:
             first = content[0]
             if isinstance(first, dict) and first.get("type") == "text":
                 text = first.get("text", "")
+                # 检测文本中的 MCP error
+                if text.startswith("MCP error"):
+                    raise MCPError(text[:500])
                 # 尝试解析为 JSON
                 try:
                     return json.loads(text)
