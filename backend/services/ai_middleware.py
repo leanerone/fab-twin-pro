@@ -1128,7 +1128,9 @@ Lot ID 格式说明：
             finally:
                 db.close()
         except Exception as e:
+            import traceback
             print(f"[AI] 使用量统计失败: {e}")
+            traceback.print_exc()
             return {
                 "total_calls": 0,
                 "total_prompt_tokens": 0,
