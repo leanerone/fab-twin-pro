@@ -119,7 +119,7 @@ def find_oracle_client():
 
 
 def connect_oracle(config: Dict):
-    """连接Oracle，自动尝试Thick/Thin模式"""
+    """连接Oracle，自动尝试Thin/Thick模式"""
     import oracledb
 
     # 先尝试Thin模式（纯Python，不需要Oracle Client）
@@ -133,12 +133,11 @@ def connect_oracle(config: Dict):
         )
         print("  [OK] Thin模式连接成功")
         return conn, "thin"
-    except oracledb.exceptions.DatabaseError as e:
+    except Exception as e:
+        # 捕获所有异常（包括 NotSupportedError, OperationalError 等）
         err_msg = str(e)
-        # Thin模式失败可能是因为Oracle 10g/11g不支持Thin模式的部分功能
-        # 尝试Thick模式
-        print(f"  [INFO] Thin模式无法连接: {err_msg[:100]}")
-        print("  尝试Thick模式...")
+        print(f"  [INFO] Thin模式无法连接: {err_msg[:150]}")
+        print("  尝试Thick模式（需要Oracle Client）...")
 
     # Thick模式需要Oracle Client
     client_dir = find_oracle_client()
@@ -165,8 +164,9 @@ def connect_oracle(config: Dict):
     else:
         print("  [ERROR] 未找到Oracle Client，且Thin模式也失败")
         print("  请确认：")
-        print("    1. Oracle 19c+ 客户端已安装")
-        print("    2. 或者网络可连通10.30.8.119:1521")
+        print("    1. Oracle Client 19c+ 已安装（推荐）")
+        print("    2. 设置环境变量 ORACLE_CLIENT_DIR 指向Client目录")
+        print("    3. 或联系管理员获取Oracle Client路径")
         return None, None
 
 
