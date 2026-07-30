@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import api from '@/api'
 
 const props = defineProps({
   machineId: { type: String, required: true },
   machineState: { type: String, default: 'idle' },
   externalDate: { type: String, default: '' },
+  jumpTimestamp: { type: String, default: '' },
 })
 
 const emit = defineEmits(['jump', 'replay-event', 'date-change'])
@@ -206,6 +207,36 @@ const eventCounts = computed(() => {
 watch(() => props.machineId, refresh, { immediate: true })
 watch(selectedDate, refresh)
 watch(filterCategory, loadEvents)
+
+// 当 jumpTimestamp 变化时，滚动事件列表到最接近的事件
+watch(() => props.jumpTimestamp, (ts) => {
+  if (!ts || !events.value.length) return
+  const targetMs = parseTs(ts)
+  if (!targetMs) return
+  // 找到时间最接近的事件
+  let bestIdx = 0
+  let bestDiff = Infinity
+  for (let i = 0; i < events.value.length; i++) {
+    const diff = Math.abs(parseTs(events.value[i].timestamp) - targetMs)
+    if (diff < bestDiff) {
+      bestDiff = diff
+      bestIdx = i
+    }
+  }
+  const ev = events.value[bestIdx]
+  if (ev) {
+    selectedEventId.value = ev.raw_id
+    // 滚动到对应元素
+    nextTick(() => {
+      const list = document.querySelector('.hr-list')
+      if (!list) return
+      const items = list.querySelectorAll('.hr-item')
+      if (items[bestIdx]) {
+        items[bestIdx].scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    })
+  }
+})
 </script>
 
 <template>

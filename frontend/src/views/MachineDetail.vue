@@ -61,6 +61,8 @@ const alarmStats = ref({ total: 0, crit: 0, warn: 0, temperature: 0, pressure: 0
 const selectedLotId = ref('')
 const transferTrigger = ref(0)
 const loading = ref(false)
+const currentLotId = ref('')  // 当前正在run的Lot ID
+const pendingJumpTs = ref('') // 等待数据加载完成后执行的跳转时间戳
 
 // === 视图模式（根据机台型号自动选择） ===
 const viewMode = ref('loading')           // loading / 3d / 2d / iso / vpo / vpo3d
@@ -619,6 +621,11 @@ function applyEventData(ev) {
   const evtName = (ev.event_name || ev.event_code || '').toUpperCase()
   const evtType = (ev.event_type || '').toUpperCase()
 
+  // 提取当前 Lot ID
+  if (ev.lot_id && ev.lot_id !== 'null' && ev.lot_id !== 'NULL') {
+    currentLotId.value = ev.lot_id
+  }
+
   if (evtType === 'STATE') {
     currentState.value = ev.event_code || currentState.value
     processStep.value = ev.description || processStep.value
@@ -680,9 +687,15 @@ async function switchToPlayback() {
   cursor.value = playbackStart.value
   playbackIdx = 0
   playing.value = false
-  // 重新加载告警与 Lot
+  // 并行加载告警与 Lot（不阻塞跳转）
   loadAlarms()
   loadLots()
+  // 如果有等待中的跳转，执行它
+  if (pendingJumpTs.value) {
+    const ts = pendingJumpTs.value
+    pendingJumpTs.value = ''
+    doJump(ts)
+  }
 }
 
 function switchToRealtime() {
@@ -809,12 +822,13 @@ async function onDateChange(newDate) {
   playbackDate.value = newDate
   loading.value = true
   try {
-    // 回放模式：重新加载历史事件
+    // 回放模式：重新加载历史事件（switchToPlayback内部已加载alarms/lots）
     if (mode.value === 'playback') {
       await switchToPlayback()
+    } else {
+      // 实时模式：仅重新加载告警/Lot
+      await Promise.all([loadAlarms(), loadLots()])
     }
-    // 重新加载告警/Lot（并行）
-    await Promise.all([loadAlarms(), loadLots()])
   } finally {
     loading.value = false
   }
@@ -833,22 +847,48 @@ function onSpeedChange(s) {
 }
 
 // 选择 Lot
-function selectLot(lot) {
+async function selectLot(lot) {
   selectedLotId.value = lot.id
-  // 切换到回放模式并跳转到 Lot 开始时间
+  const targetTs = lot.start_time || lot.timestamp
+  if (!targetTs) return
+
+  // 检查目标时间是否在当前回放日期范围内
+  const targetDate = targetTs.slice(0, 10)
   if (mode.value !== 'playback') {
-    switchToPlayback().then(() => {
-      jumpToTime(lot.start_time)
-    })
+    // 需要先切换到回放模式
+    if (targetDate !== playbackDate.value) {
+      playbackDate.value = targetDate
+    }
+    pendingJumpTs.value = targetTs
+    await switchToPlayback()
+  } else if (targetDate !== playbackDate.value) {
+    // 已在回放模式但日期不同，切换日期后跳转
+    playbackDate.value = targetDate
+    pendingJumpTs.value = targetTs
+    await switchToPlayback()
   } else {
-    jumpToTime(lot.start_time)
+    // 同日期，直接跳转
+    jumpToTime(targetTs)
   }
 }
 
 // 跳转到指定时间
-function jumpToTime(ts) {
+async function jumpToTime(ts) {
+  if (!ts) return
+  // 检查目标时间是否在当前回放日期范围内
+  const targetDate = String(ts).slice(0, 10)
   if (mode.value !== 'playback') {
-    switchToPlayback().then(() => doJump(ts))
+    // 需要先切换到回放模式
+    if (targetDate && targetDate !== playbackDate.value) {
+      playbackDate.value = targetDate
+    }
+    pendingJumpTs.value = ts
+    await switchToPlayback()
+  } else if (targetDate && targetDate !== playbackDate.value) {
+    // 已在回放模式但日期不同，切换日期后跳转
+    playbackDate.value = targetDate
+    pendingJumpTs.value = ts
+    await switchToPlayback()
   } else {
     doJump(ts)
   }
@@ -892,7 +932,7 @@ watch(() => props.id, () => {
 })
 
 // 处理AI跳转（query参数或全局store）
-function applyAIJump() {
+async function applyAIJump() {
   let ts = ''
   if (route.query && route.query.ts) {
     ts = String(route.query.ts)
@@ -910,15 +950,15 @@ function applyAIJump() {
     }
   }
   if (!ts) return
-  // 等历史数据加载完成后跳转
-  setTimeout(() => jumpToTime(ts), 500)
+  // 等待历史数据加载完成后跳转（不再用固定延时）
+  await jumpToTime(ts)
 }
 
 onMounted(() => {
   loadMachine()
   updateRunAnimation()
-  // 延迟到机器数据加载完成后再处理跳转
-  setTimeout(applyAIJump, 800)
+  // 在 loadMachine 完成后处理跳转（loadMachine 内部异步加载数据）
+  loadMachine().then(() => applyAIJump())
 })
 </script>
 
@@ -954,6 +994,7 @@ onMounted(() => {
         :process-step="processStep"
         :transfer-trigger="transferTrigger"
         :run-state="runState"
+        :current-lot-id="currentLotId"
       />
 
       <!-- 2D原理图视图 -->
@@ -964,6 +1005,7 @@ onMounted(() => {
         :metrics="metrics"
         :process-step="processStep"
         :run-state="runState"
+        :current-lot-id="currentLotId"
       />
 
       <!-- 2.5D等角视图（OXE/DRM专用） -->
@@ -1094,6 +1136,7 @@ onMounted(() => {
           :machine-id="machineId"
           :machine-state="machine?.state"
           :external-date="playbackDate"
+          :jump-timestamp="cursor ? new Date(cursor).toISOString().slice(0, 19) : ''"
           @jump="jumpToTime"
           @replay-event="onReplayEvent"
           @date-change="onDateChange"

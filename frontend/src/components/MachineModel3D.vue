@@ -21,6 +21,8 @@ const props = defineProps({
   transferTrigger: { type: Number, default: 0 },
   // Run货动画状态（与2D同步）
   runState: { type: Object, default: null },
+  // 当前正在加工的 Lot ID
+  currentLotId: { type: String, default: '' },
 })
 
 const canvasRef = ref(null)
@@ -591,6 +593,13 @@ function drawScreen() {
   ctx.fillText('TIBRV: LIVE | SECS-GEM: OK', 20, 280)
   ctx.fillText(new Date().toTimeString().slice(0, 8), screenCanvas.width - 100, 280)
 
+  // 当前 Lot ID
+  if (props.currentLotId) {
+    ctx.fillStyle = '#10b981'
+    ctx.font = 'bold 16px monospace'
+    ctx.fillText('LOT: ' + props.currentLotId, 20, 305)
+  }
+
   if (screenTex) screenTex.needsUpdate = true
 }
 
@@ -741,6 +750,11 @@ watch(() => props.transferTrigger, () => {
 
 // 监听工艺步骤变化
 watch(() => props.processStep, () => {
+  drawScreen()
+})
+
+// 监听 Lot ID 变化
+watch(() => props.currentLotId, () => {
   drawScreen()
 })
 

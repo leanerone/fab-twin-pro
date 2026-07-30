@@ -11,6 +11,7 @@ const props = defineProps({
   metrics: { type: Object, default: () => ({}) },
   processStep: { type: String, default: '待机' },
   runState: { type: Object, default: null },
+  currentLotId: { type: String, default: '' },
 })
 
 const stateColors = {
@@ -96,6 +97,15 @@ const armHoldingId = computed(() => props.runState?.armHolding || null)
       <rect width="700" height="500" fill="#e8ecf0"/>
       <g opacity="0.3">
         <path d="M 0 250 H 700 M 350 0 V 500" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="4,4"/>
+      </g>
+
+      <!-- 当前 Lot 信息栏 -->
+      <g v-if="currentLotId">
+        <rect x="10" y="10" width="200" height="28" rx="4" fill="#1e293b" opacity="0.9"/>
+        <text x="20" y="29" fill="#10b981" font-size="13" font-weight="700" font-family="monospace">LOT: {{ currentLotId }}</text>
+        <circle cx="195" cy="24" r="4" :fill="stateColors[currentState] || '#94a3b8'">
+          <animate v-if="currentState === 'run'" attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+        </circle>
       </g>
 
       <!-- ===== 连接通道（画在底层） ===== -->

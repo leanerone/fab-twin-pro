@@ -245,7 +245,7 @@ def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
     # 二分查找：找最大的 raw_id 使得 ts <= target_dt
     lo, hi = rid_min, rid_max
     best_anchor = None
-    max_iterations = 30  # 防止死循环
+    max_iterations = 15  # 15次迭代可覆盖2^15=32768范围，足以定位单机台事件
     for _ in range(max_iterations):
         if lo > hi:
             break

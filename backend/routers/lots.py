@@ -35,7 +35,7 @@ def _find_raw_id_anchor(db, tool_ids: set, target_dt: datetime) -> Optional[int]
         return None
     lo, hi = rid_min, rid_max
     best_anchor = None
-    for _ in range(30):
+    for _ in range(15):  # 15次迭代足够覆盖单机台事件范围
         if lo > hi:
             break
         mid = (lo + hi) // 2
@@ -190,11 +190,12 @@ def list_lots(
 @router.get("/{lot_id}", response_model=LotOut)
 def get_lot(lot_id: str, db: Session = Depends(get_db)):
     """获取单个 Lot 详情"""
-    # 降序取最新 5000 条，避免旧机台事件数 >5000 时取不到近期数据
+    # 使用 payload_json LIKE 过滤，避免全表扫描
     rows = (
         db.query(DT_EVENT_RAW)
+        .filter(DT_EVENT_RAW.payload_json.like(f'%{lot_id}%'))
         .order_by(DT_EVENT_RAW.raw_id.desc())
-        .limit(5000)
+        .limit(500)
         .all()
     )
 
@@ -228,11 +229,12 @@ def get_lot(lot_id: str, db: Session = Depends(get_db)):
 @router.get("/{lot_id}/events", response_model=List[EventOut])
 def get_lot_events(lot_id: str, db: Session = Depends(get_db)):
     """获取该 Lot 加工时间段内的事件"""
-    # Lot ID 不是 machine/tool ID，不做映射，全表扫描后过滤
+    # 使用 payload_json LIKE 过滤，避免全表扫描
     rows = (
         db.query(DT_EVENT_RAW)
+        .filter(DT_EVENT_RAW.payload_json.like(f'%{lot_id}%'))
         .order_by(DT_EVENT_RAW.raw_id.desc())
-        .limit(50000)
+        .limit(5000)
         .all()
     )
 
