@@ -23,6 +23,31 @@ from typing import Dict, List, Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ================================================================
+# 自动加载 env.bat 环境变量
+# ================================================================
+
+def load_env_bat():
+    """从上级目录读取env.bat，设置环境变量"""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_bat = os.path.join(base_dir, "env.bat")
+    if not os.path.exists(env_bat):
+        print(f"[WARN] env.bat not found: {env_bat}")
+        return
+    with open(env_bat, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("set "):
+                parts = line[4:].split("=", 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    val = parts[1].strip()
+                    os.environ[key] = val
+                    if key in ("ORACLE_HOST", "ORACLE_USER", "ORACLE_SERVICE", "ORACLE_CLIENT_DIR"):
+                        print(f"  [ENV] {key}={val}")
+
+load_env_bat()
+
+# ================================================================
 # 配置区：请根据实际环境修改
 # ================================================================
 
@@ -118,6 +143,28 @@ def find_oracle_client():
     return None
 
 
+def build_dsn(config: Dict):
+    """根据 dsn_type 构建正确的 DSN"""
+    import oracledb
+    host = config["host"]
+    port = config["port"]
+    service = config["service"]
+    dsn_type = config.get("dsn_type", "service_name")
+
+    if dsn_type == "sid":
+        # Thick 模式连 10g/11g 必须用 SID 格式
+        try:
+            dsn = oracledb.makedsn(host, port, sid=service)
+        except Exception:
+            dsn = f"{host}:{port}/{service}"
+    else:
+        try:
+            dsn = oracledb.makedsn(host, port, service_name=service)
+        except Exception:
+            dsn = f"{host}:{port}/{service}"
+    return dsn
+
+
 def connect_oracle(config: Dict):
     """连接Oracle，自动尝试Thin/Thick模式"""
     import oracledb
@@ -150,7 +197,8 @@ def connect_oracle(config: Dict):
             return None, None
 
         try:
-            dsn = f"{config['host']}:{config['port']}/{config['service']}"
+            dsn = build_dsn(config)
+            print(f"  使用DSN: {dsn}")
             conn = oracledb.connect(
                 user=config["user"],
                 password=config["password"],
