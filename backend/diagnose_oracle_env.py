@@ -106,9 +106,20 @@ def print_section(title):
     print("=" * 70)
 
 
+def _find_lib_dir(client_dir):
+    """返回直接包含 oci.dll 的目录（与 database.py 保持一致）"""
+    if not client_dir:
+        return ''
+    bin_dir = os.path.join(client_dir, 'bin')
+    if os.path.exists(os.path.join(bin_dir, 'oci.dll')):
+        return bin_dir
+    if os.path.exists(os.path.join(client_dir, 'oci.dll')):
+        return client_dir
+    return ''
+
+
 def find_oracle_client():
-    """自动查找Oracle Client目录"""
-    # 尝试的候选路径
+    """自动查找Oracle Client目录，返回 (client_dir, lib_dir) 元组"""
     candidates = [
         r"C:\app\client\c11463\product\19.0.0\client_1",
         r"C:\oracle",
@@ -128,19 +139,13 @@ def find_oracle_client():
 
     for path in candidates:
         if os.path.exists(path):
-            # 检查是否有oci.dll
-            oci_dll = os.path.join(path, "oci.dll")
-            if os.path.exists(oci_dll):
-                print(f"  [OK] 找到Oracle Client: {path}")
-                return path
-            # 检查是否有oci.dll在BIN目录
-            oci_dll = os.path.join(path, "BIN", "oci.dll")
-            if os.path.exists(oci_dll):
-                print(f"  [OK] 找到Oracle Client: {path} (BIN/oci.dll)")
-                return path
+            lib_dir = _find_lib_dir(path)
+            if lib_dir:
+                print(f"  [OK] 找到Oracle Client: {path} (lib={lib_dir})")
+                return path, lib_dir
 
     print("  [WARN] 未找到Oracle Client目录，将尝试Thin模式")
-    return None
+    return None, None
 
 
 def build_dsn(config: Dict):
@@ -187,11 +192,11 @@ def connect_oracle(config: Dict):
         print("  尝试Thick模式（需要Oracle Client）...")
 
     # Thick模式需要Oracle Client
-    client_dir = find_oracle_client()
-    if client_dir:
+    client_dir, lib_dir = find_oracle_client()
+    if lib_dir:
         try:
-            oracledb.init_oracle_client(lib_dir=client_dir)
-            print(f"  [OK] 已初始化Oracle Client (Thick)")
+            oracledb.init_oracle_client(lib_dir=lib_dir)
+            print(f"  [OK] 已初始化Oracle Client (Thick, lib_dir={lib_dir})")
         except Exception as e:
             print(f"  [WARN] Thick模式初始化失败: {e}")
             return None, None
