@@ -1,5 +1,7 @@
 -- ============================================================================
--- FabTwin v2.0 数据库迁移：新增 animation_config_json 和 source_files_json 字段
+-- [已废弃] FabTwin v2.0 数据库迁移：新增 animation_config_json 和 source_files_json 字段
+-- 说明：新部署使用 init_oracle_db.sql 已包含这两个字段，无需执行此脚本
+--       仅对 v2.0 之前已部署的旧环境增量升级时使用
 -- 执行方式：
 --   Oracle: sqlplus user/pass@db @v2.0_add_animation_config.sql
 --   SQLite: 不需要执行，SQLAlchemy 会自动创建新字段

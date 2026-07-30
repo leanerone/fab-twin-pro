@@ -79,15 +79,15 @@ CRITICAL_TABLES = {
     "系统配置表": [
         "USERS",
         "FLOORS",
-        "AREAS",
-        "MACHINE_TYPES",
+        "FLOOR_AREAS",
+        "ROLES",
+        "PERM_DATA",
     ],
 }
 
 # 需要完整导出数据的表
 EXPORT_FULL_TABLES = [
     "MACHINES",
-    "MACHINE_TYPES",
     "FLOORS",
     "AI_PROVIDER_CONFIGS",
     "AI_CONFIGS",

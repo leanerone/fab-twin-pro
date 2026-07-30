@@ -188,6 +188,10 @@ INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDAT
 INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
     ('mcp_n8n_timeout', '30', 'N8N MCP HTTP 超时（秒）', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'system');
 
+-- v2.1: Provider 显示名称配置
+INSERT INTO AI_CONFIGS (CONFIG_KEY, CONFIG_VALUE, DESCRIPTION, UPDATED_AT, UPDATED_BY) VALUES
+    ('provider_name', '本地规则引擎', 'Provider显示名称（如智谱GLM、OpenAI官方）', TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'admin');
+
 COMMIT;
 
 -- ============================================
@@ -201,5 +205,5 @@ COMMIT;
 -- 完成说明
 -- ============================================
 -- 共创建 3 张表 + 3 个序列 + 3 个触发器
--- 默认配置: 1 条本地规则引擎Provider + 7 条Dify/N8N键值对 + 4 条MCP配置键值对（v2.1新增）
+-- 默认配置: 1 条本地规则引擎Provider + 7 条Dify/N8N键值对 + 4 条MCP配置键值对 + 1 条Provider名称配置（v2.1）
 -- 后续可通过前端"AI配置管理"面板添加智谱GLM/OpenAI等Provider配置
