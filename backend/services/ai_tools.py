@@ -23,6 +23,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from models import Machine, DT_EVENT_RAW
+from services.time_utils import normalize_ts
 
 
 def _parse_payload(payload_json: str) -> dict:
@@ -45,12 +46,14 @@ def _is_null(val) -> bool:
 
 
 def _format_ts(ts) -> str:
-    """将 datetime 对象格式化为字符串，确保 schema 兼容"""
+    """将时间戳标准化为 'YYYY-MM-DD HH:MM:SS' 格式
+
+    使用 normalize_ts 处理所有格式（datetime对象、ISO格式、Oracle NLS中文格式等），
+    确保前端能正确解析日期和跳转。
+    """
     if ts is None:
         return None
-    if isinstance(ts, datetime):
-        return ts.strftime("%Y-%m-%d %H:%M:%S")
-    return str(ts)
+    return normalize_ts(ts) or None
 
 
 def _resolve_tool_ids(db: Session, machine_id: str) -> list:
