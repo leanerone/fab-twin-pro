@@ -528,6 +528,29 @@ async function loadMachine() {
 
 // 加载告警（按选中日期过滤）
 async function loadAlarms() {
+  // 回放模式：从已加载的 historyData 中提取 alarms，避免重复查询
+  if (mode.value === 'playback' && historyData.length) {
+    const alarmList = historyData
+      .filter(e => e.event_category === 'alarm' && e.alarm)
+      .map(e => ({
+        id: e.raw_id,
+        description: e.alarm.alarm_text || e.description,
+        level: e.alarm.severity || 'warn',
+        timestamp: e.timestamp,
+        alarm_code: e.alarm.alarm_id,
+      }))
+    alarms.value = alarmList
+    alarmStats.value = {
+      total: alarmList.length,
+      crit: alarmList.filter(a => a.level === 'crit').length,
+      warn: alarmList.filter(a => a.level === 'warn').length,
+      info: alarmList.filter(a => a.level === 'info').length,
+      resolved: 0,
+      unresolved: alarmList.length,
+    }
+    return
+  }
+  // 实时模式：调用API获取
   const start = `${playbackDate.value}T00:00:00`
   const end = `${playbackDate.value}T23:59:59.999`
   const data = await api.getAlarmHistory(machineId.value, {

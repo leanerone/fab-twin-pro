@@ -10,14 +10,14 @@
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import Optional
 from datetime import datetime
 import json
 
 from database import get_db
 from models import DT_EVENT_RAW, MachineToolMapping
-from services.time_utils import parse_ts, normalize_ts
+from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -139,48 +139,33 @@ def get_history(
 ):
     """获取指定机台的历史事件时间轴
 
-    由于 received_ts_utc 是 VARCHAR2 且格式不统一（ISO/空格/NLS中文），
-    不在SQL层做时间过滤，在Python层用 parse_ts 解析过滤。
-
-    分页策略：
-    - 优先按 start_time/end_time 在 Python 层做时间过滤
-    - 当事件总数超 limit 时，前端用 before_raw_id 翻页
-
-    自动分页（解决日期往前几天无事件的问题）：
-    - 当指定了 start_time 且未指定 before_raw_id 时，会在SQL层以 start_dt 为锚点
-      通过 raw_id 范围分批拉取数据，最多累计 20 批
-    - 这样能保证即使在历史较早的日期，也能拿到完整事件列表
+    性能优化策略：
+    - SQL层：当 start_time/end_time 是同一天时，用 received_ts_utc LIKE 缩小范围
+      （从全表20000条降到单日约1000条）
+    - Python层：用 parse_ts 精确过滤（处理NLS中文格式等边缘情况）
     """
     tool_ids = _resolve_tool_ids(db, tool_id)
 
     start_dt = parse_ts(start_time) if start_time else None
     end_dt = parse_ts(end_time) if end_time else None
 
-    # 自动分页：当指定了 start_time 但没指定 before_raw_id 时，
-    # 通过 raw_id 锚点分批拉取数据，规避 VARCHAR2 时间字段无法在SQL层过滤的限制
-    if start_dt and before_raw_id is None:
-        # 先找到 start_time 对应位置的 raw_id 锚点
-        # 方法：以 raw_id 降序扫描，按 Python 解析的 ts 定位到第一个 ts <= start_dt 的位置
-        anchor_raw_id = _find_raw_id_anchor(db, tool_ids, start_dt)
-        if anchor_raw_id is not None:
-            # 拉取 anchor 之后的所有事件（raw_id 随时间递增，>= anchor 才是目标时间之后）
-            rows = db.query(DT_EVENT_RAW).filter(
-                DT_EVENT_RAW.tool_id.in_(tool_ids),
-                DT_EVENT_RAW.raw_id >= anchor_raw_id
-            ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
-        else:
-            # 兜底：拉取最近 20000 条
-            rows = db.query(DT_EVENT_RAW).filter(
-                DT_EVENT_RAW.tool_id.in_(tool_ids)
-            ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
-    else:
-        # 普通分页模式
-        query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-        if before_raw_id is not None:
-            query = query.filter(DT_EVENT_RAW.raw_id < before_raw_id)
+    # 构建基础查询
+    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
 
-        fetch_limit = min(limit + offset, 20000)
-        rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(fetch_limit).all()
+    # SQL层日期过滤：当 start_time/end_time 是同一天时，用 LIKE 大幅缩小范围
+    if start_dt and end_dt and start_dt.date() == end_dt.date():
+        date_str = start_dt.strftime("%Y-%m-%d")
+        like_patterns = build_date_like_patterns(date_str)
+        if like_patterns:
+            query = query.filter(or_(*[
+                DT_EVENT_RAW.received_ts_utc.like(p) for p in like_patterns
+            ]))
+
+    if before_raw_id is not None:
+        query = query.filter(DT_EVENT_RAW.raw_id < before_raw_id)
+
+    fetch_limit = min(limit + offset, 5000)
+    rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(fetch_limit).all()
 
     # Python层解析和过滤
     events = []
@@ -250,11 +235,12 @@ def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
         if lo > hi:
             break
         mid = (lo + hi) // 2
-        # 取出 mid 位置的事件
+        # 取出 mid 位置之前的最近一条同机台事件
+        # （raw_id 全表递增，mid 可能落在其他机台的行上，用 <= mid + DESC LIMIT 1 找到最近的）
         row = db.query(DT_EVENT_RAW).filter(
             DT_EVENT_RAW.tool_id.in_(tool_ids),
-            DT_EVENT_RAW.raw_id == mid
-        ).first()
+            DT_EVENT_RAW.raw_id <= mid
+        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(1).first()
         if not row:
             # mid 位置无数据，向左移动
             hi = mid - 1
@@ -287,30 +273,14 @@ def get_timeline(
 
     tool_ids = _resolve_tool_ids(db, tool_id)
 
-    # 用 start_dt 锚点定位到指定日期起点
-    try:
-        target_dt = datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        target_dt = datetime.now()
-
-    # 找 target_dt 开始的 raw_id 锚点（与 get_history 保持一致，不设 next_anchor 上限）
-    # 不设上限的原因：当 anchor == next_anchor（数据库里没有比 anchor 更新的事件）时，
-    # 区间查询会漏掉该日事件。统一在 Python 层按日期过滤。
-    anchor = _find_raw_id_anchor(db, tool_ids, target_dt)
-    if anchor is not None:
-        rows = db.query(DT_EVENT_RAW).filter(
-            DT_EVENT_RAW.tool_id.in_(tool_ids),
-            DT_EVENT_RAW.raw_id >= anchor
-        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(20000).all()
-    else:
-        # 兜底：拉取最近 5000 条
-        rows = (
-            db.query(DT_EVENT_RAW)
-            .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-            .order_by(DT_EVENT_RAW.raw_id.desc())
-            .limit(5000)
-            .all()
-        )
+    # SQL层日期过滤：用 LIKE 缩小到指定日期范围
+    like_patterns = build_date_like_patterns(date)
+    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    if like_patterns:
+        query = query.filter(or_(*[
+            DT_EVENT_RAW.received_ts_utc.like(p) for p in like_patterns
+        ]))
+    rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
 
     # 按小时聚合（在Python层解析时间）
     hours = {h: {"alarm": 0, "pod": 0, "process": 0, "other": 0, "events": []} for h in range(24)}

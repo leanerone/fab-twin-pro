@@ -8,7 +8,7 @@
 """
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from fastapi import APIRouter, Depends, HTTPException, Query
 import json
 from datetime import datetime
@@ -16,7 +16,7 @@ from datetime import datetime
 from database import get_db
 from models import Lot, MachineEvent, DT_EVENT_RAW, MachineToolMapping
 from schemas import LotOut, EventOut
-from services.time_utils import parse_ts, normalize_ts, extract_date
+from services.time_utils import parse_ts, normalize_ts, extract_date, build_date_like_patterns
 
 router = APIRouter(prefix="/api/lots", tags=["lots"])
 
@@ -41,8 +41,8 @@ def _find_raw_id_anchor(db, tool_ids: set, target_dt: datetime) -> Optional[int]
         mid = (lo + hi) // 2
         row = db.query(DT_EVENT_RAW).filter(
             DT_EVENT_RAW.tool_id.in_(tool_ids),
-            DT_EVENT_RAW.raw_id == mid
-        ).first()
+            DT_EVENT_RAW.raw_id <= mid
+        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(1).first()
         if not row:
             hi = mid - 1
             continue
@@ -103,33 +103,15 @@ def list_lots(
     # 解析 machine_id 对应的所有 tool_id（含映射关系）
     tool_ids = _resolve_tool_ids(db, machine_id)
 
-    # 使用 raw_id 锚点优化：当指定了 date 时，定位到目标日期的 raw_id，缩小查询范围
-    anchor = None
+    # SQL层日期过滤：用 LIKE 缩小到指定日期范围（从全表20000条降到单日约1000条）
+    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
     if date:
-        try:
-            target_dt = datetime.strptime(date, "%Y-%m-%d")
-            anchor = _find_raw_id_anchor(db, tool_ids, target_dt)
-        except ValueError:
-            pass
-
-    if anchor is not None:
-        rows = (
-            db.query(DT_EVENT_RAW)
-            .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-            .filter(DT_EVENT_RAW.raw_id >= anchor)
-            .order_by(DT_EVENT_RAW.raw_id.desc())
-            .limit(20000)
-            .all()
-        )
-    else:
-        # 兜底：拉取最近事件
-        rows = (
-            db.query(DT_EVENT_RAW)
-            .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-            .order_by(DT_EVENT_RAW.raw_id.desc())
-            .limit(20000)
-            .all()
-        )
+        like_patterns = build_date_like_patterns(date)
+        if like_patterns:
+            query = query.filter(or_(*[
+                DT_EVENT_RAW.received_ts_utc.like(p) for p in like_patterns
+            ]))
+    rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
 
     # 解析 payload_json 提取 lot_id，在 Python 层过滤日期
     lot_set = {}  # lot_id -> {start_dt, end_dt, start_time, end_time, ...}

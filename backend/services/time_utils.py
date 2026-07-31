@@ -123,3 +123,36 @@ def extract_date(ts_str: str) -> str:
     except Exception:
         pass
     return ""
+
+
+def build_date_like_patterns(date_str: str) -> list:
+    """为日期生成匹配多种Oracle NLS时间格式的LIKE模式
+
+    Oracle中 received_ts_utc 是 VARCHAR2，格式可能为：
+    1. "2026-07-23T08:00:00" (ISO T分隔，补零)
+    2. "2026-07-23 08:00:00" (空格分隔，补零)
+    3. "2026-7-23 下午12:01:14" (NLS中文，月日不补零)
+
+    本函数生成LIKE模式列表，用于在SQL层缩小查询范围，
+    避免全表扫描20000条后在Python层逐条解析过滤。
+
+    Returns:
+        LIKE模式列表，如 ['2026-07-23%', '2026-7-23%']
+        输入无效时返回空列表
+    """
+    if not date_str:
+        return []
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return []
+
+    patterns = []
+    # 标准补零格式: 2026-07-23 (匹配 ISO T分隔 和 空格分隔)
+    iso_date = dt.strftime("%Y-%m-%d")
+    patterns.append(f'{iso_date}%')
+    # NLS不补零格式: 2026-7-23 (月或日为单位数时与ISO格式不同)
+    nls_date = f"{dt.year}-{dt.month}-{dt.day}"
+    if nls_date != iso_date:
+        patterns.append(f'{nls_date}%')
+    return patterns
