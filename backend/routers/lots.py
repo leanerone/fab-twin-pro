@@ -103,15 +103,29 @@ def list_lots(
     # 解析 machine_id 对应的所有 tool_id（含映射关系）
     tool_ids = _resolve_tool_ids(db, machine_id)
 
-    # SQL层日期过滤：用 LIKE 缩小到指定日期范围（从全表20000条降到单日约1000条）
-    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    # SQL层日期过滤：用 LIKE 缩小到指定日期范围（同时检查两个字段）
+    # 如果LIKE过滤结果为空，回退到无LIKE查询
+    base_query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    rows = []
     if date:
         like_patterns = build_date_like_patterns(date)
         if like_patterns:
-            query = query.filter(or_(*[
-                DT_EVENT_RAW.received_ts_utc.like(p) for p in like_patterns
-            ]))
-    rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
+            like_conditions = []
+            for p in like_patterns:
+                like_conditions.append(DT_EVENT_RAW.received_ts_utc.like(p))
+                like_conditions.append(DT_EVENT_RAW.event_ts_utc.like(p))
+            rows = (
+                base_query.filter(or_(*like_conditions))
+                .order_by(DT_EVENT_RAW.raw_id.desc())
+                .limit(5000)
+                .all()
+            )
+    if not rows:
+        rows = (
+            base_query.order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(5000)
+            .all()
+        )
 
     # 解析 payload_json 提取 lot_id，在 Python 层过滤日期
     lot_set = {}  # lot_id -> {start_dt, end_dt, start_time, end_time, ...}

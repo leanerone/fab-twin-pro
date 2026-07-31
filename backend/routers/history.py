@@ -150,22 +150,38 @@ def get_history(
     end_dt = parse_ts(end_time) if end_time else None
 
     # 构建基础查询
-    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    base_query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+
+    if before_raw_id is not None:
+        base_query = base_query.filter(DT_EVENT_RAW.raw_id < before_raw_id)
+
+    fetch_limit = min(limit + offset, 5000)
 
     # SQL层日期过滤：当 start_time/end_time 是同一天时，用 LIKE 大幅缩小范围
+    # 同时检查 event_ts_utc 和 received_ts_utc 两个字段（生产环境 event_ts_utc 可能有值）
+    # 如果LIKE过滤结果为空，回退到无LIKE查询保证不丢数据
+    rows = []
     if start_dt and end_dt and start_dt.date() == end_dt.date():
         date_str = start_dt.strftime("%Y-%m-%d")
         like_patterns = build_date_like_patterns(date_str)
         if like_patterns:
-            query = query.filter(or_(*[
-                DT_EVENT_RAW.received_ts_utc.like(p) for p in like_patterns
-            ]))
-
-    if before_raw_id is not None:
-        query = query.filter(DT_EVENT_RAW.raw_id < before_raw_id)
-
-    fetch_limit = min(limit + offset, 5000)
-    rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(fetch_limit).all()
+            like_conditions = []
+            for p in like_patterns:
+                like_conditions.append(DT_EVENT_RAW.received_ts_utc.like(p))
+                like_conditions.append(DT_EVENT_RAW.event_ts_utc.like(p))
+            rows = (
+                base_query.filter(or_(*like_conditions))
+                .order_by(DT_EVENT_RAW.raw_id.desc())
+                .limit(fetch_limit)
+                .all()
+            )
+    # 回退：无日期LIKE或LIKE未匹配到数据
+    if not rows:
+        rows = (
+            base_query.order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(fetch_limit)
+            .all()
+        )
 
     # Python层解析和过滤
     events = []
@@ -273,14 +289,28 @@ def get_timeline(
 
     tool_ids = _resolve_tool_ids(db, tool_id)
 
-    # SQL层日期过滤：用 LIKE 缩小到指定日期范围
+    # SQL层日期过滤：用 LIKE 缩小到指定日期范围（同时检查两个字段）
+    # 如果LIKE过滤结果为空，回退到无LIKE查询
+    base_query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
     like_patterns = build_date_like_patterns(date)
-    query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    rows = []
     if like_patterns:
-        query = query.filter(or_(*[
-            DT_EVENT_RAW.received_ts_utc.like(p) for p in like_patterns
-        ]))
-    rows = query.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
+        like_conditions = []
+        for p in like_patterns:
+            like_conditions.append(DT_EVENT_RAW.received_ts_utc.like(p))
+            like_conditions.append(DT_EVENT_RAW.event_ts_utc.like(p))
+        rows = (
+            base_query.filter(or_(*like_conditions))
+            .order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(5000)
+            .all()
+        )
+    if not rows:
+        rows = (
+            base_query.order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(5000)
+            .all()
+        )
 
     # 按小时聚合（在Python层解析时间）
     hours = {h: {"alarm": 0, "pod": 0, "process": 0, "other": 0, "events": []} for h in range(24)}
