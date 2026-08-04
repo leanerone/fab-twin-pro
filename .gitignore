@@ -68,7 +68,13 @@ frontend/.vite/
 # Backend
 backend/fabtwin.db
 backend/venv/
+backend/uploads/
 
 # Uploads
 uploads/
 public/models/
+
+# Python cache (ensure ignored even if tracked before)
+__pycache__/
+*.pyc
+*.pyo
