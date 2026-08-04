@@ -14,6 +14,10 @@ const proxyConfig = {
     ws: true,
     changeOrigin: true,
   },
+  '/uploads': {
+    target: 'http://localhost:8002',
+    changeOrigin: true,
+  },
 }
 
 export default defineConfig({

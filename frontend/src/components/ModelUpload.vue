@@ -1,49 +1,25 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-
-const BASE = '/api'
-
-async function request(method, path, data = null) {
-  const opts = {
-    method,
-  }
-  const token = localStorage.getItem('fabtwin_token')
-  if (token) {
-    opts.headers = { Authorization: `Bearer ${token}` }
-  }
-  if (data && method !== 'GET' && method !== 'DELETE') {
-    if (data instanceof FormData) {
-      opts.body = data
-    } else {
-      opts.headers = { ...(opts.headers || {}), 'Content-Type': 'application/json' }
-      opts.body = JSON.stringify(data)
-    }
-  }
-  const res = await fetch(BASE + path, opts)
-  if (!res.ok) {
-    let errMsg = `请求失败: ${res.status}`
-    try {
-      const err = await res.json()
-      errMsg = err.detail || errMsg
-    } catch { /* ignore */ }
-    throw new Error(errMsg)
-  }
-  return res.json()
-}
+import { ref, onMounted, watch } from 'vue'
+import { api } from '../api'
+import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
   modelId: { type: String, default: '' },
   modelName: { type: String, default: '' },
 })
 
-const emit = defineEmits(['uploaded', 'deleted'])
+const emit = defineEmits(['uploaded', 'deleted', 'svgPartsExtracted'])
+
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const uploading = ref(false)
+const extracting = ref(false)
 const fileList = ref([])
 const dragActive = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
+const svgParts = ref([])
 
 const ALLOWED_EXTS = ['.svg', '.glb', '.gltf', '.json', '.html']
 const MAX_SIZE = 50 * 1024 * 1024
@@ -62,13 +38,11 @@ function fileExt(name) {
 }
 
 function fileIcon(name) {
-  const ext = fileExt(name)
-  return ext.replace('.', '').toUpperCase()
+  return fileExt(name).replace('.', '').toUpperCase()
 }
 
 function extStyle(name) {
-  const c = extColor[fileExt(name)] || '#607D8B'
-  return { background: c }
+  return { background: extColor[fileExt(name)] || '#607D8B' }
 }
 
 function formatSize(bytes) {
@@ -77,16 +51,12 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function modelOptions() {
-  return fileList.value
-}
-
 async function loadFiles() {
   if (!props.modelId) return
   loading.value = true
   errorMsg.value = ''
   try {
-    const resp = await request('GET', `/uploads/models?model_id=${props.modelId}`)
+    const resp = await api.getModelFiles(props.modelId)
     fileList.value = resp.files || []
   } catch (e) {
     errorMsg.value = e.message || '加载文件列表失败'
@@ -121,20 +91,37 @@ async function handleFiles(files) {
 
   uploading.value = true
   try {
+    const user = authStore.user?.username || 'admin'
     for (const f of list) {
-      const form = new FormData()
-      form.append('file', f)
-      form.append('model_id', props.modelId)
-      form.append('uploaded_by', 'admin')
-      await request('POST', '/uploads/models', form)
+      await api.uploadModelFile(f, props.modelId, user)
     }
     successMsg.value = `成功上传 ${list.length} 个文件`
     emit('uploaded')
     await loadFiles()
+    // 如果是 SVG 文件，自动提取部件
+    if (list.some(f => fileExt(f.name) === '.svg')) {
+      await extractParts()
+    }
   } catch (e) {
     errorMsg.value = e.message || '上传失败'
   } finally {
     uploading.value = false
+  }
+}
+
+async function extractParts() {
+  if (!props.modelId) return
+  extracting.value = true
+  errorMsg.value = ''
+  try {
+    const resp = await api.extractSvgParts(props.modelId)
+    svgParts.value = resp.parts || []
+    emit('svgPartsExtracted', svgParts.value)
+    successMsg.value = `从 SVG 中提取了 ${svgParts.value.length} 个部件`
+  } catch (e) {
+    errorMsg.value = e.message || '提取部件失败'
+  } finally {
+    extracting.value = false
   }
 }
 
@@ -143,20 +130,9 @@ function onFileChange(e) {
   e.target.value = ''
 }
 
-function onDragEnter(e) {
-  e.preventDefault()
-  dragActive.value = true
-}
-
-function onDragLeave(e) {
-  e.preventDefault()
-  dragActive.value = false
-}
-
-function onDragOver(e) {
-  e.preventDefault()
-}
-
+function onDragEnter(e) { e.preventDefault(); dragActive.value = true }
+function onDragLeave(e) { e.preventDefault(); dragActive.value = false }
+function onDragOver(e) { e.preventDefault() }
 function onDrop(e) {
   e.preventDefault()
   dragActive.value = false
@@ -166,17 +142,26 @@ function onDrop(e) {
 async function deleteFile(file) {
   if (!confirm(`确定删除文件 "${file.file_name}" (${file.version})？`)) return
   try {
-    await request('DELETE', `/uploads/models/${file.file_id}?model_id=${file.model_id}`)
+    await api.deleteModelFile(file.file_id, file.model_id)
     successMsg.value = `文件 ${file.file_name} 已删除`
     emit('deleted')
     await loadFiles()
+    svgParts.value = []
+    emit('svgPartsExtracted', [])
   } catch (e) {
     errorMsg.value = e.message || '删除失败'
   }
 }
 
+function openFileUrl(url) {
+  if (url) window.open(url, '_blank')
+}
+
 watch(() => props.modelId, () => {
-  if (props.modelId) loadFiles()
+  if (props.modelId) {
+    loadFiles()
+    svgParts.value = []
+  }
 })
 
 onMounted(() => {
@@ -194,8 +179,13 @@ onMounted(() => {
       </div>
       <div class="uh-right">
         <span v-if="fileList.length" class="file-count">{{ fileList.length }} 个文件</span>
-        <button class="btn-refresh" :disabled="loading" @click="loadFiles">
+        <button class="btn-refresh" :disabled="loading" @click="loadFiles" title="刷新">
           {{ loading ? '...' : '🔄' }}
+        </button>
+        <button v-if="fileList.some(f => f.file_type === '.svg')"
+                class="btn-extract" :disabled="extracting"
+                @click="extractParts" title="提取SVG部件">
+          {{ extracting ? '⏳' : '🔍' }}
         </button>
       </div>
     </div>
@@ -243,11 +233,27 @@ onMounted(() => {
               <span class="dot">·</span>
               <span class="time">{{ f.created_at }}</span>
             </div>
-            <div class="file-path" :title="f.file_path">{{ f.file_path }}</div>
+            <div class="file-url" :title="f.file_url" @click="openFileUrl(f.file_url)">
+              🔗 {{ f.file_url }}
+            </div>
           </div>
           <div class="file-actions">
+            <button class="btn-preview" title="预览" @click="openFileUrl(f.file_url)">👁️</button>
             <button class="btn-del" title="删除" @click="deleteFile(f)">🗑️</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SVG 部件提取结果 -->
+    <div v-if="svgParts.length" class="svg-parts-section">
+      <div class="parts-header">
+        <span>🔍 SVG 部件提取结果（{{ svgParts.length }} 个）</span>
+      </div>
+      <div class="parts-list">
+        <div v-for="p in svgParts" :key="p.element_id" class="part-item">
+          <span class="part-id">{{ p.element_id }}</span>
+          <span class="part-tag">{{ p.tag }}</span>
         </div>
       </div>
     </div>
@@ -275,24 +281,19 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.uh-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+.uh-left { display: flex; align-items: center; gap: 8px; }
 .uh-icon { font-size: 18px; }
 .uh-title { font-size: 15px; font-weight: 600; color: var(--text, #e0e6ed); }
 .uh-model-name { color: var(--text-dim, #8a94a6); font-size: 13px; }
 
 .uh-right { display: flex; align-items: center; gap: 8px; }
 .file-count { font-size: 12px; color: var(--text-dim, #8a94a6); }
-.btn-refresh {
+.btn-refresh, .btn-extract {
   background: none; border: 1px solid var(--border, #2a3142);
   color: var(--text, #e0e6ed); border-radius: 6px;
   width: 32px; height: 32px; cursor: pointer; font-size: 14px;
 }
-.btn-refresh:hover { background: var(--bg-hover, #252b3b); }
+.btn-refresh:hover, .btn-extract:hover { background: var(--bg-hover, #252b3b); }
 
 .drop-zone {
   border: 2px dashed var(--border, #2a3142);
@@ -385,18 +386,55 @@ onMounted(() => {
   padding: 2px 6px; border-radius: 4px; font-weight: 600;
 }
 .file-meta .dot { opacity: 0.5; }
-.file-path {
-  font-size: 11px; color: var(--text-dim, #6a7080);
+.file-url {
+  font-size: 11px; color: var(--primary, #4a9eff);
   margin-top: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-family: monospace;
+  cursor: pointer;
 }
+.file-url:hover { text-decoration: underline; }
 
-.file-actions { flex-shrink: 0; }
-.btn-del {
+.file-actions { flex-shrink: 0; display: flex; gap: 4px; }
+.btn-preview, .btn-del {
   background: none; border: none; cursor: pointer;
   font-size: 16px; padding: 6px; border-radius: 4px;
   opacity: 0.6; transition: opacity 0.2s;
 }
+.btn-preview:hover { opacity: 1; background: rgba(74, 158, 255, 0.15); }
 .btn-del:hover { opacity: 1; background: rgba(244, 67, 54, 0.15); }
+
+/* SVG 部件提取结果 */
+.svg-parts-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-secondary, #151a28);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 8px;
+  flex-shrink: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.parts-header {
+  font-size: 13px; font-weight: 600;
+  color: var(--primary, #4a9eff);
+  margin-bottom: 8px;
+}
+.parts-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.part-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-card, #1a1f2e);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.part-id { font-family: monospace; color: var(--text, #e0e6ed); }
+.part-tag {
+  font-size: 10px; padding: 1px 6px;
+  background: rgba(74, 158, 255, 0.15); color: var(--primary, #4a9eff);
+  border-radius: 10px;
+}
 </style>

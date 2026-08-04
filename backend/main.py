@@ -37,6 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 挂载上传目录为静态文件服务，让前端可通过 /uploads/models/xxx.svg 访问
+_UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads", "models")
+os.makedirs(_UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "uploads")), name="uploads")
+
 # 注册路由
 app.include_router(machines.router, tags=["machines"])
 app.include_router(events.router, tags=["events"])
