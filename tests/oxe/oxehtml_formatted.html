@@ -1,0 +1,3500 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>
+OXE 2.5D Unified Dashboard
+</title>
+<style>
+ :root { --bg: #eaf0f4; --surface: #ffffff; --surface-soft: #f6f9fc; --ink: #0f172a; --muted: #607089; --line: #c7d3e0; --accent: #0e7490; --ok: #16a34a; --warn: #ca8a04; --alarm: #dc2626; --idle: #94a3b8; --shadow: 0 12px 28px rgba(15, 23, 42, 0.11); } * { box-sizing: border-box; } html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; color: var(--ink); background: radial-gradient(circle at 15% -20%, #ffffff 0%, #e8eff5 50%, #dde7ef 100%); font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; } .app { display: grid; grid-template-rows: auto 1fr; height: 100%; min-width: 340px; } .topbar { display: grid; grid-template-columns: minmax(280px, 1fr) auto; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(5px); } h1 { margin: 0; font-size: 19px; line-height: 1.2; } .subtitle { margin-top: 3px; color: var(--muted); font-size: 12px; } .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; } .btn, .select { min-height: 34px; border-radius: 8px; border: 1px solid var(--line); background: #ffffff; color: var(--ink); font: inherit; padding: 0 11px; } .btn { cursor: pointer; } .btn:hover { border-color: #91a4ba; } .btn.primary { color: #ffffff; border-color: #0c677f; background: linear-gradient(180deg, #0e87a7 0%, #0b6f8b 100%); } .btn.primary:hover { filter: brightness(0.96); } .select { padding-right: 28px; } .main { display: grid; grid-template-columns: minmax(560px, 1.45fr) 360px; gap: 12px; min-height: 0; padding: 12px; } .panel { min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; } .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); } .panel-title strong { font-size: 14px; } .panel-title span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); } .badge { display: inline-flex; align-items: center; min-height: 24px; border: 1px solid var(--line); border-radius: 999px; background: #ffffff; padding: 0 8px; font-size: 12px; color: var(--muted); white-space: nowrap; } .view-wrap { position: relative; height: calc(100% - 48px); min-height: 320px; background: linear-gradient(180deg, #f4f8fc 0%, #e5eef6 100%); } #isoCanvas { width: 100%; height: 100%; display: block; } .legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 20px); } .legend-item { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.92); color: var(--muted); font-size: 11px; } .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; } .lot-panel { position: absolute; top: 10px; left: 10px; min-width: 310px; max-width: 460px; padding: 10px 14px; border: 1px solid #a6b7ca; border-radius: 12px; background: rgba(232, 242, 252, 0.88); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14); backdrop-filter: blur(2px); z-index: 2; font-size: 13px; } .lot-line { display: block; line-height: 1.45; font-weight: 600; color: #0f172a; } .lot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; } .lot-col.right { text-align: right; } .status-text { font-weight: 700; margin-left: 4px; } .status-running-text { color: #16a34a; } .status-alarm-text { color: #dc2626; } .status-idle-text { color: #64748b; } .status-info-text { color: #0e7490; } .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); background: var(--surface-soft); } .kpi { min-height: 72px; border: 1px solid var(--line); border-radius: 8px; background: #ffffff; padding: 8px; } .kpi span { display: block; color: var(--muted); font-size: 11px; } .kpi strong { display: block; margin-top: 5px; font-size: 18px; line-height: 1.1; } .timeline { height: calc(100% - 165px); min-height: 180px; overflow: auto; padding: 10px; font-size: 12px; } .event-row { display: grid; grid-template-columns: 78px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px solid #edf2f7; } .event-time { color: var(--muted); font-family: ui-monospace, "Cascadia Mono", monospace; } .status-idle { color: var(--idle); } .status-running { color: var(--ok); } .status-hold { color: var(--warn); } .status-alarm { color: var(--alarm); } @media (max-width: 1080px) { .main { grid-template-columns: 1fr; } .timeline { height: 240px; } }
+</style>
+</head>
+<body>
+<div class="app">
+<div class="topbar">
+<div>
+<h1>
+OXE 2D 机台演示看板
+</h1>
+<div class="subtitle">
+平面2D视角 · ARM中心布局 · PORT/CHAMBER 邻接动作演示
+</div>
+</div>
+<div class="toolbar">
+<label style="font-size:12px;color:#607089">
+Tool ID
+</label>
+<input id="toolIdInput" class="select" style="width:130px;padding-right:10px" value="OXE-65A" />
+<label style="font-size:12px;color:#607089">
+Chamber 数量
+</label>
+<select id="chamberCount" class="select">
+<option value="2">
+2 Chamber
+</option>
+<option value="3" selected>
+3 Chamber
+</option>
+</select>
+<button class="btn" id="btnLive">
+实时监听RV
+</button>
+<button class="btn" id="btnHistory">
+DB历史回放
+</button>
+<button class="btn" id="btnDisconnect">
+断开实时
+</button>
+<button class="btn primary" id="btnReplay">
+Mock Flow
+</button>
+<button class="btn" id="btnReset">
+重置
+</button>
+</div>
+</div>
+<div class="main">
+<div class="panel">
+<div class="panel-head">
+<div class="panel-title">
+<strong>
+OXE 2D 设备结构
+</strong>
+<span>
+CHAMBER_A/B/C + PORT1/PORT2 + SMIF1/SMIF2 + PA + ARM(HEX)
+</span>
+</div>
+<span class="badge" id="machineState">
+Idle
+</span>
+</div>
+<div class="view-wrap">
+<div id="lotStatusPanel" class="lot-panel">
+</div>
+<canvas id="isoCanvas">
+</canvas>
+<div class="legend">
+<div class="legend-item">
+<span class="dot" style="background:#16a34a">
+</span>
+Running
+</div>
+<div class="legend-item">
+<span class="dot" style="background:#ca8a04">
+</span>
+Hold
+</div>
+<div class="legend-item">
+<span class="dot" style="background:#dc2626">
+</span>
+Alarm
+</div>
+<div class="legend-item">
+<span class="dot" style="background:#94a3b8">
+</span>
+Idle
+</div>
+<div class="legend-item">
+<span class="dot" style="background:#ef4444">
+</span>
+LOCK 角标
+</div>
+</div>
+</div>
+</div>
+<div class="panel">
+<div class="panel-head">
+<div class="panel-title">
+<strong>
+事件进程
+</strong>
+<span>
+来自 RV.log + EVENT 表
+</span>
+</div>
+</div>
+<div class="kpis">
+<div class="kpi">
+<span>
+LOT
+</span>
+<strong id="kpiLot">
+-
+</strong>
+</div>
+<div class="kpi">
+<span>
+Recipe
+</span>
+<strong id="kpiRecipe">
+-
+</strong>
+</div>
+<div class="kpi">
+<span>
+当前 Event
+</span>
+<strong id="kpiEvent">
+-
+</strong>
+</div>
+<div class="kpi">
+<span>
+状态
+</span>
+<strong id="kpiState" class="status-idle">
+Idle
+</strong>
+</div>
+</div>
+<div class="timeline" id="timeline">
+</div>
+</div>
+</div>
+</div>
+<script>
+var DEFAULT_EVENTS = [ /* ===== V3GK0 (PORT2/CHAMBER_B/SMIF2) 完整 25 片流程（WaferLoaded/Unloaded 1-25 已全部展开） ===== */ /* 基于日志 04:00:24 ~ 06:25:32 */ {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:00:24Z",
+    "event_type": "POD_PLACED",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2",
+    "cst_id": "10897K"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:00:25Z",
+    "event_type": "LOCK_PORT_COMPLETED",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:00:44Z",
+    "event_type": "MVIN",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:03:25Z",
+    "event_type": "DOOR_OPEN",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:03:25Z",
+    "event_type": "LOAD_CYCLE_STARTED",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 60,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:04:24Z",
+    "event_type": "LOAD_CYCLE_COMPLETED",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:04:42Z",
+    "event_type": "DOOR_CLOSE",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:04:43Z",
+    "event_type": "StartMapping_RIGHT",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 120,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:06:45Z",
+    "event_type": "WAFER_MAPPING",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "port_id": "PORT2",
+    "EVENT_VALUE": "1111111111111111111111111"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:06:45Z",
+    "event_type": "Start",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_B"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:06:47Z",
+    "event_type": "PS",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_B"
+}, /* V3GK0 WaferLoaded/Unloaded 1-25 (全部展开) */ {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:07:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 1,
+    "slot": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:12:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 1,
+    "slot": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:17:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 2,
+    "slot": 2
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:22:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 2,
+    "slot": 2
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:27:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 3,
+    "slot": 3
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:32:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 3,
+    "slot": 3
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:37:43Z",
+    "event_type": "POD_PLACED",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1",
+    "cst_id": "44062K"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:37:47Z",
+    "event_type": "LOCK_PORT_COMPLETED",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:38:06Z",
+    "event_type": "MVIN",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:41:21Z",
+    "event_type": "DOOR_OPEN",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:41:21Z",
+    "event_type": "LOAD_CYCLE_STARTED",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 60,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:42:19Z",
+    "event_type": "LOAD_CYCLE_COMPLETED",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:42:36Z",
+    "event_type": "DOOR_CLOSE",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:42:39Z",
+    "event_type": "StartMapping_LEFT",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 120,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:44:27Z",
+    "event_type": "WAFER_MAPPING",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "port_id": "PORT1",
+    "EVENT_VALUE": "1111111111111111111111111"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:44:27Z",
+    "event_type": "Start",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_A"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:44:28Z",
+    "event_type": "JobReserved",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:44:29Z",
+    "event_type": "Start",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_A"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:44:30Z",
+    "event_type": "PS",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_A"
+}, /* V3GKW WaferLoaded/Unloaded 1-25 (全部展开) */ {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:46:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 1,
+    "slot": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:37:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 4,
+    "slot": 4
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:42:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 4,
+    "slot": 4
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:47:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 5,
+    "slot": 5
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:50:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 1,
+    "slot": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:52:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 5,
+    "slot": 5
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:55:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 2,
+    "slot": 2
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:57:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 6,
+    "slot": 6
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T04:59:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 2,
+    "slot": 2
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:02:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 6,
+    "slot": 6
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:04:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 3,
+    "slot": 3
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:07:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 7,
+    "slot": 7
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:08:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 3,
+    "slot": 3
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:12:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 7,
+    "slot": 7
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:13:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 4,
+    "slot": 4
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:17:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 4,
+    "slot": 4
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:17:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 8,
+    "slot": 8
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:22:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 5,
+    "slot": 5
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:22:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 8,
+    "slot": 8
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:26:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 5,
+    "slot": 5
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:27:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 9,
+    "slot": 9
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:31:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 6,
+    "slot": 6
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:32:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 9,
+    "slot": 9
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:35:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 6,
+    "slot": 6
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:37:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 10,
+    "slot": 10
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:40:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 7,
+    "slot": 7
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:42:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 10,
+    "slot": 10
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:44:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 7,
+    "slot": 7
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:47:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 11,
+    "slot": 11
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:49:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 8,
+    "slot": 8
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:52:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 11,
+    "slot": 11
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:53:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 8,
+    "slot": 8
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:57:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 12,
+    "slot": 12
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T05:58:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 9,
+    "slot": 9
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:02:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 9,
+    "slot": 9
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:02:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 12,
+    "slot": 12
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:07:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 10,
+    "slot": 10
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:07:35Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 13,
+    "slot": 13
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:11:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 10,
+    "slot": 10
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:12:37Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 13,
+    "slot": 13
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:16:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 11,
+    "slot": 11
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:16:12Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 14,
+    "slot": 14
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:20:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 11,
+    "slot": 11
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:21:11Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT2",
+    "chamber_id": "CHAMBER_B",
+    "wafer_id": 14,
+    "slot": 14
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:21:22Z",
+    "event_type": "LotEnd",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "QTY": 25
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:21:22Z",
+    "event_type": "JobEnd",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:23:46Z",
+    "event_type": "PE",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_B"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:23:47Z",
+    "event_type": "ReadyToUnload",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 10,
+    "chamber_id": "CHAMBER_B"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:23:48Z",
+    "event_type": "DOOR_OPEN",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:23:49Z",
+    "event_type": "UNLOAD_CYCLE_COMPLETED",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 60,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:24:50Z",
+    "event_type": "DOOR_CLOSE",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:24:51Z",
+    "event_type": "MVOU",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:24:52Z",
+    "event_type": "UNLOCK_PORT_COMPLETED",
+    "machine_state": "Running",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:25:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 12,
+    "slot": 12
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:25:31Z",
+    "event_type": "POD_REMOVED",
+    "machine_state": "Idle",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF2"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:25:32Z",
+    "event_type": "FDC_CLEARCONTEXT",
+    "machine_state": "Idle",
+    "port": "2",
+    "lot_id": "V3GK0",
+    "recipe": "X4854",
+    "duration_sec": 1
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:29:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 12,
+    "slot": 12
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:34:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 13,
+    "slot": 13
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:38:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 13,
+    "slot": 13
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:43:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 14,
+    "slot": 14
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:47:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 14,
+    "slot": 14
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:52:00Z",
+    "event_type": "WaferLoaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 6,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 15,
+    "slot": 15
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T06:56:14Z",
+    "event_type": "WaferUnloaded",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 5,
+    "port_id": "PORT1",
+    "chamber_id": "CHAMBER_A",
+    "wafer_id": 15,
+    "slot": 15
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:04:11Z",
+    "event_type": "PE",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "chamber_id": "CHAMBER_A"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:04:11Z",
+    "event_type": "ReadyToUnload",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 10,
+    "chamber_id": "CHAMBER_A"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:04:12Z",
+    "event_type": "DOOR_OPEN",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:04:13Z",
+    "event_type": "UNLOAD_CYCLE_COMPLETED",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 60,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:05:14Z",
+    "event_type": "DOOR_CLOSE",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:05:15Z",
+    "event_type": "MVOU",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:05:16Z",
+    "event_type": "UNLOCK_PORT_COMPLETED",
+    "machine_state": "Running",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:06:27Z",
+    "event_type": "POD_REMOVED",
+    "machine_state": "Idle",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1,
+    "smif_id": "SMIF1"
+}, {
+    "tool_id": "OXE-65",
+    "event_ts_utc": "2026-07-05T07:06:28Z",
+    "event_type": "FDC_CLEARCONTEXT",
+    "machine_state": "Idle",
+    "port": "1",
+    "lot_id": "V3GKW",
+    "recipe": "X4854",
+    "duration_sec": 1
+}];
+var UNITS = {
+    CHAMBER_A: {
+        id: "CHAMBER_A",
+        name: "CHAMBER_A",
+        x: -208,
+        y: -220,
+        w: 120,
+        d: 100,
+        h: 0,
+        color: "#a8b7cc"
+    },
+    CHAMBER_B: {
+        id: "CHAMBER_B",
+        name: "CHAMBER_B",
+        x: -32,
+        y: -220,
+        w: 120,
+        d: 100,
+        h: 0,
+        color: "#a8b7cc"
+    },
+    CHAMBER_C: {
+        id: "CHAMBER_C",
+        name: "CHAMBER_C",
+        x: 60,
+        y: -48,
+        w: 120,
+        d: 96,
+        h: 0,
+        color: "#a8b7cc"
+    },
+    PORT1: {
+        id: "PORT1",
+        name: "PORT1",
+        x: -208,
+        y: 120,
+        w: 120,
+        d: 88,
+        h: 0,
+        color: "#8ea0b8"
+    },
+    PORT2: {
+        id: "PORT2",
+        name: "PORT2",
+        x: -32,
+        y: 120,
+        w: 120,
+        d: 88,
+        h: 0,
+        color: "#8ea0b8"
+    },
+    SMIF1: {
+        id: "SMIF1",
+        name: "SMIF1",
+        x: -208,
+        y: 208,
+        w: 120,
+        d: 68,
+        h: 0,
+        color: "#6b7280"
+    },
+    SMIF2: {
+        id: "SMIF2",
+        name: "SMIF2",
+        x: -32,
+        y: 208,
+        w: 120,
+        d: 68,
+        h: 0,
+        color: "#6b7280"
+    },
+    PA: {
+        id: "PA",
+        name: "PA",
+        x: -300,
+        y: -48,
+        w: 120,
+        d: 96,
+        h: 0,
+        color: "#8b7bd1"
+    },
+    ARM: {
+        id: "ARM",
+        name: "ARM",
+        x: -180,
+        y: -120,
+        w: 240,
+        d: 240,
+        h: 0,
+        color: "#cfd8e6"
+    }
+};
+var activeState = {
+    chamberCount: 3,
+    events: DEFAULT_EVENTS.slice(),
+    activeUnitId: "SMIF1",
+    machineState: "Idle",
+    timerId: null,
+    index: 0,
+    doorProgress: 0,
+    portDoorProgress: {
+        PORT1: 0,
+        PORT2: 0
+    },
+    portVisuals: {
+        PORT1: {
+            podPlaced: false,
+            podLocked: false,
+            podLift: 0,
+            podPlaceProgress: 0,
+            podCarryProgress: 0,
+            cassetteAt: "SMIF1",
+            podSmif: "SMIF1",
+            cassettePos: null,
+            cassetteSlots: new Array(25).fill(true)
+        },
+        PORT2: {
+            podPlaced: false,
+            podLocked: false,
+            podLift: 0,
+            podPlaceProgress: 0,
+            podCarryProgress: 0,
+            cassetteAt: "SMIF2",
+            podSmif: "SMIF2",
+            cassettePos: null,
+            cassetteSlots: new Array(25).fill(true)
+        }
+    },
+    chamberStates: {
+        CHAMBER_A: "idle",
+        CHAMBER_B: "idle",
+        CHAMBER_C: "idle"
+    },
+    mappingActive: false,
+    mappingPortId: "PORT1",
+    mappingPhase: 0,
+    movingWafer: null,
+    movingWaferLabel: "",
+    waferAtPA: false,
+    waferInChamber: {
+        CHAMBER_A: false,
+        CHAMBER_B: false,
+        CHAMBER_C: false
+    },
+    chamberWaferLabel: {
+        CHAMBER_A: "",
+        CHAMBER_B: "",
+        CHAMBER_C: ""
+    },
+    chamberEpoch: {
+        CHAMBER_A: 0,
+        CHAMBER_B: 0,
+        CHAMBER_C: 0
+    },
+    waferMap: {
+        PORT1: new Array(25).fill(0),
+        PORT2: new Array(25).fill(0)
+    },
+    armTarget: null,
+    lotStatus: {
+        PORT1: {
+            lot: "NULL",
+            status: "IDLE"
+        },
+        PORT2: {
+            lot: "NULL",
+            status: "IDLE"
+        }
+    },
+    alarmLeft: [],
+    /* 左边 alarm 列表（PORT1 / CHAMBER_A / PORT1 lot） alarmRight: [], /* 右边 alarm 列表（PORT2 / CHAMBER_B / PORT2 lot） */ alarmExpandedLeft: false,
+    alarmExpandedRight: false,
+    liveMode: false,
+    liveToolId: "",
+    liveSessionId: "",
+    rafLoopStarted: false,
+    lastEventPortId: "PORT1"
+}; 
+var liveEventSource = null; 
+var canvas = document.getElementById("isoCanvas"); var ctx = canvas.getContext("2d"); 
+function fitCanvas() { var ratio = window.devicePixelRatio || 1; var rect = canvas.getBoundingClientRect(); canvas.width = Math.round(rect.width * ratio); canvas.height = Math.round(rect.height * ratio); ctx.setTransform(ratio, 0, 0, ratio, 0, 0); render(); } 
+function shadeColor(hex, percent) { var n = parseInt(hex.slice(1), 16); var r = (n >> 16) & 255; var g = (n >> 8) & 255; var b = n & 255; var p = percent /100;
+r = Math.max(0, Math.min(255, Math.round(r + (255 - r) * p)));
+g = Math.max(0, Math.min(255, Math.round(g + (255 - g) * p)));
+b = Math.max(0, Math.min(255, Math.round(b + (255 - b) * p)));
+var s = (r << 16) | (g << 8) | b;
+return "#" + s.toString(16).padStart(6, "0");
+}
+
+function project(x, y, z) {
+    var cx = canvas.clientWidth * 0.5;
+    var cy = canvas.clientHeight * 0.46;
+    return {
+        x: cx + x,
+        y: cy + y - (z || 0) * 0.03
+    };
+}
+
+function lerpPoint(a, b, t) {
+    return {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t
+    };
+}
+
+function statusTextClass(statusText) {
+    var s = String(statusText || "").toLowerCase();
+    if (s.indexOf("alarm") >= 0) {
+        return "status-alarm-text";
+    }
+    if (s.indexOf("idle") >= 0) {
+        return "status-idle-text";
+    }
+    if (s.indexOf("processing") >= 0 || s.indexOf("unloading") >= 0 || s.indexOf("success") >= 0 || s.indexOf("mapping") >= 0 || s.indexOf("pod") >= 0) {
+        return "status-running-text";
+    }
+    return "status-info-text";
+}
+
+function updateLotPanel() {
+    var panel = document.getElementById("lotStatusPanel");
+    if (!panel) {
+        return;
+    }
+     /* 完全清空并隐藏左上角 HTML 状态栏（PORT1/PORT2 状态改用 Canvas 绘制在 MAPPING 上方）*/
+    panel.innerHTML = '';
+    panel.style.display = 'none';
+}
+
+function emptyWaferMap() {
+    return new Array(25).fill(0);
+}
+
+function parseWaferMapString(value) {
+    var raw = String(value || "").trim().replace(/[^0123]/g, "");
+    if (!raw) {
+        return null;
+    }
+    var arr = emptyWaferMap();
+    var i;
+    for (i = 0; i < 25 && i < raw.length; i += 1) {
+        var ch = raw.charAt(i);
+        if (ch === "1") {
+            arr[i] = 1;
+        } else if (ch === "2") {
+            arr[i] = 2;
+        } else if (ch === "3") {
+            arr[i] = 3;
+        } else {
+            arr[i] = 0;
+        }
+    }
+    return arr;
+}
+
+function getWaferMappingValue(ev) {
+    if (!ev || typeof ev !== "object") {
+        return "";
+    }
+    return (ev.EVENT_VALUE || ev.event_value || ev.EVENTVALUE || ev.eventvalue || ev.EventValue || ev.mapping_value || ev.MAPPING_VALUE || ev.alarm_text || ev.ALARM_TEXT || ev.ALTX || "");
+}
+
+function applyMappingToPort(portId, ev) {
+    var normalizedPort = normalizePortId(portId || ev.port_id || ev.PORT_ID || ev.portid || ev.PORTID || ev.port || ev.PORT);
+    var parsed = parseWaferMapString(getWaferMappingValue(ev));
+    if (parsed) {
+        activeState.waferMap[normalizedPort] = parsed;
+        getPortVisual(normalizedPort).cassetteSlots = parsed.map(function(v) {
+            return Number(v || 0) > 0;
+        });
+        return;
+    }
+}
+
+function markWaferAsCompleted(portId, slot) {
+    /* RUN 完成 → 状态 3（黄色） */
+    var normalizedPort = normalizePortId(portId);
+    var idx = Number(slot) - 1;
+    if (idx < 0 || idx >= 25) {
+        return;
+    }
+    activeState.waferMap[normalizedPort][idx] = 3;
+}
+
+function markWaferAsRunning(portId, slot) {
+    /* 正在 RUN → 状态 2（绿色） */
+    var normalizedPort = normalizePortId(portId);
+    var idx = Number(slot) - 1;
+    if (idx < 0 || idx >= 25) {
+        return;
+    }
+    activeState.waferMap[normalizedPort][idx] = 2;
+}
+
+function normalizePortId(portVal) {
+    var s = String(portVal || "").trim().toUpperCase();
+    if (s === "2" || s === "PORT2" || s === "CM2" || s === "SMIF2" || s === "SMIF-2") {
+        return "PORT2";
+    }
+    if (s === "1" || s === "PORT1" || s === "CM1" || s === "SMIF1" || s === "SMIF-1") {
+        return "PORT1";
+    }
+    return "PORT1";
+}
+
+function tryNormalizePortId(portVal) {
+    var s = String(portVal || "").trim().toUpperCase();
+    if (!s || s === "NULL" || s === "N/A" || s === "NONE") {
+        return null;
+    }
+    if (s === "2" || s === "PORT2" || s === "CM2" || s === "SMIF2" || s === "SMIF-2") {
+        return "PORT2";
+    }
+    if (s === "1" || s === "PORT1" || s === "CM1" || s === "SMIF1" || s === "SMIF-1") {
+        return "PORT1";
+    }
+    return null;
+}
+
+function normalizeChamberId(chamberId) {
+    var s = String(chamberId || "").trim().toUpperCase();
+    if (s === "A" || s === "CHAMBER_A" || s === "PMA") {
+        return "CHAMBER_A";
+    }
+    if (s === "B" || s === "CHAMBER_B" || s === "PMB") {
+        return "CHAMBER_B";
+    }
+    if (s === "C" || s === "CHAMBER_C" || s === "PMC") {
+        return "CHAMBER_C";
+    }
+    return "CHAMBER_A";
+}
+
+function resolvePortFromChamber(chamberId) {
+    var raw = String(chamberId || "").trim().toUpperCase();
+    if (!raw || raw === "NULL") {
+        return null;
+    } /* 直接支持单字母 A/B/C（RV 报文中常见） */
+    if (raw === "A" || raw === "CHAMBER_A" || raw === "PMA") {
+        return "PORT1";
+    }
+    if (raw === "B" || raw === "CHAMBER_B" || raw === "PMB") {
+        return "PORT2";
+    }
+    if (raw === "C" || raw === "CHAMBER_C" || raw === "PMC") {
+        return "PORT1"; /* 默认回退 PORT1 */
+    }
+    var chamber = normalizeChamberId(chamberId);
+    if (chamber === "CHAMBER_A") {
+        return "PORT1";
+    }
+    if (chamber === "CHAMBER_B") {
+        return "PORT2";
+    }
+    return null;
+}
+
+function resolveEventPortId(ev, fallbackPortId) {
+    if (ev) {
+        var directPort = tryNormalizePortId(ev.port_id || ev.PORT_ID || ev.portid || ev.PORTID || ev.port || ev.PORT || ev.cm || ev.CM);
+        if (directPort) {
+            return directPort;
+        }
+        var smifPort = tryNormalizePortId(ev.smif_id || ev.SMIF_ID || ev.smif || ev.SMIF);
+        if (smifPort) {
+            return smifPort;
+        }
+        var chamberPort = resolvePortFromChamber(ev.chamber_id || ev.CHAMBER_ID || ev.chamber || ev.CHAMBER);
+        if (chamberPort) {
+            return chamberPort;
+        }
+    }
+    var fallback = tryNormalizePortId(fallbackPortId);
+    if (fallback) {
+        return fallback;
+    }
+    return normalizePortId(fallbackPortId || activeState.lastEventPortId || activeState.mappingPortId || "PORT1");
+}
+
+function portFromEvent(portVal) {
+    return resolveEventPortId({
+        port_id: portVal
+    });
+}
+
+function chamberLabel(chamberId) {
+    return normalizeChamberId(chamberId);
+}
+
+function getActiveLotPorts() {
+    var ports = [];
+    ["PORT1", "PORT2"].forEach(function(portId) {
+        var info = activeState.lotStatus[portId] || {
+            lot: "NULL",
+            status: "IDLE"
+        };
+        var lot = String(info.lot || "").toUpperCase();
+        var status = String(info.status || "").toUpperCase();
+        if (lot && lot !== "NULL" && status !== "IDLE") {
+            ports.push(portId);
+        }
+    });
+    return ports;
+}
+
+function getPortVisual(portId) {
+    return activeState.portVisuals[normalizePortId(portId)];
+}
+
+function smifFromPort(portId) {
+    return normalizePortId(portId) === "PORT2" ? "SMIF2" : "SMIF1";
+}
+
+function displayUnitLabel(unitId) {
+    if (unitId === "CHAMBER_A") {
+        return "CHAMBER_A";
+    }
+    if (unitId === "CHAMBER_B") {
+        return "CHAMBER_B";
+    }
+    if (unitId === "CHAMBER_C") {
+        return "CHAMBER_C";
+    }
+    return unitId;
+}
+
+function drawPoly(points, fill, stroke, width) {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    var i;
+    for (i = 1; i < points.length; i += 1) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.closePath();
+    if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill();
+    }
+    if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = width || 1.2;
+        ctx.stroke();
+    }
+}
+
+function getTopFace(unit, zOffset) {
+    var h = zOffset || 0;
+    return {
+        t1: project(unit.x, unit.y, h),
+        t2: project(unit.x + unit.w, unit.y, h),
+        t3: project(unit.x + unit.w, unit.y + unit.d, h),
+        t4: project(unit.x, unit.y + unit.d, h)
+    };
+}
+
+function getUnitBaseColor(unit) {
+    if (unit.id === "ARM") {
+        return "#cbd5e1";
+    }
+    if (unit.id === "CHAMBER_A" || unit.id === "CHAMBER_B" || unit.id === "CHAMBER_C") {
+        var state = activeState.chamberStates[unit.id] || "idle";
+        if (state === "running") {
+            return "#16a34a";
+        }
+        if (state === "alarm") {
+            return "#dc2626";
+        }
+        if (state === "unloading") {
+            return "#ca8a04";
+        }
+        return "#94a3b8";
+    }
+    return unit.color;
+}
+
+function drawPrism(unit, active) {
+    var x = unit.x;
+    var y = unit.y;
+    var w = unit.w;
+    var d = unit.d;
+    var base = getUnitBaseColor(unit);
+    var cTop = active ? shadeColor(base, 18) : shadeColor(base, 8);
+    var p1 = project(x, y, 0);
+    var p2 = project(x + w, y, 0);
+    var p3 = project(x + w, y + d, 0);
+    var p4 = project(x, y + d, 0);
+    drawPoly([p1, p2, p3, p4], cTop, "#334155", 1.2);
+    var centerLabel = project(x + w * 0.5, y + d * 0.5, 0);
+    ctx.fillStyle = "#eef5fb";
+    ctx.font = "bold 10px Segoe UI";
+    ctx.textAlign = "center";
+    if (unit.id !== "ARM") {
+        ctx.fillText(displayUnitLabel(unit.id), centerLabel.x, centerLabel.y + 4);
+    }
+}
+
+function getVisibleUnits() {
+    var arr = [UNITS.PA, UNITS.CHAMBER_A, UNITS.CHAMBER_B, UNITS.CHAMBER_C, UNITS.ARM, UNITS.PORT1, UNITS.PORT2, UNITS.SMIF1, UNITS.SMIF2];
+    if (activeState.chamberCount === 2) {
+        arr = [UNITS.PA, UNITS.CHAMBER_A, UNITS.CHAMBER_B, UNITS.ARM, UNITS.PORT1, UNITS.PORT2, UNITS.SMIF1, UNITS.SMIF2];
+    }
+    return arr;
+}
+
+function getUnitCenter(unitId) {
+    var u = UNITS[unitId] || UNITS.SMIF1;
+    return {
+        x: u.x + u.w * 0.5,
+        y: u.y + u.d * 0.5,
+        z: u.h + 3
+    };
+}
+
+function drawGroundGrid() {
+    var i;
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.14)";
+    ctx.lineWidth = 1;
+    for (i = -300; i <= 300; i += 30) {
+        var p1 = project(i, -240, 0);
+        var p2 = project(i, 260, 0);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+    }
+    for (i = -240; i <= 260; i += 30) {
+        var q1 = project(-300, i, 0);
+        var q2 = project(300, i, 0);
+        ctx.beginPath();
+        ctx.moveTo(q1.x, q1.y);
+        ctx.lineTo(q2.x, q2.y);
+        ctx.stroke();
+    }
+}
+
+function drawArmZonePillar() {
+    var arm = UNITS.ARM;
+    var cx = arm.x + arm.w * 0.5;
+    var cy = arm.y + arm.d * 0.5;
+    var rxSmall = arm.w * 0.26;
+    var rySmall = arm.d * 0.26;
+    var rxLarge = arm.w * 0.5;
+    var ryLarge = arm.d * 0.5;
+    var poly = [project(cx - rxSmall, cy - ryLarge, 0), project(cx + rxSmall, cy - ryLarge, 0), project(cx + rxLarge, cy - rySmall, 0), project(cx + rxLarge, cy + rySmall, 0), project(cx + rxSmall, cy + ryLarge, 0), project(cx - rxSmall, cy + ryLarge, 0), project(cx - rxLarge, cy + rySmall, 0), project(cx - rxLarge, cy - rySmall, 0)];
+    drawPoly(poly, "rgba(203, 213, 225, 0.86)", "#334155", 1.8);
+    var hub = project(cx, cy, 0);
+    ctx.beginPath();
+    ctx.arc(hub.x, hub.y, 12, 0, Math.PI * 2);
+    ctx.strokeStyle = "#64748b";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(hub.x, hub.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#f8fafc";
+    ctx.fill();
+    var label = project(cx + arm.w * 0.16, cy + arm.d * 0.18, 0);
+    ctx.fillStyle = "#dbeafe";
+    ctx.font = "bold 14px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText("ARM", label.x, label.y + 4);
+}
+
+function drawPortDoor(unit) {
+    var open = Math.max(0, Math.min(1, activeState.portDoorProgress[unit.id] || 0));
+    var doorW = unit.w * 0.36;
+    var doorHClosed = unit.d * 0.072;
+    var topY = unit.y + unit.d - doorHClosed;
+    var bottomY = topY + doorHClosed; /* 开门向左滑动，关门时随着 open 变小自然向右回位。 */
+    var leftClosed = unit.x + (unit.w - doorW) * 0.5;
+    var slideLeft = unit.w * 0.44;
+    var left = leftClosed - open * slideLeft;
+    var right = left + doorW;
+    var topL = project(left, topY, 0);
+    var topR = project(right, topY, 0);
+    var botR = project(right, bottomY, 0);
+    var botL = project(left, bottomY, 0);
+    var fillR = Math.round(192 + (2 - 192) * open);
+    var fillG = Math.round(198 + (6 - 198) * open);
+    var fillB = Math.round(208 + (23 - 208) * open);
+    var fillA = 0.95 + (0.10 - 0.95) * open;
+    var strokeR = Math.round(120 + (15 - 120) * open);
+    var strokeG = Math.round(130 + (23 - 130) * open);
+    var strokeB = Math.round(145 + (42 - 145) * open);
+    var strokeA = 0.88 + (0.65 - 0.88) * open;
+    drawPoly([topL, topR, botR, botL], "rgba(" + fillR + ", " + fillG + ", " + fillB + ", " + fillA.toFixed(2) + ")", "rgba(" + strokeR + ", " + strokeG + ", " + strokeB + ", " + strokeA.toFixed(2) + ")", 1.2);
+}
+
+function drawPortDoors() {
+    drawPortDoor(UNITS.PORT1);
+    drawPortDoor(UNITS.PORT2);
+}
+
+function drawWaferMarker(center, color, label) {
+    var p = project(center.x, center.y, center.z);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.scale(1.45, 0.9);
+    ctx.beginPath();
+    ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+    ctx.fillStyle = color || "#fde68a";
+    ctx.fill();
+    ctx.strokeStyle = "#92400e";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    if (label) {
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "bold 10px Segoe UI";
+        ctx.textAlign = "center";
+        ctx.fillText(label, p.x, p.y + 3);
+    }
+}
+
+function drawPlacedWafers() {
+    if (activeState.waferAtPA) {
+        var pa = getUnitCenter("PA");
+        drawWaferMarker({
+            x: pa.x,
+            y: pa.y,
+            z: pa.z + 7
+        }, "#fef3c7");
+    }
+    Object.keys(activeState.waferInChamber).forEach(function(key) {
+        if (activeState.waferInChamber[key]) {
+            var c = getUnitCenter(key);
+            var chamberLabel = activeState.chamberWaferLabel[key] || "";
+            drawWaferMarker({
+                x: c.x,
+                y: c.y,
+                z: c.z + 8
+            }, "#fde68a", chamberLabel);
+        }
+    });
+}
+
+function drawPodShell(center) {
+    var p = project(center.x, center.y, center.z + 2);
+    var w = 48;
+    var h = 58;
+    ctx.fillStyle = "rgba(31, 41, 55, 0.26)";
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.72)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(p.x - w / 2, p.y + h / 2 - 8);
+    ctx.lineTo(p.x - w / 2, p.y - h / 2 + 10);
+    ctx.quadraticCurveTo(p.x - w / 2 + 3, p.y - h / 2, p.x - w / 2 + 12, p.y - h / 2);
+    ctx.lineTo(p.x + w / 2 - 12, p.y - h / 2);
+    ctx.quadraticCurveTo(p.x + w / 2 - 3, p.y - h / 2, p.x + w / 2, p.y - h / 2 + 10);
+    ctx.lineTo(p.x + w / 2, p.y + h / 2 - 8);
+    ctx.quadraticCurveTo(p.x + w / 2 - 2, p.y + h / 2, p.x + w / 2 - 10, p.y + h / 2);
+    ctx.lineTo(p.x - w / 2 + 10, p.y + h / 2);
+    ctx.quadraticCurveTo(p.x - w / 2 + 2, p.y + h / 2, p.x - w / 2, p.y + h / 2 - 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(96, 165, 250, 0.22)";
+    ctx.fillRect(p.x - 13, p.y + 7, 26, 10);
+}
+
+function drawCassetteCarrier(center) {
+    var p = project(center.x, center.y, center.z + 2);
+    var w = 34;
+    var h = 48;
+    ctx.fillStyle = "rgba(255,255,255,0.88)";
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    ctx.fillRect(p.x - w / 2, p.y - h / 2, w, h);
+    ctx.strokeRect(p.x - w / 2, p.y - h / 2, w, h);
+    ctx.fillStyle = "rgba(148, 163, 184, 0.28)";
+    ctx.fillRect(p.x - w / 2 + 2, p.y - h / 2 + 2, 5, h - 4);
+    ctx.fillRect(p.x + w / 2 - 7, p.y - h / 2 + 2, 5, h - 4);
+}
+
+function drawPodLockMarks(center, offset) {
+    var p = project(center.x, center.y, center.z + offset);
+    var s = 5;
+    var dx = 19;
+    var dy = 13;
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(p.x - dx, p.y + dy - s, s, s);
+    ctx.fillRect(p.x + dx - s, p.y + dy - s, s, s);
+}
+
+function hasAnyWaferInMap(portId) {
+    var map = activeState.waferMap[normalizePortId(portId)] || [];
+    var i;
+    for (i = 0; i < map.length; i += 1) {
+        if (Number(map[i] || 0) > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function getCassetteDisplayCenterForPort(portId) {
+    var normalizedPort = normalizePortId(portId);
+    var visual = getPortVisual(normalizedPort);
+    if (visual.cassettePos) {
+        return visual.cassettePos;
+    }
+    if (visual.cassetteAt === "PORT1" || visual.cassetteAt === "PORT2") {
+        var p = UNITS[visual.cassetteAt];
+        return {
+            x: p.x + p.w * 0.5,
+            y: p.y + p.d * 0.64,
+            z: 8
+        };
+    }
+    return getUnitCenter(visual.cassetteAt || smifFromPort(normalizedPort));
+}
+
+function getCassetteSlotsForPort(portId, fallbackSlots) {
+    var normalizedPort = normalizePortId(portId);
+    var map = activeState.waferMap[normalizedPort] || [];
+    if (hasAnyWaferInMap(normalizedPort)) {
+        return map.map(function(v) {
+            return Number(v || 0) > 0;
+        });
+    }
+    return fallbackSlots || new Array(25).fill(false);
+}
+
+function getSlotCoord(slotNumber, center) {
+    var total = 25;
+    var idx = Math.max(1, Math.min(total, Number(slotNumber || 1))) - 1;
+    var startY = center.y + 22;
+    var pitch = 1.75;
+    return {
+        x: center.x,
+        y: startY - idx * pitch,
+        z: center.z + 5
+    };
+}
+
+function drawCassetteSlots(center, slots) {
+    var slotBox = project(center.x, center.y, center.z + 3);
+    var w = 30;
+    var h = 46;
+    ctx.fillStyle = "rgba(226, 232, 240, 0.92)";
+    ctx.fillRect(slotBox.x - w / 2, slotBox.y - h / 2, w, h);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(slotBox.x - w / 2, slotBox.y - h / 2, w, h);
+    var i;
+    for (i = 1; i <= 25; i += 1) {
+        var slotY = slotBox.y + h / 2 - 2 - ((i - 1) * ((h - 6) / 24));
+        var present = slots && slots[i - 1];
+        ctx.fillStyle = present ? "#fef08a" : "#cbd5e1";
+        ctx.fillRect(slotBox.x - 11, slotY - 0.8, 22, 1.6);
+    }
+}
+
+function drawMovingWafer() {
+    if (!activeState.movingWafer) {
+        return;
+    }
+    var p = project(activeState.movingWafer.x, activeState.movingWafer.y, activeState.movingWafer.z);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.scale(1.45, 0.9);
+    ctx.beginPath();
+    ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#fde68a";
+    ctx.fill();
+    ctx.strokeStyle = "#a16207";
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.restore();
+    if (activeState.movingWaferLabel) {
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "bold 11px Segoe UI";
+        ctx.textAlign = "center";
+        ctx.fillText(activeState.movingWaferLabel, p.x, p.y - 13);
+    }
+}
+
+function drawHandsForPod(center, podPlaceProgress, podCarryProgress) {
+    var handProgress = 0;
+    if (podPlaceProgress < 1) {
+        handProgress = Math.max(handProgress, 1 - podPlaceProgress);
+    }
+    handProgress = Math.max(handProgress, podCarryProgress);
+    if (handProgress <= 0.001) {
+        return;
+    }
+    var p = project(center.x, center.y, center.z + 2);
+    ctx.fillStyle = "rgba(240, 205, 170, 0.95)";
+    ctx.fillRect(p.x - 34, p.y - 6, 12, 22);
+    ctx.fillRect(p.x + 22, p.y - 6, 12, 22);
+}
+
+function drawRobotArm() {
+    var arm = UNITS.ARM;
+    var center = getUnitCenter("ARM");
+    var hub = project(center.x, center.y, 0);
+    var target3d = activeState.armTarget || {
+        x: center.x - 8,
+        y: center.y - 12,
+        z: center.z + 8
+    };
+    var target = project(target3d.x, target3d.y, target3d.z);
+    var vx = target.x - hub.x;
+    var vy = target.y - hub.y;
+    var distance = Math.sqrt(vx * vx + vy * vy);
+    var len = Math.min(220, Math.max(24, distance));
+    var ux = distance > 0 ? vx / distance : 1;
+    var uy = distance > 0 ? vy / distance : 0;
+    var ex = hub.x + ux * len;
+    var ey = hub.y + uy * len;
+    var px = -uy;
+    var py = ux;
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 12;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(hub.x, hub.y);
+    ctx.lineTo(hub.x + ux * len * 0.55, hub.y + uy * len * 0.55);
+    ctx.stroke();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(hub.x + ux * len * 0.55, hub.y + uy * len * 0.55);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex + px * 9 - ux * 2, ey + py * 9 - uy * 2);
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - px * 9 - ux * 2, ey - py * 9 - uy * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#64748b";
+    ctx.beginPath();
+    ctx.arc(hub.x, hub.y, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e2e8f0";
+    ctx.beginPath();
+    ctx.arc(hub.x, hub.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+    ctx.lineWidth = 2;
+    drawArmZonePillar();
+}
+
+function drawPodAndCassetteForPort(portId) {
+    var normalizedPort = normalizePortId(portId);
+    var visual = getPortVisual(normalizedPort);
+    var lotInfo = activeState.lotStatus[normalizedPort] || {
+        lot: "NULL",
+        status: "IDLE"
+    };
+    var lot = String(lotInfo.lot || "").toUpperCase();
+    var status = String(lotInfo.status || "").toUpperCase();
+    var lotActive = lot && lot !== "NULL" && status !== "IDLE";
+    if (!visual.podPlaced && !lotActive) {
+        return;
+    }
+    var smifUnitId = visual.podSmif || smifFromPort(normalizedPort);
+    var smifCenter = getUnitCenter(smifUnitId);
+    var placingOffset = (1 - visual.podPlaceProgress) * 170;
+    var shellCenter = {
+        x: smifCenter.x - placingOffset - visual.podCarryProgress * 170,
+        y: smifCenter.y - placingOffset * 0.2 - visual.podCarryProgress * 36,
+        z: smifCenter.z + 7 + visual.podLift + (1 - visual.podPlaceProgress) * 4 + visual.podCarryProgress * 6
+    };
+    drawPodShell(shellCenter);
+    drawHandsForPod(shellCenter, visual.podPlaceProgress, visual.podCarryProgress);
+    if (visual.podLocked && visual.podCarryProgress < 0.98) {
+        drawPodLockMarks(shellCenter, 0);
+    }
+    var cassetteCenter;
+    if (visual.podCarryProgress > 0.001 || visual.podPlaceProgress < 0.999) {
+        cassetteCenter = {
+            x: shellCenter.x,
+            y: shellCenter.y,
+            z: shellCenter.z - 2
+        };
+    } else {
+        cassetteCenter = getCassetteDisplayCenterForPort(normalizedPort);
+    }
+    drawCassetteCarrier({
+        x: cassetteCenter.x,
+        y: cassetteCenter.y,
+        z: cassetteCenter.z + 2
+    });
+    drawCassetteSlots({
+        x: cassetteCenter.x,
+        y: cassetteCenter.y,
+        z: cassetteCenter.z + 2
+    }, getCassetteSlotsForPort(normalizedPort, visual.cassetteSlots));
+}
+
+function drawPodAndCassette() {
+    drawPodAndCassetteForPort("PORT1");
+    drawPodAndCassetteForPort("PORT2");
+}
+
+function drawMappingScan() {
+    if (!activeState.mappingActive) {
+        return;
+    }
+    var scanPort = activeState.mappingPortId || "PORT1";
+    var unit = UNITS[scanPort] || UNITS.PORT1;
+    var mapVisual = getPortVisual(scanPort);
+    if (mapVisual.cassetteAt !== scanPort && !mapVisual.cassettePos) {
+        return;
+    }
+    var face = getTopFace(unit, 9);
+    activeState.mappingPhase += 0.018;
+    if (activeState.mappingPhase > 2) {
+        activeState.mappingPhase = 0;
+    }
+    var t = activeState.mappingPhase <= 1 ? activeState.mappingPhase : (2 - activeState.mappingPhase); /* 改为上下扫：t1→t4（左上→左下），t2→t3（右上→右下） */
+    var a = lerpPoint(face.t1, face.t4, t);
+    var b = lerpPoint(face.t2, face.t3, t);
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+}
+
+function drawWaferMapPanel(portId, side) {
+    var map = activeState.waferMap[portId] || emptyWaferMap();
+    var canvasW = canvas.clientWidth;
+    var panelW = 155;
+    var panelH = 330;
+    var x = side === "right" ? (canvasW - panelW - 10) : 10;
+    var y = 74; /* PORT1 和 PORT2 都在各自 MAPPING 上方绘制状态栏（样式一致，左边 PORT1，右边 PORT2） */
+    var lotInfo = activeState.lotStatus[portId] || {
+        lot: "-",
+        status: "Idle"
+    };
+    ctx.fillStyle = "rgba(250, 252, 255, 0.95)";
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 1;
+    ctx.fillRect(x, 10, panelW, 58);
+    ctx.strokeRect(x, 10, panelW, 58);
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 11px Segoe UI";
+    ctx.textAlign = "left";
+    ctx.fillText(portId + " LOT:" + lotInfo.lot, x + 8, 28);
+    ctx.fillText("Status:", x + 8, 46);
+    ctx.fillStyle = (lotInfo.status.indexOf("running") >= 0 || lotInfo.status.indexOf("processing") >= 0) ? "#16a34a" : "#0f172a";
+    ctx.fillText(lotInfo.status, x + 60, 46);
+    ctx.fillStyle = "rgba(250, 252, 255, 0.92)";
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 1;
+    ctx.fillRect(x, y, panelW, panelH);
+    ctx.strokeRect(x, y, panelW, panelH);
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 11px Segoe UI";
+    ctx.textAlign = "left";
+    ctx.fillText(portId + " WAFER MAP", x + 8, y + 14);
+    var top = y + 24;
+    var rowH = 11.5;
+    var i;
+    for (i = 25; i >= 1; i -= 1) {
+        var row = 25 - i;
+        var cy = top + row * rowH;
+        var status = map[i - 1] || 0;
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "10px Segoe UI";
+        ctx.textAlign = "right";
+        var txt = i < 10 ? "0" + i : String(i);
+        ctx.fillText(txt, x + 22, cy + 4);
+        if (status > 0) {
+            ctx.beginPath();
+            ctx.ellipse(x + 88, cy + 1, 46, 4.2, 0, 0, Math.PI * 2); /* 颜色映射：1=灰色, 2=绿色, 3=黄色*/
+            ctx.fillStyle = status === 1 ? "#9ca3af" : (status === 2 ? "#22c55e" : "#fde047");
+            ctx.fill();
+            ctx.strokeStyle = "#334155";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        }
+    } /* 在 wafer map 面板下方显示 alarm 下拉框 */
+    var alarmList = (side === "right") ? activeState.alarmRight : activeState.alarmLeft;
+    var isExpanded = (side === "right") ? activeState.alarmExpandedRight : activeState.alarmExpandedLeft;
+    if (alarmList && alarmList.length > 0) {
+        var alarmBoxH = isExpanded ? Math.min(60, 14 + alarmList.length * 14) : 18;
+        ctx.fillStyle = "rgba(254, 226, 226, 0.95)";
+        ctx.strokeStyle = "#dc2626";
+        ctx.lineWidth = 1;
+        ctx.fillRect(x, y + panelH + 4, panelW, alarmBoxH);
+        ctx.strokeRect(x, y + panelH + 4, panelW, alarmBoxH);
+        ctx.fillStyle = "#991b1b";
+        ctx.font = "9px Segoe UI";
+        ctx.textAlign = "left"; /* 标题行（可点击展开/收起）*/ 
+        ctx.fillText("⚠ ALARM (" + alarmList.length + ") ▼", x + 4, y + panelH + 14); /* 展开时显示时间+内容列表 */
+        if (isExpanded) {
+            var ai;
+            for (ai = 0; ai < alarmList.length && ai < 3; ai++) {
+                var entry = alarmList[ai];
+                ctx.fillText("[" + entry.time + "] " + entry.text.slice(0, 16), x + 4, y + panelH + 28 + ai * 14);
+            }
+            if (alarmList.length > 3) {
+                ctx.fillText("... 共 " + alarmList.length + " 条", x + 4, y + panelH + 28 + 3 * 14 - 2);
+            }
+        }
+    }
+}
+
+function render() {
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    drawGroundGrid();
+    var units = getVisibleUnits();
+    units.forEach(function(u) {
+        drawPrism(u, activeState.activeUnitId === u.id);
+    });
+    drawRobotArm();
+    drawPodAndCassette();
+    drawPortDoors();
+    drawMappingScan();
+    drawPlacedWafers();
+    drawMovingWafer();
+    drawWaferMapPanel("PORT1", "left");
+    drawWaferMapPanel("PORT2", "right");
+}
+
+function setStateText(state) {
+    var el = document.getElementById("kpiState");
+    var value = state || "Idle";
+    el.textContent = value;
+    el.className = "status-" + value.toLowerCase();
+    document.getElementById("machineState").textContent = value;
+}
+
+function appendTimeline(ev) {
+    var root = document.getElementById("timeline");
+    var row = document.createElement("div");
+    row.className = "event-row";
+    var t = formatEventTime(ev);
+    var eventName = getEffectiveEventName(ev);
+    var extraPort = resolveEventPortId(ev, null);
+    var extra = extraPort ? " / " + extraPort : (ev.chamber_id ? " / " + chamberLabel(ev.chamber_id) : "");
+    row.innerHTML = '<div class="event-time">' + t + '</div><div><strong>' + eventName + '</strong><span style="color:#607089">' + extra + '</span></div>';
+    root.appendChild(row);
+    root.scrollTop = root.scrollHeight;
+}
+
+function normalizeIncomingEvent(ev) {
+    if (!ev || typeof ev !== "object") {
+        return ev;
+    }
+    var normalized = ev;
+    var rawType = String(normalized.event_type || normalized.EVENT_TYPE || "").trim().toUpperCase();
+    if (rawType === "ENDMAPPING") {
+        rawType = "WAFER_MAPPING";
+    }
+    if (rawType) {
+        normalized.event_type = rawType;
+    }
+    var semanticNameForNormalize = String((normalized && (normalized.event_name || normalized.status)) || "").trim();
+    var effectiveForNormalize = ((rawType === "VFEI" || rawType === "VFEO" || rawType === "HOST" || rawType === "") && semanticNameForNormalize) ? semanticNameForNormalize : (rawType || semanticNameForNormalize);
+    if (String(effectiveForNormalize || "").trim().toUpperCase() === "ENDMAPPING") {
+        effectiveForNormalize = "WAFER_MAPPING";
+    }
+    effectiveForNormalize = String(effectiveForNormalize || "").trim().toUpperCase();
+    if (rawType === "WAFER_MAPPING" || effectiveForNormalize === "WAFER_MAPPING") {
+        if (!normalized.EVENTVALUE && !normalized.eventvalue && !normalized.EVENT_VALUE && !normalized.event_value) {
+            var waferMapRaw = getWaferMappingValue(normalized);
+            if (waferMapRaw) {
+                normalized.EVENTVALUE = String(waferMapRaw);
+            }
+        }
+    }
+    if (!normalized.event_ts_utc) {
+        normalized.event_ts_utc = normalized.EVENT_TS_UTC || normalized.event_time_utc || normalized.EVENT_TIME_UTC || normalized.timestamp || normalized.TIMESTAMP || normalized.event_time || normalized.EVENT_TIME || normalized.ts || normalized.TS || normalized.received_ts_utc || normalized.RECEIVED_TS_UTC || "";
+    }
+    return normalized;
+}
+
+function getEffectiveEventName(ev) {
+    if (!ev || typeof ev !== "object") {
+        return "";
+    }
+    var rawType = String(ev.event_type || ev.EVENT_TYPE || "").trim().toUpperCase();
+    var semanticName = String((ev && (ev.event_name || ev.status)) || "").trim();
+    var result;
+    if ((rawType === "VFEI" || rawType === "VFEO" || rawType === "HOST" || rawType === "") && semanticName) {
+        result = semanticName;
+    } else {
+        result = rawType || semanticName;
+    }
+    if (String(result || "").trim().toUpperCase() === "ENDMAPPING") {
+        result = "WAFER_MAPPING";
+    }
+    return result.toUpperCase();
+}
+
+function animateValue(from, to, durationMs, onUpdate, onDone) {
+    var start = 0;
+
+    function tick(ts) {
+        if (!start) {
+            start = ts;
+        }
+        var t = Math.min(1, (ts - start) / durationMs);
+        onUpdate(from + (to - from) * t);
+        if (t < 1) {
+            requestAnimationFrame(tick);
+            return;
+        }
+        if (onDone) {
+            onDone();
+        }
+    }
+    requestAnimationFrame(tick);
+}
+
+function animateCassetteTransfer(portId, fromUnit, toUnit, durationMs, onDone) {
+    var visual = getPortVisual(portId);
+    var from = getUnitCenter(fromUnit);
+    var to = getUnitCenter(toUnit);
+    visual.cassetteAt = "MOVING";
+    animateValue(0, 1, durationMs, function(t) {
+        visual.cassettePos = {
+            x: from.x + (to.x - from.x) * t,
+            y: from.y + (to.y - from.y) * t,
+            z: from.z + 2 + Math.sin(t * Math.PI) * 6
+        };
+    }, function() {
+        visual.cassettePos = null;
+        visual.cassetteAt = toUnit;
+        if (onDone) {
+            onDone();
+        }
+    });
+}
+
+function setCassetteSlotsFromMapping(mappedSlots) {
+    var slots = new Array(25);
+    var i;
+    for (i = 0; i < 25; i += 1) {
+        slots[i] = false;
+    }
+    if (Array.isArray(mappedSlots) && mappedSlots.length > 0) {
+        mappedSlots.forEach(function(slot) {
+            var idx = Number(slot) - 1;
+            if (idx >= 0 && idx < 25) {
+                slots[idx] = true;
+            }
+        });
+    }
+    var mappingPort = normalizePortId(activeState.mappingPortId || "PORT1");
+    getPortVisual(mappingPort).cassetteSlots = slots;
+}
+
+function setChamberState(chamberId, state) {
+    var key = normalizeChamberId(chamberId);
+    if (!key || !activeState.chamberStates[key]) {
+        return;
+    }
+    activeState.chamberStates[key] = state;
+}
+
+function bumpChamberEpoch(chamberId) {
+    var key = normalizeChamberId(chamberId);
+    activeState.chamberEpoch[key] = (activeState.chamberEpoch[key] || 0) + 1;
+    return activeState.chamberEpoch[key];
+}
+
+function applyLotStatusByEvent(ev) {
+    var eventName = getEffectiveEventName(ev);
+    var cmKey = resolveEventPortId(ev, activeState.lastEventPortId);
+    if (eventName === "STARTMAPPING_RIGHT") {
+        cmKey = "PORT2";
+    }
+    if (eventName === "POD_PLACED") {
+        activeState.lotStatus[cmKey].status = "POD_PLACED";
+    } else if (eventName === "LOCK_PORT_COMPLETED") {
+        activeState.lotStatus[cmKey].status = "CHECK RCMS";
+    } else if (eventName === "MVIN") {
+        activeState.lotStatus[cmKey].status = "loading lot";
+    } else if (eventName === "LOAD_CYCLE_STARTED") {
+        activeState.lotStatus[cmKey].status = "LOAD_START";
+    } else if (eventName === "LOAD_CYCLE_COMPLETED") {
+        activeState.lotStatus[cmKey].status = "LOAD_OK";
+    } else if (eventName === "STARTMAPPING_LEFT" || eventName === "STARTMAPPING_RIGHT") {
+        activeState.lotStatus[cmKey].status = "StartMapping";
+    } else if (eventName === "WAFER_MAPPING" || eventName === "ENDMAPPING") {
+        activeState.lotStatus[cmKey].status = "EndMapping";
+    } else if (eventName === "START") {
+        activeState.lotStatus[cmKey].status = "PP-SELECT OK";
+    } else if (eventName === "PS") {
+        activeState.lotStatus[cmKey].status = "Processing";
+    } else if (eventName === "PE") {
+        activeState.lotStatus[cmKey].status = "Processing end";
+    } else if (eventName === "DOOR_OPEN") {
+        activeState.lotStatus[cmKey].status = "DOOR_OPEN";
+    } else if (eventName === "UNLOAD_CYCLE_COMPLETED") {
+        activeState.lotStatus[cmKey].status = "UNLOAD_OK";
+    } else if (eventName === "MVOU") {
+        activeState.lotStatus[cmKey].status = "出站成功";
+    } else if (eventName === "POD_REMOVED") {
+        activeState.lotStatus[cmKey].lot = "NULL";
+        activeState.lotStatus[cmKey].status = "IDLE";
+    } else if (eventName === "BATCH_INFO_FROM_ECUI") {
+        activeState.lotStatus[cmKey].lot = ev.lot_id || ev.LOT_ID || ev.lot || "NULL";
+        activeState.lotStatus[cmKey].status = "BATCH_INFO";
+    }
+    updateLotPanel();
+}
+
+function animateWaferPath(points, durationMs, onDone) {
+    activeState.movingWafer = {
+        x: points[0].x,
+        y: points[0].y,
+        z: points[0].z
+    };
+    var segments = points.length - 1;
+    animateValue(0, segments, durationMs, function(value) {
+        var idx = Math.min(segments - 1, Math.floor(value));
+        var localT = value - idx;
+        var from = points[idx];
+        var to = points[idx + 1];
+        activeState.movingWafer = {
+            x: from.x + (to.x - from.x) * localT,
+            y: from.y + (to.y - from.y) * localT,
+            z: from.z + (to.z - from.z) * localT
+        };
+        activeState.armTarget = {
+            x: activeState.movingWafer.x,
+            y: activeState.movingWafer.y,
+            z: activeState.movingWafer.z + 2
+        };
+    }, function() {
+        activeState.movingWafer = null;
+        activeState.armTarget = null;
+        if (onDone) {
+            onDone();
+        }
+    });
+}
+
+function getArmHome3D() {
+    var center = getUnitCenter("ARM");
+    return {
+        x: center.x - 8,
+        y: center.y - 12,
+        z: center.z + 8
+    };
+}
+
+function animateArmTo(target3d, durationMs, carryWafer, onDone) {
+    var home = getArmHome3D();
+    var from = activeState.armTarget || home;
+    animateValue(0, 1, durationMs, function(t) {
+        activeState.armTarget = {
+            x: from.x + (target3d.x - from.x) * t,
+            y: from.y + (target3d.y - from.y) * t,
+            z: from.z + (target3d.z - from.z) * t
+        };
+        if (carryWafer && activeState.movingWafer) {
+            activeState.movingWafer = {
+                x: activeState.armTarget.x,
+                y: activeState.armTarget.y,
+                z: activeState.armTarget.z
+            };
+        }
+    }, function() {
+        if (onDone) {
+            onDone();
+        }
+    });
+}
+
+function handleWaferLoaded(ev) {
+    var slot = Number(ev.slot || ev.wafer_id || ev.slot_id || 1);
+    var eventPort = resolveEventPortId(ev, activeState.lastEventPortId);
+    var portNo = eventPort === "PORT2" ? "2" : "1";
+    var waferTag = portNo + "-" + slot;
+    activeState.movingWaferLabel = waferTag;
+    var cassetteCenter = getCassetteDisplayCenterForPort(eventPort);
+    var start = getSlotCoord(slot, cassetteCenter);
+    var arm = getArmHome3D();
+    var pa = getUnitCenter("PA");
+    var chamberRaw = ev.chamber_id;
+    var chamberId = (chamberRaw && String(chamberRaw).trim().toUpperCase() !== "NULL") ? normalizeChamberId(chamberRaw) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+    var loadEpoch = bumpChamberEpoch(chamberId);
+    var chamber = getUnitCenter(chamberId);
+    activeState.activeUnitId = chamberId;
+    activeState.chamberWaferLabel[chamberId] = "";
+    animateArmTo({
+        x: start.x,
+        y: start.y,
+        z: start.z + 8
+    }, 1000, false, function() {
+        if (slot >= 1 && slot <= 25) {
+            getPortVisual(eventPort).cassetteSlots[slot - 1] = false;
+        }
+        activeState.waferAtPA = false;
+        activeState.waferInChamber[chamberId] = false;
+        activeState.movingWafer = {
+            x: start.x,
+            y: start.y,
+            z: start.z + 8
+        };
+        animateArmTo({
+            x: arm.x,
+            y: arm.y,
+            z: arm.z
+        }, 1000, true, function() {
+            animateArmTo({
+                x: pa.x,
+                y: pa.y,
+                z: pa.z + 10
+            }, 1000, true, function() {
+                activeState.movingWafer = null;
+                activeState.movingWaferLabel = "";
+                activeState.waferAtPA = true;
+                animateValue(0, 1, 320, function() {}, function() {
+                    activeState.movingWafer = {
+                        x: pa.x,
+                        y: pa.y,
+                        z: pa.z + 10
+                    };
+                    activeState.waferAtPA = false;
+                    animateArmTo({
+                        x: arm.x,
+                        y: arm.y,
+                        z: arm.z
+                    }, 900, true, function() {
+                        animateArmTo({
+                            x: chamber.x,
+                            y: chamber.y,
+                            z: chamber.z + 9
+                        }, 1000, true, function() {
+                            if (activeState.chamberEpoch[chamberId] !== loadEpoch || activeState.chamberStates[chamberId] === "idle") {
+                                activeState.movingWafer = null;
+                                activeState.movingWaferLabel = "";
+                                activeState.waferAtPA = false;
+                                return;
+                            }
+                            activeState.movingWafer = null;
+                            activeState.movingWaferLabel = "";
+                            activeState.waferInChamber[chamberId] = true;
+                            activeState.chamberWaferLabel[chamberId] = waferTag;
+                            animateArmTo(getArmHome3D(), 800, false);
+                        });
+                    });
+                });
+            });
+        });
+    });
+}
+
+function handleWaferUnloaded(ev) {
+    var slot = Number(ev.slot || ev.wafer_id || ev.slot_id || 1);
+    var eventPort = resolveEventPortId(ev, activeState.lastEventPortId);
+    var portNo = eventPort === "PORT2" ? "2" : "1";
+    var waferTag = portNo + "-" + slot;
+    activeState.movingWaferLabel = waferTag;
+    var cassetteCenter = getCassetteDisplayCenterForPort(eventPort);
+    var target = getSlotCoord(slot, cassetteCenter);
+    var chamberRaw = ev.chamber_id;
+    var chamberId = (chamberRaw && String(chamberRaw).trim().toUpperCase() !== "NULL") ? normalizeChamberId(chamberRaw) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+    bumpChamberEpoch(chamberId);
+    activeState.chamberWaferLabel[chamberId] = "";
+    var chamber = getUnitCenter(chamberId);
+    var arm = getArmHome3D();
+    activeState.activeUnitId = eventPort;
+    animateArmTo({
+        x: chamber.x,
+        y: chamber.y,
+        z: chamber.z + 9
+    }, 1000, false, function() {
+        activeState.waferInChamber[chamberId] = false;
+        activeState.movingWafer = {
+            x: chamber.x,
+            y: chamber.y,
+            z: chamber.z + 9
+        };
+        animateArmTo({
+            x: arm.x,
+            y: arm.y,
+            z: arm.z
+        }, 1000, true, function() {
+            animateArmTo({
+                x: target.x,
+                y: target.y,
+                z: target.z + 8
+            }, 1200, true, function() {
+                activeState.movingWafer = null;
+                activeState.movingWaferLabel = "";
+                if (slot >= 1 && slot <= 25) {
+                    getPortVisual(eventPort).cassetteSlots[slot - 1] = true;
+                }
+                animateArmTo(getArmHome3D(), 800, false);
+            });
+        });
+    });
+}
+
+function applyEvent(ev) {
+    ev = normalizeIncomingEvent(ev);
+    var eventName = getEffectiveEventName(ev);
+    activeState.machineState = ev.machine_state || activeState.machineState;
+    var eventPort = resolveEventPortId(ev, activeState.lastEventPortId);
+    activeState.lastEventPortId = eventPort;
+    activeState.activeUnitId = eventPort === "PORT2" ? "SMIF2" : "SMIF1";
+    document.getElementById("kpiLot").textContent = ev.lot_id || "-";
+    document.getElementById("kpiRecipe").textContent = ev.recipe || "-";
+    document.getElementById("kpiEvent").textContent = eventName || ev.event_type;
+    setStateText(activeState.machineState);
+    appendTimeline(ev);
+    applyLotStatusByEvent(ev);
+    if (eventName === "POD_PLACED") {
+        var podVisual = getPortVisual(eventPort);
+        podVisual.podPlaced = true;
+        podVisual.podPlaceProgress = 0;
+        podVisual.podCarryProgress = 0;
+        podVisual.podLocked = false;
+        podVisual.podLift = 0;
+        podVisual.podSmif = smifFromPort(eventPort);
+        podVisual.cassetteAt = podVisual.podSmif;
+        podVisual.cassettePos = null;
+        activeState.mappingActive = false;
+        activeState.mappingPortId = eventPort;
+        podVisual.cassetteSlots = new Array(25).fill(true);
+        animateValue(0, 1, 1000, function(v) {
+            podVisual.podPlaceProgress = v;
+        });
+    } else if (eventName === "UNLOCK_PORT_COMPLETED") {
+        getPortVisual(eventPort).podLocked = false;
+        activeState.activeUnitId = eventPort === "PORT2" ? "SMIF2" : "SMIF1";
+    } else if (eventName === "LOCK_PORT_COMPLETED") {
+        getPortVisual(eventPort).podLocked = true;
+    } else if (eventName === "MVIN") {
+        var mvinVisual = getPortVisual(eventPort);
+        animateValue(mvinVisual.podLift, 34, 900, function(v) {
+            mvinVisual.podLift = v;
+        });
+    } else if (eventName === "DOOR_OPEN") {
+        animateValue(activeState.portDoorProgress[eventPort] || 0, 1, 700, function(v) {
+            activeState.portDoorProgress[eventPort] = v;
+        });
+    } else if (eventName === "LOAD_CYCLE_STARTED") {
+        var loadSmif = smifFromPort(eventPort);
+        animateCassetteTransfer(eventPort, loadSmif, eventPort, 1500);
+    } else if (eventName === "LOAD_CYCLE_COMPLETED") {
+        var doneVisual = getPortVisual(eventPort);
+        doneVisual.cassetteAt = eventPort;
+        doneVisual.cassettePos = null;
+    } else if (eventName === "DOOR_CLOSE") {
+        animateValue(activeState.portDoorProgress[eventPort] || 0, 0, 700, function(v) {
+            activeState.portDoorProgress[eventPort] = v;
+        });
+    } else if (eventName === "STARTMAPPING_LEFT" || eventName === "STARTMAPPING_RIGHT") {
+        activeState.mappingActive = true;
+        activeState.mappingPortId = eventName === "STARTMAPPING_RIGHT" ? "PORT2" : eventPort;
+    } else if (eventName === "WAFER_MAPPING" || eventName === "ENDMAPPING") {
+        var mappingPort = resolveEventPortId({
+            port_id: ev.port_id || ev.PORT_ID || ev.portid || ev.PORTID || ev.port || ev.PORT,
+            smif_id: ev.smif_id || ev.SMIF_ID,
+            chamber_id: ev.chamber_id || ev.CHAMBER_ID
+        }, eventPort);
+        activeState.mappingActive = false;
+        activeState.mappingPortId = mappingPort;
+        activeState.mappingPhase = 0;
+        applyMappingToPort(mappingPort, ev);
+        if (Array.isArray(ev.mapped_slots) && ev.mapped_slots.length > 0) {
+            setCassetteSlotsFromMapping(ev.mapped_slots);
+        }
+    } else if (eventName === "ALARM" || eventName === "EC_ALARM_REPORT" || eventName === "ALARM_REPORT") {
+        setChamberState(normalizeChamberId(ev.chamber_id), "alarm");
+        activeState.activeUnitId = normalizeChamberId(ev.chamber_id);
+        var alarmPort = eventPort;
+        var alarmChamber = normalizeChamberId(ev.chamber_id);
+        var alarmLot = ev.lot_id || ev.lot || "";
+        var alarmText = (ev.alarm_text || ev.ALTX || ev.alarm_id || ev.ALID || "ALARM") + (ev.chamber_id ? " @ " + ev.chamber_id : "");
+        var alarmTime = formatEventTime(ev);
+        var alarmEntry = {
+            time: alarmTime,
+            text: alarmText
+        };
+        if (alarmPort === "PORT2" || alarmChamber === "CHAMBER_B" || alarmLot === activeState.lotStatus.PORT2.lot) {
+            activeState.alarmRight.push(alarmEntry);
+            activeState.alarmExpandedRight = true;
+        } else {
+            activeState.alarmLeft.push(alarmEntry);
+            activeState.alarmExpandedLeft = true;
+        }
+    } else if (eventName === "PE") {
+        var peChamber = ev.chamber_id;
+        if (!peChamber) {
+            var pePort = eventPort;
+            peChamber = (pePort === "PORT2") ? "CHAMBER_B" : "CHAMBER_A";
+        }
+        bumpChamberEpoch(peChamber);
+        activeState.waferInChamber[normalizeChamberId(peChamber)] = false;
+        activeState.waferAtPA = false;
+        setChamberState(peChamber, "idle");
+    } else if (eventName === "READYTOUNLOAD") {
+        var rtuChamber = normalizeChamberId(ev.chamber_id);
+        if (activeState.chamberStates[rtuChamber] !== "idle") {
+            setChamberState(rtuChamber, "unloading");
+        }
+    } else if (eventName === "WAFERLOADED") {
+        var wlRaw = ev.chamber_id;
+        var wlChamber = (wlRaw && String(wlRaw).trim().toUpperCase() !== "NULL") ? normalizeChamberId(wlRaw) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+        setChamberState(wlChamber, "running");
+        activeState.activeUnitId = wlChamber;
+        handleWaferLoaded(ev);
+        markWaferAsRunning(eventPort, ev.slot || ev.wafer_id || ev.slot_id);
+    } else if (eventName === "WAFERUNLOADED") {
+        var wuRaw = ev.chamber_id;
+        var wuChamber = (wuRaw && String(wuRaw).trim().toUpperCase() !== "NULL") ? normalizeChamberId(wuRaw) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+        setChamberState(wuChamber, "idle");
+        handleWaferUnloaded(ev);
+        markWaferAsCompleted(eventPort, ev.slot || ev.wafer_id || ev.slot_id);
+    } else if (eventName === "UNLOAD_CYCLE_COMPLETED") {
+        var unloadSmif = smifFromPort(eventPort);
+        var unloadVisual = getPortVisual(eventPort);
+        var unloadChamber = eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A";
+        animateCassetteTransfer(eventPort, eventPort, unloadSmif, 1500, function() {
+            animateValue(unloadVisual.podLift, 0, 800, function(v) {
+                unloadVisual.podLift = v;
+            });
+            bumpChamberEpoch(unloadChamber);
+            activeState.waferInChamber[unloadChamber] = false;
+            activeState.waferAtPA = false;
+            setChamberState(unloadChamber, "idle");
+        });
+    } else if (eventName === "POD_REMOVED") {
+        var removedVisual = getPortVisual(eventPort);
+        var removedChamber = eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A";
+        activeState.waferMap[eventPort] = emptyWaferMap();
+        activeState.activeUnitId = eventPort === "PORT2" ? "SMIF2" : "SMIF1";
+        animateValue(0, 1, 1000, function(v) {
+            removedVisual.podCarryProgress = v;
+        }, function() {
+            removedVisual.podPlaced = false;
+            removedVisual.podLocked = false;
+            removedVisual.podPlaceProgress = 0;
+            removedVisual.podCarryProgress = 0;
+            removedVisual.podLift = 0;
+            removedVisual.podSmif = smifFromPort(eventPort);
+            removedVisual.cassetteAt = removedVisual.podSmif;
+            removedVisual.cassettePos = null;
+            removedVisual.cassetteSlots = new Array(25).fill(false);
+            bumpChamberEpoch(removedChamber);
+            activeState.waferInChamber[removedChamber] = false;
+            activeState.waferAtPA = false;
+            if (eventPort === "PORT2") {
+                activeState.alarmRight = [];
+                activeState.alarmExpandedRight = false;
+            } else {
+                activeState.alarmLeft = [];
+                activeState.alarmExpandedLeft = false;
+            }
+        });
+    } else if (eventName === "FDC_CLEARCONTEXT") {
+        var clearChamber = eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A";
+        bumpChamberEpoch(clearChamber);
+        activeState.waferInChamber[clearChamber] = false;
+        activeState.waferAtPA = false;
+        setChamberState(clearChamber, "idle");
+    }
+}
+
+function stopReplay() {
+    if (activeState.timerId) {
+        clearTimeout(activeState.timerId);
+        activeState.timerId = null;
+    }
+}
+
+function disconnectLive() {
+    if (liveEventSource) {
+        liveEventSource.close();
+        liveEventSource = null;
+    }
+    activeState.liveMode = false;
+}
+
+function getSelectedToolId() {
+    var input = document.getElementById("toolIdInput");
+    var value = input ? String(input.value || "").trim() : "";
+    if (!value) {
+        value = activeState.liveToolId || "";
+    }
+    activeState.liveToolId = value;
+    return value;
+}
+
+function createSessionId() {
+    return "web-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
+}
+
+function ensureLiveBinding(toolId) {
+    if (!toolId) {
+        return Promise.resolve("");
+    }
+    if (!activeState.liveSessionId) {
+        activeState.liveSessionId = createSessionId();
+    }
+    var bindUrl = apiUrl("/bind?session_id=" + encodeURIComponent(activeState.liveSessionId) + "&tool_id=" + encodeURIComponent(toolId) + "&bind_mode=viewer");
+    return fetch(bindUrl, {
+        cache: "no-store"
+    }).then(function(res) {
+        if (!res.ok) {
+            return "";
+        }
+        return activeState.liveSessionId;
+    }).catch(function() {
+        return "";
+    });
+}
+
+function getApiBaseUrl() {
+    if (window.location.protocol === "file:") {
+        return "http://127.0.0.1:7501";
+    }
+    return "";
+}
+
+function getEventTsMs(ev) {
+    var normalized = normalizeIncomingEvent(ev) || {};
+    var ts = normalized.event_ts_utc || normalized.EVENT_TS_UTC || normalized.timestamp || normalized.TIMESTAMP || normalized.event_time || normalized.EVENT_TIME || normalized.ts || normalized.TS;
+    if (!ts) {
+        return 0;
+    }
+    var ms = Date.parse(String(ts));
+    return isNaN(ms) ? 0 : ms;
+}
+
+function isPodPlacedEventName(eventName) {
+    var s = String(eventName || "").toUpperCase();
+    return s === "POD_PLACED" || s === "POD_PLACE";
+}
+
+function isPodRemovedEventName(eventName) {
+    var s = String(eventName || "").toUpperCase();
+    return s === "POD_REMOVED" || s === "POD_REMOVE";
+}
+
+function cloneEventAsType(ev, eventType) {
+    var copy = {};
+    var k;
+    for (k in ev) {
+        if (Object.prototype.hasOwnProperty.call(ev, k)) {
+            copy[k] = ev[k];
+        }
+    }
+    copy.event_type = eventType;
+    return copy;
+}
+
+function findPortBootstrapContext(events, portId) {
+    var normalizedPort = normalizePortId(portId);
+    var smifId = smifFromPort(normalizedPort);
+    var portEvents = events.filter(function(ev) {
+        return resolveEventPortId(ev, null) === normalizedPort;
+    }).sort(function(a, b) {
+        return getEventTsMs(a) - getEventTsMs(b);
+    });
+    var i;
+    var latestPodPlaced = null;
+    for (i = portEvents.length - 1; i >= 0; i -= 1) {
+        if (isPodPlacedEventName(getEffectiveEventName(portEvents[i]))) {
+            latestPodPlaced = portEvents[i];
+            break;
+        }
+    }
+    if (!latestPodPlaced) {
+        return {
+            portId: normalizedPort,
+            active: false,
+            baseTs: 0,
+            podPlacedEvent: null,
+            latestEvent: null,
+            batchEvent: null,
+            mappingEvent: null,
+            unloadedSlots: []
+        };
+    }
+    var baseTs = getEventTsMs(latestPodPlaced);
+    var afterPlaced = portEvents.filter(function(ev) {
+        return getEventTsMs(ev) > baseTs;
+    });
+    var latestPodRemoved = null;
+    for (i = afterPlaced.length - 1; i >= 0; i -= 1) {
+        var evName = getEffectiveEventName(afterPlaced[i]);
+        var evSmif = String(afterPlaced[i].smif_id || afterPlaced[i].SMIF_ID || "").toUpperCase();
+        var evPort = resolveEventPortId(afterPlaced[i], null);
+        if (isPodRemovedEventName(evName) && (evPort === normalizedPort || evSmif === smifId)) {
+            latestPodRemoved = afterPlaced[i];
+            break;
+        }
+    }
+    if (latestPodRemoved) {
+        return {
+            portId: normalizedPort,
+            active: false,
+            baseTs: baseTs,
+            podPlacedEvent: latestPodPlaced,
+            latestEvent: null,
+            batchEvent: null,
+            mappingEvent: null,
+            unloadedSlots: []
+        };
+    }
+    var batchEvent = null;
+    var mappingEvent = null;
+    var latestEvent = null;
+    var unloadedSet = {};
+    for (i = 0; i < afterPlaced.length; i += 1) {
+        var item = afterPlaced[i];
+        var itemName = getEffectiveEventName(item);
+        latestEvent = item;
+        if (itemName === "BATCH_INFO_FROM_ECUI") {
+            batchEvent = item;
+        }
+        if (itemName === "WAFER_MAPPING") {
+            mappingEvent = item;
+        }
+        if (itemName === "WAFERUNLOADED") {
+            var slot = Number(item.slot || item.wafer_id || item.slot_id || 0);
+            if (slot >= 1 && slot <= 25) {
+                unloadedSet[slot] = true;
+            }
+        }
+    }
+    var unloadedSlots = Object.keys(unloadedSet).map(function(s) {
+        return Number(s);
+    }).sort(function(a, b) {
+        return a - b;
+    });
+    return {
+        portId: normalizedPort,
+        active: true,
+        baseTs: baseTs,
+        podPlacedEvent: latestPodPlaced,
+        latestEvent: latestEvent,
+        batchEvent: batchEvent,
+        mappingEvent: mappingEvent,
+        unloadedSlots: unloadedSlots
+    };
+}
+
+function buildBootstrapReplayEvents(context) {
+    if (!context || !context.active || !context.podPlacedEvent) {
+        return [];
+    }
+    var events = [];
+    var latestEventName = context.latestEvent ? getEffectiveEventName(context.latestEvent) : "";
+    var shouldReplayPodPlaced = !latestEventName || latestEventName === "POD_PLACED";
+    var replaySet8 = {
+        LOCK_PORT_COMPLETED: true,
+        MVIN: true,
+        DOOR_OPEN: true,
+        DOOR_CLOSE: true,
+        BATCH_INFO_FROM_ECUI: true
+    };
+    var replaySet9 = {
+        STARTMAPPING_LEFT: true,
+        PS: true,
+        WAFERLOADED: true,
+        WAFERUNLOADED: true,
+        PE: true,
+        READYTOUNLOAD: true,
+        MVOU: true
+    };
+    if (shouldReplayPodPlaced) {
+        events.push(cloneEventAsType(context.podPlacedEvent, "POD_PLACED"));
+    } /* 刚放 POD 但还没有 BATCH_INFO_FROM_ECUI：按需求不继续后续动作。 */
+    if (!context.batchEvent) {
+        if (!events.length) {
+            events.push(cloneEventAsType(context.podPlacedEvent, "POD_PLACED"));
+        }
+        return events;
+    }
+    events.push(cloneEventAsType(context.batchEvent, "BATCH_INFO_FROM_ECUI"));
+    if (context.mappingEvent) {
+        events.push(cloneEventAsType(context.mappingEvent, "WAFER_MAPPING"));
+    }
+    if (latestEventName === "UNLOAD_CYCLE_COMPLETED") {
+        events.push(cloneEventAsType(context.latestEvent, "UNLOAD_CYCLE_COMPLETED"));
+    } else if (latestEventName === "LOAD_CYCLE_STARTED") {
+        events.push(cloneEventAsType(context.latestEvent, "LOAD_CYCLE_STARTED"));
+    } else if (latestEventName === "WAFER_MAPPING") {
+        /* Mapping 阶段默认应已完成上料，先补一条 LOAD_CYCLE_COMPLETED 让 cassette 归位到 PORT。 */
+        events.push(cloneEventAsType(context.latestEvent, "LOAD_CYCLE_COMPLETED"));
+    } else if (latestEventName === "LOAD_CYCLE_COMPLETED") {
+        events.push(cloneEventAsType(context.latestEvent, "LOAD_CYCLE_COMPLETED"));
+    } else if (replaySet8[latestEventName]) {
+        events.push(cloneEventAsType(context.latestEvent, latestEventName));
+    } else if (replaySet9[latestEventName]) {
+        events.push(cloneEventAsType(context.latestEvent, "LOAD_CYCLE_COMPLETED"));
+        events.push(cloneEventAsType(context.latestEvent, latestEventName));
+    }
+    return events;
+}
+
+function primeBootstrapPortVisual(context) {
+    if (!context || !context.portId) {
+        return;
+    }
+    var portId = normalizePortId(context.portId);
+    var visual = getPortVisual(portId);
+    visual.podPlaced = !!context.active;
+    visual.podPlaceProgress = context.active ? 1 : 0;
+    visual.podCarryProgress = 0;
+    visual.podLift = 0;
+    visual.podSmif = smifFromPort(portId);
+    visual.cassettePos = null;
+    if (!context.active) {
+        visual.podLocked = false;
+        visual.cassetteAt = visual.podSmif;
+    }
+}
+
+function applyBootstrapForPort(context) {
+    var portId = context.portId;
+    primeBootstrapPortVisual(context);
+    if (!context.active) {
+        activeState.lotStatus[portId] = {
+            lot: "NULL",
+            status: "IDLE"
+        };
+        return;
+    }
+    var replayEvents = buildBootstrapReplayEvents(context);
+    replayEvents.forEach(function(ev) {
+        applyEvent(ev);
+    });
+    if (!context.batchEvent) {
+        return;
+    }
+    context.unloadedSlots.forEach(function(slot) {
+        markWaferAsCompleted(portId, slot);
+    });
+}
+
+function bootstrapFromLatestPodPlaced(toolId) {
+    if (!toolId) {
+        return Promise.resolve();
+    }
+    return fetch(apiUrl("/history-events?tool_id=" + encodeURIComponent(toolId) + "&limit=2000"), {
+        cache: "no-store"
+    }).then(function(res) {
+        if (!res.ok) {
+            throw new Error("history load failed");
+        }
+        return res.json();
+    }).then(function(payload) {
+        var events = payload && Array.isArray(payload.events) ? payload.events.map(normalizeIncomingEvent) : [];
+        if (!events.length) {
+            return;
+        }
+        activeState.events = events;
+        var p1Context = findPortBootstrapContext(events, "PORT1");
+        var p2Context = findPortBootstrapContext(events, "PORT2");
+        applyBootstrapForPort(p1Context);
+        applyBootstrapForPort(p2Context);
+    }).catch(function() {});
+}
+
+function getUrlParam(name) {
+    var query = window.location.search.substring(1);
+    var pairs = query.split("&");
+    var i;
+    for (i = 0; i < pairs.length; i += 1) {
+        var pair = pairs[i].split("=");
+        if (decodeURIComponent(pair[0]) === name) {
+            return decodeURIComponent(pair[1] || "");
+        }
+    }
+    return "";
+}
+
+function formatEventTime(ev) {
+    var normalized = normalizeIncomingEvent(ev) || {};
+    var ts = normalized.event_ts_utc || normalized.EVENT_TS_UTC || normalized.timestamp || normalized.TIMESTAMP || normalized.event_time || normalized.EVENT_TIME || normalized.ts || normalized.TS;
+    if (ts) {
+        var s = String(ts);
+        if (s.length >= 19 && s.indexOf("T") > 0) {
+            return s.slice(11, 19);
+        }
+        return s.slice(0, 8);
+    }
+    return "--:--:--";
+}
+
+function apiUrl(path) {
+    return getApiBaseUrl() + path;
+}
+
+function connectLiveStream() {
+    stopReplay();
+    disconnectLive();
+    var toolId = getSelectedToolId();
+    if (!toolId) {
+        setStateText("Hold");
+        return;
+    }
+    resetView();
+    document.getElementById("timeline").innerHTML = "";
+    setStateText("Running");
+    activeState.liveMode = true;
+    bootstrapFromLatestPodPlaced(toolId).finally(function() {
+        ensureLiveBinding(toolId).then(function(sessionId) {
+            var streamUrl = "/events?tool_id=" + encodeURIComponent(toolId);
+            if (sessionId) {
+                streamUrl += "&session_id=" + encodeURIComponent(sessionId);
+            }
+            liveEventSource = new EventSource(apiUrl(streamUrl));
+            liveEventSource.onmessage = function(evt) {
+                var data;
+                try {
+                    data = JSON.parse(evt.data);
+                } catch (err) {
+                    return;
+                }
+                data = normalizeIncomingEvent(data);
+                if (!data || !data.event_type || data.event_type === "CONNECTED") {
+                    return;
+                }
+                var selectedTool = getSelectedToolId();
+                if (selectedTool && data.tool_id && String(data.tool_id).trim().toUpperCase() !== String(selectedTool).trim().toUpperCase()) {
+                    return;
+                }
+                applyEvent(data);
+            };
+            liveEventSource.onerror = function() {
+                setStateText("Hold");
+            };
+        });
+    });
+}
+
+function replayHistoryFromDb() {
+    stopReplay();
+    disconnectLive();
+    resetView();
+    document.getElementById("timeline").innerHTML = "";
+    var toolId = getSelectedToolId();
+    fetch(apiUrl("/history-events?tool_id=" + encodeURIComponent(toolId) + "&limit=2000"), {
+        cache: "no-store"
+    }).then(function(res) {
+        if (!res.ok) {
+            throw new Error("history load failed");
+        }
+        return res.json();
+    }).then(function(payload) {
+        var events = payload && Array.isArray(payload.events) ? payload.events : [];
+        if (!events.length) {
+            activeState.events = DEFAULT_EVENTS.slice().map(normalizeIncomingEvent);
+            setStateText("Idle");
+            return;
+        }
+        activeState.events = events.map(normalizeIncomingEvent);
+        activeState.index = 0;
+        setStateText("Running");
+        scheduleNext();
+    }).catch(function() {
+        setStateText("Alarm");
+    });
+}
+
+function scheduleNext() {
+    if (activeState.index >= activeState.events.length) {
+        activeState.timerId = null;
+        return;
+    }
+    var ev = activeState.events[activeState.index];
+    applyEvent(ev);
+    activeState.index += 1;
+    var waitMs = Math.max(500, Math.min(2800, (ev.duration_sec || 2) * 320));
+    var et = String(ev.event_type || "").toUpperCase();
+    if (et === "WAFERLOADED" || et === "WAFERUNLOADED") {
+        waitMs = 5200;
+    }
+    activeState.timerId = setTimeout(scheduleNext, waitMs);
+}
+
+function replay() {
+    disconnectLive();
+    stopReplay();
+    document.getElementById("timeline").innerHTML = "";
+    activeState.index = 0;
+    setStateText("Running");
+    scheduleNext();
+}
+
+function resetView() {
+    disconnectLive();
+    stopReplay();
+    document.getElementById("timeline").innerHTML = "";
+    document.getElementById("kpiLot").textContent = "-";
+    document.getElementById("kpiRecipe").textContent = "-";
+    document.getElementById("kpiEvent").textContent = "-";
+    activeState.activeUnitId = "SMIF1";
+    activeState.doorProgress = 0;
+    activeState.portDoorProgress = {
+        PORT1: 0,
+        PORT2: 0
+    };
+    activeState.portVisuals = {
+        PORT1: {
+            podPlaced: false,
+            podLocked: false,
+            podLift: 0,
+            podPlaceProgress: 0,
+            podCarryProgress: 0,
+            cassetteAt: "SMIF1",
+            podSmif: "SMIF1",
+            cassettePos: null,
+            cassetteSlots: new Array(25).fill(true)
+        },
+        PORT2: {
+            podPlaced: false,
+            podLocked: false,
+            podLift: 0,
+            podPlaceProgress: 0,
+            podCarryProgress: 0,
+            cassetteAt: "SMIF2",
+            podSmif: "SMIF2",
+            cassettePos: null,
+            cassetteSlots: new Array(25).fill(true)
+        }
+    };
+    activeState.chamberStates = {
+        CHAMBER_A: "idle",
+        CHAMBER_B: "idle",
+        CHAMBER_C: "idle"
+    };
+    activeState.mappingActive = false;
+    activeState.mappingPortId = "PORT1";
+    activeState.mappingPhase = 0;
+    activeState.movingWafer = null;
+    activeState.movingWaferLabel = "";
+    activeState.waferAtPA = false;
+    activeState.waferInChamber = {
+        CHAMBER_A: false,
+        CHAMBER_B: false,
+        CHAMBER_C: false
+    };
+    activeState.chamberWaferLabel = {
+        CHAMBER_A: "",
+        CHAMBER_B: "",
+        CHAMBER_C: ""
+    };
+    activeState.chamberEpoch = {
+        CHAMBER_A: 0,
+        CHAMBER_B: 0,
+        CHAMBER_C: 0
+    };
+    activeState.waferMap = {
+        PORT1: emptyWaferMap(),
+        PORT2: emptyWaferMap()
+    };
+    activeState.armTarget = null;
+    activeState.lotStatus = {
+        PORT1: {
+            lot: "NULL",
+            status: "IDLE"
+        },
+        PORT2: {
+            lot: "NULL",
+            status: "IDLE"
+        }
+    };
+    updateLotPanel();
+    setStateText("Idle");
+    render();
+}
+
+function loadEvents() {
+    return fetch("./oxe_mock_events.json", {
+        cache: "no-store"
+    }).then(function(res) {
+        if (!res.ok) {
+            throw new Error("mock event file not found");
+        }
+        return res.json();
+    }).then(function(data) {
+        if (Array.isArray(data) && data.length > 0) {
+            activeState.events = data.map(normalizeIncomingEvent);
+        }
+    }).catch(function() {
+        activeState.events = DEFAULT_EVENTS.slice().map(normalizeIncomingEvent);
+    });
+}
+
+function frameLoop() {
+    render();
+    requestAnimationFrame(frameLoop);
+}
+document.getElementById("btnReplay").addEventListener("click", replay);
+document.getElementById("btnReset").addEventListener("click", resetView);
+document.getElementById("btnLive").addEventListener("click", connectLiveStream);
+document.getElementById("btnHistory").addEventListener("click", replayHistoryFromDb);
+document.getElementById("btnDisconnect").addEventListener("click", function() {
+    disconnectLive();
+    setStateText("Idle");
+});
+document.getElementById("chamberCount").addEventListener("change", function(e) {
+    activeState.chamberCount = Number(e.target.value || 3);
+}); /* 点击 canvas 上的 alarm 区域展开/收起 */
+    canvas.addEventListener("click", function(ev) {
+    var rect = canvas.getBoundingClientRect();
+    var cx = ev.clientX - rect.left;
+    var cy = ev.clientY - rect.top;
+    var panelW = 155;
+    var panelH = 330;
+    var leftX = 10;
+    var rightX = canvas.clientWidth - panelW - 10;
+    var alarmY = 74 + panelH + 4; /* 左边 alarm 区域 */
+    if (cx >= leftX && cx <= leftX + panelW && cy >= alarmY && cy <= alarmY + 60) {
+        if (activeState.alarmLeft && activeState.alarmLeft.length > 0) {
+            activeState.alarmExpandedLeft = !activeState.alarmExpandedLeft;
+        }
+    } /* 右边 alarm 区域 */
+    if (cx >= rightX && cx <= rightX + panelW && cy >= alarmY && cy <= alarmY + 60) {
+        if (activeState.alarmRight && activeState.alarmRight.length > 0) {
+            activeState.alarmExpandedRight = !activeState.alarmExpandedRight;
+        }
+    }
+});
+window.addEventListener("resize", fitCanvas);
+loadEvents().finally(function() {
+            fitCanvas();
+            resetView();
+            if (!activeState.rafLoopStarted) {
+                activeState.rafLoopStarted = true;
+                requestAnimationFrame(frameLoop);
+            }
+            var urlToolId = getUrlParam("tool_id");
+            var defaultToolId;
+            if (urlToolId) {
+                defaultToolId = urlToolId;
+            } else {
+                var firstEvent = activeState.events && activeState.events[0] ? activeState.events[0] : null;
+                defaultToolId = (firstEvent && firstEvent.tool_id) ? firstEvent.tool_id : "";
+            }
+            activeState.liveToolId = defaultToolId;
+            var input = document.getElementById("toolIdInput");
+            if (input) {
+                input.value = defaultToolId;
+            } /* 页面打开后自动连接 RV 实时流（连接前会先按最近 POD_PLACE 重建状态）*/
+            connectLiveStream(); }); 
+
+</script>
+</body>
+</html>
