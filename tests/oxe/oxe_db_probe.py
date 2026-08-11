@@ -28,7 +28,8 @@ TABLE_EVENT_RAW = os.environ.get("T_RAW_HIS", "DT_EVENT_RAW")
 TABLE_REALTIMELOT = os.environ.get("T_RTLOT", "DT_EVENT_REALTIMELOT")
 TABLE_RTLOT_EVENT_RULE = os.environ.get("T_RTLOT_EV_RULE", "DT_RTLOT_EVENT_RULE")
 TABLE_RTLOT_PORT_RULE = os.environ.get("T_RTLOT_PORT_RULE", "DT_RTLOT_TOOL_PORT_RULE")
-TABLE_FAB_MACHINE = os.environ.get("T_MACHINE", "FAB_MACHINE")
+TABLE_MACHINES = os.environ.get("T_MACHINES", "MACHINES")
+TABLE_MACHINE_TOOL_MAPPINGS = os.environ.get("T_MAPPINGS", "MACHINE_TOOL_MAPPINGS")
 
 SNAPSHOT = {
     "probe_time_utc": datetime.utcnow().isoformat() + "Z",
@@ -101,7 +102,8 @@ def oracle_probe(cursor):
         TABLE_REALTIMELOT,
         TABLE_RTLOT_EVENT_RULE,
         TABLE_RTLOT_PORT_RULE,
-        TABLE_FAB_MACHINE,
+        TABLE_MACHINES,
+        TABLE_MACHINE_TOOL_MAPPINGS,
     ]:
         info = {"exists": False, "count": None, "columns": []}
         try:
@@ -225,41 +227,69 @@ def oracle_probe(cursor):
             SNAPSHOT["oxe_recent_events_sample_error"] = str(e)[:300]
         SNAPSHOT["oxe_sample_tool_id"] = first_tid
 
-    # ===== 5. OXE 事件类型分布(最近1万条) =====
+    # ===== 5. OXE 事件类型分布(最近1万条, Python解析CLOB, 兼容Oracle 11g) =====
     SNAPSHOT["oxe_event_name_distribution"] = []
     if first_tid:
         try:
             cursor.execute(
                 f"""
                 SELECT * FROM (
-                    SELECT JSON_VALUE(payload_json, '$.event_name') AS event_name,
-                           COUNT(*) AS cnt
-                    FROM (
-                        SELECT payload_json FROM {tbl}
-                        WHERE tool_id = :1 AND parse_status = 'PARSED'
-                        ORDER BY received_ts_utc DESC NULLS LAST, raw_id DESC
-                    ) WHERE ROWNUM <= 10000
-                    GROUP BY JSON_VALUE(payload_json, '$.event_name')
-                    ORDER BY cnt DESC
-                ) WHERE ROWNUM <= 50
+                    SELECT payload_json FROM {tbl}
+                    WHERE tool_id = :1 AND parse_status = 'PARSED'
+                    ORDER BY received_ts_utc DESC NULLS LAST, raw_id DESC
+                ) WHERE ROWNUM <= 10000
                 """,
                 [first_tid],
             )
+            from collections import Counter
+            event_counter = Counter()
+            for row in cursor.fetchall():
+                payload = _read_lob(row[0])
+                if isinstance(payload, str):
+                    try:
+                        parsed = json.loads(payload)
+                        if isinstance(parsed, dict):
+                            en = parsed.get("event_name") or parsed.get("event_type") or "UNKNOWN"
+                            event_counter[en] += 1
+                    except Exception:
+                        pass
             SNAPSHOT["oxe_event_name_distribution"] = [
-                {"event_name": r[0], "count": r[1]} for r in cursor.fetchall()
+                {"event_name": k, "count": v}
+                for k, v in event_counter.most_common(50)
             ]
         except Exception as e:
-            # Oracle 11g 不支持 JSON_VALUE, 跳过
             SNAPSHOT["oxe_event_name_distribution_error"] = str(e)[:300]
 
-    # ===== 6. FAB_MACHINE 表里 OXE 机型的 machine_id 列表 =====
-    SNAPSHOT["oxe_machines_in_fab"] = []
+    # ===== 6. 平台机台表: machines + machine_tool_mappings =====
+    SNAPSHOT["oxe_machines_in_platform"] = []
+    # 6a. machines 表里 OXE 机台
     try:
         cursor.execute(
             f"""
             SELECT * FROM (
-                SELECT machine_id, tool_id, machine_name, machine_type, line_id, status
-                FROM {TABLE_FAB_MACHINE}
+                SELECT id, name, model, line, floor, chamber_count, process_type, state
+                FROM {TABLE_MACHINES}
+                WHERE UPPER(id) LIKE 'OXE%' OR UPPER(name) LIKE '%OXE%'
+                ORDER BY id
+            ) WHERE ROWNUM <= 100
+            """
+        )
+        cols = [d[0] for d in cursor.description]
+        for r in cursor.fetchall():
+            SNAPSHOT["oxe_machines_in_platform"].append(dict(zip(cols, [
+                str(v) if v is not None else None for v in r
+            ])))
+    except Exception as e:
+        SNAPSHOT["oxe_machines_in_platform_error"] = str(e)[:300]
+
+    # 6b. machine_tool_mappings 表里 OXE 相关映射
+    SNAPSHOT["oxe_tool_mappings"] = []
+    try:
+        cursor.execute(
+            f"""
+            SELECT * FROM (
+                SELECT machine_id, tool_id, description, is_primary
+                FROM {TABLE_MACHINE_TOOL_MAPPINGS}
                 WHERE UPPER(machine_id) LIKE 'OXE%' OR UPPER(tool_id) LIKE 'OXE%'
                 ORDER BY machine_id
             ) WHERE ROWNUM <= 100
@@ -267,11 +297,11 @@ def oracle_probe(cursor):
         )
         cols = [d[0] for d in cursor.description]
         for r in cursor.fetchall():
-            SNAPSHOT["oxe_machines_in_fab"].append(dict(zip(cols, [
+            SNAPSHOT["oxe_tool_mappings"].append(dict(zip(cols, [
                 str(v) if v is not None else None for v in r
             ])))
     except Exception as e:
-        SNAPSHOT["oxe_machines_in_fab_error"] = str(e)[:300]
+        SNAPSHOT["oxe_tool_mappings_error"] = str(e)[:300]
 
 
 def main():
