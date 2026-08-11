@@ -18,7 +18,7 @@ from config import API_HOST, API_PORT, CORS_ORIGINS, SIMULATION_ENABLED, DB_POLL
 from database import init_db, SessionLocal
 from models import Machine, AIConfig, AIProviderConfig, AIUsageLog
 from seed_data import init_seed_data
-from routers import machines, events, lots, alarms, ai, oht, recipes, floors, models, history, auth, users, uploads
+from routers import machines, events, lots, alarms, ai, oht, recipes, floors, models, history, auth, users, uploads, oxe
 from routers.rvmessages import router as rv_router
 from services.realtime import manager
 from services.simulator import start_simulator
@@ -57,6 +57,7 @@ app.include_router(auth.router, tags=["auth"])
 app.include_router(users.router, tags=["users"])
 app.include_router(uploads.router, tags=["uploads"])
 app.include_router(rv_router, tags=["rv"])
+app.include_router(oxe.router, tags=["oxe"])
 
 # ========== WebSocket 端点 ==========
 @app.websocket("/ws/realtime")

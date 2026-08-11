@@ -14,6 +14,26 @@ from sqlalchemy import func, or_
 from typing import Optional
 from datetime import datetime
 import json
+import re
+
+
+def _decrement_raw_id(raw_id):
+    """将 raw_id 减 1，兼容 "RAW12345678" 字符串格式和纯数字格式
+
+    测试 DB 的 raw_id 形如 "RAW97166637"（前缀+数字），生产 DB 可能为纯数字字符串。
+    返回与输入相同格式的字符串，用于下一页分页游标。
+    """
+    if raw_id is None:
+        return None
+    s = str(raw_id)
+    m = re.match(r'^([A-Za-z]*)(\d+)$', s)
+    if m:
+        prefix, num_str = m.group(1), m.group(2)
+        return f"{prefix}{int(num_str) - 1}"
+    try:
+        return int(s) - 1
+    except (ValueError, TypeError):
+        return None
 
 from database import get_db
 from models import DT_EVENT_RAW, MachineToolMapping
@@ -134,7 +154,7 @@ def get_history(
     event_category: Optional[str] = Query(None, description="事件分类过滤: alarm/pod/process/other"),
     limit: int = Query(500, ge=1, le=20000),
     offset: int = Query(0, ge=0),
-    before_raw_id: Optional[int] = None,
+    before_raw_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """获取指定机台的历史事件时间轴
@@ -207,10 +227,12 @@ def get_history(
     total = len(events)
     paged = events[offset:offset + limit]
 
-    # 下一页游标：返回结果中 raw_id 最小值 - 1
+    # 下一页游标：返回结果中 raw_id 最小值减 1
+    # 兼容 "RAW12345678" 字符串格式和纯数字格式
     next_raw_id = None
     if paged:
-        next_raw_id = min(e["raw_id"] for e in paged) - 1
+        min_raw_id = min(e["raw_id"] for e in paged)
+        next_raw_id = _decrement_raw_id(min_raw_id)
 
     return {
         "tool_id": tool_id,

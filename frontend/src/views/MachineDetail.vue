@@ -71,6 +71,11 @@ const modelConfigReady = ref(false)
 
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
+  // OXE 机台：默认显示 Canvas 实时看板
+  const machineIdVal = machine.value?.id || ''
+  if (machineIdVal.toUpperCase().startsWith('OXE')) {
+    return 'oxe'
+  }
   // PODOPENER机台：如果view_3d.type=vpo则优先显示3D，否则显示2D
   if (vm === 'vpo' || vm === 'svg-vpo' || vm === 'vpo3d' || vm === 'vpo-3d') {
     // 默认优先展示 3D 视图（更具沉浸感）
@@ -88,6 +93,12 @@ const availableViews = computed(() => {
   const cfg = currentModelConfig.value
   if (!cfg) return []
   const views = []
+  // OXE 机台：增加 Canvas 实时看板视图
+  const machineIdVal = machine.value?.id || ''
+  const isOxe = machineIdVal.toUpperCase().startsWith('OXE')
+  if (isOxe) {
+    views.push({ key: 'oxe', label: '📊 OXE看板' })
+  }
   const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' ||
                  cfg.views_config?.view_2d?.type === 'vpo' || cfg.views_config?.view_3d?.type === 'vpo'
   if (!isVpo && (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid')) {
@@ -1068,6 +1079,15 @@ onMounted(() => {
         :mode="mode"
       />
 
+      <!-- OXE Canvas 实时看板（iframe 嵌入 oxe.html） -->
+      <iframe
+        v-else-if="viewMode === 'oxe'"
+        :src="`/oxe.html?tool_id=${machineId}`"
+        class="oxe-iframe"
+        frameborder="0"
+        allowfullscreen
+      />
+
       <button class="back-btn" @click="goBack">← 返回看板</button>
 
       <!-- 悬浮信息面板（2D模式下隐藏，避免遮挡） -->
@@ -1321,6 +1341,14 @@ onMounted(() => {
   right: 14px;
   padding: 6px 12px;
   font-size: 11px;
+}
+
+/* OXE Canvas 看板 iframe 样式 */
+.oxe-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
 }
 .back-btn:hover {
   border-color: var(--accent);
