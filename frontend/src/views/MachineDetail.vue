@@ -1000,9 +1000,9 @@ onMounted(() => {
 <template>
   <div class="detail-page">
     <!-- 左侧视图区 -->
-    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso', 'is-vpo': viewMode === 'vpo' }">
-      <!-- 视图模式切换按钮（根据机台型号动态显示） -->
-      <div v-if="modelConfigReady" class="view-mode-switcher">
+    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso', 'is-vpo': viewMode === 'vpo', 'is-oxe': viewMode === 'oxe' }">
+      <!-- 视图模式切换按钮（多于1个视图时才显示，避免单按钮遮挡内容） -->
+      <div v-if="modelConfigReady && availableViews.length > 1" class="view-mode-switcher">
         <button
           v-for="v in availableViews"
           :key="v.key"
@@ -1334,6 +1334,15 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 600;
   z-index: 10;
+}
+/* OXE iframe 模式：返回看板按钮移到左上角，避免遮挡 iframe 右侧工具栏 */
+.detail-viewer.is-oxe .back-btn {
+  left: 14px;
+  right: auto;
+  top: 10px;
+  padding: 6px 12px;
+  font-size: 11px;
+  z-index: 20;
 }
 
 /* 2D模式下，返回按钮紧凑显示 */
