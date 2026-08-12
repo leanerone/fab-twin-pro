@@ -93,11 +93,12 @@ const availableViews = computed(() => {
   const cfg = currentModelConfig.value
   if (!cfg) return []
   const views = []
-  // OXE 机台：增加 Canvas 实时看板视图
+  // OXE 机台：仅显示 Canvas 实时看板视图，不显示 3D/2.5D 等其他视图
   const machineIdVal = machine.value?.id || ''
   const isOxe = machineIdVal.toUpperCase().startsWith('OXE')
   if (isOxe) {
     views.push({ key: 'oxe', label: '📊 OXE看板' })
+    return views
   }
   const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' ||
                  cfg.views_config?.view_2d?.type === 'vpo' || cfg.views_config?.view_3d?.type === 'vpo'

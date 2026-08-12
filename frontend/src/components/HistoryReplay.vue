@@ -286,7 +286,10 @@ watch(() => props.jumpTimestamp, (ts) => {
     <!-- 事件列表 -->
     <div class="hr-list" @scroll.passive="onListScroll">
       <div v-if="loading" class="hr-loading">加载中...</div>
-      <div v-else-if="filteredEvents.length === 0" class="hr-empty">暂无事件</div>
+      <div v-else-if="filteredEvents.length === 0" class="hr-empty">
+        {{ selectedDate }} 该日期无事件记录
+        <div class="hr-empty-hint">请尝试选择其他日期（数据可能集中在特定日期）</div>
+      </div>
       <div
         v-for="ev in filteredEvents"
         :key="ev.raw_id"
@@ -467,6 +470,11 @@ watch(() => props.jumpTimestamp, (ts) => {
   text-align: center;
   color: #64748b;
   font-size: 13px;
+}
+.hr-empty-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #94a3b8;
 }
 .hr-item {
   display: flex;

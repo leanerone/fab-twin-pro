@@ -2909,6 +2909,36 @@ function applyEvent(ev) {
         activeState.waferInChamber[clearChamber] = false;
         activeState.waferAtPA = false;
         setChamberState(clearChamber, "idle");
+    } else if (eventName === "SENSOR") {
+        // 传感器事件：更新事件进程显示（oxe.html 无独立 KPI 指标区，仅在时间轴记录）
+        var sensorDesc = ev.description || ev.sensor_name || "传感器数据";
+        if (ev.sensor_value != null) { sensorDesc += " = " + ev.sensor_value; }
+        document.getElementById("kpiEvent").textContent = "SENSOR: " + sensorDesc;
+    } else if (eventName === "STATE") {
+        // 状态变更事件：映射机台状态到 Chamber 状态
+        var stateVal = String(ev.state || ev.machine_state || "").toUpperCase();
+        if (stateVal === "RUNNING" || stateVal === "PROCESS") {
+            var stChamber = ev.chamber_id ? normalizeChamberId(ev.chamber_id) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+            setChamberState(stChamber, "running");
+            activeState.activeUnitId = stChamber;
+        } else if (stateVal === "IDLE" || stateVal === "READY") {
+            var idleChamber = ev.chamber_id ? normalizeChamberId(ev.chamber_id) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+            if (activeState.chamberStates[idleChamber] === "running") {
+                setChamberState(idleChamber, "idle");
+            }
+        } else if (stateVal === "HOLD" || stateVal === "PAUSE") {
+            var holdChamber = ev.chamber_id ? normalizeChamberId(ev.chamber_id) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+            setChamberState(holdChamber, "hold");
+        }
+    } else if (eventName === "TRANSFER") {
+        // 传输事件：标记晶圆在 ARM/PA/Chamber 间传输
+        var transferChamber = ev.chamber_id ? normalizeChamberId(ev.chamber_id) : (eventPort === "PORT2" ? "CHAMBER_B" : "CHAMBER_A");
+        if (ev.transfer_stage === "PICK" || ev.action === "PICK") {
+            setChamberState(transferChamber, "loading");
+        } else if (ev.transfer_stage === "PLACE" || ev.action === "PLACE") {
+            setChamberState(transferChamber, "running");
+            activeState.waferInChamber[transferChamber] = true;
+        }
     }
 }
 
