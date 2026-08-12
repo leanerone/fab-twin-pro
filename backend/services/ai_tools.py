@@ -59,9 +59,13 @@ def _format_ts(ts) -> str:
 def _resolve_tool_ids(db: Session, machine_id: str) -> list:
     """获取机台对应的 tool_id 列表（前缀匹配 + MachineToolMapping）"""
     tool_ids = [machine_id]
+    upper_id = machine_id.upper() if machine_id else ""
     # PODOPENER 系列特殊处理：PODOPENER-1 也匹配 PODOPENER
-    if machine_id.upper().startswith("PODOPENER"):
+    if upper_id.startswith("PODOPENER"):
         tool_ids.append("PODOPENER")
+    # OXE 系列特殊处理：OXE-61 也匹配 OXE 前缀
+    if upper_id.startswith("OXE"):
+        tool_ids.append("OXE")
     # 尝试 MachineToolMapping（生产可能没有此表）
     try:
         from models import MachineToolMapping
@@ -75,6 +79,34 @@ def _resolve_tool_ids(db: Session, machine_id: str) -> list:
     except Exception:
         pass
     return list(set(tool_ids))
+
+
+# ALARM 类事件名：port_id/chamber_id 等字段被错误填充为告警描述词，需清空
+_ALARM_EVENT_NAMES = {"ALARM_REPORT", "EC_ALARM_REPORT"}
+# ALARM 事件需要清空的字段（这些字段在 ALARM 报文中是错误解析的描述词）
+_ALARM_FIELDS_TO_CLEAR = (
+    "port_id", "chamber_id", "cassette_id", "smif_id",
+    "slot_id", "wafer_id", "pod_id", "unit_id", "batch_id",
+)
+
+
+def clean_alarm_event(payload: dict) -> dict:
+    """清理 ALARM 事件中被错误填充的字段
+
+    量产 DB 中 ALARM_REPORT/EC_ALARM_REPORT 事件的 port_id/chamber_id 等字段
+    被 bridge.py 错误填充为告警描述词（如 "AGC"/"Time"/"Sensor-2"），
+    需清空这些字段，只保留 alarm_text/alarm_code 等告警字段。
+
+    与 oxe.py 中的 _convert_event 保持一致，提取为公共函数供 AI 工具复用。
+    """
+    if not payload:
+        return payload
+    event_name = str(payload.get("event_name", "")).upper().strip()
+    if event_name in _ALARM_EVENT_NAMES:
+        for field in _ALARM_FIELDS_TO_CLEAR:
+            if field in payload:
+                payload[field] = "NULL"
+    return payload
 
 
 # ==================== 工具1: 机台状态 ====================
@@ -204,6 +236,8 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
     alarms = []
     for r in rows:
         payload = _parse_payload(r.payload_json)
+        # 清理 ALARM_REPORT/EC_ALARM_REPORT 事件中被错误填充的字段（与 oxe.py 保持一致）
+        payload = clean_alarm_event(payload)
         alarm_code = payload.get("alarm_code")
         if _is_null(alarm_code):
             continue
@@ -266,6 +300,8 @@ def _get_alarms_fallback(db: Session, machine_id: str = None, limit: int = 20) -
     alarms = []
     for e in events:
         payload = _parse_payload(e.payload_json)
+        # 清理 ALARM_REPORT/EC_ALARM_REPORT 事件中被错误填充的字段（与主路径保持一致）
+        payload = clean_alarm_event(payload)
         alarm_code = payload.get("alarm_code")
         if alarm_code and alarm_code.upper() not in ("NULL", ""):
             alarms.append({
@@ -821,6 +857,430 @@ def get_recipe_info(db: Session, machine_id: str = None) -> dict:
     }
 
 
+# ==================== OXE 专用工具 ====================
+
+# OXE 晶圆加工相关事件名（ WaferLoaded/Unloaded 表示一片晶圆加工开始/结束）
+_OXE_WAFER_LOAD_EVENT = "WaferLoaded"
+_OXE_WAFER_UNLOAD_EVENT = "WaferUnloaded"
+# OXE 工艺事件（Start=开始加工, PE=加工结束, PS=工艺步骤开始）
+_OXE_PROCESS_EVENTS = {"Start", "PS", "PE"}
+# OXE Chamber 标识
+_OXE_CHAMBERS = ["CHAMBER_A", "CHAMBER_B", "CHAMBER_C"]
+
+
+def _is_oxe_machine(machine_id: str) -> bool:
+    """判断是否为 OXE 系列机台"""
+    return bool(machine_id) and machine_id.upper().startswith("OXE")
+
+
+def get_wafer_flow(db: Session, machine_id: str, lot_id: str = None) -> dict:
+    """查询 OXE 机台某 Lot 的晶圆流向（PORT→PA→CHAMBER 加工流转）
+
+    通过 WaferLoaded/WaferUnloaded/Start/PE 事件推算每片晶圆的加工状态。
+    容错：如果某片晶圆缺少 Unloaded 事件，标记为"加工中/异常"。
+    """
+    if not machine_id:
+        return {"answer": "请指定机台ID，如 OXE-61。", "sql": ""}
+
+    tool_ids = _resolve_tool_ids(db, machine_id)
+    q = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+
+    # 如果指定了 lot_id，按 lot_id 过滤
+    if lot_id:
+        q = q.filter(DT_EVENT_RAW.payload_json.like(f'%"{lot_id}"%'))
+
+    # 取最近 5000 条事件（足够覆盖一个完整 Lot 的 25 片流程）
+    rows = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
+
+    # 解析并按时间正序排列（raw_id 升序 = 时间升序）
+    events = []
+    for r in rows:
+        payload = _parse_payload(r.payload_json)
+        payload = clean_alarm_event(payload)
+        events.append({
+            "raw_id": str(r.raw_id),
+            "ts": r.received_ts_utc,
+            "event_name": str(payload.get("event_name", "")).strip(),
+            "lot_id": payload.get("lot_id", ""),
+            "wafer_id": payload.get("wafer_id"),
+            "slot": payload.get("slot"),
+            "chamber_id": payload.get("chamber_id", ""),
+            "port_id": payload.get("port_id", ""),
+        })
+    events.reverse()  # 时间正序
+
+    # 如果未指定 lot_id，取最新的 lot_id
+    if not lot_id:
+        for ev in reversed(events):
+            if ev["lot_id"]:
+                lot_id = ev["lot_id"]
+                break
+
+    # 过滤指定 lot 的事件
+    if lot_id:
+        events = [e for e in events if e["lot_id"] == lot_id]
+
+    if not events:
+        return {"answer": f"机台 {machine_id} 暂无 Lot {lot_id or '(最新)'} 的晶圆加工事件。", "sql": ""}
+
+    # 按 wafer_id 聚合：记录每片晶圆的 Loaded/Unloaded 时间
+    wafer_records = {}  # {wafer_id: {"loaded_ts": ..., "unloaded_ts": ..., "chamber": ..., "slot": ...}}
+    for ev in events:
+        wid = ev["wafer_id"]
+        if wid is None:
+            continue
+        wid = str(wid)
+        if wid not in wafer_records:
+            wafer_records[wid] = {"loaded_ts": None, "unloaded_ts": None, "chamber": ev["chamber_id"], "slot": ev["slot"]}
+        if ev["event_name"] == _OXE_WAFER_LOAD_EVENT:
+            wafer_records[wid]["loaded_ts"] = ev["ts"]
+            if ev["chamber_id"]:
+                wafer_records[wid]["chamber"] = ev["chamber_id"]
+        elif ev["event_name"] == _OXE_WAFER_UNLOAD_EVENT:
+            wafer_records[wid]["unloaded_ts"] = ev["ts"]
+
+    if not wafer_records:
+        return {"answer": f"机台 {machine_id} Lot {lot_id} 的事件中未找到 WaferLoaded/Unloaded 记录，可能事件类型不匹配。", "sql": ""}
+
+    # 按晶圆号排序
+    def _wafer_sort_key(wid):
+        try:
+            return int(wid)
+        except (ValueError, TypeError):
+            return 9999
+    sorted_wafers = sorted(wafer_records.items(), key=lambda x: _wafer_sort_key(x[0]))
+
+    completed = [w for w, d in sorted_wafers if d["unloaded_ts"]]
+    in_progress = [w for w, d in sorted_wafers if d["loaded_ts"] and not d["unloaded_ts"]]
+    pending = [w for w, d in sorted_wafers if not d["loaded_ts"]]
+
+    # 计算平均加工时长（从 Loaded 到 Unloaded）
+    durations = []
+    for w, d in sorted_wafers:
+        if d["loaded_ts"] and d["unloaded_ts"]:
+            try:
+                ts1 = datetime.fromisoformat(str(d["loaded_ts"]).replace("Z", "").replace("+00:00", ""))
+                ts2 = datetime.fromisoformat(str(d["unloaded_ts"]).replace("Z", "").replace("+00:00", ""))
+                dur = (ts2 - ts1).total_seconds()
+                if dur > 0:
+                    durations.append((w, dur))
+            except Exception:
+                pass
+
+    avg_duration_sec = sum(d for _, d in durations) / len(durations) if durations else 0
+    avg_min = int(avg_duration_sec // 60) if avg_duration_sec else 0
+    avg_sec = int(avg_duration_sec % 60) if avg_duration_sec else 0
+
+    # 检测异常片（加工时长超出平均 50%）
+    anomalies = []
+    if avg_duration_sec > 0:
+        for w, dur in durations:
+            if dur > avg_duration_sec * 1.5:
+                anomalies.append((w, int(dur // 60), int(dur % 60)))
+
+    answer = f"机台 {machine_id} Lot {lot_id} 的晶圆流向：\n"
+    answer += f"- 总晶圆数：{len(sorted_wafers)} 片\n"
+    answer += f"- 已完成：{len(completed)} 片"
+    if completed:
+        answer += f"（W{completed[0]}-W{completed[-1]}）"
+    answer += f"\n- 加工中：{len(in_progress)} 片"
+    if in_progress:
+        answer += f"（当前 W{in_progress[-1]}）"
+        current_chamber = wafer_records[in_progress[-1]]["chamber"]
+        if current_chamber:
+            answer += f"，位于 {current_chamber}"
+    answer += f"\n- 待加工：{len(pending)} 片\n"
+
+    if avg_duration_sec > 0:
+        answer += f"- 平均加工时长：{avg_min}分{avg_sec}秒/片\n"
+
+    if anomalies:
+        answer += f"- 异常片（加工时长超出平均50%）：{len(anomalies)} 片\n"
+        for w, m, s in anomalies[:3]:
+            answer += f"  W{w}：{m}分{s}秒\n"
+
+    # 表格数据
+    table_rows = []
+    for w, d in sorted_wafers[:25]:
+        status = "已完成" if d["unloaded_ts"] else ("加工中" if d["loaded_ts"] else "待加工")
+        table_rows.append([
+            f"W{w}",
+            str(d["slot"] or "-"),
+            d["chamber"] or "-",
+            str(d["loaded_ts"] or "-")[:19],
+            str(d["unloaded_ts"] or "-")[:19],
+            status,
+        ])
+
+    return {
+        "answer": answer,
+        "sql": "",
+        "table_data": {
+            "headers": ["晶圆ID", "Slot", "Chamber", "Loaded时间", "Unloaded时间", "状态"],
+            "rows": table_rows,
+        },
+        "jump_timestamp": str(wafer_records[in_progress[-1]]["loaded_ts"]) if in_progress and wafer_records[in_progress[-1]]["loaded_ts"] else (str(events[-1]["ts"]) if events else None),
+        "jump_machine_id": machine_id,
+    }
+
+
+def get_chamber_status(db: Session, machine_id: str) -> dict:
+    """查询 OXE 机台 3 个 Chamber 的实时加工状态
+
+    通过最近 N 条事件推算每个 Chamber 的当前状态（空闲/加工中/卸载中）。
+    """
+    if not machine_id:
+        return {"answer": "请指定机台ID，如 OXE-61。", "sql": ""}
+
+    tool_ids = _resolve_tool_ids(db, machine_id)
+    rows = db.query(DT_EVENT_RAW).filter(
+        DT_EVENT_RAW.tool_id.in_(tool_ids)
+    ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(500).all()
+
+    if not rows:
+        return {"answer": f"机台 {machine_id} 暂无事件数据。", "sql": ""}
+
+    # 解析事件（时间倒序，最新在前）
+    events = []
+    for r in rows:
+        payload = _parse_payload(r.payload_json)
+        payload = clean_alarm_event(payload)
+        events.append({
+            "raw_id": str(r.raw_id),
+            "ts": r.received_ts_utc,
+            "event_name": str(payload.get("event_name", "")).strip(),
+            "lot_id": payload.get("lot_id", ""),
+            "wafer_id": payload.get("wafer_id"),
+            "chamber_id": payload.get("chamber_id", ""),
+            "machine_state": payload.get("machine_state", ""),
+        })
+
+    # 推算每个 Chamber 的状态
+    chamber_states = {}
+    current_lot = events[0]["lot_id"] if events else ""
+    latest_ts = str(events[0]["ts"]) if events else ""
+
+    for chamber in _OXE_CHAMBERS:
+        chamber_events = [e for e in events if e["chamber_id"] == chamber]
+        if not chamber_events:
+            chamber_states[chamber] = {"state": "空闲", "wafer": None, "last_ts": None, "last_event": "无事件"}
+            continue
+
+        latest = chamber_events[0]  # 最新事件（倒序第一个）
+        state = "空闲"
+        wafer = None
+
+        # 根据最新事件类型推算状态
+        if latest["event_name"] == _OXE_WAFER_LOAD_EVENT:
+            # 最新是 Loaded，说明刚放入，正在加工
+            state = "加工中"
+            wafer = latest["wafer_id"]
+        elif latest["event_name"] == _OXE_WAFER_UNLOAD_EVENT:
+            # 最新是 Unloaded，说明刚取出，空闲
+            state = "空闲"
+            wafer = None
+        elif latest["event_name"] == "Start":
+            state = "加工中"
+            wafer = latest["wafer_id"]
+        elif latest["event_name"] == "PE":
+            state = "空闲"
+        elif latest["event_name"] in ("PS",):
+            state = "加工中"
+            wafer = latest["wafer_id"]
+
+        chamber_states[chamber] = {
+            "state": state,
+            "wafer": wafer,
+            "last_ts": latest["ts"],
+            "last_event": latest["event_name"],
+        }
+
+    # 统计今日产量（WaferUnloaded 事件数）
+    today_prefix = str(latest_ts)[:10] if latest_ts else ""
+    today_yield = 0
+    for e in events:
+        if e["event_name"] == _OXE_WAFER_UNLOAD_EVENT and str(e["ts"]).startswith(today_prefix):
+            today_yield += 1
+
+    # 当前 Lot 进度
+    lot_events = [e for e in events if e["lot_id"] == current_lot]
+    loaded_count = sum(1 for e in lot_events if e["event_name"] == _OXE_WAFER_LOAD_EVENT)
+    unloaded_count = sum(1 for e in lot_events if e["event_name"] == _OXE_WAFER_UNLOAD_EVENT)
+
+    answer = f"机台 {machine_id} Chamber 状态（截至 {str(latest_ts)[:19]}）：\n"
+    for chamber in _OXE_CHAMBERS:
+        s = chamber_states[chamber]
+        wafer_info = f"，当前 W{s['wafer']}" if s["wafer"] else ""
+        last_info = f"，上次事件 {str(s['last_ts'])[:19]}" if s["last_ts"] else ""
+        answer += f"- {chamber}：{s['state']}{wafer_info}{last_info}\n"
+
+    answer += f"- 今日产量：{today_yield} 片\n"
+    if current_lot:
+        answer += f"- 当前Lot：{current_lot}（已加载 {loaded_count} 片，已卸载 {unloaded_count} 片）\n"
+
+    table_rows = []
+    for chamber in _OXE_CHAMBERS:
+        s = chamber_states[chamber]
+        table_rows.append([
+            chamber,
+            s["state"],
+            f"W{s['wafer']}" if s["wafer"] else "-",
+            str(s["last_ts"])[:19] if s["last_ts"] else "-",
+            s["last_event"],
+        ])
+
+    return {
+        "answer": answer,
+        "sql": "",
+        "table_data": {
+            "headers": ["Chamber", "状态", "当前晶圆", "最近事件时间", "最近事件"],
+            "rows": table_rows,
+        },
+        "jump_timestamp": latest_ts,
+        "jump_machine_id": machine_id,
+    }
+
+
+def get_oxe_lot_summary(db: Session, machine_id: str, date: str = None, lot_id: str = None) -> dict:
+    """查询 OXE 机台某日/某 Lot 的加工汇总（多 Lot 对比、产量趋势）
+
+    通过 WaferLoaded/Unloaded 事件聚合统计。
+    """
+    if not machine_id:
+        return {"answer": "请指定机台ID，如 OXE-61。", "sql": ""}
+
+    tool_ids = _resolve_tool_ids(db, machine_id)
+    q = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+
+    # 如果指定了 lot_id，按 lot_id 过滤
+    if lot_id:
+        q = q.filter(DT_EVENT_RAW.payload_json.like(f'%"{lot_id}"%'))
+
+    rows = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
+
+    if not rows:
+        return {"answer": f"机台 {machine_id} 暂无事件数据。", "sql": ""}
+
+    # 解析事件
+    events = []
+    for r in rows:
+        payload = _parse_payload(r.payload_json)
+        payload = clean_alarm_event(payload)
+        ts = str(r.received_ts_utc) if r.received_ts_utc else ""
+        events.append({
+            "ts": ts,
+            "date": ts[:10] if ts else "",
+            "event_name": str(payload.get("event_name", "")).strip(),
+            "lot_id": payload.get("lot_id", ""),
+            "wafer_id": payload.get("wafer_id"),
+            "chamber_id": payload.get("chamber_id", ""),
+        })
+
+    # 按日期过滤
+    if date:
+        events = [e for e in events if e["date"] == date]
+    else:
+        # 默认取最新日期
+        all_dates = sorted(set(e["date"] for e in events if e["date"]), reverse=True)
+        if all_dates:
+            date = all_dates[0]
+            events = [e for e in events if e["date"] == date]
+
+    if not events:
+        return {"answer": f"机台 {machine_id} 在 {date or '指定日期'} 暂无事件数据。", "sql": ""}
+
+    # 按 lot_id 聚合
+    lot_summary = {}  # {lot_id: {"loaded": set(), "unloaded": set(), "alarms": 0, "chambers": set()}}
+    for ev in events:
+        lid = ev["lot_id"] or "(未知Lot)"
+        if lid not in lot_summary:
+            lot_summary[lid] = {"loaded": set(), "unloaded": set(), "alarms": 0, "chambers": set(), "first_ts": ev["ts"], "last_ts": ev["ts"]}
+        if ev["event_name"] == _OXE_WAFER_LOAD_EVENT and ev["wafer_id"] is not None:
+            lot_summary[lid]["loaded"].add(str(ev["wafer_id"]))
+        elif ev["event_name"] == _OXE_WAFER_UNLOAD_EVENT and ev["wafer_id"] is not None:
+            lot_summary[lid]["unloaded"].add(str(ev["wafer_id"]))
+        elif ev["event_name"] in ("ALARM_REPORT", "EC_ALARM_REPORT"):
+            lot_summary[lid]["alarms"] += 1
+        if ev["chamber_id"]:
+            lot_summary[lid]["chambers"].add(ev["chamber_id"])
+        if ev["ts"] < lot_summary[lid]["first_ts"]:
+            lot_summary[lid]["first_ts"] = ev["ts"]
+        if ev["ts"] > lot_summary[lid]["last_ts"]:
+            lot_summary[lid]["last_ts"] = ev["ts"]
+
+    # 统计
+    total_wafers = sum(len(s["loaded"]) for s in lot_summary.values())
+    completed_wafers = sum(len(s["unloaded"]) for s in lot_summary.values())
+    total_alarms = sum(s["alarms"] for s in lot_summary.values())
+    in_progress = total_wafers - completed_wafers
+
+    # 计算总加工时长（取最早和最晚时间戳）
+    all_ts = [e["ts"] for e in events if e["ts"]]
+    total_duration_sec = 0
+    if len(all_ts) >= 2:
+        try:
+            ts_min = min(all_ts)
+            ts_max = max(all_ts)
+            dt_min = datetime.fromisoformat(ts_min.replace("Z", "").replace("+00:00", ""))
+            dt_max = datetime.fromisoformat(ts_max.replace("Z", "").replace("+00:00", ""))
+            total_duration_sec = (dt_max - dt_min).total_seconds()
+        except Exception:
+            pass
+
+    total_hours = int(total_duration_sec // 3600) if total_duration_sec else 0
+    total_minutes = int((total_duration_sec % 3600) // 60) if total_duration_sec else 0
+
+    # 平均加工时长
+    avg_per_wafer_sec = total_duration_sec / completed_wafers if completed_wafers > 0 else 0
+    avg_min = int(avg_per_wafer_sec // 60) if avg_per_wafer_sec else 0
+    avg_sec = int(avg_per_wafer_sec % 60) if avg_per_wafer_sec else 0
+
+    # 机台利用率（有事件时间 / 总时间）
+    utilization = 0
+    if total_duration_sec > 0 and completed_wafers > 0:
+        # 估算：每片加工时间 * 片数 / 总时间
+        process_time = avg_per_wafer_sec * completed_wafers
+        utilization = min(100, int(process_time / total_duration_sec * 100))
+
+    answer = f"机台 {machine_id} 在 {date} 的加工汇总：\n"
+    answer += f"- 加工Lot数：{len(lot_summary)} 个"
+    if lot_summary:
+        answer += f"（{'/'.join(list(lot_summary.keys())[:5])}）"
+    answer += f"\n- 总晶圆数：{total_wafers} 片\n"
+    answer += f"- 已完成：{completed_wafers} 片\n"
+    answer += f"- 加工中：{in_progress} 片\n" if in_progress > 0 else ""
+    answer += f"- 异常告警：{total_alarms} 次\n" if total_alarms > 0 else ""
+    if avg_per_wafer_sec > 0:
+        answer += f"- 平均加工时长：{avg_min}分{avg_sec}秒/片\n"
+    if total_duration_sec > 0:
+        answer += f"- 总加工时间：{total_hours}小时{total_minutes}分\n"
+        answer += f"- 机台利用率：{utilization}%\n"
+
+    # 表格数据（按 Lot 分组）
+    table_rows = []
+    for lid, s in sorted(lot_summary.items()):
+        table_rows.append([
+            lid,
+            str(len(s["loaded"])),
+            str(len(s["unloaded"])),
+            "/".join(sorted(s["chambers"])) if s["chambers"] else "-",
+            str(s["alarms"]),
+            str(s["first_ts"])[:19],
+            str(s["last_ts"])[:19],
+        ])
+
+    return {
+        "answer": answer,
+        "sql": "",
+        "table_data": {
+            "headers": ["Lot ID", "已加载", "已完成", "使用Chamber", "告警数", "开始时间", "结束时间"],
+            "rows": table_rows,
+        },
+        "jump_timestamp": all_ts[-1] if all_ts else None,
+        "jump_machine_id": machine_id,
+    }
+
+
 # ==================== OpenAI Function Calling 工具定义 ====================
 
 TOOL_DEFINITIONS = [
@@ -957,6 +1417,69 @@ TOOL_DEFINITIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_wafer_flow",
+            "description": "查询OXE机台某Lot的晶圆流向（PORT取片→PA对准→CHAMBER加工→PA放回→PORT放回）。返回每片晶圆的加工状态、平均时长、异常片。适用：用户问'晶圆流向'、'第几片在加工'、'晶圆进度'。仅适用于OXE系列机台。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {
+                        "type": "string",
+                        "description": "OXE机台ID，如 OXE-61"
+                    },
+                    "lot_id": {
+                        "type": "string",
+                        "description": "Lot ID。不传则查询最新Lot。"
+                    }
+                },
+                "required": ["machine_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_chamber_status",
+            "description": "查询OXE机台3个Chamber（CHAMBER_A/B/C）的实时加工状态，包括每个Chamber当前是否加工中、加工哪片晶圆、最近事件时间、今日产量。适用：用户问'Chamber状态'、'3个腔体在做什么'、'当前加工情况'。仅适用于OXE系列机台。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {
+                        "type": "string",
+                        "description": "OXE机台ID，如 OXE-61"
+                    }
+                },
+                "required": ["machine_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_oxe_lot_summary",
+            "description": "查询OXE机台某日或某Lot的加工汇总（多Lot对比、产量趋势、机台利用率）。返回每个Lot的晶圆数、完成数、告警数、加工时长。适用：用户问'今天加工了几个Lot'、'产量汇总'、'机台利用率'。仅适用于OXE系列机台。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {
+                        "type": "string",
+                        "description": "OXE机台ID，如 OXE-61"
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "日期，格式 YYYY-MM-DD，如 2026-08-11。不传则查询最新日期。"
+                    },
+                    "lot_id": {
+                        "type": "string",
+                        "description": "Lot ID。指定则只查该Lot。"
+                    }
+                },
+                "required": ["machine_id"]
+            }
+        }
+    },
 ]
 
 # 工具名 → 处理函数映射
@@ -968,4 +1491,7 @@ TOOL_HANDLERS = {
     "get_lot_info": get_lot_info,
     "get_mes_lot_info": lambda db, **kw: get_mes_lot_info(db, lot_id=kw.get("lot") or kw.get("lot_id")),
     "get_recipe_info": get_recipe_info,
+    "get_wafer_flow": get_wafer_flow,
+    "get_chamber_status": get_chamber_status,
+    "get_oxe_lot_summary": get_oxe_lot_summary,
 }

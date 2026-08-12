@@ -51,6 +51,8 @@ const cursor = ref(0)                     // 回放游标时间戳
 const playbackStart = ref(0)
 const playbackEnd = ref(0)
 const rightTab = ref('alarms')
+const aiAssistantRef = ref(null)
+const aiPrefillQuestion = ref('')  // 从回放 Tab 传递过来的预填问题
 const currentState = ref('idle')
 const processStep = ref('待机')
 const metrics = reactive({ temp: 22, pressure: 1, gas: 0, rf: 0, waferCount: 0 })
@@ -954,6 +956,20 @@ function onReplayEvent(ev) {
   }
 }
 
+// 回放 Tab 的"AI分析当前回放"：切换到 AI Tab 并预填问题
+function onAiAnalyze(payload) {
+  const tsStr = payload.timestamp ? String(payload.timestamp).slice(0, 19).replace('T', ' ') : ''
+  const dateStr = payload.date || ''
+  const machineStr = payload.machine_id || machineId.value || ''
+  // 根据机台型号生成不同的预填问题
+  if (machineStr.toUpperCase().startsWith('OXE')) {
+    aiPrefillQuestion.value = `分析 ${machineStr} 在 ${tsStr} 附近的事件，当前第几片晶圆在加工？是否有异常？`
+  } else {
+    aiPrefillQuestion.value = `分析 ${machineStr} 在 ${dateStr} ${tsStr} 附近的事件，机台状态是否正常？有无异常告警？`
+  }
+  rightTab.value = 'ai'
+}
+
 
 // 返回看板
 function goBack() {
@@ -1184,6 +1200,7 @@ onMounted(() => {
           @jump="jumpToTime"
           @replay-event="onReplayEvent"
           @date-change="onDateChange"
+          @ai-analyze="onAiAnalyze"
         />
       </div>
 
@@ -1194,7 +1211,7 @@ onMounted(() => {
 
       <!-- AI Tab -->
       <div v-show="rightTab === 'ai'" class="dr-section">
-        <AiAssistant :machine-id="machineId" @jump="jumpToTime" />
+        <AiAssistant ref="aiAssistantRef" :machine-id="machineId" :prefill-question="aiPrefillQuestion" @jump="jumpToTime" />
       </div>
 
 

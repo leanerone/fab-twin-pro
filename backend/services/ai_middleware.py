@@ -541,6 +541,22 @@ class AIMiddleware:
 
 7. get_recipe_info: 查询工艺配方（当前返回提示信息）
 
+OXE 机台专用工具（仅适用于 OXE 系列机台，如 OXE-51/OXE-61/OXE-65A）：
+
+8. get_wafer_flow: 查询 OXE 机台某 Lot 的晶圆流向（25片晶圆在 PORT→PA→CHAMBER 间的加工流转）
+   - 必填参数：machine_id (OXE机台ID)
+   - 可选参数：lot_id (不传则查最新Lot)
+   - 适用：用户问"晶圆流向"、"第几片在加工"、"晶圆进度"、"W07加工了多久"
+
+9. get_chamber_status: 查询 OXE 机台 3 个 Chamber 的实时状态
+   - 必填参数：machine_id
+   - 适用：用户问"Chamber状态"、"3个腔体在做什么"、"当前加工情况"
+
+10. get_oxe_lot_summary: 查询 OXE 机台某日加工汇总（多Lot对比、产量趋势、利用率）
+    - 必填参数：machine_id
+    - 可选参数：date (YYYY-MM-DD)、lot_id
+    - 适用：用户问"今天加工了几个Lot"、"产量汇总"、"机台利用率"
+
 Lot ID 格式说明：
 - 主 Lot：N 或 V 开头，如 NT938, VC001
 - 控片/测试 Lot：P 开头，如 P0093

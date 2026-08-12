@@ -9,7 +9,7 @@ const props = defineProps({
   jumpTimestamp: { type: String, default: '' },
 })
 
-const emit = defineEmits(['jump', 'replay-event', 'date-change'])
+const emit = defineEmits(['jump', 'replay-event', 'date-change', 'ai-analyze'])
 
 // 时间戳解析：统一处理东八区时间，去掉Z后缀按本地时间解析
 function parseTs(ts) {
@@ -151,6 +151,16 @@ function jumpToHour(hour) {
       break
     }
   }
+}
+
+// AI 分析当前回放：携带机台ID和当前回放时间戳，父组件切换到 AI Tab 并预填问题
+function emitAiAnalyze() {
+  const ts = props.jumpTimestamp || `${selectedDate.value}T00:00:00`
+  emit('ai-analyze', {
+    machine_id: props.machineId,
+    timestamp: ts,
+    date: selectedDate.value,
+  })
 }
 
 function getEventIcon(cat) {
@@ -323,6 +333,12 @@ watch(() => props.jumpTimestamp, (ts) => {
           {{ loadingMore ? '加载中...' : `加载更多 (已显示 ${events.length})` }}
         </button>
       </div>
+    </div>
+    <!-- AI 快捷分析栏：点击后切换到 AI Tab 并预填问题 -->
+    <div v-if="filteredEvents.length > 0" class="hr-ai-bar">
+      <button class="hr-ai-btn" @click="emitAiAnalyze">
+        🤖 AI分析当前回放
+      </button>
     </div>
   </div>
 </template>
@@ -573,5 +589,26 @@ watch(() => props.jumpTimestamp, (ts) => {
 .hr-load-more button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* AI 快捷分析栏 */
+.hr-ai-bar {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.hr-ai-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%);
+  border: 1px solid #06b6d4;
+  border-radius: 6px;
+  color: #ffffff;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.hr-ai-btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
 }
 </style>

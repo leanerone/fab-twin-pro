@@ -78,3 +78,13 @@ public/models/
 __pycache__/
 *.pyc
 *.pyo
+
+# Vite temporary timestamp files
+frontend/vite.config.js.timestamp-*.mjs
+
+# HTML reference backups
+frontend/public/*_old.html
+frontend/public/*_new.html
+
+# User DB exploration logs
+tests/oxe/*.txt

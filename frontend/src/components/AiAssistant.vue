@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { api } from '../api'
 import VoiceInput from './VoiceInput.vue'
 
@@ -10,6 +10,8 @@ const props = defineProps({
   sessionType: { type: String, default: 'detail' },
   // 是否显示语音功能
   showVoice: { type: Boolean, default: true },
+  // 预填问题（从回放 Tab 的"AI分析当前回放"按钮传入）
+  prefillQuestion: { type: String, default: '' },
 })
 
 const emit = defineEmits(['jump'])
@@ -26,16 +28,33 @@ const interimText = ref('')
 
 const STORAGE_KEY = `fabtwin_ai_${props.sessionType}`
 
-// 快捷问题
-const suggestions = [
-  '当前机台状态',
-  '今天有多少报警',
-  '温度趋势如何',
-  '已加工多少晶圆',
-  '异常检测结果',
-  '工艺步骤详情',
-  '查询 Lot',
-]
+// 快捷问题：按机台型号动态生成（OXE 系列显示专用问题，其他显示通用问题）
+const isOxeMachine = computed(() => {
+  const id = props.machineId || ''
+  return id.toUpperCase().startsWith('OXE')
+})
+
+const suggestions = computed(() => {
+  if (isOxeMachine.value) {
+    return [
+      '3个Chamber当前状态',
+      '最新Lot加工进度',
+      '今天加工了多少片晶圆',
+      '晶圆流向分析',
+      '有哪些异常告警',
+      '查询 Lot',
+    ]
+  }
+  return [
+    '当前机台状态',
+    '今天有多少报警',
+    '温度趋势如何',
+    '已加工多少晶圆',
+    '异常检测结果',
+    '工艺步骤详情',
+    '查询 Lot',
+  ]
+})
 
 // ==================== 会话持久化 ====================
 
@@ -84,6 +103,17 @@ watch(() => props.machineId, (newId, oldId) => {
       messages.value = []
       sessionId.value = null
     }
+  }
+})
+
+// 监听预填问题（从回放 Tab 的"AI分析当前回放"按钮传入），自动填入输入框并滚动到可见
+watch(() => props.prefillQuestion, (newQ) => {
+  if (newQ) {
+    input.value = newQ
+    nextTick(() => {
+      const inputEl = document.querySelector('.ai-input-area input, .ai-input-area textarea')
+      if (inputEl) inputEl.focus()
+    })
   }
 })
 
