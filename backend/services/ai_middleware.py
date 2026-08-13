@@ -322,15 +322,18 @@ class AIMiddleware:
     def _build_chat_url(self, base_url: str) -> str:
         """根据 base_url 构建 chat completions 完整 URL
 
-        兼容用户填写时带或不带 /v1 后缀的情况：
-        - https://api.openai.com       → https://api.openai.com/v1/chat/completions
-        - https://api.openai.com/v1    → https://api.openai.com/v1/chat/completions
-        - https://api.openai.com/v1/   → https://api.openai.com/v1/chat/completions
+        兼容用户填写时带或不带版本后缀的情况：
+        - https://api.openai.com              → https://api.openai.com/v1/chat/completions
+        - https://api.openai.com/v1           → https://api.openai.com/v1/chat/completions
+        - https://api.openai.com/v1/          → https://api.openai.com/v1/chat/completions
+        - https://open.bigmodel.cn/api/paas/v4 → https://open.bigmodel.cn/api/paas/v4/chat/completions
+        - https://api.deepseek.com/v1         → https://api.deepseek.com/v1/chat/completions
         """
         url = (base_url or "").rstrip('/')
         if not url:
             return ""
-        if url.endswith('/v1'):
+        # 已包含版本号后缀（v1/v2/v4 等）时直接拼接，避免重复加 /v1
+        if re.search(r'/v\d+$', url):
             return f"{url}/chat/completions"
         return f"{url}/v1/chat/completions"
 
@@ -577,7 +580,12 @@ Lot ID 格式说明：
 - 对于产量：如有数据，分析产量趋势
 """
         if machine_id:
-            prompt += f"\n当前关联机台: {machine_id}"
+            prompt += (
+                f"\n\n【重要】当前关联机台: {machine_id}\n"
+                f"- 用户在该机台详情页提问，所有涉及机台的查询都应使用此 machine_id，无需再向用户索要\n"
+                f"- 如果用户问题涉及 Chamber/Lot/晶圆/告警/状态/流向 等，直接用此 machine_id 调用对应工具\n"
+                f"- 只有当用户明确提到其他机台 ID 时，才使用用户指定的 ID"
+            )
 
         if context:
             prompt += f"\n上下文数据: {json.dumps(context, ensure_ascii=False, default=str)}"
