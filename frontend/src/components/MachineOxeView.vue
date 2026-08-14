@@ -954,7 +954,7 @@ function animateArmTo(target3d, durationMs, carryWafer, onDone) {
 }
 
 function handleWaferLoaded(ev) {
-  const slot = Number(ev.slot || ev.wafer_id || ev.slot_id || 1)
+  const slot = Number(ev.slot || ev.wafer_id || ev.slot_id || ev.payload?.slot || ev.payload?.wafer_id || ev.payload?.slot_id || 1)
   const eventPort = resolveEventPortId(ev, activeState.lastEventPortId)
   const portNo = eventPort === 'PORT2' ? '2' : '1'
   const waferTag = portNo + '-' + slot
@@ -1004,7 +1004,7 @@ function handleWaferLoaded(ev) {
 }
 
 function handleWaferUnloaded(ev) {
-  const slot = Number(ev.slot || ev.wafer_id || ev.slot_id || 1)
+  const slot = Number(ev.slot || ev.wafer_id || ev.slot_id || ev.payload?.slot || ev.payload?.wafer_id || ev.payload?.slot_id || 1)
   const eventPort = resolveEventPortId(ev, activeState.lastEventPortId)
   const portNo = eventPort === 'PORT2' ? '2' : '1'
   const waferTag = portNo + '-' + slot
@@ -1132,13 +1132,13 @@ function applyEvent(ev) {
     setChamberState(wlChamber, 'running')
     activeState.activeUnitId = wlChamber
     handleWaferLoaded(ev)
-    markWaferAsRunning(eventPort, ev.slot || ev.wafer_id || ev.slot_id)
+    markWaferAsRunning(eventPort, ev.slot || ev.wafer_id || ev.slot_id || ev.payload?.slot || ev.payload?.wafer_id || ev.payload?.slot_id)
   } else if (eventName === 'WAFERUNLOADED') {
     const wuRaw = ev.chamber_id
     const wuChamber = (wuRaw && String(wuRaw).trim().toUpperCase() !== 'NULL') ? normalizeChamberId(wuRaw) : (eventPort === 'PORT2' ? 'CHAMBER_B' : 'CHAMBER_A')
     setChamberState(wuChamber, 'idle')
     handleWaferUnloaded(ev)
-    markWaferAsCompleted(eventPort, ev.slot || ev.wafer_id || ev.slot_id)
+    markWaferAsCompleted(eventPort, ev.slot || ev.wafer_id || ev.slot_id || ev.payload?.slot || ev.payload?.wafer_id || ev.payload?.slot_id)
   } else if (eventName === 'UNLOAD_CYCLE_COMPLETED') {
     const unloadSmif = smifFromPort(eventPort)
     const unloadVisual = getPortVisual(eventPort)

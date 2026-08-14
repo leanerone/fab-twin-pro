@@ -718,6 +718,9 @@ async function switchToPlayback() {
   }))
   if (!historyData.length) {
     console.warn('无历史数据')
+    // 即使无事件数据，也要刷新告警和Lot（否则显示的是旧日期数据）
+    loadAlarms()
+    loadLots()
     return
   }
   playbackStart.value = historyData[0]._ts

@@ -16,10 +16,12 @@ from database import SessionLocal
 from models import DT_EVENT_RAW
 
 TOOL_ID = 'OXE-61'
-# 4个日期，每个日期生成1个完整Lot流程
-TEST_DATES = ['2026-08-08', '2026-08-09', '2026-08-10', '2026-08-11']
-LOT_IDS = ['TEST0801', 'TEST0802', 'TEST0901', 'TEST1001']
-RECIPES = ['X4854', 'X4855', 'X4856', 'X4857']
+# 9个日期，每个日期生成1个完整Lot流程
+TEST_DATES = ['2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09', '2026-08-10',
+              '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14']
+LOT_IDS = ['TEST0601', 'TEST0701', 'TEST0801', 'TEST0802', 'TEST0901',
+           'TEST1001', 'TEST1101', 'TEST1201', 'TEST1301']
+RECIPES = ['X4851', 'X4852', 'X4853', 'X4854', 'X4855', 'X4856', 'X4857', 'X4858', 'X4859']
 
 
 def build_event(raw_id, tool_id, ts, event_name, lot_id, recipe, port, **extra):
