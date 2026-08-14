@@ -117,13 +117,10 @@ function formatTime(ts) {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 16px;
-  display: none;
+  display: flex;
   align-items: center;
   gap: 14px;
   z-index: 50;
-}
-.playback-bar.show {
-  display: flex;
 }
 .pb-mode-switch {
   display: flex;

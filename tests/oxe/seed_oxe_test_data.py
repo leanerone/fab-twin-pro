@@ -46,8 +46,12 @@ def build_event(raw_id, tool_id, ts, event_name, lot_id, recipe, port, **extra):
     )
 
 
-def generate_lot_events(base_date, lot_id, recipe, port, start_raw_seq):
-    """生成一个Lot的完整事件流程（精简版，约30条事件）"""
+def generate_lot_events(base_date, lot_id, recipe, port, start_raw_seq, wafer_count=25):
+    """生成一个Lot的完整事件流程（25片晶圆，分布在3个Chamber）
+
+    Args:
+        wafer_count: 晶圆数量，默认25片（标准Lot）
+    """
     events = []
     seq = start_raw_seq
     base_dt = datetime.strptime(base_date, '%Y-%m-%d')
@@ -61,7 +65,8 @@ def generate_lot_events(base_date, lot_id, recipe, port, start_raw_seq):
         return f'RAW_SEED_{seq}'
 
     smif = f'SMIF{port}'
-    chamber = 'CHAMBER_B' if port == 2 else 'CHAMBER_A'
+    # 3个Chamber轮换：W1→A, W2→B, W3→C, W4→A ...
+    chambers = ['CHAMBER_A', 'CHAMBER_B', 'CHAMBER_C']
 
     # POD流程
     events.append(build_event(rid(), TOOL_ID, ts(0), 'POD_PLACED', lot_id, recipe, port, smif_id=smif, cst_id=f'CST{lot_id}'))
@@ -70,35 +75,36 @@ def generate_lot_events(base_date, lot_id, recipe, port, start_raw_seq):
     events.append(build_event(rid(), TOOL_ID, ts(5), 'DOOR_OPEN', lot_id, recipe, port, smif_id=smif))
     events.append(build_event(rid(), TOOL_ID, ts(6), 'LOAD_CYCLE_STARTED', lot_id, recipe, port, smif_id=smif, duration_sec=60))
 
-    # 3片晶圆的完整流程（简化，每片约20分钟）
-    for wafer_id in range(1, 4):
-        w_min = 10 + (wafer_id - 1) * 20
+    # 每片晶圆约3分钟（25片约75分钟），分布在3个Chamber
+    for wafer_id in range(1, wafer_count + 1):
+        w_min = 10 + (wafer_id - 1) * 3
+        chamber = chambers[(wafer_id - 1) % 3]
         events.append(build_event(rid(), TOOL_ID, ts(w_min), 'WaferLoaded', lot_id, recipe, port,
                                    port_id=f'PORT{port}', chamber_id=chamber, wafer_id=wafer_id, slot=wafer_id, duration_sec=6))
         events.append(build_event(rid(), TOOL_ID, ts(w_min + 1), 'Start', lot_id, recipe, port, chamber_id=chamber, duration_sec=1))
-        events.append(build_event(rid(), TOOL_ID, ts(w_min + 2), 'PS', lot_id, recipe, port, chamber_id=chamber, duration_sec=1))
+        events.append(build_event(rid(), TOOL_ID, ts(w_min + 1), 'PS', lot_id, recipe, port, chamber_id=chamber, duration_sec=1))
         # 添加 STATE 事件用于测试状态映射
-        events.append(build_event(rid(), TOOL_ID, ts(w_min + 3), 'STATE', lot_id, recipe, port,
+        events.append(build_event(rid(), TOOL_ID, ts(w_min + 1), 'STATE', lot_id, recipe, port,
                                    chamber_id=chamber, state='RUNNING', machine_state='Running', description=f'{chamber} 加工中'))
         # 添加 SENSOR 事件用于测试传感器映射
-        events.append(build_event(rid(), TOOL_ID, ts(w_min + 5), 'SENSOR', lot_id, recipe, port,
+        events.append(build_event(rid(), TOOL_ID, ts(w_min + 1), 'SENSOR', lot_id, recipe, port,
                                    chamber_id=chamber, sensor_name='Temperature', sensor_value=85.5 + wafer_id * 0.3, description='腔体温度'))
-        events.append(build_event(rid(), TOOL_ID, ts(w_min + 10), 'PE', lot_id, recipe, port, chamber_id=chamber, duration_sec=1))
-        events.append(build_event(rid(), TOOL_ID, ts(w_min + 12), 'WaferUnloaded', lot_id, recipe, port,
+        events.append(build_event(rid(), TOOL_ID, ts(w_min + 2), 'PE', lot_id, recipe, port, chamber_id=chamber, duration_sec=1))
+        events.append(build_event(rid(), TOOL_ID, ts(w_min + 2), 'WaferUnloaded', lot_id, recipe, port,
                                    port_id=f'PORT{port}', chamber_id=chamber, wafer_id=wafer_id, slot=wafer_id, duration_sec=5))
 
     # 添加1条 ALARM 事件
-    events.append(build_event(rid(), TOOL_ID, ts(75), 'EC_ALARM_REPORT', lot_id, recipe, port,
-                               chamber_id=chamber, alarm_id='9003', alarm_text='Chamber temperature drift', severity='warn'))
+    events.append(build_event(rid(), TOOL_ID, ts(wafer_count * 3 + 10), 'EC_ALARM_REPORT', lot_id, recipe, port,
+                               chamber_id=chambers[0], alarm_id='9003', alarm_text='Chamber temperature drift', severity='warn'))
 
     # 添加1条 TRANSFER 事件
-    events.append(build_event(rid(), TOOL_ID, ts(76), 'TRANSFER', lot_id, recipe, port,
-                               chamber_id=chamber, transfer_stage='PLACE', action='PLACE', description='晶圆传输完成'))
+    events.append(build_event(rid(), TOOL_ID, ts(wafer_count * 3 + 11), 'TRANSFER', lot_id, recipe, port,
+                               chamber_id=chambers[0], transfer_stage='PLACE', action='PLACE', description='晶圆传输完成'))
 
     # 结束流程
-    events.append(build_event(rid(), TOOL_ID, ts(80), 'LOAD_CYCLE_COMPLETED', lot_id, recipe, port, smif_id=smif, duration_sec=1))
-    events.append(build_event(rid(), TOOL_ID, ts(82), 'DOOR_CLOSE', lot_id, recipe, port, smif_id=smif))
-    events.append(build_event(rid(), TOOL_ID, ts(85), 'POD_REMOVED', lot_id, recipe, port, smif_id=smif))
+    events.append(build_event(rid(), TOOL_ID, ts(wafer_count * 3 + 15), 'LOAD_CYCLE_COMPLETED', lot_id, recipe, port, smif_id=smif, duration_sec=1))
+    events.append(build_event(rid(), TOOL_ID, ts(wafer_count * 3 + 17), 'DOOR_CLOSE', lot_id, recipe, port, smif_id=smif))
+    events.append(build_event(rid(), TOOL_ID, ts(wafer_count * 3 + 20), 'POD_REMOVED', lot_id, recipe, port, smif_id=smif))
 
     return events, seq
 

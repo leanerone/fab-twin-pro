@@ -8,6 +8,7 @@ import { stateLabels } from '../composables/useThree'
 import MachineModel3D from '../components/MachineModel3D.vue'
 import MachineModel2D from '../components/MachineModel2D.vue'
 import MachineIsoView from '../components/MachineIsoView.vue'
+import MachineOxeView from '../components/MachineOxeView.vue'
 import MachineVpoView from '../components/MachineVpoView.vue'
 import MachineVpo3DView from '../components/MachineVpo3DView.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
@@ -727,7 +728,10 @@ async function switchToPlayback() {
   // 并行加载告警与 Lot（不阻塞跳转）
   loadAlarms()
   loadLots()
-  // 如果有等待中的跳转，执行它
+  // 修复：加载历史数据后先初始化到起始位置，批量重建初始视觉状态
+  // 避免用户刚切回放时看到空白画面以为没动，同时保证displayEvents正确传入MachineOxeView
+  seek(0)
+  // 如果有等待中的跳转，执行它（覆盖上面seek(0)的位置）
   if (pendingJumpTs.value) {
     const ts = pendingJumpTs.value
     pendingJumpTs.value = ''
@@ -859,12 +863,13 @@ async function onDateChange(newDate) {
   playbackDate.value = newDate
   loading.value = true
   try {
-    // 回放模式：重新加载历史事件（switchToPlayback内部已加载alarms/lots）
-    if (mode.value === 'playback') {
+    // 选日期时自动切换到回放模式
+    if (mode.value !== 'playback') {
+      mode.value = 'playback'
       await switchToPlayback()
     } else {
-      // 实时模式：仅重新加载告警/Lot
-      await Promise.all([loadAlarms(), loadLots()])
+      // 已在回放模式：重新加载历史事件
+      await switchToPlayback()
     }
   } finally {
     loading.value = false
@@ -1096,13 +1101,18 @@ onMounted(() => {
         :mode="mode"
       />
 
-      <!-- OXE Canvas 实时看板（iframe 嵌入 oxe.html） -->
-      <iframe
+      <!-- OXE Canvas 看板（Vue 组件，支持回放驱动） -->
+      <MachineOxeView
         v-else-if="viewMode === 'oxe'"
-        :src="`/oxe.html?tool_id=${machineId}`"
-        class="oxe-iframe"
-        frameborder="0"
-        allowfullscreen
+        :machine="machine"
+        :model-config="currentModelConfig"
+        :current-state="currentState"
+        :metrics="metrics"
+        :events="displayEvents"
+        :paused="mode === 'playback' && !playing"
+        :mode="mode"
+        :speed="speed"
+        :current-lot-id="currentLotId"
       />
 
       <button class="back-btn" @click="goBack">← 返回看板</button>
@@ -1352,14 +1362,34 @@ onMounted(() => {
   font-weight: 600;
   z-index: 10;
 }
-/* OXE iframe 模式：返回看板按钮移到左上角，避免遮挡 iframe 右侧工具栏 */
+/* OXE Canvas 模式：为避免遮挡左侧 PORT1 Wafer Map 面板，back-btn 固定右上角；
+   同时为顶部切换按钮区 / 底部播放条预留 padding，确保 Canvas 不画在遮挡区域下 */
+.detail-viewer.is-oxe {
+  padding: 58px 0 84px 0;
+  box-sizing: border-box;
+}
 .detail-viewer.is-oxe .back-btn {
-  left: 14px;
-  right: auto;
-  top: 10px;
+  left: auto;
+  right: 14px;
+  top: 14px;
   padding: 6px 12px;
   font-size: 11px;
-  z-index: 20;
+  z-index: 60;
+}
+/* OXE 模式：视图模式切换按钮移到左上角（与返回按钮左右对称，避开顶部中心及左右两侧 Wafer Map 面板） */
+.detail-viewer.is-oxe .view-mode-switcher {
+  left: 14px;
+  top: 14px;
+  right: auto;
+  transform: none;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 60;
+}
+.detail-viewer.is-oxe .vms-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  background: rgba(13, 20, 36, 0.92);
 }
 
 /* 2D模式下，返回按钮紧凑显示 */
