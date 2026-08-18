@@ -122,6 +122,10 @@ function formatTime(ts) {
   gap: 14px;
   z-index: 50;
 }
+/* 实时模式下隐藏整个时间轴 */
+.playback-bar:not(.show) {
+  display: none !important;
+}
 .pb-mode-switch {
   display: flex;
   gap: 4px;

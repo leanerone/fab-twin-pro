@@ -1183,8 +1183,9 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 回放控制条 -->
+      <!-- 回放控制条（仅回放模式显示） -->
       <PlaybackBar
+        v-show="mode === 'playback'"
         :mode="mode"
         :playing="playing"
         :speed="speed"

@@ -1608,10 +1608,9 @@ onUnmounted(() => {
 }
 .oxe-kpi-panel {
   position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 150px;
+  left: 10px;
+  bottom: 10px;
+  width: 155px;
   padding: 8px 10px;
   border: 1px solid #c7d3e0;
   border-radius: 10px;
@@ -1652,10 +1651,10 @@ onUnmounted(() => {
 .status-info-text { color: #0e7490; }
 .oxe-timeline-panel {
   position: absolute;
-  left: 10px;
+  right: 10px;
   bottom: 10px;
-  width: 220px;
-  max-height: 220px;
+  width: 155px;
+  max-height: 140px;
   border: 1px solid #c7d3e0;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.92);
@@ -1698,13 +1697,19 @@ onUnmounted(() => {
 }
 .oxe-legend {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: 260px;
+  max-width: 400px;
   z-index: 3;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #c7d3e0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 .legend-item {
   display: inline-flex;
