@@ -990,6 +990,22 @@ watch(() => props.id, () => {
   loadMachine()
 })
 
+// 监听 URL query 参数变化（date、mode）—— SPA 中切换 URL 不会重新挂载组件
+watch(() => route.query, (q) => {
+  if (!q) return
+  const qDate = q.date ? String(q.date) : ''
+  const qMode = q.mode ? String(q.mode) : ''
+  // 仅处理合法日期格式
+  if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate) && qDate !== playbackDate.value) {
+    playbackDate.value = qDate
+    switchToPlayback()
+  } else if (qMode === 'playback' && mode.value !== 'playback') {
+    switchToPlayback()
+  } else if (qMode === 'realtime' && mode.value !== 'realtime') {
+    switchToRealtime()
+  }
+})
+
 // 处理AI跳转（query参数或全局store）
 async function applyAIJump() {
   let ts = ''
@@ -1016,8 +1032,22 @@ async function applyAIJump() {
 onMounted(() => {
   loadMachine()
   updateRunAnimation()
-  // 在 loadMachine 完成后处理跳转（loadMachine 内部异步加载数据）
-  loadMachine().then(() => applyAIJump())
+  // 处理 URL 参数：date、mode
+  const queryDate = route.query.date ? String(route.query.date) : ''
+  const queryMode = route.query.mode ? String(route.query.mode) : ''
+  // 在 loadMachine 完成后处理跳转和 URL 参数（loadMachine 内部异步加载数据）
+  loadMachine().then(async () => {
+    // 优先应用 URL 参数：date 和 mode
+    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      playbackDate.value = queryDate
+    }
+    if (queryMode === 'playback' || queryDate) {
+      // 有日期参数或明确指定 playback 模式时，自动切换到回放
+      await switchToPlayback()
+    }
+    // 处理 AI 跳转（ts 参数）
+    await applyAIJump()
+  })
 })
 </script>
 
