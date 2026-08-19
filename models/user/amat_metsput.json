@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "document": {
+    "name": "amat_metsput",
+    "src": "amat_metsput",
+    "coord": {
+      "type": "logical",
+      "unit": "px",
+      "origin": "bottom_left",
+      "y_axis": "up"
+    }
+  },
+  "motions": [
+    {
+      "step": "CHAMBER_START",
+      "enabled": true,
+      "rules": [
+        {
+          "when": "params.chamber == '1'",
+          "target_part_id": "ARM_2",
+          "actions": [
+            { "type": "rotate", "angle": 45, "pivot": { "x": 0, "y": 900 } },
+            { "type": "offset", "offset_x": 0, "offset_y": 0 }
+          ]
+        },
+        {
+          "when": "params.chamber == '2'",
+          "target_part_id": "ARM_2",
+          "actions": [
+            { "type": "rotate", "angle": -5, "pivot": { "x": 0, "y": 900 } },
+            { "type": "offset", "offset_x": 0, "offset_y": 0 }
+          ]
+        },
+        {
+          "when": "params.chamber == '3'",
+          "target_part_id": "ARM_2",
+          "actions": [
+            { "type": "rotate", "angle": 5, "pivot": { "x": 0, "y": 900 } },
+            { "type": "offset", "offset_x": 0, "offset_y": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "MIC",
+      "enabled": true,
+      "rules": [
+        {
+          "when": "params.port == '1'",
+          "target_part_id": "Group1_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 116 }
+          ]
+        },
+        {
+          "when": "params.port == '2'",
+          "target_part_id": "Group1_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 116 }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "MOC",
+      "enabled": true,
+      "rules": [
+        {
+          "when": "params.port == '1'",
+          "target_part_id": "Group1_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0 }
+          ]
+        },
+        {
+          "when": "params.port == '2'",
+          "target_part_id": "Group2_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0 }
+          ]
+        }
+      ]
+    }
+  ],
+  "ext": {
+    "machine_type": "amat_metsput",
+    "version": "1.0.0",
+    "description": "AMAT METSPUT消息驱动动作配置"
+  }
+}
