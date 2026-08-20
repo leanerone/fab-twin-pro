@@ -210,6 +210,17 @@ async def upload_model_file(
     _save_file_record(db, model_id, file_id, file.filename, file_url,
                       ext, file_size, version, uploaded_by)
 
+    # 如果是 JSON 文件且包含 schema_version，存入 animation_config_json
+    if ext == ".json":
+        try:
+            json_data = json.loads(content.decode("utf-8"))
+            if "schema_version" in json_data:
+                model.animation_config_json = json.dumps(json_data, ensure_ascii=False)
+                model.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                db.commit()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass  # 非 Motion JSON 格式，忽略
+
     return ModelFileResponse(
         file_id=file_id,
         file_name=file.filename,

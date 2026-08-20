@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import ModelUpload from '../components/ModelUpload.vue'
+import MotionPreview from '../components/MotionPreview.vue'
 
 const authStore = useAuthStore()
 
@@ -260,6 +261,28 @@ function onSvgPartsExtracted(parts) {
   svgPartsCache.value = parts || []
 }
 
+// ModelUpload 触发 uploaded 事件时（文件上传成功后），重新拉取机型数据
+// 修复：上传 SVG/JSON 后，本地 selectedModel.views_config / animation_config 不会自动刷新
+async function onModelFileUploaded() {
+  if (!selectedModel.value) return
+  const currentId = selectedModel.value.model_id
+  try {
+    const fresh = await api.getModels()
+    models.value = fresh || []
+    // 重新选中当前机型，使 selectedModel 引用最新数据
+    const updated = fresh?.find(m => m.model_id === currentId)
+    if (updated) {
+      selectedModel.value = updated
+      // 如果当前在动画配置Tab，同步刷新 editingConfig
+      if (activeTab.value === 'config' || activeTab.value === 'debug') {
+        loadAnimConfig(updated)
+      }
+    }
+  } catch (e) {
+    console.error('[ModelEditor] 上传后刷新机型数据失败:', e)
+  }
+}
+
 // === 动画原语（animations） ===
 function addAnimation() {
   if (!editingConfig.value) return
@@ -482,6 +505,52 @@ const svgPreviewUrl = computed(() => {
   return view2d.svg_source || view2d.url || ''
 })
 
+// === Motion JSON 导入 ===
+const importInput = ref(null)
+
+function triggerImportJson() {
+  importInput.value?.click()
+}
+
+async function onImportJson(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  e.target.value = ''
+
+  if (!selectedModel.value) {
+    toast('请先选择机型', 'warn')
+    return
+  }
+
+  try {
+    const text = await file.text()
+    const data = JSON.parse(text)
+
+    // 检测是否为通用 Motion JSON 格式
+    if (!data.schema_version) {
+      toast('文件中没有 schema_version 字段，不是通用 Motion JSON 格式', 'error')
+      return
+    }
+
+    // 填入编辑器
+    editingConfig.value = data
+    editDirty.value = true
+    toast(`已导入 Motion JSON v${data.schema_version}（${data.motions?.length || 0} 个步骤）`, 'success')
+  } catch (err) {
+    toast(`导入失败: ${err.message}`, 'error')
+  }
+}
+
+// === MotionPreview 绑定 ===
+const motionPreviewSvgUrl = computed(() => svgPreviewUrl.value)
+const motionPreviewConfig = computed(() => {
+  if (!editingConfig.value) return null
+  // 如果是通用 Motion JSON 格式，直接返回
+  if (editingConfig.value.schema_version) return editingConfig.value
+  // 旧格式暂不支持，返回 null
+  return null
+})
+
 // === 生命周期 ===
 onMounted(async () => {
   await loadModels()
@@ -544,6 +613,7 @@ onMounted(async () => {
           <ModelUpload
             :model-id="selectedModel.model_id"
             :model-name="selectedModel.model_name"
+            @uploaded="onModelFileUploaded"
             @svg-parts-extracted="onSvgPartsExtracted"
           />
         </div>
@@ -637,6 +707,21 @@ onMounted(async () => {
             </select>
           </div>
           <div class="config-actions">
+            <button
+              class="btn-import"
+              :disabled="!selectedModel"
+              @click="triggerImportJson"
+              title="导入通用 Motion JSON 格式文件"
+            >
+              📥 导入Motion JSON
+            </button>
+            <input
+              ref="importInput"
+              type="file"
+              accept=".json"
+              style="display: none;"
+              @change="onImportJson"
+            />
             <button
               class="btn-save"
               :disabled="!editDirty || !selectedModel"
@@ -909,7 +994,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- ==================== Tab 3: 动画调试 ==================== -->
+      <!-- ==================== Tab 3: 动画调试（MotionPreview） ==================== -->
       <div v-show="activeTab === 'debug'" class="debug-panel">
         <div class="debug-toolbar">
           <div class="debug-selectors">
@@ -922,69 +1007,21 @@ onMounted(async () => {
                 {{ m.model_id }}
               </option>
             </select>
-            <select v-model="debugFlow">
-              <option v-for="f in flowKeys" :key="f" :value="f">{{ f }}</option>
-            </select>
-            <input v-model="debugTestMachine" placeholder="测试机台ID" class="machine-input" />
-          </div>
-          <div class="debug-actions">
-            <button class="btn-primary" @click="testEvents = []">清空事件记录</button>
           </div>
         </div>
 
-        <div class="debug-grid">
-          <!-- 左侧：手动触发 + 阶段跳转 -->
-          <div class="debug-left">
-            <h4>🎯 手动触发事件（{{ debugFlow }}）</h4>
-            <div class="manual-grid">
-              <button
-                v-for="m in manualEvents"
-                :key="m.event"
-                class="manual-btn"
-                @click="manualTriggerEvent(m.event)"
-              >
-                <div class="btn-event">{{ m.event }}</div>
-                <div class="btn-phase">→ {{ m.phase }}</div>
-                <div v-if="m.anim" class="btn-anim">动画: {{ m.anim }}</div>
-              </button>
-              <div v-if="manualEvents.length === 0" class="empty-row">暂无可触发事件</div>
-            </div>
-
-            <h4 style="margin-top: 20px;">⏭️ 阶段跳转</h4>
-            <div class="phase-jump">
-              <button
-                v-for="(p, idx) in phaseList"
-                :key="p.key"
-                class="phase-btn"
-                @click="jumpToPhase(p.key)"
-              >
-                {{ idx + 1 }}. {{ p.label }}
-              </button>
-              <div v-if="phaseList.length === 0" class="empty-row">暂无阶段</div>
-            </div>
-          </div>
-
-          <!-- 右侧：事件记录列表 -->
-          <div class="debug-right">
-            <h4>📝 事件记录（最近 {{ testEvents.length }} 条）</h4>
-            <div v-if="testEvents.length === 0" class="empty-hint">点击左侧按钮手动触发事件</div>
-            <div v-else class="event-log">
-              <div v-for="(e, idx) in testEvents.slice(0, 50)" :key="idx" class="event-log-item">
-                <span class="log-time">{{ e.timestamp.slice(11, 19) }}</span>
-                <span class="log-event">{{ e.event_code }}</span>
-                <span class="log-tool">{{ e.tool_id }}</span>
-              </div>
-            </div>
-          </div>
+        <div v-if="!selectedModel" class="empty-hint">请先选择机型</div>
+        <div v-else-if="!motionPreviewConfig" class="empty-hint">
+          该机型未配置通用 Motion JSON。
+          请到"动画配置" Tab 点击"导入Motion JSON"按钮导入配置文件，
+          或上传带 schema_version 的 .json 文件。
         </div>
-
-        <div class="debug-tip">
-          💡 提示：手动触发的事件仅在本页面记录。要看到 2D/3D 动画效果，请打开
-          <router-link :to="`/machine/${debugTestMachine}`" target="_blank">
-            {{ debugTestMachine }} 机台详情页
-          </router-link>
-          ，并在 WinForm 模拟器或实时模式下观察。
-        </div>
+        <MotionPreview
+          v-else
+          :svg-url="motionPreviewSvgUrl"
+          :motion-config="motionPreviewConfig"
+          style="height: calc(100% - 50px);"
+        />
       </div>
 
       <!-- ==================== Tab 4: 体素建模 ==================== -->
@@ -1340,6 +1377,18 @@ onMounted(async () => {
 }
 .btn-save:hover { opacity: 0.9; }
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-import {
+  background: var(--yellow);
+  color: #000;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+.btn-import:hover { opacity: 0.9; }
+.btn-import:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-export {
   background: var(--accent);
   color: #000;
