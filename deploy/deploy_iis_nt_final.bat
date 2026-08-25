@@ -87,7 +87,8 @@ if errorlevel 1 (
 
 echo.
 echo [5/8] Copying frontend files...
-set "DIST_DIR=frontend\dist"
+REM 脚本在 deploy 目录，frontend\dist 在项目根（deploy 的父目录）
+set "DIST_DIR=%SCRIPT_DIR%\..\frontend\dist"
 set "IIS_SITE_DIR=C:\inetpub\wwwroot\FabTwin"
 if not exist "%DIST_DIR%\index.html" (
     echo [ERROR] frontend\dist not found! Please run 'npm run build' first.

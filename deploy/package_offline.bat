@@ -11,9 +11,13 @@ REM ================================================================
 
 setlocal enabledelayedexpansion
 
-set "BASE_DIR=%~dp0"
-set "BASE_DIR=%BASE_DIR:~0,-1%"
-set "DEPLOY_DIR=%BASE_DIR%\fabtwin-offline-deploy"
+REM SCRIPT_DIR=deploy 目录（找 deploy 脚本），BASE_DIR=项目根（找 backend/frontend/sql），脚本已移至 deploy 子目录
+set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+pushd "%SCRIPT_DIR%\.."
+set "BASE_DIR=%CD%"
+popd
+set "DEPLOY_DIR=%SCRIPT_DIR%\fabtwin-offline-deploy"
 
 REM Format date as YYYYMMDD
 for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value 2^>nul') do set "ldt=%%a"
@@ -54,12 +58,12 @@ mkdir "%DEPLOY_DIR%\sql"
 copy /Y "%BASE_DIR%\sql\*.sql" "%DEPLOY_DIR%\sql\" >nul
 
 echo [4/8] Copying deploy scripts...
-copy /Y "%BASE_DIR%\deploy.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%BASE_DIR%\start-dev.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%BASE_DIR%\start_backend.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%BASE_DIR%\init_db.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%BASE_DIR%\create_user.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%BASE_DIR%\create_user.sql" "%DEPLOY_DIR%\" >nul
+copy /Y "%SCRIPT_DIR%\deploy.bat" "%DEPLOY_DIR%\" >nul
+copy /Y "%SCRIPT_DIR%\start-dev.bat" "%DEPLOY_DIR%\" >nul
+copy /Y "%SCRIPT_DIR%\start_backend.bat" "%DEPLOY_DIR%\" >nul
+copy /Y "%SCRIPT_DIR%\init_db.bat" "%DEPLOY_DIR%\" >nul
+copy /Y "%SCRIPT_DIR%\create_user.bat" "%DEPLOY_DIR%\" >nul 2>nul
+copy /Y "%SCRIPT_DIR%\create_user.sql" "%DEPLOY_DIR%\" >nul 2>nul
 
 echo [5/8] Checking backend deps...
 cd /d "%BASE_DIR%\backend"

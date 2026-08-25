@@ -10,8 +10,12 @@ echo  (New Server Setup - All In One)
 echo ================================================================
 echo.
 
-set "BASE_DIR=%~dp0"
-set "BASE_DIR=%BASE_DIR:~0,-1%"
+REM SCRIPT_DIR=deploy 目录（找 env.bat），BASE_DIR=项目根（找 backend/frontend），脚本已移至 deploy 子目录
+set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+pushd "%SCRIPT_DIR%\.."
+set "BASE_DIR=%CD%"
+popd
 set "BACKEND_DIR=%BASE_DIR%\backend"
 set "FRONTEND_DIR=%BASE_DIR%\frontend"
 
@@ -42,9 +46,9 @@ set ORACLE_USER=
 set ORACLE_SERVICE=
 set ORACLE_CLIENT_DIR=
 
-if exist "%BASE_DIR%\env.bat" (
+if exist "%SCRIPT_DIR%\env.bat" (
     echo   Found env.bat, loading...
-    call "%BASE_DIR%\env.bat"
+    call "%SCRIPT_DIR%\env.bat"
 ) else (
     echo   [WARN] env.bat not found
 )

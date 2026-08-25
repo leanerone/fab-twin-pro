@@ -20,8 +20,10 @@ REM ================================================================
 
 title FabTwin Deploy
 
-set "BASE_DIR=%~dp0"
-set "BASE_DIR=%BASE_DIR:~0,-1%"
+REM BASE_DIR 指向项目根（deploy 的父目录），脚本已移至 deploy 子目录
+pushd "%~dp0.."
+set "BASE_DIR=%CD%"
+popd
 set "BACKEND_DIR=%BASE_DIR%\backend"
 set "FRONTEND_DIR=%BASE_DIR%\frontend"
 

@@ -20,7 +20,8 @@ REM ================================================================
 
 setlocal
 
-cd /d %~dp0
+REM 脚本在 deploy 目录，cd 到项目根（deploy 的父目录）以找到 sql\ 目录
+cd /d "%~dp0.."
 
 REM ---------- Auto detect ORACLE_HOME ----------
 if defined ORACLE_HOME (

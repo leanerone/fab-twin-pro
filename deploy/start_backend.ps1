@@ -6,7 +6,9 @@ $ErrorActionPreference = "Stop"
 # ================================================================
 #  Configuration
 # ================================================================
-$BaseDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# ScriptDir=deploy 目录（找 env.bat），BaseDir=项目根（找 backend），脚本已移至 deploy 子目录
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$BaseDir = Split-Path -Parent $ScriptDir
 $BackendDir = Join-Path $BaseDir "backend"
 $BackendPort = 8002
 
@@ -54,7 +56,7 @@ Write-Host ""
 # ================================================================
 #  Load environment
 # ================================================================
-$envBat = Join-Path $BaseDir "env.bat"
+$envBat = Join-Path $ScriptDir "env.bat"
 if (Test-Path $envBat) {
     Write-Host "[INFO] Loading env.bat..." -ForegroundColor Yellow
     $envVars = Import-EnvBat $envBat
