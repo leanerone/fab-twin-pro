@@ -199,19 +199,43 @@ function markDirty() {
   editDirty.value = true
 }
 
-// === 部件绑定（targets） ===
+// === 部件绑定（targets 旧格式 / parts 数组 Motion JSON） ===
+// 是否为 Motion JSON 格式（带 schema_version + parts 数组）
+const isMotionJson = computed(() => !!editingConfig.value?.schema_version)
+
 function addTarget() {
   if (!editingConfig.value) return
-  const idx = Object.keys(editingConfig.value.targets).length + 1
-  const key = `part_${idx}`
-  editingConfig.value.targets[key] = { view_2d: '', view_3d: '', desc: '' }
+  if (isMotionJson.value) {
+    // Motion JSON：往 parts 数组追加
+    if (!Array.isArray(editingConfig.value.parts)) editingConfig.value.parts = []
+    const idx = editingConfig.value.parts.length + 1
+    editingConfig.value.parts.push({
+      part_id: `part_${idx}`,
+      part_name: `part_${idx}`,
+      part_type: '',
+      desc: '',
+    })
+  } else {
+    const idx = Object.keys(editingConfig.value.targets || {}).length + 1
+    const key = `part_${idx}`
+    if (!editingConfig.value.targets) editingConfig.value.targets = {}
+    editingConfig.value.targets[key] = { view_2d: '', view_3d: '', desc: '' }
+  }
   markDirty()
 }
 
 function deleteTarget(key) {
   if (!editingConfig.value) return
   if (!confirm(`确定删除部件 "${key}"？`)) return
-  delete editingConfig.value.targets[key]
+  if (isMotionJson.value) {
+    // Motion JSON：按索引删除
+    const idx = Number(key)
+    if (Number.isInteger(idx) && idx >= 0 && idx < editingConfig.value.parts.length) {
+      editingConfig.value.parts.splice(idx, 1)
+    }
+  } else {
+    delete editingConfig.value.targets[key]
+  }
   markDirty()
 }
 
@@ -221,13 +245,25 @@ function renameTarget(oldKey, newKey) {
     toast('部件 key 不能为空', 'error')
     return
   }
-  if (editingConfig.value.targets[newKey]) {
-    toast(`键 "${newKey}" 已存在`, 'error')
-    return
+  if (isMotionJson.value) {
+    // Motion JSON：按索引更新 part_id（part_id 唯一性校验）
+    const idx = Number(oldKey)
+    if (!Number.isInteger(idx) || idx < 0 || idx >= editingConfig.value.parts.length) return
+    const exists = editingConfig.value.parts.some((p, i) => i !== idx && p.part_id === newKey)
+    if (exists) {
+      toast(`part_id "${newKey}" 已存在`, 'error')
+      return
+    }
+    editingConfig.value.parts[idx].part_id = newKey
+  } else {
+    if (editingConfig.value.targets[newKey]) {
+      toast(`键 "${newKey}" 已存在`, 'error')
+      return
+    }
+    const data = editingConfig.value.targets[oldKey]
+    delete editingConfig.value.targets[oldKey]
+    editingConfig.value.targets[newKey] = data
   }
-  const data = editingConfig.value.targets[oldKey]
-  delete editingConfig.value.targets[oldKey]
-  editingConfig.value.targets[newKey] = data
   markDirty()
 }
 
@@ -247,15 +283,33 @@ async function extractSvgPartsToTargets() {
     }
     // 兼容 Motion JSON（parts 数组）和旧格式（targets 对象）
     if (editingConfig.value.schema_version) {
-      // Motion JSON 格式：parts 数组，merge SVG 部件（part_id 不存在则新增）
+      // Motion JSON 格式：parts 数组
+      // - part_id 不存在 → 新增
+      // - part_id 已存在 → 用 SVG 的 tag 更新 part_type / part_name（不强制覆盖用户改过的非空值）
       if (!Array.isArray(editingConfig.value.parts)) editingConfig.value.parts = []
-      const existing = new Set(editingConfig.value.parts.map(p => p.part_id))
+      const idxMap = new Map()
+      editingConfig.value.parts.forEach((p, i) => {
+        if (p && p.part_id) idxMap.set(p.part_id, i)
+      })
       let added = 0
+      let updated = 0
       for (const p of parts) {
-        if (!existing.has(p.element_id)) {
+        const id = p.element_id
+        if (!id) continue
+        if (idxMap.has(id)) {
+          const target = editingConfig.value.parts[idxMap.get(id)]
+          if (p.tag && target.part_type !== p.tag) {
+            target.part_type = p.tag
+            updated++
+          }
+          // part_name 为空或与 element_id 一致时，刷新为 element_id
+          if (!target.part_name || target.part_name === id) {
+            target.part_name = id
+          }
+        } else {
           editingConfig.value.parts.push({
-            part_id: p.element_id,
-            part_name: p.element_id,
+            part_id: id,
+            part_name: id,
             part_type: p.tag || '',
             desc: '',
           })
@@ -263,25 +317,36 @@ async function extractSvgPartsToTargets() {
         }
       }
       markDirty()
-      toast(`Motion JSON: SVG 提取 ${parts.length} 个部件，新增 ${added} 个到 parts`, 'success')
+      toast(`Motion JSON: SVG 提取 ${parts.length} 个部件，新增 ${added} 个，更新 ${updated} 个`, 'success')
     } else {
       // 旧格式：targets 对象
       if (!editingConfig.value.targets) editingConfig.value.targets = {}
+      let added = 0
+      let updated = 0
       for (const p of parts) {
         const id = p.element_id
         if (!id) continue
+        // 已存在 view_2d === id 的部件 → 更新 desc（若为空）
         const existKey = Object.keys(editingConfig.value.targets).find(
           k => editingConfig.value.targets[k].view_2d === id
         )
-        if (existKey) continue
+        if (existKey) {
+          if (!editingConfig.value.targets[existKey].desc && p.tag) {
+            editingConfig.value.targets[existKey].desc = p.tag
+            updated++
+          }
+          continue
+        }
         if (!editingConfig.value.targets[id]) {
           editingConfig.value.targets[id] = { view_2d: id, view_3d: '', desc: p.tag || '' }
+          added++
         } else {
           editingConfig.value.targets[id].view_2d = id
+          added++
         }
       }
       markDirty()
-      toast(`已从SVG提取 ${parts.length} 个部件并填充 view_2d`, 'success')
+      toast(`已从SVG提取 ${parts.length} 个部件，新增 ${added} 个，更新 ${updated} 个`, 'success')
     }
   } catch (e) {
     toast(`提取失败: ${e.message}`, 'error')
@@ -431,6 +496,11 @@ function deleteEventMapping(flowKey, evt) {
 // === 计算属性 ===
 const targetKeys = computed(() => {
   if (!editingConfig.value) return []
+  // Motion JSON：返回 parts 数组索引（字符串形式，便于 v-for key）
+  if (isMotionJson.value) {
+    const arr = Array.isArray(editingConfig.value.parts) ? editingConfig.value.parts : []
+    return arr.map((_, i) => String(i))
+  }
   return Object.keys(editingConfig.value.targets || {})
 })
 
@@ -812,40 +882,72 @@ onMounted(async () => {
           <div class="config-split-view">
             <!-- ============ 左栏 ============ -->
             <div class="config-left-panel">
-              <!-- 左栏上：部件绑定 targets -->
+              <!-- 左栏上：部件绑定（Motion JSON: parts 数组 / 旧格式: targets 对象） -->
               <div class="left-section">
                 <div class="section-header">
-                  <h4>🎯 部件绑定（{{ targetKeys.length }} 个）</h4>
+                  <h4>🎯 部件绑定（{{ targetKeys.length }} 个）{{ isMotionJson ? ' [Motion JSON]' : '' }}</h4>
                   <div class="section-actions">
                     <button class="btn-small" @click="extractSvgPartsToTargets">🔍 从SVG提取</button>
                     <button class="btn-small" @click="addTarget">+ 添加部件</button>
                   </div>
                 </div>
                 <div class="data-table target-table">
-                  <div class="table-row table-header">
+                  <!-- Motion JSON: parts 数组表头 -->
+                  <div v-if="isMotionJson" class="table-row table-header">
+                    <div class="col-key">part_id</div>
+                    <div class="col-2d">part_name</div>
+                    <div class="col-3d">part_type</div>
+                    <div class="col-desc">desc</div>
+                    <div class="col-op">操作</div>
+                  </div>
+                  <!-- 旧格式: targets 对象表头 -->
+                  <div v-else class="table-row table-header">
                     <div class="col-key">key</div>
                     <div class="col-2d">view_2d (SVG id)</div>
                     <div class="col-3d">view_3d (Group)</div>
                     <div class="col-desc">desc</div>
                     <div class="col-op">操作</div>
                   </div>
-                  <div v-for="key in targetKeys" :key="key" class="table-row">
-                    <div class="col-key">
-                      <input :value="key" @change="renameTarget(key, $event.target.value)" />
+                  <!-- Motion JSON: parts 数组行 -->
+                  <template v-if="isMotionJson">
+                    <div v-for="(key, idx) in targetKeys" :key="'p'+idx" class="table-row">
+                      <div class="col-key">
+                        <input :value="editingConfig.parts[idx].part_id" @change="renameTarget(String(idx), $event.target.value)" />
+                      </div>
+                      <div class="col-2d">
+                        <input v-model="editingConfig.parts[idx].part_name" @input="markDirty" />
+                      </div>
+                      <div class="col-3d">
+                        <input v-model="editingConfig.parts[idx].part_type" @input="markDirty" />
+                      </div>
+                      <div class="col-desc">
+                        <input v-model="editingConfig.parts[idx].desc" @input="markDirty" />
+                      </div>
+                      <div class="col-op">
+                        <button class="btn-delete" @click="deleteTarget(String(idx))" title="删除">×</button>
+                      </div>
                     </div>
-                    <div class="col-2d">
-                      <input v-model="editingConfig.targets[key].view_2d" @input="markDirty" />
+                  </template>
+                  <!-- 旧格式: targets 对象行 -->
+                  <template v-else>
+                    <div v-for="key in targetKeys" :key="key" class="table-row">
+                      <div class="col-key">
+                        <input :value="key" @change="renameTarget(key, $event.target.value)" />
+                      </div>
+                      <div class="col-2d">
+                        <input v-model="editingConfig.targets[key].view_2d" @input="markDirty" />
+                      </div>
+                      <div class="col-3d">
+                        <input v-model="editingConfig.targets[key].view_3d" @input="markDirty" />
+                      </div>
+                      <div class="col-desc">
+                        <input v-model="editingConfig.targets[key].desc" @input="markDirty" />
+                      </div>
+                      <div class="col-op">
+                        <button class="btn-delete" @click="deleteTarget(key)" title="删除">×</button>
+                      </div>
                     </div>
-                    <div class="col-3d">
-                      <input v-model="editingConfig.targets[key].view_3d" @input="markDirty" />
-                    </div>
-                    <div class="col-desc">
-                      <input v-model="editingConfig.targets[key].desc" @input="markDirty" />
-                    </div>
-                    <div class="col-op">
-                      <button class="btn-delete" @click="deleteTarget(key)" title="删除">×</button>
-                    </div>
-                  </div>
+                  </template>
                   <div v-if="targetKeys.length === 0" class="empty-row">
                     暂无部件，点击 "+ 添加部件" 或 "从SVG提取"
                   </div>
