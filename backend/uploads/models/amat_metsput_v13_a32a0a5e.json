@@ -1,0 +1,150 @@
+{
+  "schema_version": "1.1",
+  "document": {
+    "name": "amat_metsput",
+    "src": "amat_metsput",
+    "coord": {
+      "type": "svg_user_space",
+      "unit": "px",
+      "origin": "bottom_left",
+      "y_axis": "up",
+      "viewBox": [0, 0, 720, 900]
+    }
+  },
+  "parts": [
+    {
+      "part_id": "ARM_2",
+      "part_name": "Wafer Handler Robot",
+      "part_type": "group",
+      "anchors": [{ "name": "pivot", "x": 0, "y": 900 }],
+      "view_3d": "ARM_2_3D",
+      "desc": "顶部晶圆传送机械臂"
+    },
+    {
+      "part_id": "Group1_CST",
+      "part_name": "Cassette 1",
+      "part_type": "group",
+      "desc": "1号载具"
+    },
+    {
+      "part_id": "Group2_CST",
+      "part_name": "Cassette 2",
+      "part_type": "group",
+      "desc": "2号载具"
+    },
+    {
+      "part_id": "CH_1",
+      "part_name": "PVD Chamber 1",
+      "part_type": "circle",
+      "desc": "PVD 1号腔体"
+    },
+    {
+      "part_id": "CH_2",
+      "part_name": "PVD Chamber 2",
+      "part_type": "circle",
+      "desc": "PVD 2号腔体"
+    },
+    {
+      "part_id": "CH_3",
+      "part_name": "PVD Chamber 3",
+      "part_type": "circle",
+      "desc": "PVD 3号腔体"
+    },
+    {
+      "part_id": "CH_4",
+      "part_name": "PVD Chamber 4",
+      "part_type": "circle",
+      "desc": "PVD 4号腔体"
+    },
+    {
+      "part_id": "ARM_1",
+      "part_name": "Buffer Robot",
+      "part_type": "group",
+      "desc": "缓冲区机械臂"
+    },
+    {
+      "part_id": "SMIF_1",
+      "part_name": "SMIF Port 1",
+      "part_type": "group",
+      "desc": "1号SMIF口"
+    }
+  ],
+  "motions": [
+    {
+      "step": "CHAMBER_START",
+      "enabled": true,
+      "target_part_id": "ARM_2",
+      "rules": [
+        {
+          "when": "params.chamber == '1'",
+          "target_part_id": "ARM_2",
+          "actions": [
+            { "type": "rotate", "angle": 45, "axis": "z", "pivot": { "x": 0, "y": 900 }, "duration": 800, "easing": "mechanical" },
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 0 }
+          ]
+        },
+        {
+          "when": "params.chamber == '2'",
+          "target_part_id": "ARM_2",
+          "actions": [
+            { "type": "rotate", "angle": -5, "axis": "z", "pivot": { "x": 0, "y": 900 }, "duration": 800, "easing": "mechanical" },
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 0 }
+          ]
+        },
+        {
+          "when": "params.chamber == '3'",
+          "target_part_id": "ARM_2",
+          "actions": [
+            { "type": "rotate", "angle": 5, "axis": "z", "pivot": { "x": 0, "y": 900 }, "duration": 800, "easing": "mechanical" },
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "MIC",
+      "enabled": true,
+      "rules": [
+        {
+          "when": "params.port == '1'",
+          "target_part_id": "Group1_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 116, "duration": 600, "easing": "mechanical" }
+          ]
+        },
+        {
+          "when": "params.port == '2'",
+          "target_part_id": "Group1_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 116, "duration": 600, "easing": "mechanical" }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "MOC",
+      "enabled": true,
+      "rules": [
+        {
+          "when": "params.port == '1'",
+          "target_part_id": "Group1_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 600, "easing": "mechanical" }
+          ]
+        },
+        {
+          "when": "params.port == '2'",
+          "target_part_id": "Group2_CST",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 600, "easing": "mechanical" }
+          ]
+        }
+      ]
+    }
+  ],
+  "ext": {
+    "machine_type": "amat_metsput",
+    "version": "1.0.0",
+    "description": "AMAT METSPUT消息驱动动作配置"
+  }
+}

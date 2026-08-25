@@ -1,0 +1,132 @@
+<?xml version="1.0"?>
+<svg width="720" height="900" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+<title id="title">AMAT METSPUT schematic</title>
+<desc id="desc">Line-art SVG rebuilt from the provided AMAT METSPUT reference image.</desc>
+<defs>
+  <style>.frame { fill: #fff; stroke: #7f7f7f; stroke-width: 2; }
+            .outline { fill: none; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+            .shape { fill: #fff; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+            .light { fill: #f7f7f7; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+            .dash { fill: none; stroke: #454545; stroke-width: 2.2; stroke-dasharray: 10 7; stroke-linecap: round; stroke-linejoin: round; }
+            .blue { font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 700; fill: #1148d8; }
+            .title { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; fill: #222; text-anchor: middle; }
+            .label { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; fill: #222; text-anchor: middle; }
+            .small { font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 700; fill: #222; text-anchor: middle; }
+            .tiny { font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 700; fill: #222; text-anchor: middle; }</style>
+</defs>
+<g class="layer">
+  <title>Layer 1</title>
+  <rect class="frame" height="820" id="svg_1" width="640" x="40" y="40">是s sdad</rect>
+  <g id="svg_71" transform="translate(-1 -57) matrix(0.935185 0 0 1 20.8333 0)">
+   <text class="small" id="svg_74" x="320" y="776">LLA</text>
+   <text class="small" id="svg_75" x="400" y="776">LLB</text>
+  </g>
+  <text class="blue" id="svg_2" x="86" y="116">Ti/TiN</text>
+  <text class="blue" id="svg_3" text-anchor="end" x="620" y="116">AL</text>
+  <text class="blue" font-size="26" id="svg_4" transform="matrix(1 0 0 1 0 0)" x="57" y="286">AL</text>
+  <text class="blue" font-size="26" id="svg_5" text-anchor="end" x="679" y="278">Ti/TiN</text>
+  <text class="blue" font-size="26" id="svg_6" transform="matrix(1 0 0 1 0 0)" x="76" y="537">Ti/TiN</text>
+  <text class="blue" font-size="26" id="svg_7" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="647" y="533">Ti/TiN</text>
+  <text class="blue" font-size="26" id="svg_8" transform="matrix(1 0 0 1 0 0)" x="133" y="677">Degas</text>
+  <text class="blue" font-size="26" id="svg_9" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="583" y="675">Degas</text>
+  <g id="svg_10" transform="matrix(1 0 0 1 0 0)">
+   <ellipse class="light" cx="188" cy="190" id="svg_11" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(-34 188 190)"/>
+   <circle class="shape" cx="188" cy="190" id="CH_2" r="46"/>
+   <text class="label" id="svg_13" x="188" y="196">PVD 2</text>
+   <rect class="light" height="40" id="svg_14" rx="18" transform="matrix(0.829038 -0.559193 0.559193 0.829038 -86.6643 92.5338)" width="56" x="80" y="168"/>
+   <rect class="light" height="40" id="svg_15" rx="18" transform="rotate(-34 266 188)" width="56" x="238" y="168"/>
+  </g>
+  <g id="svg_16">
+   <ellipse class="light" cx="530" cy="190" id="svg_17" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(34 530 190)"/>
+   <circle class="shape" cx="530" cy="190" id="CH_3" r="46"/>
+   <text class="label" id="svg_19" x="530" y="196">PVD 3</text>
+   <rect class="light" height="40" id="svg_20" rx="18" transform="rotate(34 450 188)" width="56" x="422" y="168"/>
+   <rect class="light" height="40" id="svg_21" rx="18" transform="matrix(1 0 0 1 0 0) rotate(34 608 188)" width="56" x="580" y="168"/>
+  </g>
+  <g id="svg_22" transform="matrix(1 0 0 1 -9 -10)">
+   <ellipse class="light" cx="188" cy="350" id="svg_23" rx="90" ry="58" transform="rotate(34 188 350)"/>
+   <circle class="shape" cx="188" cy="350" id="CH_1" r="46"/>
+   <text class="label" id="svg_25" x="188" y="356">PVD 1</text>
+   <rect class="light" height="40" id="svg_26" rx="18" transform="rotate(34 108 348)" width="56" x="80" y="328"/>
+   <rect class="light" height="40" id="svg_27" rx="18" transform="rotate(34 266 348)" width="56" x="238" y="328"/>
+  </g>
+  <g id="svg_28" transform="matrix(1 0 0 1 13 -13)">
+   <ellipse class="light" cx="530" cy="350" id="svg_29" rx="90" ry="58" transform="rotate(-34 530 350)"/>
+   <circle class="shape" cx="530" cy="350" id="CH_4" r="46"/>
+   <text class="label" id="svg_31" x="530" y="356">PVD 4</text>
+   <rect class="light" height="40" id="svg_32" rx="18" transform="rotate(-34 450 348)" width="56" x="422" y="328"/>
+   <rect class="light" height="40" id="svg_33" rx="18" transform="rotate(-34 608 348)" width="56" x="580" y="328"/>
+  </g>
+  <g id="svg_34" transform="matrix(0.999859 0.0168225 -0.0168225 0.999859 4.72759 -6.01675)">
+   <circle class="shape" cx="360" cy="278" id="svg_35" r="124" transform="matrix(1 0 0 1 0 0) matrix(0.854791 0.518972 -0.518972 0.854791 196.549 -146.462)"/>
+   <text class="tiny" font-size="11" id="svg_42" transform="matrix(1 0 0 1 0 0)" x="360" y="193">WAFER HANDLER ROBOTS</text>
+   <g id="ARM_2">
+    <circle class="shape" cx="360" cy="278" id="svg_36" r="28" transform="matrix(1 0 0 1 0 0)"/>
+    <circle class="shape" cx="360" cy="224" id="svg_37" r="24" transform="matrix(1 0 0 1 0 0)"/>
+    <circle class="shape" cx="360" cy="332" id="svg_38" r="24"/>
+    <path class="shape" d="m300,300l60,-22l60,22l-10,10l-50,-20l-50,20l-10,-10z" id="svg_39"/>
+    <path class="outline" d="m286,294l50,-28l24,0l-60,34l-14,-6z" id="svg_40"/>
+    <path class="outline" d="m434,294l-50,-28l-24,0l60,34l14,-6z" id="svg_41"/>
+   </g>
+  </g>
+  <g id="svg_47">
+   <path d="m238.75,472.66l73.14,-72.66l103.44,0l73.14,72.66l0,102.75l-73.14,72.66l-103.44,0l-73.14,-72.66l0,-102.75z" fill="#ffffff" id="BUFFER" stroke="#000000"/>
+   <text class="tiny" font-size="13.46" id="svg_54" transform="matrix(0.999876 0.0133529 -0.0108504 0.968472 5.66273 15.9322)" x="367" y="626">BUFFER CHAMBER</text>
+   <g id="ARM_1" transform="translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) translate(0 1) rotate(-0.295524 359.495 496.016)">
+    <ellipse class="light" cx="359.54" cy="522" id="svg_48" rx="76" ry="44" transform="rotate(1.25562 359.495 526.277) matrix(0.999876 0.0133529 -0.0108504 0.968472 5.66273 15.9322)"/>
+    <circle class="shape" cx="364.47" cy="453.71" id="svg_49" r="22" transform="rotate(1.25562 362.146 450.88) matrix(1.40824 0.0183803 -0.0152818 1.3331 -144.178 -160.667)"/>
+    <circle class="shape" cx="359.43" cy="527" id="svg_50" r="22" transform="rotate(1.25562 359.335 531.117) matrix(0.999876 0.0133529 -0.0108504 0.968472 5.66273 15.9322)"/>
+    <path class="shape" d="m298.03,513.83l62.25,-22.42l61.73,24.07l-16.11,9.47l-45.8,-18.05l-46.19,16.82l-15.89,-9.9z" id="svg_51" transform="rotate(1.25562 360.022 508.19)"/>
+    <path class="outline" d="m302.38,503.53l34.26,-22.79l24,0.32l-62.36,32.1l4.11,-9.63z" id="svg_52" transform="rotate(1.25562 329.449 496.951)"/>
+    <path class="outline" d="m418.33,506.44l-33.74,-23.7l-24,-0.32l61.62,33.76l-3.89,-9.74z" id="svg_53" transform="rotate(1.25562 391.405 499.298)"/>
+   </g>
+   <path d="m310,647l54,4l51,-3" fill="#ffffff" id="svg_55" stroke="#000000"/>
+  </g>
+  <g id="svg_56" transform="matrix(1 0 0 1 2 -67)">
+   <ellipse class="shape" cx="298" cy="470" id="CH_A" rx="42" ry="26" transform="matrix(1 0 0 1 0 0)"/>
+   <ellipse class="shape" cx="422" cy="470" id="CH_B" rx="42" ry="26"/>
+   <text class="label" id="svg_59" transform="matrix(1 0 0 1 0 0)" x="298" y="476">A</text>
+   <text class="label" id="svg_60" x="422" y="476">B</text>
+  </g>
+  <g id="svg_66" transform="translate(8 3)">
+   <circle class="shape" cx="466" cy="636" id="CH_F" r="34" transform="matrix(1 0 0 1 0 0)"/>
+   <circle class="shape" cx="245.5" cy="634" id="CH_E" r="34"/>
+   <text class="label" font-size="25.34" id="svg_69" transform="matrix(1 0 0 1 0 0)" x="243" y="639">E</text>
+   <text class="label" font-size="103.4" id="svg_70" x="465" y="639">F</text>
+  </g>
+  <text font-size="191.19" id="svg_86" text-anchor="middle" x="538" xml:space="preserve" y="431"/>
+  <text font-size="191.19" id="svg_87" text-anchor="middle" x="556" xml:space="preserve" y="439"/>
+  <text font-size="191.19" id="svg_88" text-anchor="middle" x="554" xml:space="preserve" y="455"/>
+  <text font-size="191.19" id="svg_89" text-anchor="middle" x="564" xml:space="preserve" y="450"/>
+  <text class="blue" font-size="26" id="svg_90" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="541.14" y="438">COOL</text>
+  <text class="blue" font-size="26" id="svg_91" text-anchor="end" x="243" y="441">COOL</text>
+  <rect fill="#7f7f7f" height="48" id="LLA" transform="matrix(1 0 0 1 0 0)" width="55" x="307" y="650"/>
+  <rect fill="#7f7f7f" height="48" id="LLB" transform="matrix(1 0 0 1 0 0)" width="55" x="365.5" y="649.5"/>
+    <g id="door-lla">
+      <path d="M317 640 H351" fill="none" stroke="#000000" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M321 639.5 H347" fill="none" stroke="#000000" stroke-width="3.2" stroke-linecap="square"/>
+      <rect x="320" y="619" width="28" height="21" rx="1.5" fill="#ffffff" stroke="#000000" stroke-width="1.6"/>
+      <path d="M324 622 H344" fill="none" stroke="#000000" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M331 619 L331 606" fill="none" stroke="#000000" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M327 611 L331 606 L335 611" fill="none" stroke="#000000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M318 629 H320" fill="none" stroke="#000000" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M348 629 H350" fill="none" stroke="#000000" stroke-width="1.4" stroke-linecap="round"/>
+    </g>
+    <g id="door-llb">
+      <path d="M375.5 639.5 H409.5" fill="none" stroke="#000000" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M379.5 639 H405.5" fill="none" stroke="#000000" stroke-width="3.2" stroke-linecap="square"/>
+      <rect x="378.5" y="618.5" width="28" height="21" rx="1.5" fill="#ffffff" stroke="#000000" stroke-width="1.6"/>
+      <path d="M382.5 621.5 H402.5" fill="none" stroke="#000000" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M389.5 618.5 L389.5 605.5" fill="none" stroke="#000000" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M385.5 610.5 L389.5 605.5 L393.5 610.5" fill="none" stroke="#000000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M376.5 628.5 H378.5" fill="none" stroke="#000000" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M406.5 628.5 H408.5" fill="none" stroke="#000000" stroke-width="1.4" stroke-linecap="round"/>
+    </g>
+  <rect fill="#ffffff" height="102" id="CH_C" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="155" y="472"/>
+  <rect fill="#ffffff" height="102" id="CH_D" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="489.5" y="473"/>
+  <g id="svg_61" transform="matrix(1 0 0 1 0 0) translate(0 -1) matrix(1 0 0 1 8 -16)">
+   <text class="label" font-size="15" id="svg_64" x="190" y="548">C</text>
+   <text class="label" font-size="15" id="svg_65" transform="matrix(1 0 0 1 0 0)" x="520" y="546">D</text>
+  </g>
+</g>
+</svg>
