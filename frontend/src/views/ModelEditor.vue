@@ -638,6 +638,57 @@ async function loadSvgInline(url) {
 }
 watch(svgPreviewUrl, (url) => loadSvgInline(url), { immediate: true })
 
+// === SVG 部件交互（点击 SVG 元素 ↔ 部件列表行 双向高亮） ===
+const selectedPartId = ref('')
+const svgInlineRef = ref(null)
+
+// 高亮 SVG 内指定 id 的元素（清除上一个，加 .part-highlight 类）
+function highlightSvgPart(partId) {
+  const container = svgInlineRef.value
+  if (!container) return
+  // 清除上一个高亮
+  const prev = container.querySelector('.part-highlight')
+  if (prev) prev.classList.remove('part-highlight')
+  if (!partId) return
+  // SVG 内元素 id 可能含特殊字符，用属性选择器转义
+  const escId = partId.replace(/["\\]/g, '\\$&')
+  const target = container.querySelector(`[id="${escId}"]`)
+  if (target) {
+    target.classList.add('part-highlight')
+    // 滚动到可见
+    try { target.scrollIntoView({ block: 'nearest', inline: 'center' }) } catch (_) { /* ignore */ }
+  }
+}
+
+// SVG 容器点击事件委托：从 event.target 读取 id
+function onSvgClick(e) {
+  let el = e.target
+  // 向上查找带 id 的祖先（点击到的可能是 <path>/<rect> 的子节点）
+  while (el && el !== e.currentTarget) {
+    const id = el.getAttribute && el.getAttribute('id')
+    if (id) {
+      selectedPartId.value = id
+      highlightSvgPart(id)
+      return
+    }
+    el = el.parentElement
+  }
+  // 点击空白处清除高亮
+  selectedPartId.value = ''
+  highlightSvgPart('')
+}
+
+// 部件列表行点击 → 同步 selectedPartId + 高亮 SVG 元素
+function selectPartFromList(partId) {
+  selectedPartId.value = partId
+  highlightSvgPart(partId)
+}
+
+// SVG 重新加载时清除残留高亮
+watch(svgInlineHtml, () => {
+  selectedPartId.value = ''
+})
+
 // === Motion JSON 导入 ===
 const importInput = ref(null)
 
@@ -878,6 +929,26 @@ onMounted(async () => {
         <div v-if="!selectedModel" class="empty-hint">请先在“模型管理”中选择机型，或在此下拉选择</div>
         <div v-else-if="!editingConfig" class="empty-hint">加载中...</div>
         <div v-else class="config-editor">
+          <!-- 交互式 SVG 预览栏：点击 SVG 元素 ↔ 部件列表行 双向高亮 -->
+          <div v-if="svgPreviewUrl" class="config-svg-section">
+            <div class="section-header">
+              <h4>🖼️ SVG 部件预览（点击图形 ↔ 下方部件行 高亮联动）</h4>
+              <span v-if="selectedPartId" class="selected-part-tag">
+                当前选中：<code>{{ selectedPartId }}</code>
+              </span>
+            </div>
+            <div class="svg-preview-wrapper svg-interactive">
+              <div v-if="svgPreviewLoading" class="svg-loading">⏳ 加载中...</div>
+              <div
+                v-else
+                ref="svgInlineRef"
+                class="svg-inline"
+                v-html="svgInlineHtml"
+                @click="onSvgClick"
+              ></div>
+            </div>
+            <div class="svg-preview-url">🔗 {{ svgPreviewUrl }}</div>
+          </div>
           <!-- 左右两栏布局 -->
           <div class="config-split-view">
             <!-- ============ 左栏 ============ -->
@@ -910,41 +981,53 @@ onMounted(async () => {
                   </div>
                   <!-- Motion JSON: parts 数组行 -->
                   <template v-if="isMotionJson">
-                    <div v-for="(key, idx) in targetKeys" :key="'p'+idx" class="table-row">
+                    <div
+                      v-for="(key, idx) in targetKeys"
+                      :key="'p'+idx"
+                      class="table-row"
+                      :class="{ 'row-selected': selectedPartId === editingConfig.parts[idx].part_id }"
+                      @click="selectPartFromList(editingConfig.parts[idx].part_id)"
+                    >
                       <div class="col-key">
-                        <input :value="editingConfig.parts[idx].part_id" @change="renameTarget(String(idx), $event.target.value)" />
+                        <input :value="editingConfig.parts[idx].part_id" @change="renameTarget(String(idx), $event.target.value)" @click.stop />
                       </div>
                       <div class="col-2d">
-                        <input v-model="editingConfig.parts[idx].part_name" @input="markDirty" />
+                        <input v-model="editingConfig.parts[idx].part_name" @input="markDirty" @click.stop />
                       </div>
                       <div class="col-3d">
-                        <input v-model="editingConfig.parts[idx].part_type" @input="markDirty" />
+                        <input v-model="editingConfig.parts[idx].part_type" @input="markDirty" @click.stop />
                       </div>
                       <div class="col-desc">
-                        <input v-model="editingConfig.parts[idx].desc" @input="markDirty" />
+                        <input v-model="editingConfig.parts[idx].desc" @input="markDirty" @click.stop />
                       </div>
                       <div class="col-op">
-                        <button class="btn-delete" @click="deleteTarget(String(idx))" title="删除">×</button>
+                        <button class="btn-delete" @click="deleteTarget(String(idx))" title="删除" @click.stop>×</button>
                       </div>
                     </div>
                   </template>
                   <!-- 旧格式: targets 对象行 -->
                   <template v-else>
-                    <div v-for="key in targetKeys" :key="key" class="table-row">
+                    <div
+                      v-for="key in targetKeys"
+                      :key="key"
+                      class="table-row"
+                      :class="{ 'row-selected': selectedPartId === editingConfig.targets[key].view_2d || selectedPartId === key }"
+                      @click="selectPartFromList(editingConfig.targets[key].view_2d || key)"
+                    >
                       <div class="col-key">
-                        <input :value="key" @change="renameTarget(key, $event.target.value)" />
+                        <input :value="key" @change="renameTarget(key, $event.target.value)" @click.stop />
                       </div>
                       <div class="col-2d">
-                        <input v-model="editingConfig.targets[key].view_2d" @input="markDirty" />
+                        <input v-model="editingConfig.targets[key].view_2d" @input="markDirty" @click.stop />
                       </div>
                       <div class="col-3d">
-                        <input v-model="editingConfig.targets[key].view_3d" @input="markDirty" />
+                        <input v-model="editingConfig.targets[key].view_3d" @input="markDirty" @click.stop />
                       </div>
                       <div class="col-desc">
-                        <input v-model="editingConfig.targets[key].desc" @input="markDirty" />
+                        <input v-model="editingConfig.targets[key].desc" @input="markDirty" @click.stop />
                       </div>
                       <div class="col-op">
-                        <button class="btn-delete" @click="deleteTarget(key)" title="删除">×</button>
+                        <button class="btn-delete" @click="deleteTarget(key)" title="删除" @click.stop>×</button>
                       </div>
                     </div>
                   </template>
@@ -1497,6 +1580,64 @@ onMounted(async () => {
   max-height: 100%;
   width: auto;
   height: auto;
+}
+
+/* === v2.5.9: SVG 部件交互样式 === */
+/* 动画配置 Tab 顶部的交互式 SVG 预览栏 */
+.config-svg-section {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 16px 0;
+}
+.config-svg-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.config-svg-section h4 {
+  font-size: 14px;
+  color: var(--accent);
+  margin: 0;
+}
+.selected-part-tag {
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(255, 87, 34, 0.12);
+  border: 1px solid rgba(255, 87, 34, 0.4);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.selected-part-tag code {
+  color: #ff7043;
+  font-weight: 600;
+}
+.svg-interactive {
+  height: 320px;
+  cursor: crosshair;
+}
+/* SVG 内带 id 的元素：可点击 + 高亮态 */
+.svg-interactive svg [id] {
+  cursor: pointer;
+  transition: filter 0.15s ease, outline 0.15s ease;
+}
+.svg-interactive svg [id]:hover {
+  filter: drop-shadow(0 0 4px rgba(255, 87, 34, 0.7));
+}
+.svg-interactive svg .part-highlight {
+  outline: 3px solid #ff5722;
+  outline-offset: 2px;
+  filter: drop-shadow(0 0 6px rgba(255, 87, 34, 0.9));
+}
+/* 部件列表行选中态 */
+.table-row.row-selected {
+  background: rgba(255, 87, 34, 0.15) !important;
+  box-shadow: inset 3px 0 0 #ff5722;
+}
+.table-row.row-selected input {
+  background: transparent;
 }
 .svg-loading {
   color: var(--text-dim);
