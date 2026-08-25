@@ -667,6 +667,7 @@ onMounted(async () => {
             :model-id="selectedModel.model_id"
             :model-name="selectedModel.model_name"
             @uploaded="onModelFileUploaded"
+            @deleted="onModelFileUploaded"
             @svg-parts-extracted="onSvgPartsExtracted"
           />
         </div>
