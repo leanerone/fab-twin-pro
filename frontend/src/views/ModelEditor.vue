@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import ModelUpload from '../components/ModelUpload.vue'
@@ -100,6 +100,22 @@ function selectModel(m) {
   selectedModel.value = m
   // 同步加载该机型的动画配置到编辑器
   loadAnimConfig(m)
+}
+
+// v2.5.4: 删除机型（机型卡片右上角 × 按钮）
+// 修复"创建的模型无法删除"——之前机型卡片没有删除入口
+async function deleteModel(model) {
+  if (!confirm(`确认删除机型 ${model.model_id}？\n该操作不可恢复，关联的文件、动画配置将一并清除。`)) return
+  try {
+    await api.deleteModel(model.model_id)
+    await loadModels()
+    if (selectedModel.value?.model_id === model.model_id) {
+      selectedModel.value = null
+    }
+    toast(`机型 ${model.model_id} 已删除`, 'success')
+  } catch (e) {
+    toast(`删除失败: ${e.message}`, 'error')
+  }
 }
 
 // === 动画配置：从机型 DB 字段 animation_config 读写 ===
@@ -515,6 +531,27 @@ const svgPreviewUrl = computed(() => {
   return src
 })
 
+// v2.5.4: SVG 预览改用内联渲染（fetch + v-html），替代 <object> 标签
+// 修复 <object> 渲染 SVG 空白 / fallback iframe 嵌主页看板问题
+const svgInlineHtml = ref('')
+const svgPreviewLoading = ref(false)
+async function loadSvgInline(url) {
+  if (!url) { svgInlineHtml.value = ''; return }
+  svgPreviewLoading.value = true
+  try {
+    const resp = await fetch(url, { cache: 'no-store' })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const text = await resp.text()
+    if (!text.includes('<svg')) throw new Error('返回内容不是 SVG')
+    svgInlineHtml.value = text
+  } catch (e) {
+    svgInlineHtml.value = `<div style="color:#f44336;padding:12px">⚠️ SVG 加载失败: ${e.message}</div>`
+  } finally {
+    svgPreviewLoading.value = false
+  }
+}
+watch(svgPreviewUrl, (url) => loadSvgInline(url), { immediate: true })
+
 // === Motion JSON 导入 ===
 const importInput = ref(null)
 
@@ -608,6 +645,12 @@ onMounted(async () => {
             <div class="model-header">
               <span class="model-id">{{ model.model_id }}</span>
               <span class="model-vendor">{{ model.vendor }}</span>
+              <button
+                v-if="authStore.hasPermission('model_edit')"
+                class="btn-delete-card"
+                title="删除机型"
+                @click.stop="deleteModel(model)"
+              >×</button>
             </div>
             <div class="model-name">{{ model.model_name }}</div>
             <div class="model-meta">
@@ -635,13 +678,8 @@ onMounted(async () => {
         <div v-if="selectedModel && svgPreviewUrl" class="svg-preview-section">
           <h3>🖼️ SVG 预览</h3>
           <div class="svg-preview-wrapper">
-            <object
-              :data="svgPreviewUrl"
-              type="image/svg+xml"
-              class="svg-preview-object"
-            >
-              <iframe :src="svgPreviewUrl" class="svg-preview-iframe" title="SVG Preview"></iframe>
-            </object>
+            <div v-if="svgPreviewLoading" class="svg-loading">⏳ 加载中...</div>
+            <div v-else class="svg-inline" v-html="svgInlineHtml"></div>
           </div>
           <div class="svg-preview-url">🔗 {{ svgPreviewUrl }}</div>
         </div>
@@ -1261,6 +1299,29 @@ onMounted(async () => {
   border-color: var(--accent);
   background: rgba(0, 212, 255, 0.08);
 }
+/* v2.5.4: 机型卡片删除按钮 */
+.btn-delete-card {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(244, 67, 54, 0.85);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.model-card:hover .btn-delete-card { opacity: 1; }
+.btn-delete-card:hover { background: rgba(244, 67, 54, 1); }
+.model-header { position: relative; }
 .model-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .model-id { font-family: monospace; font-weight: 700; color: var(--accent); }
 .model-vendor { font-size: 11px; color: var(--text-dim); }
@@ -1298,15 +1359,29 @@ onMounted(async () => {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: auto;
   height: 400px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
-.svg-preview-object,
-.svg-preview-iframe {
+/* v2.5.4: 内联 SVG 渲染容器 */
+.svg-inline {
   width: 100%;
   height: 100%;
-  border: none;
-  display: block;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.svg-inline svg {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+}
+.svg-loading {
+  color: var(--text-dim);
+  font-size: 14px;
 }
 .svg-preview-url {
   margin-top: 8px;
