@@ -62,8 +62,8 @@ copy /Y "%SCRIPT_DIR%\deploy.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%SCRIPT_DIR%\start-dev.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%SCRIPT_DIR%\start_backend.bat" "%DEPLOY_DIR%\" >nul
 copy /Y "%SCRIPT_DIR%\init_db.bat" "%DEPLOY_DIR%\" >nul
-copy /Y "%SCRIPT_DIR%\create_user.bat" "%DEPLOY_DIR%\" >nul 2>nul
-copy /Y "%SCRIPT_DIR%\create_user.sql" "%DEPLOY_DIR%\" >nul 2>nul
+copy /Y "%SCRIPT_DIR%\..\scripts\archive\create_user.bat" "%DEPLOY_DIR%\" >nul 2>nul
+copy /Y "%SCRIPT_DIR%\..\scripts\archive\create_user.sql" "%DEPLOY_DIR%\" >nul 2>nul
 
 echo [5/8] Checking backend deps...
 cd /d "%BASE_DIR%\backend"

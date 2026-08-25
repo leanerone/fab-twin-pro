@@ -107,7 +107,8 @@ echo [OK] Frontend files copied
 
 echo.
 echo [6/8] Copying get_user.asp (returns Windows username)...
-copy "%SCRIPT_DIR%\get_user.asp" "%IIS_SITE_DIR%\get_user.asp" >nul 2>&1
+REM get_user.asp 在 scripts\archive 目录（项目根），不在 deploy 目录
+copy "%SCRIPT_DIR%\..\scripts\archive\get_user.asp" "%IIS_SITE_DIR%\get_user.asp" >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Failed to copy get_user.asp!
     pause
