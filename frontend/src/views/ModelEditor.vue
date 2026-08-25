@@ -262,7 +262,9 @@ function onSvgPartsExtracted(parts) {
 }
 
 // ModelUpload 触发 uploaded 事件时（文件上传成功后），重新拉取机型数据
-// 修复：上传 SVG/JSON 后，本地 selectedModel.views_config / animation_config 不会自动刷新
+// 修复：
+// 1. 上传 SVG/JSON 后，本地 selectedModel.views_config / animation_config 不会自动刷新
+// 2. 上传 JSON 后在任意 Tab 都立即 loadAnimConfig，否则切到调试Tab 拿不到 motionConfig（"没反应"）
 async function onModelFileUploaded() {
   if (!selectedModel.value) return
   const currentId = selectedModel.value.model_id
@@ -273,9 +275,12 @@ async function onModelFileUploaded() {
     const updated = fresh?.find(m => m.model_id === currentId)
     if (updated) {
       selectedModel.value = updated
-      // 如果当前在动画配置Tab，同步刷新 editingConfig
-      if (activeTab.value === 'config' || activeTab.value === 'debug') {
-        loadAnimConfig(updated)
+      // 上传后无论当前在哪个 Tab，都同步刷新 editingConfig
+      // 这样切到调试Tab 时 MotionPreview 能立即拿到最新的 motionConfig
+      loadAnimConfig(updated)
+      const motionCfg = updated.animation_config
+      if (motionCfg && motionCfg.schema_version) {
+        toast(`动画配置已加载：v${motionCfg.schema_version}（${motionCfg.motions?.length || 0} 个步骤）`, 'success')
       }
     }
   } catch (e) {
@@ -498,11 +503,16 @@ function exportVoxelConfig() {
 }
 
 // === SVG 预览 URL（从 views_config.view_2d.svg_source 获取） ===
+// 过滤占位符（如 "procedural"），只认 /uploads/ 或 http(s):// 开头的真实 URL
+// 否则 <object data="procedural"> 会被当相对路径 → vite SPA fallback → 嵌出主页看板
 const svgPreviewUrl = computed(() => {
   if (!selectedModel.value) return ''
   const view2d = selectedModel.value.views_config?.view_2d
   if (!view2d) return ''
-  return view2d.svg_source || view2d.url || ''
+  const src = view2d.svg_source || view2d.url || ''
+  if (!src || src === 'procedural') return ''
+  if (!src.startsWith('/') && !src.startsWith('http')) return ''
+  return src
 })
 
 // === Motion JSON 导入 ===

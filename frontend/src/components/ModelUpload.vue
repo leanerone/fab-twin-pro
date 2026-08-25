@@ -75,38 +75,58 @@ async function handleFiles(files) {
     return
   }
 
+  // 前置校验：格式 + 大小
+  const invalid = []
   for (const f of list) {
     const ext = fileExt(f.name)
     if (!ALLOWED_EXTS.includes(ext)) {
-      errorMsg.value = `不支持的文件类型: ${f.name} (${ext})，支持: ${ALLOWED_EXTS.join(', ')}`
-      continue
-    }
-    if (f.size > MAX_SIZE) {
-      errorMsg.value = `文件过大: ${f.name} (${formatSize(f.size)})，最大支持 ${formatSize(MAX_SIZE)}`
-      continue
+      invalid.push(`${f.name} (不支持 ${ext})`)
+    } else if (f.size > MAX_SIZE) {
+      invalid.push(`${f.name} (${formatSize(f.size)} 超 ${formatSize(MAX_SIZE)})`)
     }
   }
+  if (invalid.length) {
+    errorMsg.value = `已忽略：${invalid.join('，')}。支持: ${ALLOWED_EXTS.join(', ')}，最大 ${formatSize(MAX_SIZE)}`
+    return
+  }
 
-  if (errorMsg.value) return
+  // v2.5.3：SVG 排前面先传，确保 extractParts 在所有文件传完后能立即拿到 current_svg
+  // （后端已分槽存储顺序无关，此排序仅作保险）
+  list.sort((a, b) => {
+    const aSvg = fileExt(a.name) === '.svg' ? 0 : 1
+    const bSvg = fileExt(b.name) === '.svg' ? 0 : 1
+    return aSvg - bSvg
+  })
 
   uploading.value = true
-  try {
-    const user = authStore.user?.username || 'admin'
-    for (const f of list) {
+  const user = authStore.user?.username || 'admin'
+  const okFiles = []
+  const failedFiles = []
+  for (const f of list) {
+    try {
       await api.uploadModelFile(f, props.modelId, user)
+      okFiles.push(f.name)
+    } catch (e) {
+      failedFiles.push(`${f.name}: ${e.message || '上传失败'}`)
     }
-    successMsg.value = `成功上传 ${list.length} 个文件`
+  }
+
+  // 汇总反馈
+  const msgs = []
+  if (okFiles.length) msgs.push(`✅ 成功 ${okFiles.length} 个：${okFiles.join('、')}`)
+  if (failedFiles.length) msgs.push(`❌ 失败 ${failedFiles.length} 个：${failedFiles.join('；')}`)
+  successMsg.value = msgs.length ? msgs.join(' | ') : ''
+
+  // 只要有任意一个成功，就触发父组件刷新 + 重新加载文件列表
+  if (okFiles.length) {
     emit('uploaded')
     await loadFiles()
-    // 如果是 SVG 文件，自动提取部件
-    if (list.some(f => fileExt(f.name) === '.svg')) {
+    // 如果本次上传了 SVG，自动提取部件
+    if (okFiles.some(n => fileExt(n) === '.svg')) {
       await extractParts()
     }
-  } catch (e) {
-    errorMsg.value = e.message || '上传失败'
-  } finally {
-    uploading.value = false
   }
+  uploading.value = false
 }
 
 async function extractParts() {

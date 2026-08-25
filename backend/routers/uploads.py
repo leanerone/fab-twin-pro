@@ -89,13 +89,32 @@ def _get_next_version(db: Session, model_id: str) -> str:
         return "v1"
 
 
+def _slot_key_for_type(file_type: str) -> str:
+    """文件类型 → source_files_json 中的存储槽 key
+
+    v2.5.3：按 file_type 分槽存储，支持 SVG + JSON + GLB 等多文件并存
+    （旧版只有 current_file 单文件，后上传的会覆盖前者，导致无法同时管理 SVG+JSON）
+    """
+    if file_type == ".svg":
+        return "current_svg"
+    if file_type == ".json":
+        return "current_json"
+    if file_type in (".glb", ".gltf"):
+        return "current_glb"
+    if file_type == ".html":
+        return "current_html"
+    return "current_other"
+
+
 def _save_file_record(db: Session, model_id: str, file_id: str, file_name: str,
                       file_url: str, file_type: str, file_size: int,
                       version: str, uploaded_by: str):
     """保存文件记录到 source_files_json（merge模式，不覆盖 views_config_json）
 
-    v2.2 修复：
-    - 文件信息写入 source_files_json，不再覆盖 views_config_json
+    v2.5.3 修复：
+    - 按 file_type 分槽存储（current_svg/current_json/current_glb/current_html），
+      不再互相覆盖，支持 SVG + JSON 同时上传并存
+    - 向后兼容：旧数据只有 current_file，读取时 fallback
     - 同时更新 views_config 中对应视图的 model_source，让视图组件能加载文件
     """
     model = db.query(MachineModelConfig).filter(
@@ -106,14 +125,14 @@ def _save_file_record(db: Session, model_id: str, file_id: str, file_name: str,
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 1. 将文件信息 merge 到 source_files_json
+    # 1. 将文件信息 merge 到 source_files_json 对应槽位
     source_files = {}
     try:
         source_files = json.loads(model.source_files_json) if model.source_files_json else {}
     except (json.JSONDecodeError, TypeError):
         source_files = {}
 
-    source_files["current_file"] = {
+    file_info = {
         "file_id": file_id,
         "file_name": file_name,
         "file_url": file_url,
@@ -123,9 +142,14 @@ def _save_file_record(db: Session, model_id: str, file_id: str, file_name: str,
         "uploaded_by": uploaded_by,
         "created_at": now_str,
     }
-    # 保留历史版本
+    slot_key = _slot_key_for_type(file_type)
+    source_files[slot_key] = file_info
+    # 同时保留 current_file 兼容旧前端读取（指向最新上传的文件）
+    source_files["current_file"] = file_info
+
+    # 累积历史版本
     history = source_files.get("history", [])
-    history.append(source_files["current_file"])
+    history.append(file_info)
     source_files["history"] = history
 
     model.source_files_json = json.dumps(source_files, ensure_ascii=False)
@@ -148,7 +172,8 @@ def _save_file_record(db: Session, model_id: str, file_id: str, file_name: str,
             views_config["view_3d"] = {}
         views_config["view_3d"]["model_source"] = file_url
     elif file_type == ".json":
-        # JSON → 3D JSON 模型
+        # JSON → 3D JSON 模型（注意：Motion JSON 由 upload_model_file 单独写入 animation_config_json，
+        # 这里只更新 view_3d.model_source 用于普通 JSON 模型文件，不冲突）
         if "view_3d" not in views_config:
             views_config["view_3d"] = {}
         views_config["view_3d"]["model_source"] = file_url
@@ -241,21 +266,33 @@ async def list_model_files(
 ):
     """查询模型文件列表
 
-    v2.2: 从 source_files_json 读取文件信息
+    v2.5.3: 遍历 source_files_json 中所有 file_type 槽位（current_svg/current_json/...），
+            支持一个机型同时存在多个文件（SVG + JSON + GLB ...）
+            旧版只有 current_file，向后兼容
     """
     query = db.query(MachineModelConfig)
     if model_id:
         query = query.filter(MachineModelConfig.model_id == model_id)
     models = query.all()
 
+    # 所有可能的文件槽位 key
+    slot_keys = ["current_svg", "current_json", "current_glb", "current_html", "current_other", "current_file"]
+
     files = []
+    seen_file_ids = set()  # current_file 与具体槽位可能重复，去重
     for m in models:
         try:
             source_files = json.loads(m.source_files_json) if m.source_files_json else {}
-            current = source_files.get("current_file")
-            if current and current.get("file_id"):
+            for key in slot_keys:
+                current = source_files.get(key)
+                if not current or not current.get("file_id"):
+                    continue
+                fid = current.get("file_id")
+                if fid in seen_file_ids:
+                    continue
+                seen_file_ids.add(fid)
                 files.append(ModelFileResponse(
-                    file_id=current.get("file_id", ""),
+                    file_id=fid,
                     file_name=current.get("file_name", ""),
                     file_url=current.get("file_url", ""),
                     file_type=current.get("file_type", ""),
@@ -292,38 +329,53 @@ async def delete_model_file(
         raise HTTPException(status_code=404, detail=f"机型 {model_id} 不存在")
 
     # 从 source_files_json 获取文件路径并删除磁盘文件
+    # v2.5.3: 遍历所有 file_type 槽位找到匹配 file_id 的记录，只清理对应槽，不影响其他文件
+    deleted_slot = None
+    deleted_file_url = ""
     try:
         source_files = json.loads(model.source_files_json) if model.source_files_json else {}
-        current = source_files.get("current_file", {})
-        file_url = current.get("file_url", "")
-        if file_url:
-            # file_url 格式: /uploads/models/xxx.svg
-            file_name = os.path.basename(file_url)
+        slot_keys = ["current_svg", "current_json", "current_glb", "current_html", "current_other", "current_file"]
+        for key in slot_keys:
+            entry = source_files.get(key)
+            if entry and entry.get("file_id") == file_id:
+                deleted_slot = key
+                deleted_file_url = entry.get("file_url", "")
+                break
+        if deleted_file_url:
+            file_name = os.path.basename(deleted_file_url)
             abs_path = os.path.join(UPLOAD_DIR, file_name)
             if os.path.exists(abs_path):
                 os.remove(abs_path)
     except Exception:
         pass
 
-    # 清理 source_files_json
-    model.source_files_json = "{}"
+    # 只清理命中的槽位，保留其他文件；同时清理 current_file 兼容字段（若指向同一文件）
+    try:
+        if deleted_slot:
+            source_files.pop(deleted_slot, None)
+        cf = source_files.get("current_file")
+        if cf and cf.get("file_id") == file_id:
+            source_files.pop("current_file", None)
+        model.source_files_json = json.dumps(source_files, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError):
+        model.source_files_json = "{}"
 
     # 清理 views_config 中对应的 model_source
+    # v2.5.3: 仅在删除对应类型文件时清理对应字段（SVG→svg_source, GLB/JSON→model_source）
     try:
         views_config = json.loads(model.views_config_json) if model.views_config_json else {}
-        if "view_2d" in views_config:
+        if deleted_slot == "current_svg" and "view_2d" in views_config:
             views_config["view_2d"].pop("svg_source", None)
-        if "view_3d" in views_config:
+        if deleted_slot in ("current_glb", "current_json") and "view_3d" in views_config:
             views_config["view_3d"].pop("model_source", None)
         model.views_config_json = json.dumps(views_config, ensure_ascii=False)
     except (json.JSONDecodeError, TypeError):
         pass
 
     model.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    model.version = "v0"
     db.commit()
 
-    return {"status": "success", "message": f"文件 {file_id} 已删除"}
+    return {"status": "success", "message": f"文件 {file_id} 已删除（槽位 {deleted_slot}）"}
 
 
 @router.post("/models/{model_id}/extract-svg-parts", response_model=SvgPartsResponse)
@@ -345,13 +397,14 @@ async def extract_svg_parts(
         raise HTTPException(status_code=404, detail=f"机型 {model_id} 不存在")
 
     # 从 source_files_json 获取 SVG 文件路径
+    # v2.5.3: 优先从 current_svg 槽读取，旧版 fallback 到 current_file
     source_files = {}
     try:
         source_files = json.loads(model.source_files_json) if model.source_files_json else {}
     except (json.JSONDecodeError, TypeError):
         source_files = {}
 
-    current = source_files.get("current_file", {})
+    current = source_files.get("current_svg") or source_files.get("current_file") or {}
     file_url = current.get("file_url", "")
     file_type = current.get("file_type", "")
 
