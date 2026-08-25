@@ -245,28 +245,44 @@ async function extractSvgPartsToTargets() {
       toast('未提取到任何SVG部件', 'warn')
       return
     }
-    // 为每个 SVG 部件确保存在对应的 target，自动填充 view_2d
-    for (const p of parts) {
-      const id = p.element_id
-      if (!id) continue
-      // 已存在 view_2d == id 的项则跳过
-      const existKey = Object.keys(editingConfig.value.targets).find(
-        k => editingConfig.value.targets[k].view_2d === id
-      )
-      if (existKey) continue
-      // 不存在则新建，key 默认为 element_id
-      if (!editingConfig.value.targets[id]) {
-        editingConfig.value.targets[id] = {
-          view_2d: id,
-          view_3d: '',
-          desc: p.tag || '',
+    // 兼容 Motion JSON（parts 数组）和旧格式（targets 对象）
+    if (editingConfig.value.schema_version) {
+      // Motion JSON 格式：parts 数组，merge SVG 部件（part_id 不存在则新增）
+      if (!Array.isArray(editingConfig.value.parts)) editingConfig.value.parts = []
+      const existing = new Set(editingConfig.value.parts.map(p => p.part_id))
+      let added = 0
+      for (const p of parts) {
+        if (!existing.has(p.element_id)) {
+          editingConfig.value.parts.push({
+            part_id: p.element_id,
+            part_name: p.element_id,
+            part_type: p.tag || '',
+            desc: '',
+          })
+          added++
         }
-      } else {
-        editingConfig.value.targets[id].view_2d = id
       }
+      markDirty()
+      toast(`Motion JSON: SVG 提取 ${parts.length} 个部件，新增 ${added} 个到 parts`, 'success')
+    } else {
+      // 旧格式：targets 对象
+      if (!editingConfig.value.targets) editingConfig.value.targets = {}
+      for (const p of parts) {
+        const id = p.element_id
+        if (!id) continue
+        const existKey = Object.keys(editingConfig.value.targets).find(
+          k => editingConfig.value.targets[k].view_2d === id
+        )
+        if (existKey) continue
+        if (!editingConfig.value.targets[id]) {
+          editingConfig.value.targets[id] = { view_2d: id, view_3d: '', desc: p.tag || '' }
+        } else {
+          editingConfig.value.targets[id].view_2d = id
+        }
+      }
+      markDirty()
+      toast(`已从SVG提取 ${parts.length} 个部件并填充 view_2d`, 'success')
     }
-    markDirty()
-    toast(`已从SVG提取 ${parts.length} 个部件并填充 view_2d`, 'success')
   } catch (e) {
     toast(`提取失败: ${e.message}`, 'error')
   }
