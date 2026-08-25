@@ -489,19 +489,147 @@ function addEventMapping(flowKey) {
 
 function deleteEventMapping(flowKey, evt) {
   if (!editingConfig.value) return
+  if (!confirm(`确定删除事件 "${evt}"？`)) return
   delete editingConfig.value.flows[flowKey].event_to_phase[evt]
   markDirty()
+}
+
+// v2.5.10: 复制阶段（在指定位置之后插入一份相同配置）
+function duplicatePhase(flowKey, idx) {
+  if (!editingConfig.value) return
+  const phases = editingConfig.value.flows[flowKey].phases
+  if (idx < 0 || idx >= phases.length) return
+  const src = phases[idx]
+  // 深拷贝，避免引用共享；key 加 _copy 后缀避免重复
+  const copy = JSON.parse(JSON.stringify(src))
+  copy.key = `${src.key}_copy${Date.now() % 1000}`
+  phases.splice(idx + 1, 0, copy)
+  markDirty()
+}
+
+// v2.5.10: 导出当前 animation_config 为 JSON 文件
+function exportAnimConfigJson() {
+  if (!editingConfig.value) return
+  const json = JSON.stringify(editingConfig.value, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const modelId = selectedModel.value?.model_id || 'motion'
+  a.href = url
+  a.download = `${modelId}_animation_config.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  toast('已导出 animation_config JSON', 'success')
+}
+
+// v2.5.10: 插入 PODOPENER 标准流程骨架（PACKING + ALIGNING + UNPACKING）
+// 已有同名流程会跳过
+function insertPodopenerTemplate() {
+  if (!editingConfig.value) return
+  const flows = editingConfig.value.flows
+  const template = {
+    PACKING: {
+      phases: [
+        { key: 'IDLE', label: '待机', duration_ms: 1000, easing: 'linear' },
+        { key: 'POD_ARRIVE', label: 'Pod 到位', duration_ms: 800, easing: 'mechanical' },
+        { key: 'DOOR_OPEN', label: '门开启', duration_ms: 500, easing: 'ease-out' },
+        { key: 'LOADING', label: '装载', duration_ms: 1500, easing: 'ease-in-out' },
+        { key: 'COMPLETE', label: '完成', duration_ms: 500, easing: 'linear' },
+      ],
+      event_to_phase: {
+        POD_PLACED: { phase: 'POD_ARRIVE', anim: '', note: 'Pod 放置到 LoadPort' },
+        DOOR_OPENED: { phase: 'DOOR_OPEN', anim: '', note: '门开启信号' },
+        WAFER_LOADED: { phase: 'LOADING', anim: '', note: '晶圆装载' },
+        PACKING_DONE: { phase: 'COMPLETE', anim: '', note: '流程完成' },
+      },
+    },
+    ALIGNING: {
+      phases: [
+        { key: 'IDLE', label: '待机', duration_ms: 500, easing: 'linear' },
+        { key: 'PRE_ALIGN', label: '预对准', duration_ms: 2000, easing: 'mechanical' },
+        { key: 'FINE_ALIGN', label: '精对准', duration_ms: 1500, easing: 'ease-in-out' },
+        { key: 'COMPLETE', label: '完成', duration_ms: 500, easing: 'linear' },
+      ],
+      event_to_phase: {
+        ALIGN_START: { phase: 'PRE_ALIGN', anim: '', note: '对准开始' },
+        ALIGN_DONE: { phase: 'COMPLETE', anim: '', note: '对准完成' },
+      },
+    },
+    UNPACKING: {
+      phases: [
+        { key: 'IDLE', label: '待机', duration_ms: 500, easing: 'linear' },
+        { key: 'UNLOADING', label: '卸载', duration_ms: 1500, easing: 'ease-in-out' },
+        { key: 'DOOR_CLOSE', label: '门关闭', duration_ms: 500, easing: 'ease-in' },
+        { key: 'POD_LEAVE', label: 'Pod 离开', duration_ms: 800, easing: 'mechanical' },
+        { key: 'COMPLETE', label: '完成', duration_ms: 500, easing: 'linear' },
+      ],
+      event_to_phase: {
+        UNLOAD_START: { phase: 'UNLOADING', anim: '', note: '卸载开始' },
+        DOOR_CLOSED: { phase: 'DOOR_CLOSE', anim: '', note: '门关闭信号' },
+        POD_REMOVED: { phase: 'POD_LEAVE', anim: '', note: 'Pod 离开' },
+        UNPACK_DONE: { phase: 'COMPLETE', anim: '', note: '流程完成' },
+      },
+    },
+  }
+  let inserted = 0
+  for (const [k, v] of Object.entries(template)) {
+    if (!flows[k]) {
+      flows[k] = JSON.parse(JSON.stringify(v))
+      inserted++
+    }
+  }
+  if (inserted > 0) {
+    markDirty()
+    toast(`已插入 ${inserted} 个 PODOPENER 标准流程（PACKING/ALIGNING/UNPACKING）`, 'success')
+    // 自动展开流程配置区
+    collapsedSections.value.flows = false
+  } else {
+    toast('已存在 PACKING/ALIGNING/UNPACKING 流程，未插入', 'warn')
+  }
 }
 
 // === 计算属性 ===
 const targetKeys = computed(() => {
   if (!editingConfig.value) return []
+  const q = partSearch.value.trim().toLowerCase()
   // Motion JSON：返回 parts 数组索引（字符串形式，便于 v-for key）
   if (isMotionJson.value) {
     const arr = Array.isArray(editingConfig.value.parts) ? editingConfig.value.parts : []
-    return arr.map((_, i) => String(i))
+    return arr
+      .map((p, i) => ({ p, i: String(i) }))
+      .filter(({ p }) => {
+        if (!q) return true
+        return (
+          (p.part_id || '').toLowerCase().includes(q) ||
+          (p.part_name || '').toLowerCase().includes(q) ||
+          (p.part_type || '').toLowerCase().includes(q)
+        )
+      })
+      .map(({ i }) => i)
   }
-  return Object.keys(editingConfig.value.targets || {})
+  // 旧格式：targets 对象
+  const allKeys = Object.keys(editingConfig.value.targets || {})
+  if (!q) return allKeys
+  return allKeys.filter(k => {
+    const t = editingConfig.value.targets[k]
+    return (
+      k.toLowerCase().includes(q) ||
+      (t?.view_2d || '').toLowerCase().includes(q) ||
+      (t?.view_3d || '').toLowerCase().includes(q) ||
+      (t?.desc || '').toLowerCase().includes(q)
+    )
+  })
+})
+
+// 总部件数（不受搜索过滤）
+const totalPartsCount = computed(() => {
+  if (!editingConfig.value) return 0
+  if (isMotionJson.value) {
+    return Array.isArray(editingConfig.value.parts) ? editingConfig.value.parts.length : 0
+  }
+  return Object.keys(editingConfig.value.targets || {}).length
 })
 
 const animationKeys = computed(() => {
@@ -641,6 +769,13 @@ watch(svgPreviewUrl, (url) => loadSvgInline(url), { immediate: true })
 // === SVG 部件交互（点击 SVG 元素 ↔ 部件列表行 双向高亮） ===
 const selectedPartId = ref('')
 const svgInlineRef = ref(null)
+// 部件搜索框
+const partSearch = ref('')
+// 区块折叠状态（默认动画原语折叠，流程配置展开）
+const collapsedSections = ref({
+  animations: true,
+  flows: false,
+})
 
 // 高亮 SVG 内指定 id 的元素（清除上一个，加 .part-highlight 类）
 function highlightSvgPart(partId) {
@@ -956,11 +1091,20 @@ onMounted(async () => {
               <!-- 左栏上：部件绑定（Motion JSON: parts 数组 / 旧格式: targets 对象） -->
               <div class="left-section">
                 <div class="section-header">
-                  <h4>🎯 部件绑定（{{ targetKeys.length }} 个）{{ isMotionJson ? ' [Motion JSON]' : '' }}</h4>
+                  <h4>🎯 部件绑定（{{ targetKeys.length }}/{{ totalPartsCount }} 个）{{ isMotionJson ? ' [Motion JSON]' : '' }}</h4>
                   <div class="section-actions">
                     <button class="btn-small" @click="extractSvgPartsToTargets">🔍 从SVG提取</button>
                     <button class="btn-small" @click="addTarget">+ 添加部件</button>
                   </div>
+                </div>
+                <!-- 部件搜索框 -->
+                <div class="part-search-bar">
+                  <input
+                    v-model="partSearch"
+                    placeholder="🔍 按 part_id / part_name / part_type 搜索..."
+                    class="part-search-input"
+                  />
+                  <button v-if="partSearch" class="btn-clear" @click="partSearch = ''" title="清除">×</button>
                 </div>
                 <div class="data-table target-table">
                   <!-- Motion JSON: parts 数组表头 -->
@@ -1037,15 +1181,18 @@ onMounted(async () => {
                 </div>
               </div>
 
-              <!-- 左栏下：动画原语 animations -->
-              <div class="left-section">
-                <div class="section-header">
-                  <h4>🎬 动画原语（{{ animationKeys.length }} 个）</h4>
+              <!-- 左栏下：动画原语 animations（可折叠） -->
+              <div class="left-section" :class="{ 'section-collapsed': collapsedSections.animations }">
+                <div class="section-header section-header-clickable" @click="collapsedSections.animations = !collapsedSections.animations">
+                  <h4>
+                    <span class="collapse-icon">{{ collapsedSections.animations ? '▶' : '▼' }}</span>
+                    🎬 动画原语（{{ animationKeys.length }} 个）
+                  </h4>
                   <div class="section-actions">
-                    <button class="btn-small" @click="addAnimation">+ 添加动画</button>
+                    <button class="btn-small" @click.stop="addAnimation">+ 添加动画</button>
                   </div>
                 </div>
-                <div class="anim-grid">
+                <div v-show="!collapsedSections.animations" class="anim-grid">
                   <div v-for="aKey in animationKeys" :key="aKey" class="anim-card">
                     <div class="anim-card-header">
                       <input
@@ -1137,11 +1284,19 @@ onMounted(async () => {
 
             <!-- ============ 右栏：流程配置 flows ============ -->
             <div class="config-right-panel">
-              <div class="section-header">
-                <h4>📋 流程配置（{{ flowKeys.length }} 个）</h4>
-                <button class="btn-small" @click="addFlow">+ 添加流程</button>
+              <div class="section-header section-header-clickable" @click="collapsedSections.flows = !collapsedSections.flows">
+                <h4>
+                  <span class="collapse-icon">{{ collapsedSections.flows ? '▶' : '▼' }}</span>
+                  📋 流程配置（{{ flowKeys.length }} 个）
+                </h4>
+                <div class="section-actions">
+                  <button class="btn-small" @click.stop="insertPodopenerTemplate" title="一键插入 PACKING/ALIGNING/UNPACKING 标准流程骨架">⚡ PODOPENER 模板</button>
+                  <button class="btn-small" @click.stop="exportAnimConfigJson" title="导出当前 animation_config 为 JSON 文件">💾 导出 JSON</button>
+                  <button class="btn-small" @click.stop="addFlow">+ 添加流程</button>
+                </div>
               </div>
 
+              <div v-show="!collapsedSections.flows">
               <div v-for="flowKey in flowKeys" :key="flowKey" class="flow-section">
                 <div class="flow-section-header">
                   <h4>🔄 {{ flowKey }}</h4>
@@ -1178,7 +1333,8 @@ onMounted(async () => {
                         </select>
                       </div>
                       <div class="p-op">
-                        <button class="btn-delete" @click="deletePhase(flowKey, idx)">×</button>
+                        <button class="btn-small" @click="duplicatePhase(flowKey, idx)" title="复制阶段">⧉</button>
+                        <button class="btn-delete" @click="deletePhase(flowKey, idx)" title="删除">×</button>
                       </div>
                     </div>
                     <div v-if="editingConfig.flows[flowKey].phases.length === 0" class="empty-row">
@@ -1239,6 +1395,7 @@ onMounted(async () => {
                 </div>
               </div>
               <div v-if="flowKeys.length === 0" class="empty-row">暂无流程，点击 "+ 添加流程"</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1615,7 +1772,8 @@ onMounted(async () => {
   font-weight: 600;
 }
 .svg-interactive {
-  height: 320px;
+  height: 60vh;
+  min-height: 400px;
   cursor: crosshair;
 }
 /* SVG 内带 id 的元素：可点击 + 高亮态 */
@@ -1638,6 +1796,72 @@ onMounted(async () => {
 }
 .table-row.row-selected input {
   background: transparent;
+}
+
+/* === v2.5.10: 部件搜索框 + 列表内部滚动 === */
+.part-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.part-search-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+.part-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.btn-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 2px 6px;
+  line-height: 1;
+}
+.btn-clear:hover { color: var(--accent); }
+/* 部件表格容器内部滚动（不再整页下拉） */
+.target-table {
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+/* 表头置顶 */
+.target-table .table-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-2);
+}
+
+/* === v2.5.10: 区块折叠样式 === */
+.section-header-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.section-header-clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+.collapse-icon {
+  display: inline-block;
+  width: 14px;
+  color: var(--text-dim);
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+.section-collapsed {
+  padding-bottom: 8px;
 }
 .svg-loading {
   color: var(--text-dim);
