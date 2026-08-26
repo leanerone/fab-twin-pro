@@ -44,30 +44,6 @@ function toast(msg, type = 'info') {
   }, 3000)
 }
 
-// === 动画原语 action 枚举与字段映射 ===
-const ACTION_TYPES = ['translate', 'rotate', 'scale', 'flash', 'visibility', 'color', 'scan', 'signal']
-const AXIS_OPTIONS = ['x', 'y', 'z']
-const EASING_OPTIONS = ['linear', 'mechanical', 'ease-in', 'ease-out', 'ease-in-out']
-
-// 根据 action 类型返回需要显示的字段列表
-function actionFields(action) {
-  switch (action) {
-    case 'translate':
-    case 'rotate':
-    case 'scale':
-      return ['axis', 'from', 'to', 'duration_ms', 'easing']
-    case 'flash':
-    case 'color':
-    case 'scan':
-    case 'signal':
-      return ['color', 'duration_ms', 'easing']
-    case 'visibility':
-      return ['from', 'to', 'duration_ms', 'easing']
-    default:
-      return []
-  }
-}
-
 // === 模型管理 ===
 async function loadModels() {
   try {
@@ -199,73 +175,8 @@ function markDirty() {
   editDirty.value = true
 }
 
-// === 部件绑定（targets 旧格式 / parts 数组 Motion JSON） ===
-// 是否为 Motion JSON 格式（带 schema_version + parts 数组）
+// === Motion JSON 格式检测 ===
 const isMotionJson = computed(() => !!editingConfig.value?.schema_version)
-
-function addTarget() {
-  if (!editingConfig.value) return
-  if (isMotionJson.value) {
-    // Motion JSON：往 parts 数组追加
-    if (!Array.isArray(editingConfig.value.parts)) editingConfig.value.parts = []
-    const idx = editingConfig.value.parts.length + 1
-    editingConfig.value.parts.push({
-      part_id: `part_${idx}`,
-      part_name: `part_${idx}`,
-      part_type: '',
-      desc: '',
-    })
-  } else {
-    const idx = Object.keys(editingConfig.value.targets || {}).length + 1
-    const key = `part_${idx}`
-    if (!editingConfig.value.targets) editingConfig.value.targets = {}
-    editingConfig.value.targets[key] = { view_2d: '', view_3d: '', desc: '' }
-  }
-  markDirty()
-}
-
-function deleteTarget(key) {
-  if (!editingConfig.value) return
-  if (!confirm(`确定删除部件 "${key}"？`)) return
-  if (isMotionJson.value) {
-    // Motion JSON：按索引删除
-    const idx = Number(key)
-    if (Number.isInteger(idx) && idx >= 0 && idx < editingConfig.value.parts.length) {
-      editingConfig.value.parts.splice(idx, 1)
-    }
-  } else {
-    delete editingConfig.value.targets[key]
-  }
-  markDirty()
-}
-
-function renameTarget(oldKey, newKey) {
-  if (!editingConfig.value || oldKey === newKey) return
-  if (!newKey) {
-    toast('部件 key 不能为空', 'error')
-    return
-  }
-  if (isMotionJson.value) {
-    // Motion JSON：按索引更新 part_id（part_id 唯一性校验）
-    const idx = Number(oldKey)
-    if (!Number.isInteger(idx) || idx < 0 || idx >= editingConfig.value.parts.length) return
-    const exists = editingConfig.value.parts.some((p, i) => i !== idx && p.part_id === newKey)
-    if (exists) {
-      toast(`part_id "${newKey}" 已存在`, 'error')
-      return
-    }
-    editingConfig.value.parts[idx].part_id = newKey
-  } else {
-    if (editingConfig.value.targets[newKey]) {
-      toast(`键 "${newKey}" 已存在`, 'error')
-      return
-    }
-    const data = editingConfig.value.targets[oldKey]
-    delete editingConfig.value.targets[oldKey]
-    editingConfig.value.targets[newKey] = data
-  }
-  markDirty()
-}
 
 // "从SVG提取"按钮：调用 api.extractSvgParts 获取部件列表，自动填充 view_2d 列
 async function extractSvgPartsToTargets() {
@@ -385,189 +296,6 @@ async function onModelFileUploaded() {
   }
 }
 
-// === 动画原语（animations） ===
-function addAnimation() {
-  if (!editingConfig.value) return
-  // v2.5.11: 弹出内联输入框，让用户输入动画名称
-  showNewAnimInput.value = true
-  newAnimName.value = ''
-  // 自动展开动画原语区
-  collapsedSections.value.animations = false
-  nextTick(() => {
-    if (newAnimInputRef.value) newAnimInputRef.value.focus()
-  })
-}
-
-// 确认添加动画（回车或失焦触发）
-function confirmAddAnimation() {
-  if (!editingConfig.value) {
-    showNewAnimInput.value = false
-    return
-  }
-  const name = newAnimName.value.trim()
-  if (!name) {
-    showNewAnimInput.value = false
-    return
-  }
-  const key = name.toUpperCase()
-  if (editingConfig.value.animations[key]) {
-    toast(`动画 "${key}" 已存在`, 'error')
-    return
-  }
-  editingConfig.value.animations[key] = {
-    target: '',
-    action: 'translate',
-    axis: 'y',
-    from: 0,
-    to: 0,
-    duration_ms: 1000,
-    easing: 'linear',
-  }
-  markDirty()
-  showNewAnimInput.value = false
-  newAnimName.value = ''
-  toast(`已添加动画 "${key}"`, 'success')
-}
-
-// 取消添加动画（Esc 触发）
-function cancelAddAnimation() {
-  showNewAnimInput.value = false
-  newAnimName.value = ''
-}
-
-function deleteAnimation(key) {
-  if (!editingConfig.value) return
-  if (!confirm(`确定删除动画 "${key}"？`)) return
-  delete editingConfig.value.animations[key]
-  markDirty()
-}
-
-function renameAnimation(oldKey, newKey) {
-  if (!editingConfig.value || oldKey === newKey) return
-  if (!newKey) {
-    toast('动画 key 不能为空', 'error')
-    return
-  }
-  if (editingConfig.value.animations[newKey]) {
-    toast(`键 "${newKey}" 已存在`, 'error')
-    return
-  }
-  const data = editingConfig.value.animations[oldKey]
-  delete editingConfig.value.animations[oldKey]
-  editingConfig.value.animations[newKey] = data
-  markDirty()
-}
-
-// === 流程配置（flows） ===
-function addFlow() {
-  if (!editingConfig.value) return
-  // v2.5.11: 弹出内联输入框，让用户输入流程名
-  showNewFlowInput.value = true
-  newFlowName.value = ''
-  // 自动展开流程配置区
-  collapsedSections.value.flows = false
-  nextTick(() => {
-    if (newFlowInputRef.value) newFlowInputRef.value.focus()
-  })
-}
-
-// 确认添加流程（回车或失焦触发）
-function confirmAddFlow() {
-  if (!editingConfig.value) {
-    showNewFlowInput.value = false
-    return
-  }
-  const name = newFlowName.value.trim()
-  if (!name) {
-    showNewFlowInput.value = false
-    return
-  }
-  const key = name.toUpperCase()
-  if (editingConfig.value.flows[key]) {
-    toast(`流程 "${key}" 已存在`, 'error')
-    return
-  }
-  editingConfig.value.flows[key] = { phases: [], event_to_phase: {} }
-  markDirty()
-  showNewFlowInput.value = false
-  newFlowName.value = ''
-  toast(`已添加流程 "${key}"`, 'success')
-}
-
-// 取消添加流程（Esc 触发）
-function cancelAddFlow() {
-  showNewFlowInput.value = false
-  newFlowName.value = ''
-}
-
-function deleteFlow(flowKey) {
-  if (!editingConfig.value) return
-  if (!confirm(`确定删除流程 "${flowKey}"？`)) return
-  delete editingConfig.value.flows[flowKey]
-  markDirty()
-}
-
-function addPhase(flowKey) {
-  if (!editingConfig.value) return
-  const phases = editingConfig.value.flows[flowKey].phases
-  phases.push({
-    key: `PHASE_${phases.length + 1}`,
-    label: '新阶段',
-    duration_ms: 1000,
-    easing: 'linear',
-  })
-  markDirty()
-}
-
-function deletePhase(flowKey, idx) {
-  if (!editingConfig.value) return
-  if (!confirm(`确定删除阶段 ${idx + 1}？`)) return
-  editingConfig.value.flows[flowKey].phases.splice(idx, 1)
-  markDirty()
-}
-
-function addEventMapping(flowKey) {
-  if (!editingConfig.value) return
-  const evtName = prompt('输入事件名（如 POD_PLACED）：')
-  if (!evtName) return
-  const flow = editingConfig.value.flows[flowKey]
-  if (!flow.phases || flow.phases.length === 0) {
-    toast('请先添加阶段', 'warn')
-    return
-  }
-  const key = evtName.toUpperCase()
-  if (flow.event_to_phase[key]) {
-    toast(`事件 "${key}" 已存在`, 'error')
-    return
-  }
-  flow.event_to_phase[key] = {
-    phase: flow.phases[0].key,
-    anim: '',
-    note: '',
-  }
-  markDirty()
-}
-
-function deleteEventMapping(flowKey, evt) {
-  if (!editingConfig.value) return
-  if (!confirm(`确定删除事件 "${evt}"？`)) return
-  delete editingConfig.value.flows[flowKey].event_to_phase[evt]
-  markDirty()
-}
-
-// v2.5.10: 复制阶段（在指定位置之后插入一份相同配置）
-function duplicatePhase(flowKey, idx) {
-  if (!editingConfig.value) return
-  const phases = editingConfig.value.flows[flowKey].phases
-  if (idx < 0 || idx >= phases.length) return
-  const src = phases[idx]
-  // 深拷贝，避免引用共享；key 加 _copy 后缀避免重复
-  const copy = JSON.parse(JSON.stringify(src))
-  copy.key = `${src.key}_copy${Date.now() % 1000}`
-  phases.splice(idx + 1, 0, copy)
-  markDirty()
-}
-
 // v2.5.10: 导出当前 animation_config 为 JSON 文件
 function exportAnimConfigJson() {
   if (!editingConfig.value) return
@@ -585,70 +313,546 @@ function exportAnimConfigJson() {
   toast('已导出 animation_config JSON', 'success')
 }
 
-// v2.5.10: 插入 PODOPENER 标准流程骨架（PACKING + ALIGNING + UNPACKING）
-// 已有同名流程会跳过
-function insertPodopenerTemplate() {
-  if (!editingConfig.value) return
-  const flows = editingConfig.value.flows
-  const template = {
-    PACKING: {
-      phases: [
-        { key: 'IDLE', label: '待机', duration_ms: 1000, easing: 'linear' },
-        { key: 'POD_ARRIVE', label: 'Pod 到位', duration_ms: 800, easing: 'mechanical' },
-        { key: 'DOOR_OPEN', label: '门开启', duration_ms: 500, easing: 'ease-out' },
-        { key: 'LOADING', label: '装载', duration_ms: 1500, easing: 'ease-in-out' },
-        { key: 'COMPLETE', label: '完成', duration_ms: 500, easing: 'linear' },
-      ],
-      event_to_phase: {
-        POD_PLACED: { phase: 'POD_ARRIVE', anim: '', note: 'Pod 放置到 LoadPort' },
-        DOOR_OPENED: { phase: 'DOOR_OPEN', anim: '', note: '门开启信号' },
-        WAFER_LOADED: { phase: 'LOADING', anim: '', note: '晶圆装载' },
-        PACKING_DONE: { phase: 'COMPLETE', anim: '', note: '流程完成' },
-      },
-    },
-    ALIGNING: {
-      phases: [
-        { key: 'IDLE', label: '待机', duration_ms: 500, easing: 'linear' },
-        { key: 'PRE_ALIGN', label: '预对准', duration_ms: 2000, easing: 'mechanical' },
-        { key: 'FINE_ALIGN', label: '精对准', duration_ms: 1500, easing: 'ease-in-out' },
-        { key: 'COMPLETE', label: '完成', duration_ms: 500, easing: 'linear' },
-      ],
-      event_to_phase: {
-        ALIGN_START: { phase: 'PRE_ALIGN', anim: '', note: '对准开始' },
-        ALIGN_DONE: { phase: 'COMPLETE', anim: '', note: '对准完成' },
-      },
-    },
-    UNPACKING: {
-      phases: [
-        { key: 'IDLE', label: '待机', duration_ms: 500, easing: 'linear' },
-        { key: 'UNLOADING', label: '卸载', duration_ms: 1500, easing: 'ease-in-out' },
-        { key: 'DOOR_CLOSE', label: '门关闭', duration_ms: 500, easing: 'ease-in' },
-        { key: 'POD_LEAVE', label: 'Pod 离开', duration_ms: 800, easing: 'mechanical' },
-        { key: 'COMPLETE', label: '完成', duration_ms: 500, easing: 'linear' },
-      ],
-      event_to_phase: {
-        UNLOAD_START: { phase: 'UNLOADING', anim: '', note: '卸载开始' },
-        DOOR_CLOSED: { phase: 'DOOR_CLOSE', anim: '', note: '门关闭信号' },
-        POD_REMOVED: { phase: 'POD_LEAVE', anim: '', note: 'Pod 离开' },
-        UNPACK_DONE: { phase: 'COMPLETE', anim: '', note: '流程完成' },
-      },
-    },
+// === 拖拽录制模式 ===
+const recordMode = ref(false)
+const recordActionType = ref('offset')  // offset / rotate / scale / opacity
+const recordStepInputRef = ref(null)
+// 多选：用数组而非 Set，确保 Vue 响应式可靠追踪
+const selectedPartIds = ref([])
+// 框选（lasso）状态
+const lassoState = ref({
+  active: false,
+  startX: 0, startY: 0,   // 屏幕坐标
+  currentX: 0, currentY: 0,
+})
+const dragState = ref({
+  partId: '',
+  startSvgX: 0, startSvgY: 0,
+  currentSvgX: 0, currentSvgY: 0,
+  dragging: false,
+  startBBox: null,
+})
+const showRecordPanel = ref(false)
+const showGroupInput = ref(false)
+const groupNameInput = ref('')
+const groupInputRef = ref(null)
+const recordForm = ref({
+  step: '',
+  when: 'true',
+  actionType: 'offset',
+  partId: '',
+  partIds: [],  // 多选时多个目标
+  offsetX: 0, offsetY: 0,
+  angle: 0, pivotX: 0, pivotY: 0,
+  scaleX: 1, scaleY: 1,
+  opacity: 1,
+  duration: 1000,
+  easing: 'linear',
+})
+
+const ACTION_TYPE_OPTIONS = [
+  { value: 'offset', label: '位移', icon: '✥' },
+  { value: 'rotate', label: '旋转', icon: '⟳' },
+  { value: 'scale', label: '缩放', icon: '⤢' },
+  { value: 'opacity', label: '透明度', icon: '◐' },
+]
+
+const EVENT_TEMPLATES = [
+  { label: '始终触发', when: 'true' },
+  { label: 'Port 1', when: "params.port == '1'" },
+  { label: 'Port 2', when: "params.port == '2'" },
+  { label: 'Chamber 1', when: "params.chamber == '1'" },
+  { label: 'Chamber 2', when: "params.chamber == '2'" },
+  { label: 'Chamber 3', when: "params.chamber == '3'" },
+]
+
+const EASING_OPTIONS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'mechanical']
+
+// 已录制动作列表（Motion JSON 的 motions 数组）
+const motionList = computed(() => {
+  if (!editingConfig.value) return []
+  if (!editingConfig.value.schema_version) return []
+  return editingConfig.value.motions || []
+})
+
+function toggleRecordMode() {
+  recordMode.value = !recordMode.value
+  if (!recordMode.value) {
+    resetDragState()
+    showRecordPanel.value = false
+    selectedPartIds.value = []
+    lassoState.value.active = false
+    selectedPartId.value = ''
+    highlightSvgPart('')
   }
-  let inserted = 0
-  for (const [k, v] of Object.entries(template)) {
-    if (!flows[k]) {
-      flows[k] = JSON.parse(JSON.stringify(v))
-      inserted++
+  toast(recordMode.value ? '录制模式：点击选中，空白处拖拽框选，Ctrl+点击追加' : '录制模式已关闭（仍可多选/框选/组合）', 'info')
+}
+
+// 标志位：mousedown 已处理选中时，阻止后续 click 重置选中
+let mousedownProcessed = false
+
+// 自动展开部件列表 <details>（高亮才能被看到）
+function expandPartsDetails() {
+  nextTick(() => {
+    const details = document.querySelector('.parts-details')
+    if (details && !details.hasAttribute('open')) {
+      details.setAttribute('open', '')
+    }
+  })
+}
+
+// 将 SVG 元素置顶（移动到父节点末尾，SVG 渲染顺序=DOM 顺序）
+function bringToFront(el) {
+  if (!el || !el.parentNode) return
+  el.parentNode.appendChild(el)
+}
+
+// 高亮多个选中部件（数组版）
+function highlightSelectedParts() {
+  const container = svgInlineRef.value
+  if (!container) return
+  container.querySelectorAll('.part-highlight').forEach(prev => {
+    prev.classList.remove('part-highlight')
+    prev.style.stroke = ''
+    prev.style.strokeWidth = ''
+    prev.style.filter = ''
+    prev.querySelectorAll('*').forEach(el => {
+      el.style.stroke = ''
+      el.style.strokeWidth = ''
+      el.style.filter = ''
+    })
+  })
+  for (const partId of selectedPartIds.value) {
+    const escId = partId.replace(/["\\]/g, '\\$&')
+    const target = container.querySelector(`[id="${escId}"]`)
+    if (target) {
+      target.classList.add('part-highlight')
+      target.style.stroke = '#ff5722'
+      target.style.strokeWidth = '3px'
+      target.style.filter = 'drop-shadow(0 0 6px rgba(255, 87, 34, 0.9))'
+      const tag = target.tagName.toLowerCase()
+      if (tag === 'g' || tag === 'svg') {
+        target.querySelectorAll('*').forEach(el => {
+          el.style.stroke = '#ff5722'
+          el.style.strokeWidth = '2px'
+          el.style.filter = 'drop-shadow(0 0 4px rgba(255, 87, 34, 0.7))'
+        })
+      }
     }
   }
-  if (inserted > 0) {
-    markDirty()
-    toast(`已插入 ${inserted} 个 PODOPENER 标准流程（PACKING/ALIGNING/UNPACKING）`, 'success')
-    // 自动展开流程配置区
-    collapsedSections.value.flows = false
-  } else {
-    toast('已存在 PACKING/ALIGNING/UNPACKING 流程，未插入', 'warn')
+}
+
+function resetDragState() {
+  const ds = dragState.value
+  if (svgInlineRef.value) {
+    for (const partId of selectedPartIds.value) {
+      const el = svgInlineRef.value.querySelector(`#${CSS.escape(partId)}`)
+      if (el) { el.style.transform = ''; el.style.transformOrigin = '' }
+    }
+    if (ds.partId) {
+      const el = svgInlineRef.value.querySelector(`#${CSS.escape(ds.partId)}`)
+      if (el) { el.style.transform = ''; el.style.transformOrigin = '' }
+    }
   }
+  dragState.value = { partId: '', startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, dragging: false, startBBox: null }
+}
+
+function screenToSvgCoords(e) {
+  const container = svgInlineRef.value
+  if (!container) return { x: 0, y: 0 }
+  const svg = container.querySelector('svg')
+  if (!svg) return { x: 0, y: 0 }
+  const pt = svg.createSVGPoint()
+  pt.x = e.clientX
+  pt.y = e.clientY
+  const ctm = svg.getScreenCTM()
+  if (!ctm) return { x: 0, y: 0 }
+  const svgPt = pt.matrixTransform(ctm.inverse())
+  return { x: svgPt.x, y: svgPt.y }
+}
+
+// 获取容器屏幕坐标（用于框选矩形定位）
+function getContainerOffset() {
+  const container = svgInlineRef.value
+  if (!container) return { left: 0, top: 0 }
+  const rect = container.getBoundingClientRect()
+  return { left: rect.left, top: rect.top }
+}
+
+// 框选矩形样式（响应式，使用容器相对坐标）
+const lassoRectStyle = computed(() => {
+  if (!lassoState.value.active) return { display: 'none' }
+  const ls = lassoState.value
+  const container = svgInlineRef.value
+  if (!container) return { display: 'none' }
+  const rect = container.getBoundingClientRect()
+  const x = Math.min(ls.startX, ls.currentX) - rect.left
+  const y = Math.min(ls.startY, ls.currentY) - rect.top
+  const w = Math.abs(ls.currentX - ls.startX)
+  const h = Math.abs(ls.currentY - ls.startY)
+  return { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px', display: 'block' }
+})
+
+// 非部件标签（点击这些元素视为点击空白，触发框选）
+const NON_PART_TAGS = new Set(['svg', 'defs', 'style', 'metadata', 'title', 'desc'])
+function isPartElement(el, containerRect) {
+  if (!el) return false
+  const tag = el.tagName ? el.tagName.toLowerCase().replace(/^.*:/, '') : ''
+  if (NON_PART_TAGS.has(tag)) return false
+  const id = el.getAttribute && el.getAttribute('id')
+  if (!id) return false
+  // 过滤大面积背景元素（覆盖容器 70% 以上视为背景）
+  if (containerRect) {
+    try {
+      const bbox = el.getBoundingClientRect()
+      if (bbox.width > 0 && bbox.height > 0) {
+        const areaRatio = (bbox.width * bbox.height) / (containerRect.width * containerRect.height)
+        if (areaRatio > 0.7) return false
+      }
+    } catch(_) {}
+  }
+  return true
+}
+
+function onSvgMouseDown(e) {
+  // 多选/框选在非录制模式也可用；拖拽录制仅限录制模式
+  const containerRect = svgInlineRef.value?.getBoundingClientRect()
+  // 查找点击的部件（跳过 SVG 根、defs、大面积背景等非部件元素）
+  let el = e.target
+  let partId = ''
+  while (el && el !== e.currentTarget) {
+    if (isPartElement(el, containerRect)) { partId = el.getAttribute('id'); break }
+    el = el.parentElement
+  }
+
+  // 标记本次 mousedown 已处理选中，阻止后续 click 重置
+  mousedownProcessed = true
+  setTimeout(() => { mousedownProcessed = false }, 60)
+
+  if (partId) {
+    // === 点击部件：选中 + (录制模式下)开始拖拽 ===
+    e.preventDefault()
+    const targetEl = svgInlineRef.value?.querySelector(`#${CSS.escape(partId)}`)
+    if (targetEl) bringToFront(targetEl)
+
+    const isMulti = e.ctrlKey || e.metaKey
+    if (isMulti) {
+      // Ctrl+click：添加/移除
+      const idx = selectedPartIds.value.indexOf(partId)
+      if (idx >= 0) {
+        selectedPartIds.value = selectedPartIds.value.filter(id => id !== partId)
+      } else {
+        selectedPartIds.value = [...selectedPartIds.value, partId]
+      }
+    } else {
+      // 普通点击：如果已有多选且点击的是其中一个，保持多选；否则单选
+      if (selectedPartIds.value.length > 1 && selectedPartIds.value.includes(partId)) {
+        // 保持当前多选
+      } else {
+        selectedPartIds.value = [partId]
+      }
+    }
+    selectedPartId.value = partId
+    highlightSelectedParts()
+    scrollSelectedPartsIntoView()
+    expandPartsDetails()
+
+    // 仅在录制模式下开始拖拽录制
+    if (recordMode.value) {
+      const coords = screenToSvgCoords(e)
+      const bbox = targetEl ? (function() { try { return targetEl.getBBox() } catch(_) { return null } })() : null
+      dragState.value = {
+        partId, startSvgX: coords.x, startSvgY: coords.y,
+        currentSvgX: coords.x, currentSvgY: coords.y,
+        dragging: true,
+        startBBox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null,
+      }
+      recordForm.value.partId = partId
+      recordForm.value.partIds = [...selectedPartIds.value]
+      recordForm.value.actionType = recordActionType.value
+      if (bbox && recordActionType.value === 'rotate') {
+        recordForm.value.pivotX = Math.round(bbox.x + bbox.width / 2)
+        recordForm.value.pivotY = Math.round(bbox.y + bbox.height / 2)
+      }
+    }
+  } else {
+    // === 点击空白：开始框选（lasso）—— 录制/非录制模式都支持 ===
+    e.preventDefault()
+    lassoState.value = {
+      active: true,
+      startX: e.clientX, startY: e.clientY,
+      currentX: e.clientX, currentY: e.clientY,
+    }
+    // 框选时不保留之前的选择（如果未按 Ctrl）
+    if (!e.ctrlKey && !e.metaKey) {
+      selectedPartIds.value = []
+      selectedPartId.value = ''
+      highlightSvgPart('')
+    }
+  }
+}
+
+function onSvgMouseMove(e) {
+  const ds = dragState.value
+  // 框选拖拽
+  if (lassoState.value.active) {
+    lassoState.value.currentX = e.clientX
+    lassoState.value.currentY = e.clientY
+    // 实时检测框选范围内的部件
+    updateLassoSelection()
+    return
+  }
+  // 部件拖拽
+  if (!ds.dragging || !svgInlineRef.value) return
+  const coords = screenToSvgCoords(e)
+  ds.currentSvgX = coords.x
+  ds.currentSvgY = coords.y
+  const dx = coords.x - ds.startSvgX
+  const dy = coords.y - ds.startSvgY
+  const partIds = selectedPartIds.value.length > 0 ? selectedPartIds.value : [ds.partId]
+  for (const pid of partIds) {
+    const el = svgInlineRef.value.querySelector(`#${CSS.escape(pid)}`)
+    if (!el) continue
+    switch (recordActionType.value) {
+      case 'offset':
+        el.style.transform = `translate(${dx}px, ${dy}px)`
+        break
+      case 'rotate': {
+        const angle = Math.round(Math.atan2(dy, dx) * 180 / Math.PI)
+        el.style.transformOrigin = `${recordForm.value.pivotX}px ${recordForm.value.pivotY}px`
+        el.style.transform = `rotate(${angle}deg)`
+        recordForm.value.angle = angle
+        break
+      }
+      case 'scale': {
+        const sx = Math.max(0.1, 1 + dx / 100)
+        const sy = Math.max(0.1, 1 + dy / 100)
+        el.style.transform = `scale(${sx}, ${sy})`
+        recordForm.value.scaleX = Math.round(sx * 100) / 100
+        recordForm.value.scaleY = Math.round(sy * 100) / 100
+        break
+      }
+    }
+  }
+}
+
+// 框选：检测哪些 SVG 元素在框选矩形内
+function updateLassoSelection() {
+  const container = svgInlineRef.value
+  if (!container) return
+  const ls = lassoState.value
+  const containerRect = container.getBoundingClientRect()
+  const lx = Math.min(ls.startX, ls.currentX) - containerRect.left
+  const ly = Math.min(ls.startY, ls.currentY) - containerRect.top
+  const lw = Math.abs(ls.currentX - ls.startX)
+  const lh = Math.abs(ls.currentY - ls.startY)
+  const allIds = container.querySelectorAll('[id]')
+  const newSelection = []
+  for (const el of allIds) {
+    if (!isPartElement(el, containerRect)) continue
+    const eid = el.getAttribute('id')
+    let bbox
+    try { bbox = el.getBoundingClientRect() } catch(_) { continue }
+    if (bbox.width === 0 && bbox.height === 0) continue
+    const elLeft = bbox.left - containerRect.left
+    const elTop = bbox.top - containerRect.top
+    const cx = elLeft + bbox.width / 2
+    const cy = elTop + bbox.height / 2
+    if (cx >= lx && cx <= lx + lw && cy >= ly && cy <= ly + lh) {
+      newSelection.push(eid)
+    }
+  }
+  selectedPartIds.value = newSelection
+  if (newSelection.length > 0) {
+    selectedPartId.value = newSelection[newSelection.length - 1]
+  }
+  highlightSelectedParts()
+}
+
+function onSvgMouseUp(e) {
+  // 框选结束
+  if (lassoState.value.active) {
+    lassoState.value.active = false
+    if (selectedPartIds.value.length > 0) {
+      // 框选到部件后，滚动右侧列表到第一个选中项并展开部件列表
+      scrollSelectedPartsIntoView()
+      expandPartsDetails()
+    }
+    return
+  }
+  // 部件拖拽结束
+  const ds = dragState.value
+  if (!ds.dragging) return
+  const coords = screenToSvgCoords(e)
+  ds.currentSvgX = coords.x
+  ds.currentSvgY = coords.y
+  const dx = Math.round(coords.x - ds.startSvgX)
+  const dy = Math.round(coords.y - ds.startSvgY)
+  if (recordActionType.value === 'offset') {
+    recordForm.value.offsetX = dx
+    recordForm.value.offsetY = -dy
+  }
+  showRecordPanel.value = true
+  ds.dragging = false
+  nextTick(() => {
+    if (recordStepInputRef.value) recordStepInputRef.value.focus()
+  })
+}
+
+// 滚动右侧部件列表到选中项
+function scrollSelectedPartsIntoView() {
+  if (selectedPartIds.value.length === 0) return
+  nextTick(() => {
+    // 优先滚动 .parts-mini-list 中的对应行
+    const container = document.querySelector('.parts-mini-list')
+    if (container) {
+      const firstId = selectedPartIds.value[0]
+      const escId = firstId.replace(/["\\]/g, '\\$&')
+      const row = container.querySelector(`[data-part-id="${escId}"]`)
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    // 也尝试 .motion-list（无 data-part-id，跳过）
+  })
+}
+
+// 将多个选中部件组合为一个 <g> 组（永久分组，可当作单个部件引用）
+function startGroupInput() {
+  if (selectedPartIds.value.length < 2) {
+    toast('请先框选或 Ctrl+点击选中 2 个以上部件', 'warn')
+    return
+  }
+  showGroupInput.value = true
+  groupNameInput.value = `GROUP_${Date.now() % 10000}`
+  nextTick(() => {
+    if (groupInputRef.value) {
+      groupInputRef.value.focus()
+      groupInputRef.value.select()
+    }
+  })
+}
+
+function confirmGroupCombine() {
+  const name = groupNameInput.value.trim()
+  if (!name) { toast('请输入组合名称', 'error'); return }
+  const container = svgInlineRef.value
+  const svg = container?.querySelector('svg')
+  if (!svg) { toast('SVG 未加载', 'error'); return }
+  const ns = svg.namespaceURI
+  const g = document.createElementNS(ns, 'g')
+  g.setAttribute('id', name)
+  const partIds = [...selectedPartIds.value]
+  for (const pid of partIds) {
+    const el = container.querySelector(`#${CSS.escape(pid)}`)
+    if (el && el.parentNode) {
+      g.appendChild(el)
+    }
+  }
+  svg.appendChild(g)
+  if (isMotionJson.value) {
+    if (!Array.isArray(editingConfig.value.parts)) editingConfig.value.parts = []
+    editingConfig.value.parts.push({
+      part_id: name, part_name: name, part_type: 'group',
+      desc: `组合: ${partIds.join(', ')}`,
+    })
+  } else {
+    if (!editingConfig.value.targets) editingConfig.value.targets = {}
+    editingConfig.value.targets[name] = { view_2d: name, view_3d: '', desc: `组合: ${partIds.join(', ')}` }
+  }
+  markDirty()
+  selectedPartIds.value = [name]
+  selectedPartId.value = name
+  highlightSelectedParts()
+  showGroupInput.value = false
+  toast(`已创建组合 "${name}"（${partIds.length} 个部件）`, 'success')
+}
+
+function cancelGroupCombine() {
+  showGroupInput.value = false
+  groupNameInput.value = ''
+}
+
+function clearSelection() {
+  selectedPartIds.value = []
+  selectedPartId.value = ''
+  highlightSvgPart('')
+}
+
+function cancelRecord() {
+  resetDragState()
+  showRecordPanel.value = false
+}
+
+function saveRecord() {
+  if (!editingConfig.value) return
+  const f = recordForm.value
+  if (!f.step.trim()) { toast('请输入 Step 名称', 'error'); return }
+  // 目标部件列表（支持多选）
+  const targets = (f.partIds && f.partIds.length > 0) ? f.partIds : [f.partId]
+  if (!targets[0]) { toast('未选中部件', 'error'); return }
+  // 旧格式 → 转 Motion JSON
+  if (!editingConfig.value.schema_version) {
+    const oldParts = editingConfig.value.parts || []
+    editingConfig.value = {
+      schema_version: '1.0',
+      document: { name: selectedModel.value?.model_id || '', src: 'svg' },
+      parts: oldParts,
+      motions: [],
+      ext: {},
+    }
+  }
+  if (!Array.isArray(editingConfig.value.motions)) editingConfig.value.motions = []
+  // 构建 action（所有目标共用同一动作参数）
+  let action = { type: f.actionType }
+  switch (f.actionType) {
+    case 'offset': action.offset_x = f.offsetX; action.offset_y = f.offsetY; break
+    case 'rotate': action.angle = f.angle; action.pivot = { x: f.pivotX, y: f.pivotY }; break
+    case 'scale': action.scale_x = f.scaleX; action.scale_y = f.scaleY; break
+    case 'opacity': action.to = f.opacity; break
+  }
+  if (f.duration > 0) action.duration = f.duration
+  if (f.easing && f.easing !== 'linear') action.easing = f.easing
+  // 构建 motion：多目标时生成多条 rules（同一 step 下，每部件一条 rule）
+  const rules = targets.map(pid => ({
+    when: f.when || 'true',
+    target_part_id: pid,
+    actions: [JSON.parse(JSON.stringify(action))],
+  }))
+  const motion = {
+    step: f.step.trim().toUpperCase(),
+    enabled: true,
+    rules,
+  }
+  editingConfig.value.motions.push(motion)
+  markDirty()
+  resetDragState()
+  showRecordPanel.value = false
+  recordForm.value.step = ''
+  toast(`已录制: ${motion.step} → ${targets.join(', ')} (${f.actionType}${targets.length > 1 ? `, ${targets.length}个部件` : ''})`, 'success')
+}
+
+function deleteMotion(idx) {
+  if (!editingConfig.value?.motions) return
+  const m = editingConfig.value.motions[idx]
+  if (!confirm(`确定删除动作 "${m.step}"？`)) return
+  editingConfig.value.motions.splice(idx, 1)
+  markDirty()
+}
+
+function getMotionSummary(motion) {
+  const rules = motion.rules || []
+  if (rules.length === 0) return '(无动作)'
+  const r = rules[0]
+  const actions = r.actions || []
+  const parts = actions.map(a => {
+    switch (a.type) {
+      case 'offset': return `位移(${a.offset_x||0},${a.offset_y||0})`
+      case 'rotate': return `旋转${a.angle||0}°`
+      case 'scale': return `缩放(${a.scale_x||1},${a.scale_y||1})`
+      case 'opacity': return `透明度${a.to??1}`
+      default: return a.type
+    }
+  })
+  return `${r.target_part_id}: ${parts.join(', ')}`
 }
 
 // === 计算属性 ===
@@ -691,16 +895,6 @@ const totalPartsCount = computed(() => {
     return Array.isArray(editingConfig.value.parts) ? editingConfig.value.parts.length : 0
   }
   return Object.keys(editingConfig.value.targets || {}).length
-})
-
-const animationKeys = computed(() => {
-  if (!editingConfig.value) return []
-  return Object.keys(editingConfig.value.animations || {})
-})
-
-const flowKeys = computed(() => {
-  if (!editingConfig.value) return []
-  return Object.keys(editingConfig.value.flows || {})
 })
 
 // === 动画调试 ===
@@ -832,32 +1026,46 @@ const selectedPartId = ref('')
 const svgInlineRef = ref(null)
 // 部件搜索框
 const partSearch = ref('')
-// 区块折叠状态（默认动画原语折叠，流程配置展开）
-const collapsedSections = ref({
-  animations: true,
-  flows: false,
-})
-// v2.5.11: 内联输入框（替代 prompt）
-const showNewFlowInput = ref(false)
-const newFlowName = ref('')
-const newFlowInputRef = ref(null)
-const showNewAnimInput = ref(false)
-const newAnimName = ref('')
-const newAnimInputRef = ref(null)
 
 // 高亮 SVG 内指定 id 的元素（清除上一个，加 .part-highlight 类）
 function highlightSvgPart(partId) {
   const container = svgInlineRef.value
   if (!container) return
-  // 清除上一个高亮
+  // 清除上一个高亮（包括 inline style）
   const prev = container.querySelector('.part-highlight')
-  if (prev) prev.classList.remove('part-highlight')
+  if (prev) {
+    prev.classList.remove('part-highlight')
+    // 清除 inline style（避免残留）
+    prev.style.stroke = ''
+    prev.style.strokeWidth = ''
+    prev.style.filter = ''
+    // 子元素也清除（<g> 容器情况）
+    prev.querySelectorAll('*').forEach(el => {
+      el.style.stroke = ''
+      el.style.strokeWidth = ''
+      el.style.filter = ''
+    })
+  }
   if (!partId) return
   // SVG 内元素 id 可能含特殊字符，用属性选择器转义
   const escId = partId.replace(/["\\]/g, '\\$&')
   const target = container.querySelector(`[id="${escId}"]`)
   if (target) {
     target.classList.add('part-highlight')
+    // v2.5.12: 直接设置 inline style，强制覆盖 SVG attribute（stroke="..."）
+    // 原因：CSS 类的 stroke 即使有 !important 也可能被 SVG attribute 覆盖
+    target.style.stroke = '#ff5722'
+    target.style.strokeWidth = '3px'
+    target.style.filter = 'drop-shadow(0 0 6px rgba(255, 87, 34, 0.9))'
+    // 如果是 <g> 容器（无 stroke），给子元素也加描边
+    const tag = target.tagName.toLowerCase()
+    if (tag === 'g' || tag === 'svg') {
+      target.querySelectorAll('*').forEach(el => {
+        el.style.stroke = '#ff5722'
+        el.style.strokeWidth = '2px'
+        el.style.filter = 'drop-shadow(0 0 4px rgba(255, 87, 34, 0.7))'
+      })
+    }
     // 滚动到可见
     try { target.scrollIntoView({ block: 'nearest', inline: 'center' }) } catch (_) { /* ignore */ }
   }
@@ -865,37 +1073,57 @@ function highlightSvgPart(partId) {
 
 // SVG 容器点击事件委托：从 event.target 读取 id
 function onSvgClick(e) {
+  // 鼠标触发的 click（e.detail >= 1）由 mousedown 处理，这里只处理键盘触发的 click（如 Enter）
+  if (e.detail > 0) return
+  if (recordMode.value) return  // 录制模式下由 mousedown 处理
+  const containerRect = svgInlineRef.value?.getBoundingClientRect()
   let el = e.target
-  // 向上查找带 id 的祖先（点击到的可能是 <path>/<rect> 的子节点）
+  // 向上查找带 id 的部件祖先（跳过 SVG 根、defs、大面积背景）
   while (el && el !== e.currentTarget) {
-    const id = el.getAttribute && el.getAttribute('id')
-    if (id) {
+    if (isPartElement(el, containerRect)) {
+      const id = el.getAttribute('id')
       selectedPartId.value = id
-      highlightSvgPart(id)
-      scrollPartRowIntoView(id)  // v2.5.11: 滚动部件行到中间
+      selectedPartIds.value = [id]
+      highlightSelectedParts()
+      scrollPartRowIntoView(id)
+      expandPartsDetails()
       return
     }
     el = el.parentElement
   }
   // 点击空白处清除高亮
   selectedPartId.value = ''
+  selectedPartIds.value = []
   highlightSvgPart('')
 }
 
-// 部件列表行点击 → 同步 selectedPartId + 高亮 SVG 元素
-function selectPartFromList(partId) {
+// 部件列表行点击 → 同步选中 + 高亮 SVG 元素 + 滚动到可见
+function selectPartFromList(partId, event) {
+  const isMulti = event && (event.ctrlKey || event.metaKey)
+  if (isMulti) {
+    // Ctrl+click：添加/移除
+    const idx = selectedPartIds.value.indexOf(partId)
+    if (idx >= 0) {
+      selectedPartIds.value = selectedPartIds.value.filter(id => id !== partId)
+    } else {
+      selectedPartIds.value = [...selectedPartIds.value, partId]
+    }
+  } else {
+    selectedPartIds.value = [partId]
+  }
   selectedPartId.value = partId
-  highlightSvgPart(partId)
+  highlightSelectedParts()
+  scrollSelectedPartsIntoView()
+  expandPartsDetails()
 }
 
-// v2.5.11: 滚动部件列表对应行到容器中间（smooth）
+// 滚动部件列表对应行到容器中间（smooth）
 function scrollPartRowIntoView(partId) {
   if (!partId) return
-  // 等待 DOM 更新（部件行 :class 重新计算后）
   nextTick(() => {
-    const container = document.querySelector('.target-table')
+    // 新模板用 .parts-mini-list，旧模板用 .target-table
+    const container = document.querySelector('.parts-mini-list') || document.querySelector('.target-table')
     if (!container) return
-    // 转义 partId 中的特殊字符（属性选择器）
     const escId = partId.replace(/["\\]/g, '\\$&')
     const row = container.querySelector(`[data-part-id="${escId}"]`)
     if (row) {
@@ -1096,7 +1324,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- ==================== Tab 2: 动画配置（DB 驱动） ==================== -->
+      <!-- ==================== Tab 2: 动画配置（拖拽录制） ==================== -->
       <div v-show="activeTab === 'config'" class="config-panel">
         <!-- 顶部工具栏 -->
         <div class="config-toolbar">
@@ -1114,405 +1342,238 @@ onMounted(async () => {
           </div>
           <div class="config-actions">
             <button
-              class="btn-import"
-              :disabled="!selectedModel"
-              @click="triggerImportJson"
-              title="导入通用 Motion JSON 格式文件"
+              class="btn-record"
+              :class="{ 'recording': recordMode }"
+              :disabled="!selectedModel || !svgPreviewUrl"
+              @click="toggleRecordMode"
+              :title="recordMode ? '点击关闭录制' : '开启后可在SVG上拖拽部件录制动作'"
             >
-              📥 导入Motion JSON
+              {{ recordMode ? '⏹ 停止录制' : '● 开始录制' }}
             </button>
-            <input
-              ref="importInput"
-              type="file"
-              accept=".json"
-              style="display: none;"
-              @change="onImportJson"
-            />
-            <button
-              class="btn-save"
-              :disabled="!editDirty || !selectedModel"
-              @click="saveAnimConfig"
-            >
-              💾 保存到DB
+            <button class="btn-import" :disabled="!selectedModel" @click="triggerImportJson" title="导入Motion JSON">
+              导入JSON
             </button>
-            <button
-              class="btn-export"
-              :disabled="!editingConfig"
-              @click="exportConfig"
-            >
-              📤 导出JSON
-            </button>
-            <span v-if="editDirty" class="dirty-flag">● 有未保存变更</span>
+            <input ref="importInput" type="file" accept=".json" style="display:none;" @change="onImportJson" />
+            <button class="btn-save" :disabled="!editDirty || !selectedModel" @click="saveAnimConfig">保存</button>
+            <button class="btn-export" :disabled="!editingConfig" @click="exportConfig">导出</button>
+            <span v-if="editDirty" class="dirty-flag">● 未保存</span>
           </div>
         </div>
 
-        <div v-if="!selectedModel" class="empty-hint">请先在“模型管理”中选择机型，或在此下拉选择</div>
+        <div v-if="!selectedModel" class="empty-hint">请先选择机型</div>
+        <div v-else-if="!svgPreviewUrl" class="empty-hint">该机型未配置SVG文件，请先在"模型管理"上传SVG</div>
         <div v-else-if="!editingConfig" class="empty-hint">加载中...</div>
         <div v-else class="config-editor">
-          <!-- ===== 第一段：SVG 预览 + 部件绑定 并排（主工作区） ===== -->
-          <div v-if="svgPreviewUrl" class="config-main-row">
-            <!-- 左：SVG 预览（flex: 3） -->
-            <div class="config-svg-section">
+          <!-- 主工作区：SVG + 右侧面板 -->
+          <div class="record-main-row">
+            <!-- 左：SVG 交互预览 -->
+            <div class="record-svg-section">
               <div class="section-header">
-                <h4>🖼️ SVG 部件预览（点击图形 ↔ 右侧部件行 高亮联动）</h4>
-                <span v-if="selectedPartId" class="selected-part-tag">
-                  当前选中：<code>{{ selectedPartId }}</code>
-                </span>
+                <h4>SVG 预览{{ recordMode ? '（录制中：拖拽部件录制动作）' : '（Ctrl+点击多选，空白处拖拽框选）' }}</h4>
+                <div class="record-toolbar-right">
+                  <span v-if="selectedPartIds.length > 0" class="selected-count">
+                    已选 {{ selectedPartIds.length }} 个
+                    <button v-if="selectedPartIds.length >= 2" class="btn-small btn-combine" @click="startGroupInput">组合</button>
+                    <button class="btn-small" @click="clearSelection">清除</button>
+                  </span>
+                  <span v-if="recordMode" class="record-action-selector">
+                    动作类型：
+                    <select v-model="recordActionType" class="action-type-select">
+                      <option v-for="a in ACTION_TYPE_OPTIONS" :key="a.value" :value="a.value">
+                        {{ a.icon }} {{ a.label }}
+                      </option>
+                    </select>
+                  </span>
+                </div>
               </div>
-              <div class="svg-preview-wrapper svg-interactive">
-                <div v-if="svgPreviewLoading" class="svg-loading">⏳ 加载中...</div>
+              <!-- 组合名称输入框 -->
+              <div v-if="showGroupInput" class="group-input-bar">
+                <input
+                  ref="groupInputRef"
+                  v-model="groupNameInput"
+                  placeholder="组合名称（如 GROUP_1）"
+                  class="group-name-input"
+                  @keyup.enter="confirmGroupCombine"
+                  @keyup.esc="cancelGroupCombine"
+                  @blur="confirmGroupCombine"
+                />
+                <button class="btn-small btn-combine" @click="confirmGroupCombine">确认</button>
+                <button class="btn-small" @click="cancelGroupCombine">取消</button>
+              </div>
+              <div class="svg-preview-wrapper svg-interactive" :class="{ 'recording-mode': recordMode }">
+                <div v-if="svgPreviewLoading" class="svg-loading">加载中...</div>
                 <div
                   v-else
                   ref="svgInlineRef"
                   class="svg-inline"
                   v-html="svgInlineHtml"
                   @click="onSvgClick"
+                  @mousedown="onSvgMouseDown"
+                  @mousemove="onSvgMouseMove"
+                  @mouseup="onSvgMouseUp"
+                  @mouseleave="onSvgMouseUp"
                 ></div>
+                <!-- 框选矩形（lasso） -->
+                <div v-if="lassoState.active" class="lasso-rect" :style="lassoRectStyle"></div>
               </div>
-              <div class="svg-preview-url">🔗 {{ svgPreviewUrl }}</div>
+              <div class="svg-preview-url">{{ svgPreviewUrl }}</div>
             </div>
-            <!-- 右：部件绑定（flex: 2，内部滚动） -->
-            <div class="config-parts-section">
-              <div class="left-section">
-                <div class="section-header">
-                  <h4>🎯 部件绑定（{{ targetKeys.length }}/{{ totalPartsCount }} 个）{{ isMotionJson ? ' [Motion JSON]' : '' }}</h4>
-                  <div class="section-actions">
-                    <button class="btn-small" @click="extractSvgPartsToTargets">🔍 从SVG提取</button>
-                    <button class="btn-small" @click="addTarget">+ 添加部件</button>
-                  </div>
-                </div>
-                <!-- 部件搜索框 -->
-                <div class="part-search-bar">
-                  <input
-                    v-model="partSearch"
-                    placeholder="🔍 按 part_id / part_name / part_type 搜索..."
-                    class="part-search-input"
-                  />
-                  <button v-if="partSearch" class="btn-clear" @click="partSearch = ''" title="清除">×</button>
-                </div>
-                <div class="data-table target-table">
-                  <!-- Motion JSON: parts 数组表头 -->
-                  <div v-if="isMotionJson" class="table-row table-header">
-                    <div class="col-key">part_id</div>
-                    <div class="col-2d">part_name</div>
-                    <div class="col-3d">part_type</div>
-                    <div class="col-desc">desc</div>
-                    <div class="col-op">操作</div>
-                  </div>
-                  <!-- 旧格式: targets 对象表头 -->
-                  <div v-else class="table-row table-header">
-                    <div class="col-key">key</div>
-                    <div class="col-2d">view_2d (SVG id)</div>
-                    <div class="col-3d">view_3d (Group)</div>
-                    <div class="col-desc">desc</div>
-                    <div class="col-op">操作</div>
-                  </div>
-                  <!-- Motion JSON: parts 数组行 -->
-                  <template v-if="isMotionJson">
-                    <div
-                      v-for="(key, idx) in targetKeys"
-                      :key="'p'+idx"
-                      class="table-row"
-                      :class="{ 'row-selected': selectedPartId === editingConfig.parts[idx].part_id }"
-                      :data-part-id="editingConfig.parts[idx].part_id"
-                      @click="selectPartFromList(editingConfig.parts[idx].part_id)"
-                    >
-                      <div class="col-key">
-                        <input :value="editingConfig.parts[idx].part_id" @change="renameTarget(String(idx), $event.target.value)" @click.stop />
-                      </div>
-                      <div class="col-2d">
-                        <input v-model="editingConfig.parts[idx].part_name" @input="markDirty" @click.stop />
-                      </div>
-                      <div class="col-3d">
-                        <input v-model="editingConfig.parts[idx].part_type" @input="markDirty" @click.stop />
-                      </div>
-                      <div class="col-desc">
-                        <input v-model="editingConfig.parts[idx].desc" @input="markDirty" @click.stop />
-                      </div>
-                      <div class="col-op">
-                        <button class="btn-delete" @click="deleteTarget(String(idx))" title="删除" @click.stop>×</button>
-                      </div>
-                    </div>
-                  </template>
-                  <!-- 旧格式: targets 对象行 -->
-                  <template v-else>
-                    <div
-                      v-for="key in targetKeys"
-                      :key="key"
-                      class="table-row"
-                      :class="{ 'row-selected': selectedPartId === editingConfig.targets[key].view_2d || selectedPartId === key }"
-                      :data-part-id="editingConfig.targets[key].view_2d || key"
-                      @click="selectPartFromList(editingConfig.targets[key].view_2d || key)"
-                    >
-                      <div class="col-key">
-                        <input :value="key" @change="renameTarget(key, $event.target.value)" @click.stop />
-                      </div>
-                      <div class="col-2d">
-                        <input v-model="editingConfig.targets[key].view_2d" @input="markDirty" @click.stop />
-                      </div>
-                      <div class="col-3d">
-                        <input v-model="editingConfig.targets[key].view_3d" @input="markDirty" @click.stop />
-                      </div>
-                      <div class="col-desc">
-                        <input v-model="editingConfig.targets[key].desc" @input="markDirty" @click.stop />
-                      </div>
-                      <div class="col-op">
-                        <button class="btn-delete" @click="deleteTarget(key)" title="删除" @click.stop>×</button>
-                      </div>
-                    </div>
-                  </template>
-                  <div v-if="targetKeys.length === 0" class="empty-row">
-                    暂无部件，点击 "+ 添加部件" 或 "从SVG提取"
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- config-parts-section 闭合 -->
-          </div>
-          <!-- config-main-row 闭合 -->
 
-          <!-- ===== 第二段：动画原语（全宽，可折叠） ===== -->
-          <div class="config-section-anim">
-            <div class="left-section" :class="{ 'section-collapsed': collapsedSections.animations }">
-                <div class="section-header section-header-clickable" @click="collapsedSections.animations = !collapsedSections.animations">
-                  <h4>
-                    <span class="collapse-icon">{{ collapsedSections.animations ? '▶' : '▼' }}</span>
-                    🎬 动画原语（{{ animationKeys.length }} 个）
-                  </h4>
-                  <div class="section-actions">
-                    <button class="btn-small" @click.stop="addAnimation">+ 添加动画</button>
-                    <input
-                      v-if="showNewAnimInput"
-                      ref="newAnimInputRef"
-                      v-model="newAnimName"
-                      class="inline-name-input"
-                      placeholder="动画名（如 ARM_EXTEND）"
-                      @keyup.enter="confirmAddAnimation"
-                      @keyup.esc="cancelAddAnimation"
-                      @blur="confirmAddAnimation"
-                      @click.stop
-                    />
-                  </div>
-                </div>
-                <div v-show="!collapsedSections.animations" class="anim-grid">
-                  <div v-for="aKey in animationKeys" :key="aKey" class="anim-card">
-                    <div class="anim-card-header">
-                      <input
-                        class="anim-key-input"
-                        :value="aKey"
-                        @change="renameAnimation(aKey, $event.target.value)"
-                      />
-                      <select
-                        v-model="editingConfig.animations[aKey].action"
-                        class="anim-action-select"
-                        @change="markDirty"
-                      >
-                        <option v-for="a in ACTION_TYPES" :key="a" :value="a">{{ a }}</option>
-                      </select>
-                      <button class="btn-delete" @click="deleteAnimation(aKey)" title="删除">×</button>
-                    </div>
-                    <div class="anim-fields">
-                      <div class="anim-field">
-                        <label>target</label>
-                        <select v-model="editingConfig.animations[aKey].target" @change="markDirty">
-                          <option value="">(无)</option>
-                          <option v-for="t in targetKeys" :key="t" :value="t">{{ t }}</option>
-                        </select>
-                      </div>
-                      <template v-if="actionFields(editingConfig.animations[aKey].action).includes('axis')">
-                        <div class="anim-field">
-                          <label>axis</label>
-                          <select v-model="editingConfig.animations[aKey].axis" @change="markDirty">
-                            <option v-for="ax in AXIS_OPTIONS" :key="ax" :value="ax">{{ ax }}</option>
-                          </select>
-                        </div>
-                      </template>
-                      <template v-if="actionFields(editingConfig.animations[aKey].action).includes('from')">
-                        <div class="anim-field">
-                          <label>from</label>
-                          <input
-                            type="number"
-                            v-model.number="editingConfig.animations[aKey].from"
-                            @input="markDirty"
-                          />
-                        </div>
-                      </template>
-                      <template v-if="actionFields(editingConfig.animations[aKey].action).includes('to')">
-                        <div class="anim-field">
-                          <label>to</label>
-                          <input
-                            type="number"
-                            v-model.number="editingConfig.animations[aKey].to"
-                            @input="markDirty"
-                          />
-                        </div>
-                      </template>
-                      <template v-if="actionFields(editingConfig.animations[aKey].action).includes('color')">
-                        <div class="anim-field">
-                          <label>color</label>
-                          <input
-                            type="color"
-                            v-model="editingConfig.animations[aKey].color"
-                            @input="markDirty"
-                          />
-                        </div>
-                      </template>
-                      <template v-if="actionFields(editingConfig.animations[aKey].action).includes('duration_ms')">
-                        <div class="anim-field">
-                          <label>duration_ms</label>
-                          <input
-                            type="number"
-                            v-model.number="editingConfig.animations[aKey].duration_ms"
-                            @input="markDirty"
-                          />
-                        </div>
-                      </template>
-                      <template v-if="actionFields(editingConfig.animations[aKey].action).includes('easing')">
-                        <div class="anim-field">
-                          <label>easing</label>
-                          <select v-model="editingConfig.animations[aKey].easing" @change="markDirty">
-                            <option v-for="e in EASING_OPTIONS" :key="e" :value="e">{{ e }}</option>
-                          </select>
-                        </div>
-                      </template>
-                    </div>
-                  </div>
-                  <div v-if="animationKeys.length === 0" class="empty-row">
-                    暂无动画，点击 "+ 添加动画"
-                  </div>
-                </div>
-              </div>
-            </div>
-          <!-- config-section-anim 闭合 -->
-
-          <!-- ===== 第三段：流程配置（全宽，可折叠） ===== -->
-          <div class="config-section-flow">
-              <div class="section-header section-header-clickable" @click="collapsedSections.flows = !collapsedSections.flows">
-                <h4>
-                  <span class="collapse-icon">{{ collapsedSections.flows ? '▶' : '▼' }}</span>
-                  📋 流程配置（{{ flowKeys.length }} 个）
-                </h4>
+            <!-- 右：已录制动作列表 -->
+            <div class="record-motions-section">
+              <div class="section-header">
+                <h4>已录制动作（{{ motionList.length }}）</h4>
                 <div class="section-actions">
-                  <button class="btn-small" @click.stop="insertPodopenerTemplate" title="一键插入 PACKING/ALIGNING/UNPACKING 标准流程骨架">⚡ PODOPENER 模板</button>
-                  <button class="btn-small" @click.stop="exportAnimConfigJson" title="导出当前 animation_config 为 JSON 文件">💾 导出 JSON</button>
-                  <button class="btn-small" @click.stop="addFlow">+ 添加流程</button>
-                  <input
-                    v-if="showNewFlowInput"
-                    ref="newFlowInputRef"
-                    v-model="newFlowName"
-                    class="inline-name-input"
-                    placeholder="流程名（如 PACKING）"
-                    @keyup.enter="confirmAddFlow"
-                    @keyup.esc="cancelAddFlow"
-                    @blur="confirmAddFlow"
-                    @click.stop
-                  />
+                  <button class="btn-small" @click="extractSvgPartsToTargets" title="从SVG提取部件列表">提取部件</button>
                 </div>
               </div>
-
-              <div v-show="!collapsedSections.flows">
-              <div v-for="flowKey in flowKeys" :key="flowKey" class="flow-section">
-                <div class="flow-section-header">
-                  <h4>🔄 {{ flowKey }}</h4>
-                  <button class="btn-delete" @click="deleteFlow(flowKey)" title="删除流程">×</button>
-                </div>
-
-                <!-- 阶段序列 -->
-                <div class="flow-sub-section">
-                  <div class="flow-header">
-                    <span>阶段序列（{{ editingConfig.flows[flowKey].phases.length }}）</span>
-                    <button class="btn-small" @click="addPhase(flowKey)">+ 添加阶段</button>
-                  </div>
-                  <div class="data-table phase-table">
-                    <div class="table-row table-header">
-                      <div class="p-key">key</div>
-                      <div class="p-label">label</div>
-                      <div class="p-dur">duration_ms</div>
-                      <div class="p-easing">easing</div>
-                      <div class="p-op">操作</div>
-                    </div>
-                    <div
-                      v-for="(p, idx) in editingConfig.flows[flowKey].phases"
-                      :key="idx"
-                      class="table-row"
-                    >
-                      <div class="p-key"><input v-model="p.key" @input="markDirty" /></div>
-                      <div class="p-label"><input v-model="p.label" @input="markDirty" /></div>
-                      <div class="p-dur">
-                        <input type="number" v-model.number="p.duration_ms" @input="markDirty" />
-                      </div>
-                      <div class="p-easing">
-                        <select v-model="p.easing" @change="markDirty">
-                          <option v-for="e in EASING_OPTIONS" :key="e" :value="e">{{ e }}</option>
-                        </select>
-                      </div>
-                      <div class="p-op">
-                        <button class="btn-small" @click="duplicatePhase(flowKey, idx)" title="复制阶段">⧉</button>
-                        <button class="btn-delete" @click="deletePhase(flowKey, idx)" title="删除">×</button>
-                      </div>
-                    </div>
-                    <div v-if="editingConfig.flows[flowKey].phases.length === 0" class="empty-row">
-                      暂无阶段
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 事件映射 -->
-                <div class="flow-sub-section">
-                  <div class="flow-header">
-                    <span>事件映射（{{ Object.keys(editingConfig.flows[flowKey].event_to_phase).length }}）</span>
-                    <button class="btn-small" @click="addEventMapping(flowKey)">+ 添加事件</button>
-                  </div>
-                  <div class="data-table event-table">
-                    <div class="table-row table-header">
-                      <div class="e-name">event_name</div>
-                      <div class="e-phase">phase</div>
-                      <div class="e-anim">anim</div>
-                      <div class="e-note">note</div>
-                      <div class="e-op">操作</div>
-                    </div>
-                    <div
-                      v-for="(def, evt) in editingConfig.flows[flowKey].event_to_phase"
-                      :key="evt"
-                      class="table-row"
-                    >
-                      <div class="e-name"><span class="event-tag">{{ evt }}</span></div>
-                      <div class="e-phase">
-                        <select v-model="def.phase" @change="markDirty">
-                          <option
-                            v-for="p in editingConfig.flows[flowKey].phases"
-                            :key="p.key"
-                            :value="p.key"
-                          >
-                            {{ p.key }}
-                          </option>
-                        </select>
-                      </div>
-                      <div class="e-anim">
-                        <select v-model="def.anim" @change="markDirty">
-                          <option value="">(无)</option>
-                          <option v-for="a in animationKeys" :key="a" :value="a">{{ a }}</option>
-                        </select>
-                      </div>
-                      <div class="e-note"><input v-model="def.note" @input="markDirty" /></div>
-                      <div class="e-op">
-                        <button class="btn-delete" @click="deleteEventMapping(flowKey, evt)">×</button>
-                      </div>
-                    </div>
-                    <div
-                      v-if="Object.keys(editingConfig.flows[flowKey].event_to_phase).length === 0"
-                      class="empty-row"
-                    >
-                      暂无事件
-                    </div>
-                  </div>
+              <!-- 选中部件显示区 -->
+              <div v-if="selectedPartIds.length > 0" class="selected-parts-box">
+                <div class="selected-parts-title">已选部件（{{ selectedPartIds.length }}）</div>
+                <div class="selected-parts-chips">
+                  <span v-for="pid in selectedPartIds" :key="pid" class="selected-part-chip">{{ pid }}</span>
                 </div>
               </div>
-              <div v-if="flowKeys.length === 0" class="empty-row">暂无流程，点击 "+ 添加流程"</div>
+              <!-- 部件搜索 -->
+              <div class="part-search-bar">
+                <input v-model="partSearch" placeholder="搜索部件..." class="part-search-input" />
+                <button v-if="partSearch" class="btn-clear" @click="partSearch = ''">×</button>
+              </div>
+              <!-- 动作列表 -->
+              <div class="motion-list">
+                <div v-for="(m, idx) in motionList" :key="idx" class="motion-item" :data-idx="idx">
+                  <div class="motion-item-header">
+                    <span class="motion-step">{{ m.step }}</span>
+                    <button class="btn-delete" @click="deleteMotion(idx)" title="删除">×</button>
+                  </div>
+                  <div class="motion-summary">{{ getMotionSummary(m) }}</div>
+                  <div v-if="m.rules?.[0]?.when && m.rules[0].when !== 'true'" class="motion-when">
+                    when: {{ m.rules[0].when }}
+                  </div>
+                </div>
+                <div v-if="motionList.length === 0" class="empty-row">
+                  暂无动作{{ recordMode ? '，拖拽SVG部件开始录制' : '' }}
+                </div>
+              </div>
+              <!-- 部件列表（默认展开，可手动折叠；Ctrl+点击列表行多选） -->
+              <details class="parts-details" open>
+                <summary>部件列表（{{ totalPartsCount }}）{{ selectedPartIds.length > 0 ? ` · 已选 ${selectedPartIds.length}` : '' }}</summary>
+                <div class="parts-mini-list">
+                  <div
+                    v-for="(key, idx) in targetKeys"
+                    :key="'p'+idx"
+                    class="part-mini-item"
+                    :data-part-id="isMotionJson ? editingConfig.parts[idx]?.part_id : key"
+                    :class="{ 'row-selected': selectedPartId === (isMotionJson ? editingConfig.parts[idx]?.part_id : key) || selectedPartIds.includes(isMotionJson ? editingConfig.parts[idx]?.part_id : key) }"
+                    @click="selectPartFromList(isMotionJson ? editingConfig.parts[idx]?.part_id : key, $event)"
+                  >
+                    {{ isMotionJson ? editingConfig.parts[idx]?.part_id : key }}
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <!-- 录制面板（浮动） -->
+          <div v-if="showRecordPanel" class="record-panel">
+            <div class="record-panel-header">
+              <h4>录制动作</h4>
+              <button class="btn-delete" @click="cancelRecord" title="取消">×</button>
+            </div>
+            <div class="record-panel-body">
+              <div class="record-field">
+                <label>目标部件</label>
+                <input :value="recordForm.partId" disabled class="record-readonly" />
+              </div>
+              <div class="record-field">
+                <label>动作类型</label>
+                <input :value="ACTION_TYPE_OPTIONS.find(a => a.value === recordForm.actionType)?.label" disabled class="record-readonly" />
+              </div>
+              <!-- offset 参数 -->
+              <template v-if="recordForm.actionType === 'offset'">
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>offset_x</label>
+                    <input type="number" v-model.number="recordForm.offsetX" />
+                  </div>
+                  <div class="record-field">
+                    <label>offset_y</label>
+                    <input type="number" v-model.number="recordForm.offsetY" />
+                  </div>
+                </div>
+              </template>
+              <!-- rotate 参数 -->
+              <template v-if="recordForm.actionType === 'rotate'">
+                <div class="record-field">
+                  <label>angle (°)</label>
+                  <input type="number" v-model.number="recordForm.angle" />
+                </div>
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>pivot_x</label>
+                    <input type="number" v-model.number="recordForm.pivotX" />
+                  </div>
+                  <div class="record-field">
+                    <label>pivot_y</label>
+                    <input type="number" v-model.number="recordForm.pivotY" />
+                  </div>
+                </div>
+              </template>
+              <!-- scale 参数 -->
+              <template v-if="recordForm.actionType === 'scale'">
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>scale_x</label>
+                    <input type="number" step="0.1" v-model.number="recordForm.scaleX" />
+                  </div>
+                  <div class="record-field">
+                    <label>scale_y</label>
+                    <input type="number" step="0.1" v-model.number="recordForm.scaleY" />
+                  </div>
+                </div>
+              </template>
+              <!-- opacity 参数 -->
+              <template v-if="recordForm.actionType === 'opacity'">
+                <div class="record-field">
+                  <label>opacity (0-1)</label>
+                  <input type="number" step="0.1" min="0" max="1" v-model.number="recordForm.opacity" />
+                </div>
+              </template>
+              <!-- 通用参数 -->
+              <div class="record-field-row">
+                <div class="record-field">
+                  <label>duration (ms)</label>
+                  <input type="number" v-model.number="recordForm.duration" />
+                </div>
+                <div class="record-field">
+                  <label>easing</label>
+                  <select v-model="recordForm.easing">
+                    <option v-for="e in EASING_OPTIONS" :key="e" :value="e">{{ e }}</option>
+                  </select>
+                </div>
+              </div>
+              <hr class="record-divider" />
+              <div class="record-field">
+                <label>Step 名称（触发事件）</label>
+                <input ref="recordStepInputRef" v-model="recordForm.step" placeholder="如 POD_PLACED" @keyup.enter="saveRecord" />
+              </div>
+              <div class="record-field">
+                <label>When 条件</label>
+                <input v-model="recordForm.when" placeholder="如 params.port == '1'" />
+                <div class="event-templates">
+                  <button v-for="t in EVENT_TEMPLATES" :key="t.when" class="event-template-btn" @click="recordForm.when = t.when">
+                    {{ t.label }}
+                  </button>
+                </div>
+              </div>
+              <div class="record-panel-actions">
+                <button class="btn-save" @click="saveRecord">保存录制</button>
+                <button class="btn-cancel-record" @click="cancelRecord">取消</button>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
       <!-- ==================== Tab 3: 动画调试（MotionPreview） ==================== -->
       <div v-show="activeTab === 'debug'" class="debug-panel">
@@ -1836,6 +1897,7 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
 }
 /* v2.5.4: 内联 SVG 渲染容器 */
 .svg-inline {
@@ -1854,24 +1916,6 @@ onMounted(async () => {
 
 /* === v2.5.9: SVG 部件交互样式 === */
 /* 动画配置 Tab 顶部的交互式 SVG 预览栏 */
-.config-svg-section {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  margin: 12px 16px 0;
-}
-.config-svg-section .section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.config-svg-section h4 {
-  font-size: 14px;
-  color: var(--accent);
-  margin: 0;
-}
 .selected-part-tag {
   font-size: 12px;
   color: var(--text-dim);
@@ -1889,7 +1933,11 @@ onMounted(async () => {
   min-height: 400px;
   cursor: crosshair;
 }
-/* SVG 内带 id 的元素：可点击 + 高亮态 */
+/* SVG 内所有元素强制接收鼠标事件（覆盖 SVG 文件中的 pointer-events 属性） */
+.svg-interactive svg,
+.svg-interactive svg * {
+  pointer-events: all !important;
+}
 .svg-interactive svg [id] {
   cursor: pointer;
   transition: filter 0.15s ease, outline 0.15s ease;
@@ -1962,40 +2010,6 @@ onMounted(async () => {
   background: var(--panel-2);
 }
 
-/* === v2.5.10: 区块折叠样式 === */
-.section-header-clickable {
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s ease;
-}
-.section-header-clickable:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
-}
-.collapse-icon {
-  display: inline-block;
-  width: 14px;
-  color: var(--text-dim);
-  font-size: 11px;
-  transition: transform 0.15s ease;
-}
-.section-collapsed {
-  padding-bottom: 8px;
-}
-/* v2.5.11: 内联输入框（替代 prompt） */
-.inline-name-input {
-  padding: 4px 8px;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 12px;
-  width: 160px;
-}
-.inline-name-input:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 87, 34, 0.2);
-}
 .svg-loading {
   color: var(--text-dim);
   font-size: 14px;
@@ -2107,52 +2121,272 @@ onMounted(async () => {
 
 .config-editor { padding: 0; }
 
-/* === v2.5.11: 三段式布局 === */
-/* 第一段：SVG 预览 + 部件绑定 并排 */
-.config-main-row {
+/* === 录制模式布局 === */
+.record-main-row {
   display: flex;
   gap: 12px;
-  padding: 12px 16px 0;
+  padding: 12px 16px;
   align-items: stretch;
 }
-.config-main-row .config-svg-section {
-  flex: 3;
-  min-width: 0;
-  margin: 0;
-}
-.config-main-row .config-parts-section {
+.record-svg-section { flex: 3; min-width: 0; }
+.record-motions-section {
   flex: 2;
-  min-width: 0;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 70vh;
 }
-/* 第二段：动画原语 全宽 */
-.config-section-anim {
-  padding: 12px 16px 0;
+.record-svg-section .svg-interactive {
+  height: 70vh;
+  min-height: 400px;
 }
-/* 第三段：流程配置 全宽 */
-.config-section-flow {
-  padding: 12px 16px 16px;
+.recording-mode {
+  border: 2px dashed var(--yellow) !important;
+  cursor: crosshair;
 }
-@media (max-width: 1100px) {
-  .config-main-row { flex-direction: column; }
+.recording-mode .svg-inline { cursor: grab; }
+.recording-mode .svg-inline:active { cursor: grabbing; }
+.record-action-selector { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+/* 框选矩形 */
+.lasso-rect {
+  position: absolute;
+  border: 2px dashed #06b6d4;
+  background: rgba(6, 182, 212, 0.1);
+  pointer-events: none;
+  z-index: 50;
+  border-radius: 2px;
 }
-/* 部件绑定区内部滚动 */
-.config-parts-section .left-section {
-  min-height: 0;
+/* 选中部件显示区 */
+.selected-parts-box {
+  background: rgba(6, 182, 212, 0.06);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+.selected-parts-title {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.selected-parts-chips {
   display: flex;
-  flex-direction: column;
-  max-height: 60vh;
-}
-.config-parts-section .target-table {
-  flex: 1;
-  max-height: none;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-height: 60px;
   overflow-y: auto;
 }
-/* SVG 预览区高度自适应（保持 60vh） */
-.config-main-row .config-svg-section .svg-interactive {
-  height: 60vh;
-  min-height: 400px;
+.selected-part-chip {
+  font-size: 10px;
+  font-family: monospace;
+  background: var(--panel-2);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  word-break: break-all;
+}
+.record-toolbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.selected-count {
+  font-size: 12px;
+  color: var(--yellow);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-combine {
+  background: var(--accent) !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+.group-input-bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 0;
+  align-items: center;
+}
+.group-name-input {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+}
+.group-name-input:focus { border-color: var(--accent); }
+.action-type-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.btn-record {
+  background: #e8463a;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  animation: pulse-rec 1.5s infinite;
+}
+.btn-record.recording { background: #1dc981; animation: none; }
+.btn-record:disabled { opacity: 0.5; cursor: not-allowed; animation: none; }
+@keyframes pulse-rec {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+/* 已录制动作列表 */
+.motion-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.motion-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.motion-item:hover { border-color: var(--accent); }
+.motion-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.motion-step {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--yellow);
+  font-weight: 600;
+}
+.motion-summary {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.motion-when {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+.parts-details { margin-top: 8px; font-size: 12px; }
+.parts-details summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; }
+.parts-mini-list {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.part-mini-item {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: monospace;
+  word-break: break-all;
+}
+.part-mini-item:hover { background: var(--panel-2); }
+.part-mini-item.row-selected { background: rgba(6, 182, 212, 0.15); color: var(--accent); }
+
+/* 录制面板 */
+.record-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  z-index: 100;
+}
+.record-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 12px 12px 0 0;
+}
+.record-panel-header h4 { margin: 0; font-size: 14px; color: var(--accent); }
+.record-panel-body { padding: 12px 16px; }
+.record-field { margin-bottom: 8px; }
+.record-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.record-field input, .record-field select {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+}
+.record-field input:focus, .record-field select:focus { border-color: var(--accent); }
+.record-readonly {
+  background: var(--panel-2) !important;
+  color: var(--text-dim) !important;
+}
+.record-field-row { display: flex; gap: 8px; }
+.record-field-row .record-field { flex: 1; }
+.record-divider { margin: 10px 0; border: none; border-top: 1px solid var(--border); }
+.event-templates { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.event-template-btn {
+  background: var(--panel-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.event-template-btn:hover { border-color: var(--accent); color: var(--accent); }
+.record-panel-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.record-panel-actions .btn-save { flex: 1; }
+.btn-cancel-record {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-cancel-record:hover { background: var(--bg); }
+@media (max-width: 1100px) {
+  .record-main-row { flex-direction: column; }
+  .record-motions-section { max-height: 300px; }
 }
 
 /* 区块标题 */
@@ -2224,120 +2458,6 @@ onMounted(async () => {
 .target-table .col-3d { flex: 1.5; min-width: 120px; }
 .target-table .col-desc { flex: 1.5; min-width: 120px; }
 .target-table .col-op { width: 36px; flex-shrink: 0; text-align: center; }
-
-/* phase 表格列宽 */
-.phase-table .p-key { flex: 1.2; min-width: 100px; }
-.phase-table .p-label { flex: 1.5; min-width: 120px; }
-.phase-table .p-dur { flex: 1; min-width: 90px; }
-.phase-table .p-easing { flex: 1; min-width: 100px; }
-.phase-table .p-op { width: 36px; flex-shrink: 0; text-align: center; }
-
-/* event 表格列宽 */
-.event-table .e-name { flex: 1.5; min-width: 140px; }
-.event-table .e-phase { flex: 1.3; min-width: 110px; }
-.event-table .e-anim { flex: 1.3; min-width: 110px; }
-.event-table .e-note { flex: 1.5; min-width: 120px; }
-.event-table .e-op { width: 36px; flex-shrink: 0; text-align: center; }
-.event-tag {
-  font-family: monospace;
-  font-size: 11px;
-  color: var(--yellow);
-  font-weight: 600;
-  word-break: break-all;
-}
-
-/* 动画原语卡片网格 */
-.anim-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
-}
-.anim-card {
-  background: var(--bg);
-  border-radius: 6px;
-  padding: 10px;
-  border: 1px solid var(--border);
-}
-.anim-card-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
-.anim-key-input {
-  flex: 1;
-  background: var(--panel);
-  color: var(--accent);
-  border: 1px solid var(--border);
-  padding: 3px 6px;
-  border-radius: 3px;
-  font-size: 12px;
-  font-family: monospace;
-  outline: none;
-  min-width: 0;
-}
-.anim-key-input:focus { border-color: var(--accent); }
-.anim-action-select {
-  background: rgba(6, 182, 212, 0.15);
-  color: #06b6d4;
-  border: 1px solid rgba(6, 182, 212, 0.3);
-  padding: 3px 6px;
-  border-radius: 10px;
-  font-size: 11px;
-  outline: none;
-  cursor: pointer;
-}
-.anim-fields { display: flex; flex-direction: column; gap: 4px; }
-.anim-field { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-.anim-field label {
-  color: var(--text-dim);
-  min-width: 80px;
-  flex-shrink: 0;
-}
-.anim-field input,
-.anim-field select {
-  flex: 1;
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  outline: none;
-  min-width: 0;
-}
-.anim-field input:focus,
-.anim-field select:focus { border-color: var(--accent); }
-.anim-field input[type="color"] {
-  height: 22px;
-  padding: 1px;
-  cursor: pointer;
-}
-
-/* 流程区块 */
-.flow-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.flow-section-header h4 {
-  color: var(--accent);
-  font-size: 14px;
-  margin: 0;
-}
-.flow-sub-section { margin-top: 12px; }
-.flow-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--text-dim);
-  font-weight: 600;
-}
 
 /* ============ 动画调试 Tab ============ */
 .debug-panel { background: var(--panel); border-radius: 8px; }
