@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import ModelUpload from '../components/ModelUpload.vue'
@@ -388,8 +388,32 @@ async function onModelFileUploaded() {
 // === 动画原语（animations） ===
 function addAnimation() {
   if (!editingConfig.value) return
-  const idx = Object.keys(editingConfig.value.animations).length + 1
-  const key = `anim_${idx}`
+  // v2.5.11: 弹出内联输入框，让用户输入动画名称
+  showNewAnimInput.value = true
+  newAnimName.value = ''
+  // 自动展开动画原语区
+  collapsedSections.value.animations = false
+  nextTick(() => {
+    if (newAnimInputRef.value) newAnimInputRef.value.focus()
+  })
+}
+
+// 确认添加动画（回车或失焦触发）
+function confirmAddAnimation() {
+  if (!editingConfig.value) {
+    showNewAnimInput.value = false
+    return
+  }
+  const name = newAnimName.value.trim()
+  if (!name) {
+    showNewAnimInput.value = false
+    return
+  }
+  const key = name.toUpperCase()
+  if (editingConfig.value.animations[key]) {
+    toast(`动画 "${key}" 已存在`, 'error')
+    return
+  }
   editingConfig.value.animations[key] = {
     target: '',
     action: 'translate',
@@ -400,6 +424,15 @@ function addAnimation() {
     easing: 'linear',
   }
   markDirty()
+  showNewAnimInput.value = false
+  newAnimName.value = ''
+  toast(`已添加动画 "${key}"`, 'success')
+}
+
+// 取消添加动画（Esc 触发）
+function cancelAddAnimation() {
+  showNewAnimInput.value = false
+  newAnimName.value = ''
 }
 
 function deleteAnimation(key) {
@@ -428,8 +461,27 @@ function renameAnimation(oldKey, newKey) {
 // === 流程配置（flows） ===
 function addFlow() {
   if (!editingConfig.value) return
-  const name = prompt('输入流程名称（如 PACKING）：')
-  if (!name) return
+  // v2.5.11: 弹出内联输入框，让用户输入流程名
+  showNewFlowInput.value = true
+  newFlowName.value = ''
+  // 自动展开流程配置区
+  collapsedSections.value.flows = false
+  nextTick(() => {
+    if (newFlowInputRef.value) newFlowInputRef.value.focus()
+  })
+}
+
+// 确认添加流程（回车或失焦触发）
+function confirmAddFlow() {
+  if (!editingConfig.value) {
+    showNewFlowInput.value = false
+    return
+  }
+  const name = newFlowName.value.trim()
+  if (!name) {
+    showNewFlowInput.value = false
+    return
+  }
   const key = name.toUpperCase()
   if (editingConfig.value.flows[key]) {
     toast(`流程 "${key}" 已存在`, 'error')
@@ -437,6 +489,15 @@ function addFlow() {
   }
   editingConfig.value.flows[key] = { phases: [], event_to_phase: {} }
   markDirty()
+  showNewFlowInput.value = false
+  newFlowName.value = ''
+  toast(`已添加流程 "${key}"`, 'success')
+}
+
+// 取消添加流程（Esc 触发）
+function cancelAddFlow() {
+  showNewFlowInput.value = false
+  newFlowName.value = ''
 }
 
 function deleteFlow(flowKey) {
@@ -776,6 +837,13 @@ const collapsedSections = ref({
   animations: true,
   flows: false,
 })
+// v2.5.11: 内联输入框（替代 prompt）
+const showNewFlowInput = ref(false)
+const newFlowName = ref('')
+const newFlowInputRef = ref(null)
+const showNewAnimInput = ref(false)
+const newAnimName = ref('')
+const newAnimInputRef = ref(null)
 
 // 高亮 SVG 内指定 id 的元素（清除上一个，加 .part-highlight 类）
 function highlightSvgPart(partId) {
@@ -804,6 +872,7 @@ function onSvgClick(e) {
     if (id) {
       selectedPartId.value = id
       highlightSvgPart(id)
+      scrollPartRowIntoView(id)  // v2.5.11: 滚动部件行到中间
       return
     }
     el = el.parentElement
@@ -817,6 +886,22 @@ function onSvgClick(e) {
 function selectPartFromList(partId) {
   selectedPartId.value = partId
   highlightSvgPart(partId)
+}
+
+// v2.5.11: 滚动部件列表对应行到容器中间（smooth）
+function scrollPartRowIntoView(partId) {
+  if (!partId) return
+  // 等待 DOM 更新（部件行 :class 重新计算后）
+  nextTick(() => {
+    const container = document.querySelector('.target-table')
+    if (!container) return
+    // 转义 partId 中的特殊字符（属性选择器）
+    const escId = partId.replace(/["\\]/g, '\\$&')
+    const row = container.querySelector(`[data-part-id="${escId}"]`)
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
 }
 
 // SVG 重新加载时清除残留高亮
@@ -1064,31 +1149,30 @@ onMounted(async () => {
         <div v-if="!selectedModel" class="empty-hint">请先在“模型管理”中选择机型，或在此下拉选择</div>
         <div v-else-if="!editingConfig" class="empty-hint">加载中...</div>
         <div v-else class="config-editor">
-          <!-- 交互式 SVG 预览栏：点击 SVG 元素 ↔ 部件列表行 双向高亮 -->
-          <div v-if="svgPreviewUrl" class="config-svg-section">
-            <div class="section-header">
-              <h4>🖼️ SVG 部件预览（点击图形 ↔ 下方部件行 高亮联动）</h4>
-              <span v-if="selectedPartId" class="selected-part-tag">
-                当前选中：<code>{{ selectedPartId }}</code>
-              </span>
+          <!-- ===== 第一段：SVG 预览 + 部件绑定 并排（主工作区） ===== -->
+          <div v-if="svgPreviewUrl" class="config-main-row">
+            <!-- 左：SVG 预览（flex: 3） -->
+            <div class="config-svg-section">
+              <div class="section-header">
+                <h4>🖼️ SVG 部件预览（点击图形 ↔ 右侧部件行 高亮联动）</h4>
+                <span v-if="selectedPartId" class="selected-part-tag">
+                  当前选中：<code>{{ selectedPartId }}</code>
+                </span>
+              </div>
+              <div class="svg-preview-wrapper svg-interactive">
+                <div v-if="svgPreviewLoading" class="svg-loading">⏳ 加载中...</div>
+                <div
+                  v-else
+                  ref="svgInlineRef"
+                  class="svg-inline"
+                  v-html="svgInlineHtml"
+                  @click="onSvgClick"
+                ></div>
+              </div>
+              <div class="svg-preview-url">🔗 {{ svgPreviewUrl }}</div>
             </div>
-            <div class="svg-preview-wrapper svg-interactive">
-              <div v-if="svgPreviewLoading" class="svg-loading">⏳ 加载中...</div>
-              <div
-                v-else
-                ref="svgInlineRef"
-                class="svg-inline"
-                v-html="svgInlineHtml"
-                @click="onSvgClick"
-              ></div>
-            </div>
-            <div class="svg-preview-url">🔗 {{ svgPreviewUrl }}</div>
-          </div>
-          <!-- 左右两栏布局 -->
-          <div class="config-split-view">
-            <!-- ============ 左栏 ============ -->
-            <div class="config-left-panel">
-              <!-- 左栏上：部件绑定（Motion JSON: parts 数组 / 旧格式: targets 对象） -->
+            <!-- 右：部件绑定（flex: 2，内部滚动） -->
+            <div class="config-parts-section">
               <div class="left-section">
                 <div class="section-header">
                   <h4>🎯 部件绑定（{{ targetKeys.length }}/{{ totalPartsCount }} 个）{{ isMotionJson ? ' [Motion JSON]' : '' }}</h4>
@@ -1130,6 +1214,7 @@ onMounted(async () => {
                       :key="'p'+idx"
                       class="table-row"
                       :class="{ 'row-selected': selectedPartId === editingConfig.parts[idx].part_id }"
+                      :data-part-id="editingConfig.parts[idx].part_id"
                       @click="selectPartFromList(editingConfig.parts[idx].part_id)"
                     >
                       <div class="col-key">
@@ -1156,6 +1241,7 @@ onMounted(async () => {
                       :key="key"
                       class="table-row"
                       :class="{ 'row-selected': selectedPartId === editingConfig.targets[key].view_2d || selectedPartId === key }"
+                      :data-part-id="editingConfig.targets[key].view_2d || key"
                       @click="selectPartFromList(editingConfig.targets[key].view_2d || key)"
                     >
                       <div class="col-key">
@@ -1180,9 +1266,14 @@ onMounted(async () => {
                   </div>
                 </div>
               </div>
+            </div>
+            <!-- config-parts-section 闭合 -->
+          </div>
+          <!-- config-main-row 闭合 -->
 
-              <!-- 左栏下：动画原语 animations（可折叠） -->
-              <div class="left-section" :class="{ 'section-collapsed': collapsedSections.animations }">
+          <!-- ===== 第二段：动画原语（全宽，可折叠） ===== -->
+          <div class="config-section-anim">
+            <div class="left-section" :class="{ 'section-collapsed': collapsedSections.animations }">
                 <div class="section-header section-header-clickable" @click="collapsedSections.animations = !collapsedSections.animations">
                   <h4>
                     <span class="collapse-icon">{{ collapsedSections.animations ? '▶' : '▼' }}</span>
@@ -1190,6 +1281,17 @@ onMounted(async () => {
                   </h4>
                   <div class="section-actions">
                     <button class="btn-small" @click.stop="addAnimation">+ 添加动画</button>
+                    <input
+                      v-if="showNewAnimInput"
+                      ref="newAnimInputRef"
+                      v-model="newAnimName"
+                      class="inline-name-input"
+                      placeholder="动画名（如 ARM_EXTEND）"
+                      @keyup.enter="confirmAddAnimation"
+                      @keyup.esc="cancelAddAnimation"
+                      @blur="confirmAddAnimation"
+                      @click.stop
+                    />
                   </div>
                 </div>
                 <div v-show="!collapsedSections.animations" class="anim-grid">
@@ -1281,9 +1383,10 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
+          <!-- config-section-anim 闭合 -->
 
-            <!-- ============ 右栏：流程配置 flows ============ -->
-            <div class="config-right-panel">
+          <!-- ===== 第三段：流程配置（全宽，可折叠） ===== -->
+          <div class="config-section-flow">
               <div class="section-header section-header-clickable" @click="collapsedSections.flows = !collapsedSections.flows">
                 <h4>
                   <span class="collapse-icon">{{ collapsedSections.flows ? '▶' : '▼' }}</span>
@@ -1293,6 +1396,17 @@ onMounted(async () => {
                   <button class="btn-small" @click.stop="insertPodopenerTemplate" title="一键插入 PACKING/ALIGNING/UNPACKING 标准流程骨架">⚡ PODOPENER 模板</button>
                   <button class="btn-small" @click.stop="exportAnimConfigJson" title="导出当前 animation_config 为 JSON 文件">💾 导出 JSON</button>
                   <button class="btn-small" @click.stop="addFlow">+ 添加流程</button>
+                  <input
+                    v-if="showNewFlowInput"
+                    ref="newFlowInputRef"
+                    v-model="newFlowName"
+                    class="inline-name-input"
+                    placeholder="流程名（如 PACKING）"
+                    @keyup.enter="confirmAddFlow"
+                    @keyup.esc="cancelAddFlow"
+                    @blur="confirmAddFlow"
+                    @click.stop
+                  />
                 </div>
               </div>
 
@@ -1399,7 +1513,6 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-      </div>
 
       <!-- ==================== Tab 3: 动画调试（MotionPreview） ==================== -->
       <div v-show="activeTab === 'debug'" class="debug-panel">
@@ -1785,9 +1898,15 @@ onMounted(async () => {
   filter: drop-shadow(0 0 4px rgba(255, 87, 34, 0.7));
 }
 .svg-interactive svg .part-highlight {
-  outline: 3px solid #ff5722;
-  outline-offset: 2px;
+  outline: none;
+  stroke: #ff5722 !important;
+  stroke-width: 3px !important;
   filter: drop-shadow(0 0 6px rgba(255, 87, 34, 0.9));
+}
+/* <g> 容器无 stroke 时，给子元素也加描边 */
+.svg-interactive svg .part-highlight * {
+  stroke: #ff5722 !important;
+  stroke-width: 2px !important;
 }
 /* 部件列表行选中态 */
 .table-row.row-selected {
@@ -1862,6 +1981,20 @@ onMounted(async () => {
 }
 .section-collapsed {
   padding-bottom: 8px;
+}
+/* v2.5.11: 内联输入框（替代 prompt） */
+.inline-name-input {
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  width: 160px;
+}
+.inline-name-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 87, 34, 0.2);
 }
 .svg-loading {
   color: var(--text-dim);
@@ -1973,21 +2106,53 @@ onMounted(async () => {
 .dirty-flag { color: var(--yellow); font-size: 12px; font-weight: 600; }
 
 .config-editor { padding: 0; }
-.config-split-view {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 16px;
+
+/* === v2.5.11: 三段式布局 === */
+/* 第一段：SVG 预览 + 部件绑定 并排 */
+.config-main-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px 0;
+  align-items: stretch;
 }
-@media (max-width: 1100px) {
-  .config-split-view { grid-template-columns: 1fr; }
+.config-main-row .config-svg-section {
+  flex: 3;
+  min-width: 0;
+  margin: 0;
 }
-.config-left-panel,
-.config-right-panel {
+.config-main-row .config-parts-section {
+  flex: 2;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-width: 0;
+}
+/* 第二段：动画原语 全宽 */
+.config-section-anim {
+  padding: 12px 16px 0;
+}
+/* 第三段：流程配置 全宽 */
+.config-section-flow {
+  padding: 12px 16px 16px;
+}
+@media (max-width: 1100px) {
+  .config-main-row { flex-direction: column; }
+}
+/* 部件绑定区内部滚动 */
+.config-parts-section .left-section {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+}
+.config-parts-section .target-table {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+/* SVG 预览区高度自适应（保持 60vh） */
+.config-main-row .config-svg-section .svg-interactive {
+  height: 60vh;
+  min-height: 400px;
 }
 
 /* 区块标题 */
