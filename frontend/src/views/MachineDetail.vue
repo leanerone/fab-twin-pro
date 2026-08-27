@@ -43,6 +43,8 @@ const modelStore = useModelStore()
 
 // === 状态 ===
 const machine = ref(null)
+// 是否使用外部跳转网站（iframe 嵌入）替代原生 2D/3D 视图
+const useExternalView = computed(() => !!(machine.value?.use_external_url && machine.value?.external_url))
 const mode = ref('realtime')              // realtime / playback
 const playing = ref(true)
 const speed = ref(2)
@@ -525,15 +527,21 @@ async function loadMachine() {
     metrics.waferCount = machine.value.wafer_count
     appStore.selectMachine(machineId.value)
 
-    if (modelStore.models.length === 0) {
-      await modelStore.loadModels()
+    // 外部跳转网站：用 iframe 嵌入，跳过原生 2D/3D 视图配置
+    if (useExternalView.value) {
+      viewMode.value = 'external'
+      modelConfigReady.value = true
+    } else {
+      if (modelStore.models.length === 0) {
+        await modelStore.loadModels()
+      }
+      const modelId = modelStore.resolveModelId(machine.value.model)
+      const cfg = modelStore.getModelById(modelId)
+      currentModelConfig.value = cfg
+      const resolved = resolveViewMode(machine.value.model)
+      viewMode.value = resolved
+      modelConfigReady.value = !!cfg
     }
-    const modelId = modelStore.resolveModelId(machine.value.model)
-    const cfg = modelStore.getModelById(modelId)
-    currentModelConfig.value = cfg
-    const resolved = resolveViewMode(machine.value.model)
-    viewMode.value = resolved
-    modelConfigReady.value = !!cfg
   }
   // 并行加载右侧面板数据
   loadAlarms()
@@ -1068,8 +1076,13 @@ onMounted(() => {
         </button>
       </div>
 
+      <!-- 外部跳转网站：iframe 嵌入 -->
+      <div v-if="useExternalView" class="ext-iframe-wrap">
+        <iframe :src="machine.external_url" class="oxe-iframe" frameborder="0" allow="fullscreen; clipboard-read; clipboard-write" allowfullscreen></iframe>
+      </div>
+
       <!-- 加载占位（避免闪现ETCH模型） -->
-      <div v-if="!modelConfigReady" class="model-loading">
+      <div v-else-if="!modelConfigReady" class="model-loading">
         <div class="loading-spinner"></div>
         <div class="loading-text">加载机台模型配置...</div>
       </div>
@@ -1432,6 +1445,22 @@ onMounted(() => {
   right: 14px;
   padding: 6px 12px;
   font-size: 11px;
+}
+
+/* 外部跳转网站 iframe 容器（铺满详情视图区） */
+.ext-iframe-wrap {
+  position: absolute;
+  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+}
+.ext-iframe-wrap .oxe-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 /* OXE Canvas 看板 iframe 样式 */

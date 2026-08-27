@@ -45,6 +45,7 @@ export const api = {
   getMachines: () => request('GET', '/machines'),
   getMachine: (id) => request('GET', `/machines/${id}`),
   getMachineStats: () => request('GET', '/machines/stats'),
+  updateMachineExternalLink: (id, payload) => request('PATCH', `/machines/${id}/external-link`, payload),
 
   // 事件API
   getEvents: (machineId, date) => request('GET', `/events/${machineId}?date=${date}`),

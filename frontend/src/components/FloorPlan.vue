@@ -116,6 +116,68 @@ function selectMachine(m) {
   }
 }
 
+// === 双击机台 → 编辑外链跳转配置（仅管理员） ===
+const showExternalLinkModal = ref(false)
+const editingLinkMachine = ref(null)
+const externalLinkForm = ref({ external_url: '', use_external_url: 0 })
+const savingExternalLink = ref(false)
+let machineClickTimer = null
+
+function canEditModel() {
+  return authStore.can && authStore.can('model_edit')
+}
+
+function onMachineClick(m) {
+  // 管理员用计时器区分双击编辑；普通用户直接跳转
+  if (canEditModel()) {
+    if (machineClickTimer) { clearTimeout(machineClickTimer); machineClickTimer = null; return }
+    machineClickTimer = setTimeout(() => {
+      selectMachine(m)
+      machineClickTimer = null
+    }, 230)
+  } else {
+    selectMachine(m)
+  }
+}
+function onMachineDblClick(m) {
+  if (!canEditModel()) return
+  if (machineClickTimer) { clearTimeout(machineClickTimer); machineClickTimer = null }
+  openExternalLinkEditor(m)
+}
+function openExternalLinkEditor(m) {
+  editingLinkMachine.value = m
+  externalLinkForm.value = {
+    external_url: m.external_url || '',
+    use_external_url: m.use_external_url ? 1 : 0,
+  }
+  showExternalLinkModal.value = true
+}
+async function saveExternalLink() {
+  const m = editingLinkMachine.value
+  if (!m) return
+  const url = (externalLinkForm.value.external_url || '').trim()
+  if (externalLinkForm.value.use_external_url && !url) {
+    showToast('启用跳转网站时必须填写 URL', 'error')
+    return
+  }
+  savingExternalLink.value = true
+  try {
+    const updated = await api.updateMachineExternalLink(m.id, {
+      external_url: url,
+      use_external_url: externalLinkForm.value.use_external_url ? 1 : 0,
+    })
+    const idx = machines.value.findIndex(x => x.id === m.id)
+    if (idx >= 0) Object.assign(machines.value[idx], updated)
+    Object.assign(m, updated)
+    showExternalLinkModal.value = false
+    showToast('外链配置已保存', 'success')
+  } catch (e) {
+    showToast(`保存失败: ${e.message}`, 'error')
+  } finally {
+    savingExternalLink.value = false
+  }
+}
+
 // 获取百分比坐标
 function getPercent(e) {
   const rect = e.currentTarget.getBoundingClientRect()
@@ -759,8 +821,11 @@ onUnmounted(() => {
           left: m.floor_x + '%',
           top: m.floor_y + '%',
         }"
-        @click.stop="selectMachine(m)"
+        :title="m.use_external_url ? `外链：${m.external_url}` : (canEditModel() ? '单击进入，双击编辑外链' : '')"
+        @click.stop="onMachineClick(m)"
+        @dblclick.stop="onMachineDblClick(m)"
       >
+        <span v-if="m.use_external_url" class="ext-link-badge" :title="`跳转网站：${m.external_url}`">↗</span>
         <div 
           v-if="m.process_type === 'STK'"
           class="marker-stk"
@@ -874,7 +939,46 @@ onUnmounted(() => {
         </span>
       </div>
     </div>
-    
+
+    <!-- 双击机台：编辑外链跳转配置（仅管理员） -->
+    <div v-if="showExternalLinkModal" class="ext-link-overlay" @click.self="showExternalLinkModal = false">
+      <div class="ext-link-modal">
+        <div class="ext-link-modal-header">
+          <h3>编辑机台跳转 — {{ editingLinkMachine?.id }}</h3>
+          <button class="ext-link-close" @click="showExternalLinkModal = false">×</button>
+        </div>
+        <div class="ext-link-modal-body">
+          <div class="ext-link-row">
+            <label class="ext-link-radio">
+              <input type="radio" :value="0" v-model.number="externalLinkForm.use_external_url" />
+              <span>使用原路线（进入机台详情页）</span>
+            </label>
+            <label class="ext-link-radio">
+              <input type="radio" :value="1" v-model.number="externalLinkForm.use_external_url" />
+              <span>使用跳转网站（iframe 嵌入）</span>
+            </label>
+          </div>
+          <div class="ext-link-field">
+            <label>跳转网站 URL</label>
+            <input
+              type="text"
+              v-model.trim="externalLinkForm.external_url"
+              placeholder="https://your-site.com/path"
+              :disabled="!externalLinkForm.use_external_url"
+              @keyup.enter="saveExternalLink"
+            />
+            <div class="ext-link-hint">⚠️ 目标站点需允许被 iframe 嵌入（X-Frame-Options / CSP frame-ancestors）</div>
+          </div>
+        </div>
+        <div class="ext-link-modal-actions">
+          <button class="ext-link-save" :disabled="savingExternalLink" @click="saveExternalLink">
+            {{ savingExternalLink ? '保存中…' : '保存' }}
+          </button>
+          <button class="ext-link-cancel" @click="showExternalLinkModal = false">取消</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast 提示 -->
     <div v-if="toast.show" class="toast" :class="toast.type">
       {{ toast.msg }}
@@ -1492,6 +1596,89 @@ onUnmounted(() => {
 }
 
 /* Toast 提示 */
+/* 外链跳转角标 */
+.ext-link-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 11px;
+  line-height: 1;
+  color: #38bdf8;
+  text-shadow: 0 0 2px #000;
+  pointer-events: none;
+}
+
+/* 外链编辑模态框 */
+.ext-link-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.ext-link-modal {
+  width: 460px;
+  max-width: 92vw;
+  background: #0f1b2d;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  color: #e5e7eb;
+  font-size: 13px;
+}
+.ext-link-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e3a5f;
+}
+.ext-link-modal-header h3 { margin: 0; font-size: 15px; }
+.ext-link-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+.ext-link-close:hover { color: #ef4444; }
+.ext-link-modal-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.ext-link-row { display: flex; flex-direction: column; gap: 8px; }
+.ext-link-radio { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.ext-link-radio input { accent-color: #06b6d4; }
+.ext-link-field { display: flex; flex-direction: column; gap: 4px; }
+.ext-link-field label { font-size: 12px; color: #9ca3af; }
+.ext-link-field input {
+  padding: 6px 8px;
+  background: #0b1220;
+  border: 1px solid #1e3a5f;
+  border-radius: 4px;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+.ext-link-field input:disabled { opacity: 0.4; }
+.ext-link-hint { font-size: 11px; color: #f59e0b; margin-top: 2px; }
+.ext-link-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #1e3a5f;
+}
+.ext-link-save, .ext-link-cancel {
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: 1px solid #1e3a5f;
+  cursor: pointer;
+  font-size: 13px;
+}
+.ext-link-save { background: #06b6d4; color: #001018; border-color: #06b6d4; }
+.ext-link-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.ext-link-cancel { background: transparent; color: #9ca3af; }
+
 .toast {
   position: absolute;
   top: 60px;

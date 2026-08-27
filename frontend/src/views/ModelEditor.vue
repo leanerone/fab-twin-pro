@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import ModelUpload from '../components/ModelUpload.vue'
@@ -329,9 +329,18 @@ const dragState = ref({
   partId: '',
   startSvgX: 0, startSvgY: 0,
   currentSvgX: 0, currentSvgY: 0,
+  startClientX: 0, startClientY: 0,   // mousedown 时屏幕 CSS px（用于 transform 一致）
+  finalDxCss: 0, finalDyCss: 0,        // 拖拽结束时 CSS px 偏移（用于累计 base）
   dragging: false,
   startBBox: null,
 })
+// 已保存录制的累计位移 base（CSS px），部件在多次连续录制间停留在结束位置
+// key: partId, value: { x, y }
+const partBaseCss = ref({})
+// 拖拽时实时坐标提示（起点/当前/偏移，SVG 坐标系）
+const dragCoordHint = ref({ visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0 })
+// 常驻坐标轴位置：鼠标在 SVG 坐标系中的实时 X/Y（坐标轴位置显示）
+const cursorSvgCoord = ref(null)
 const showRecordPanel = ref(false)
 const showGroupInput = ref(false)
 const groupNameInput = ref('')
@@ -343,6 +352,8 @@ const recordForm = ref({
   partId: '',
   partIds: [],  // 多选时多个目标
   offsetX: 0, offsetY: 0,
+  startX: 0, startY: 0,   // 起点 SVG 坐标（可微调）
+  endX: 0, endY: 0,       // 终点 SVG 坐标（可微调）
   angle: 0, pivotX: 0, pivotY: 0,
   scaleX: 1, scaleY: 1,
   opacity: 1,
@@ -356,6 +367,26 @@ const ACTION_TYPE_OPTIONS = [
   { value: 'scale', label: '缩放', icon: '⤢' },
   { value: 'opacity', label: '透明度', icon: '◐' },
 ]
+
+// === 已录制动作编辑（双击编辑，调整播放时间等） ===
+const editingMotionIdx = ref(null)
+const showMotionEditPanel = ref(false)
+const editMotionForm = ref({
+  step: '', when: 'true', actionType: 'offset',
+  offsetX: 0, offsetY: 0,
+  angle: 0, pivotX: 0, pivotY: 0,
+  scaleX: 1, scaleY: 1, opacity: 1,
+  duration: 1000, easing: 'linear',
+})
+
+// === 部件列表双击编辑部件名称（part_name）并保存到 DB ===
+const editingPartIdx = ref(null)        // 正在编辑的 parts 数组索引
+const editingPartNameInput = ref('')   // 编辑框文本
+const partNameInputRef = ref(null)     // 编辑框 DOM 引用
+// 函数 ref：在 v-for 中只能用函数 ref 正确设置 ref（模板内联函数会自动 unwrap ref 导致赋值失效）
+function setPartNameInputRef(el) {
+  partNameInputRef.value = el
+}
 
 const EVENT_TEMPLATES = [
   { label: '始终触发', when: 'true' },
@@ -379,13 +410,15 @@ function toggleRecordMode() {
   recordMode.value = !recordMode.value
   if (!recordMode.value) {
     resetDragState()
+    clearAllTransforms()
     showRecordPanel.value = false
+    showMotionEditPanel.value = false
     selectedPartIds.value = []
     lassoState.value.active = false
     selectedPartId.value = ''
     highlightSvgPart('')
   }
-  toast(recordMode.value ? '录制模式：点击选中，空白处拖拽框选，Ctrl+点击追加' : '录制模式已关闭（仍可多选/框选/组合）', 'info')
+  toast(recordMode.value ? '录制模式：先选中部件→拖拽录制动作（选中已锁定，不会误切换）；改选部件请先关闭录制' : '录制模式已关闭（仍可多选/框选/组合）', 'info')
 }
 
 // 标志位：mousedown 已处理选中时，阻止后续 click 重置选中
@@ -405,6 +438,21 @@ function expandPartsDetails() {
 function bringToFront(el) {
   if (!el || !el.parentNode) return
   el.parentNode.appendChild(el)
+}
+
+// 将当前选中的所有部件置顶（手动触发，避免自动置顶遮挡其他部件导致选不到）
+function bringSelectedToFront() {
+  const container = svgInlineRef.value
+  if (!container) return
+  if (selectedPartIds.value.length === 0) {
+    toast('请先选中部件再置顶', 'warn')
+    return
+  }
+  for (const partId of selectedPartIds.value) {
+    const el = container.querySelector(`#${CSS.escape(partId)}`)
+    if (el && el.parentNode) el.parentNode.appendChild(el)
+  }
+  toast(`已置顶 ${selectedPartIds.value.length} 个部件`, 'info')
 }
 
 // 高亮多个选中部件（数组版）
@@ -445,16 +493,37 @@ function highlightSelectedParts() {
 function resetDragState() {
   const ds = dragState.value
   if (svgInlineRef.value) {
-    for (const partId of selectedPartIds.value) {
+    // 取消当前拖拽时恢复到累计 base 位置（保留之前已保存录制的位移，部件不回弹到原始位置）
+    const revertIds = new Set(selectedPartIds.value)
+    if (ds.partId) revertIds.add(ds.partId)
+    for (const partId of revertIds) {
       const el = svgInlineRef.value.querySelector(`#${CSS.escape(partId)}`)
-      if (el) { el.style.transform = ''; el.style.transformOrigin = '' }
-    }
-    if (ds.partId) {
-      const el = svgInlineRef.value.querySelector(`#${CSS.escape(ds.partId)}`)
-      if (el) { el.style.transform = ''; el.style.transformOrigin = '' }
+      if (!el) continue
+      const base = partBaseCss.value[partId] || { x: 0, y: 0 }
+      el.style.transform = (base.x || base.y) ? `translate(${base.x}px, ${base.y}px)` : ''
+      el.style.transformOrigin = ''
     }
   }
-  dragState.value = { partId: '', startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, dragging: false, startBBox: null }
+  dragState.value = { partId: '', startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, startClientX: 0, startClientY: 0, finalDxCss: 0, finalDyCss: 0, dragging: false, startBBox: null }
+  dragCoordHint.value = { visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0 }
+}
+
+// 彻底清除所有部件的 transform 与累计 base（退出录制模式时调用，部件回到 SVG 原始位置）
+function clearAllTransforms() {
+  if (svgInlineRef.value) {
+    const all = svgInlineRef.value.querySelectorAll('[id]')
+    for (const el of all) {
+      if (el.style.transform) el.style.transform = ''
+      if (el.style.transformOrigin) el.style.transformOrigin = ''
+    }
+  }
+  partBaseCss.value = {}
+}
+
+// 录制面板微调起终点坐标时，自动重算 offset（offset = end - start）
+function recomputeOffset() {
+  recordForm.value.offsetX = Math.round(recordForm.value.endX - recordForm.value.startX)
+  recordForm.value.offsetY = -Math.round(recordForm.value.endY - recordForm.value.startY)
 }
 
 function screenToSvgCoords(e) {
@@ -493,6 +562,59 @@ const lassoRectStyle = computed(() => {
   return { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px', display: 'block' }
 })
 
+// 拖拽坐标提示浮窗样式（跟随鼠标，显示起点/当前/偏移）
+const dragCoordHintStyle = computed(() => {
+  if (!dragCoordHint.value.visible) return { display: 'none' }
+  const container = svgInlineRef.value
+  if (!container) return { display: 'none' }
+  const r = container.getBoundingClientRect()
+  const x = dragCoordHint.value.clientX - r.left + 14
+  const y = dragCoordHint.value.clientY - r.top - 64
+  return { left: x + 'px', top: Math.max(4, y) + 'px', display: 'block' }
+})
+
+// 拖拽连线样式：从起点到当前点的虚线（容器相对坐标）
+const dragLineStyle = computed(() => {
+  if (!dragCoordHint.value.visible) return { display: 'none' }
+  const container = svgInlineRef.value
+  if (!container) return { display: 'none' }
+  const r = container.getBoundingClientRect()
+  const ls = dragCoordHint.value
+  // 起点和当前点用屏幕坐标减去容器偏移
+  // 起点屏幕坐标：startSvgX 是 SVG 坐标，需要转屏幕坐标。简化：用 dragState 的 startClientX
+  const ds = dragState.value
+  const sx = (ds.startClientX || ls.clientX) - r.left
+  const sy = (ds.startClientY || ls.clientY) - r.top
+  const cx = ls.clientX - r.left
+  const cy = ls.clientY - r.top
+  const dx = cx - sx
+  const dy = cy - sy
+  const len = Math.sqrt(dx * dx + dy * dy) || 1
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI
+  return {
+    left: sx + 'px',
+    top: sy + 'px',
+    width: len + 'px',
+    transform: `rotate(${angle}deg)`,
+    transformOrigin: '0 0',
+    display: 'block',
+  }
+})
+
+// 拖拽起点标记样式
+const dragStartDotStyle = computed(() => {
+  if (!dragCoordHint.value.visible) return { display: 'none' }
+  const container = svgInlineRef.value
+  if (!container) return { display: 'none' }
+  const r = container.getBoundingClientRect()
+  const ds = dragState.value
+  return {
+    left: (ds.startClientX - r.left - 5) + 'px',
+    top: (ds.startClientY - r.top - 5) + 'px',
+    display: 'block',
+  }
+})
+
 // 非部件标签（点击这些元素视为点击空白，触发框选）
 const NON_PART_TAGS = new Set(['svg', 'defs', 'style', 'metadata', 'title', 'desc'])
 function isPartElement(el, containerRect) {
@@ -514,9 +636,51 @@ function isPartElement(el, containerRect) {
   return true
 }
 
+// 开始拖拽录制：对传入的部件集合启动一次拖拽，记录起点坐标并初始化录制表单
+function startDragRecording(e, partIds) {
+  const coords = screenToSvgCoords(e)
+  const firstEl = svgInlineRef.value?.querySelector(`#${CSS.escape(partIds[0])}`)
+  const bbox = firstEl ? (function() { try { return firstEl.getBBox() } catch(_) { return null } })() : null
+  dragState.value = {
+    partId: partIds[0],
+    startSvgX: coords.x, startSvgY: coords.y,
+    currentSvgX: coords.x, currentSvgY: coords.y,
+    startClientX: e.clientX, startClientY: e.clientY,   // CSS px，用于 transform 跟随鼠标
+    dragging: true,
+    startBBox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null,
+  }
+  recordForm.value.partId = partIds[0]
+  recordForm.value.partIds = [...partIds]
+  recordForm.value.actionType = recordActionType.value
+  recordForm.value.startX = Math.round(coords.x)
+  recordForm.value.startY = Math.round(coords.y)
+  recordForm.value.endX = Math.round(coords.x)
+  recordForm.value.endY = Math.round(coords.y)
+  if (bbox && recordActionType.value === 'rotate') {
+    recordForm.value.pivotX = Math.round(bbox.x + bbox.width / 2)
+    recordForm.value.pivotY = Math.round(bbox.y + bbox.height / 2)
+  }
+  // 显示拖拽坐标提示（起点/当前/偏移）
+  dragCoordHint.value = { visible: true, startX: coords.x, startY: coords.y, curX: coords.x, curY: coords.y, dx: 0, dy: 0, clientX: e.clientX, clientY: e.clientY }
+}
+
 function onSvgMouseDown(e) {
   // 多选/框选在非录制模式也可用；拖拽录制仅限录制模式
   const containerRect = svgInlineRef.value?.getBoundingClientRect()
+
+  // 标记本次 mousedown 已处理选中，阻止后续 click 重置
+  mousedownProcessed = true
+  setTimeout(() => { mousedownProcessed = false }, 60)
+
+  // === 录制模式：锁定已选中部件，拖拽移动整个选择集，不再切换选中 ===
+  // 用户先选中部件 → 进入/处于录制模式 → 点击不会误切换到别的部件，确保能稳定抓取移动。
+  // 需要改选部件时，请先关闭录制模式。
+  if (recordMode.value && selectedPartIds.value.length > 0) {
+    e.preventDefault()
+    startDragRecording(e, selectedPartIds.value)
+    return
+  }
+
   // 查找点击的部件（跳过 SVG 根、defs、大面积背景等非部件元素）
   let el = e.target
   let partId = ''
@@ -525,15 +689,11 @@ function onSvgMouseDown(e) {
     el = el.parentElement
   }
 
-  // 标记本次 mousedown 已处理选中，阻止后续 click 重置
-  mousedownProcessed = true
-  setTimeout(() => { mousedownProcessed = false }, 60)
-
   if (partId) {
-    // === 点击部件：选中 + (录制模式下)开始拖拽 ===
+    // === 点击部件：选中 + (录制模式下且无选中时)开始拖拽 ===
     e.preventDefault()
     const targetEl = svgInlineRef.value?.querySelector(`#${CSS.escape(partId)}`)
-    if (targetEl) bringToFront(targetEl)
+    // 注：不再自动置顶，避免遮挡其他部件导致选不到；置顶改由"置顶"按钮手动触发
 
     const isMulti = e.ctrlKey || e.metaKey
     if (isMulti) {
@@ -557,23 +717,9 @@ function onSvgMouseDown(e) {
     scrollSelectedPartsIntoView()
     expandPartsDetails()
 
-    // 仅在录制模式下开始拖拽录制
-    if (recordMode.value) {
-      const coords = screenToSvgCoords(e)
-      const bbox = targetEl ? (function() { try { return targetEl.getBBox() } catch(_) { return null } })() : null
-      dragState.value = {
-        partId, startSvgX: coords.x, startSvgY: coords.y,
-        currentSvgX: coords.x, currentSvgY: coords.y,
-        dragging: true,
-        startBBox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null,
-      }
-      recordForm.value.partId = partId
-      recordForm.value.partIds = [...selectedPartIds.value]
-      recordForm.value.actionType = recordActionType.value
-      if (bbox && recordActionType.value === 'rotate') {
-        recordForm.value.pivotX = Math.round(bbox.x + bbox.width / 2)
-        recordForm.value.pivotY = Math.round(bbox.y + bbox.height / 2)
-      }
+    // 录制模式 + 首次选中（之前无选中）：立即开始拖拽该部件
+    if (recordMode.value && selectedPartIds.value.length > 0) {
+      startDragRecording(e, selectedPartIds.value)
     }
   } else {
     // === 点击空白：开始框选（lasso）—— 录制/非录制模式都支持 ===
@@ -593,6 +739,9 @@ function onSvgMouseDown(e) {
 }
 
 function onSvgMouseMove(e) {
+  // 始终更新鼠标在 SVG 坐标系中的位置（坐标轴位置显示）
+  const curCoord = screenToSvgCoords(e)
+  cursorSvgCoord.value = { x: Math.round(curCoord.x), y: Math.round(curCoord.y) }
   const ds = dragState.value
   // 框选拖拽
   if (lassoState.value.active) {
@@ -607,32 +756,47 @@ function onSvgMouseMove(e) {
   const coords = screenToSvgCoords(e)
   ds.currentSvgX = coords.x
   ds.currentSvgY = coords.y
-  const dx = coords.x - ds.startSvgX
-  const dy = coords.y - ds.startSvgY
+  // CSS px 差：用于 transform，确保部件移动和鼠标一致（不受 viewBox 缩放影响）
+  const dxCss = e.clientX - ds.startClientX
+  const dyCss = e.clientY - ds.startClientY
+  // SVG 坐标差：用于记录动画 offset
+  const dxSvg = coords.x - ds.startSvgX
+  const dySvg = coords.y - ds.startSvgY
   const partIds = selectedPartIds.value.length > 0 ? selectedPartIds.value : [ds.partId]
   for (const pid of partIds) {
     const el = svgInlineRef.value.querySelector(`#${CSS.escape(pid)}`)
     if (!el) continue
     switch (recordActionType.value) {
-      case 'offset':
-        el.style.transform = `translate(${dx}px, ${dy}px)`
+      case 'offset': {
+        // 累计已保存录制的 base，确保连续录制时部件从上一次结束位置继续移动
+        const base = partBaseCss.value[pid] || { x: 0, y: 0 }
+        el.style.transform = `translate(${base.x + dxCss}px, ${base.y + dyCss}px)`
         break
+      }
       case 'rotate': {
-        const angle = Math.round(Math.atan2(dy, dx) * 180 / Math.PI)
+        const angle = Math.round(Math.atan2(dySvg, dxSvg) * 180 / Math.PI)
         el.style.transformOrigin = `${recordForm.value.pivotX}px ${recordForm.value.pivotY}px`
         el.style.transform = `rotate(${angle}deg)`
         recordForm.value.angle = angle
         break
       }
       case 'scale': {
-        const sx = Math.max(0.1, 1 + dx / 100)
-        const sy = Math.max(0.1, 1 + dy / 100)
+        const sx = Math.max(0.1, 1 + dxSvg / 100)
+        const sy = Math.max(0.1, 1 + dySvg / 100)
         el.style.transform = `scale(${sx}, ${sy})`
         recordForm.value.scaleX = Math.round(sx * 100) / 100
         recordForm.value.scaleY = Math.round(sy * 100) / 100
         break
       }
     }
+  }
+  // 更新拖拽坐标提示
+  dragCoordHint.value = {
+    visible: true,
+    startX: ds.startSvgX, startY: ds.startSvgY,
+    curX: coords.x, curY: coords.y,
+    dx: dxSvg, dy: dySvg,
+    clientX: e.clientX, clientY: e.clientY,
   }
 }
 
@@ -686,12 +850,19 @@ function onSvgMouseUp(e) {
   const coords = screenToSvgCoords(e)
   ds.currentSvgX = coords.x
   ds.currentSvgY = coords.y
+  // 记录本次拖拽的最终 CSS px 偏移（保存录制时用于累计 base，部件停留在结束位置）
+  ds.finalDxCss = e.clientX - ds.startClientX
+  ds.finalDyCss = e.clientY - ds.startClientY
   const dx = Math.round(coords.x - ds.startSvgX)
   const dy = Math.round(coords.y - ds.startSvgY)
   if (recordActionType.value === 'offset') {
     recordForm.value.offsetX = dx
     recordForm.value.offsetY = -dy
+    recordForm.value.endX = Math.round(coords.x)
+    recordForm.value.endY = Math.round(coords.y)
   }
+  // 隐藏拖拽坐标提示
+  dragCoordHint.value = { ...dragCoordHint.value, visible: false }
   showRecordPanel.value = true
   ds.dragging = false
   nextTick(() => {
@@ -824,7 +995,22 @@ function saveRecord() {
   }
   editingConfig.value.motions.push(motion)
   markDirty()
-  resetDragState()
+  // 保存录制后：部件停留在结束位置，便于衔接下一次录制
+  // offset 类型累计 CSS px base，连续录制时下一次拖拽从本次结束位置开始
+  if (f.actionType === 'offset' && svgInlineRef.value) {
+    const ds = dragState.value
+    const fdx = ds.finalDxCss || 0
+    const fdy = ds.finalDyCss || 0
+    if (fdx || fdy) {
+      for (const pid of targets) {
+        const base = partBaseCss.value[pid] || { x: 0, y: 0 }
+        partBaseCss.value[pid] = { x: base.x + fdx, y: base.y + fdy }
+      }
+    }
+  }
+  // 软重置：不清除已应用 transform（部件留在结束位置），仅清拖拽状态与提示
+  dragState.value = { partId: '', startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, startClientX: 0, startClientY: 0, finalDxCss: 0, finalDyCss: 0, dragging: false, startBBox: null }
+  dragCoordHint.value = { visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0 }
   showRecordPanel.value = false
   recordForm.value.step = ''
   toast(`已录制: ${motion.step} → ${targets.join(', ')} (${f.actionType}${targets.length > 1 ? `, ${targets.length}个部件` : ''})`, 'success')
@@ -838,11 +1024,143 @@ function deleteMotion(idx) {
   markDirty()
 }
 
+// 双击已录制动作 → 编辑（调整播放时间 duration、动作参数、触发条件等）
+function editMotion(idx) {
+  const m = editingConfig.value?.motions?.[idx]
+  if (!m) return
+  const r = m.rules?.[0]
+  const a = r?.actions?.[0] || {}
+  editingMotionIdx.value = idx
+  editMotionForm.value = {
+    step: m.step || '',
+    when: r?.when || 'true',
+    actionType: a.type || 'offset',
+    offsetX: a.offset_x || 0,
+    offsetY: a.offset_y || 0,
+    angle: a.angle || 0,
+    pivotX: a.pivot?.x || 0,
+    pivotY: a.pivot?.y || 0,
+    scaleX: a.scale_x ?? 1,
+    scaleY: a.scale_y ?? 1,
+    opacity: a.to ?? 1,
+    duration: a.duration ?? 1000,
+    easing: a.easing || 'linear',
+  }
+  showMotionEditPanel.value = true
+}
+
+function saveMotionEdit() {
+  const idx = editingMotionIdx.value
+  if (idx == null || !editingConfig.value?.motions) return
+  const f = editMotionForm.value
+  if (!f.step.trim()) { toast('Step 名称不能为空', 'error'); return }
+  const m = editingConfig.value.motions[idx]
+  // 更新每条 rule 的 action（同一 step 下所有目标共用动作参数）
+  for (const r of (m.rules || [])) {
+    if (!Array.isArray(r.actions) || r.actions.length === 0) r.actions = [{}]
+    const a = r.actions[0]
+    // 清旧字段，按新类型重写
+    delete a.offset_x; delete a.offset_y; delete a.angle; delete a.pivot
+    delete a.scale_x; delete a.scale_y; delete a.to; delete a.type
+    a.type = f.actionType
+    switch (f.actionType) {
+      case 'offset': a.offset_x = f.offsetX; a.offset_y = f.offsetY; break
+      case 'rotate': a.angle = f.angle; a.pivot = { x: f.pivotX, y: f.pivotY }; break
+      case 'scale': a.scale_x = f.scaleX; a.scale_y = f.scaleY; break
+      case 'opacity': a.to = f.opacity; break
+    }
+    if (f.duration > 0) a.duration = f.duration; else delete a.duration
+    if (f.easing && f.easing !== 'linear') a.easing = f.easing; else delete a.easing
+    r.when = f.when || 'true'
+  }
+  m.step = f.step.trim().toUpperCase()
+  // 触发响应式更新
+  editingConfig.value.motions[idx] = { ...m, rules: m.rules.map(r => ({ ...r, actions: r.actions.map(x => ({ ...x })) })) }
+  markDirty()
+  showMotionEditPanel.value = false
+  editingMotionIdx.value = null
+  toast('已更新动作', 'success')
+}
+
+function cancelMotionEdit() {
+  showMotionEditPanel.value = false
+  editingMotionIdx.value = null
+}
+
+// === 单击动作 → 部件跳到该动作预设位置（累计 offset 预览）；双击 → 编辑 ===
+let motionClickTimer = null
+function onMotionClick(idx) {
+  // 用计时器区分单击与双击：双击时取消单击跳转
+  if (motionClickTimer) { clearTimeout(motionClickTimer); motionClickTimer = null; return }
+  motionClickTimer = setTimeout(() => {
+    applyMotionPosition(idx)
+    motionClickTimer = null
+  }, 230)
+}
+function onMotionDblClick(idx) {
+  if (motionClickTimer) { clearTimeout(motionClickTimer); motionClickTimer = null }
+  editMotion(idx)
+}
+
+// 点击动作项：累计到该动作（含）的位移，让部件到达预设结束位置
+function applyMotionPosition(idx) {
+  if (!editingConfig.value?.motions) return
+  const container = svgInlineRef.value
+  if (!container) return
+  const svg = container.querySelector('svg')
+  if (!svg) return
+  const ctm = svg.getScreenCTM()
+  if (!ctm) return
+  const motions = editingConfig.value.motions
+  // 累计 offset（CSS px）+ 最新 rotate/scale（按部件）
+  const accumOffset = {}   // pid -> { x, y } CSS px
+  const lastRotate = {}    // pid -> { angle, pivotX, pivotY }
+  const lastScale = {}     // pid -> { sx, sy }
+  for (let i = 0; i <= idx; i++) {
+    for (const r of (motions[i]?.rules || [])) {
+      const pid = r.target_part_id
+      const a = r.actions?.[0]
+      if (!a) continue
+      if (!accumOffset[pid]) accumOffset[pid] = { x: 0, y: 0 }
+      if (a.type === 'offset') {
+        // offset_x 为 SVG X（右为正），offset_y 向上为正；转 CSS px
+        accumOffset[pid].x += (a.offset_x || 0) * ctm.a
+        accumOffset[pid].y += -((a.offset_y || 0) * ctm.d)
+      } else if (a.type === 'rotate') {
+        lastRotate[pid] = { angle: a.angle || 0, pivotX: a.pivot?.x || 0, pivotY: a.pivot?.y || 0 }
+      } else if (a.type === 'scale') {
+        lastScale[pid] = { sx: a.scale_x ?? 1, sy: a.scale_y ?? 1 }
+      }
+    }
+  }
+  const pids = new Set([...Object.keys(accumOffset), ...Object.keys(lastRotate), ...Object.keys(lastScale)])
+  if (pids.size === 0) { toast('该动作无可预览的位移/旋转/缩放', 'warn'); return }
+  for (const pid of pids) {
+    const el = container.querySelector(`#${CSS.escape(pid)}`)
+    if (!el) continue
+    const parts = []
+    const off = accumOffset[pid] || { x: 0, y: 0 }
+    if (off.x || off.y) parts.push(`translate(${off.x}px, ${off.y}px)`)
+    if (lastRotate[pid]) {
+      el.style.transformOrigin = `${lastRotate[pid].pivotX}px ${lastRotate[pid].pivotY}px`
+      if (lastRotate[pid].angle) parts.push(`rotate(${lastRotate[pid].angle}deg)`)
+    }
+    if (lastScale[pid] && (lastScale[pid].sx !== 1 || lastScale[pid].sy !== 1)) {
+      parts.push(`scale(${lastScale[pid].sx}, ${lastScale[pid].sy})`)
+    }
+    el.style.transform = parts.join(' ')
+    // 更新 base，便于衔接后续录制
+    partBaseCss.value[pid] = { x: off.x, y: off.y }
+  }
+  toast(`已跳转到动作 #${idx + 1}「${motions[idx]?.step || ''}」预设位置`, 'info')
+}
+
 function getMotionSummary(motion) {
   const rules = motion.rules || []
   if (rules.length === 0) return '(无动作)'
   const r = rules[0]
   const actions = r.actions || []
+  const dur = actions[0]?.duration ?? 1000
   const parts = actions.map(a => {
     switch (a.type) {
       case 'offset': return `位移(${a.offset_x||0},${a.offset_y||0})`
@@ -852,7 +1170,7 @@ function getMotionSummary(motion) {
       default: return a.type
     }
   })
-  return `${r.target_part_id}: ${parts.join(', ')}`
+  return `${r.target_part_id}: ${parts.join(', ')} · ${dur}ms`
 }
 
 // === 计算属性 ===
@@ -1117,6 +1435,48 @@ function selectPartFromList(partId, event) {
   expandPartsDetails()
 }
 
+// 双击部件列表行 → 内联编辑部件名称（part_name）
+function startEditPartName(partArrIdx) {
+  if (!isMotionJson.value) { toast('仅 Motion JSON 配置支持编辑部件名称', 'warn'); return }
+  const p = editingConfig.value?.parts?.[partArrIdx]
+  if (!p) return
+  editingPartIdx.value = partArrIdx
+  editingPartNameInput.value = p.part_name || p.part_id || ''
+  nextTick(() => {
+    const inp = partNameInputRef.value
+    if (inp && inp.focus) { inp.focus(); inp.select?.() }
+  })
+}
+async function savePartName(partArrIdx) {
+  if (editingPartIdx.value === null) return
+  const p = editingConfig.value?.parts?.[partArrIdx]
+  if (!p) { editingPartIdx.value = null; return }
+  const newName = (editingPartNameInput.value || '').trim()
+  editingPartIdx.value = null
+  if (!newName) { toast('部件名称不能为空', 'warn'); return }
+  if (newName === (p.part_name || p.part_id)) return  // 未改动
+  p.part_name = newName
+  markDirty()
+  // 直接保存到 DB
+  await saveAnimConfig()
+}
+function cancelPartName() {
+  editingPartIdx.value = null
+}
+
+// 全局 capture 监听：编辑部件名称时，点击编辑行以外任意位置即退出编辑
+// （SVG 的 onSvgMouseDown 会 preventDefault 阻止 input 失焦，故用 capture 阶段先处理）
+function onPartNameOutsideMouseDown(ev) {
+  if (editingPartIdx.value === null) return
+  const inp = partNameInputRef.value
+  // 点击编辑框本身或其所在行内，不退出
+  if (inp && (ev.target === inp || inp.contains(ev.target))) return
+  const row = ev.target && ev.target.closest ? ev.target.closest('.part-mini-item') : null
+  if (row && inp && row.contains(inp)) return
+  // 其余位置 → 退出编辑（保存）
+  savePartName(editingPartIdx.value)
+}
+
 // 滚动部件列表对应行到容器中间（smooth）
 function scrollPartRowIntoView(partId) {
   if (!partId) return
@@ -1186,6 +1546,10 @@ const motionPreviewConfig = computed(() => {
 // === 生命周期 ===
 onMounted(async () => {
   await loadModels()
+  document.addEventListener('mousedown', onPartNameOutsideMouseDown, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onPartNameOutsideMouseDown, true)
 })
 </script>
 
@@ -1374,6 +1738,7 @@ onMounted(async () => {
                   <span v-if="selectedPartIds.length > 0" class="selected-count">
                     已选 {{ selectedPartIds.length }} 个
                     <button v-if="selectedPartIds.length >= 2" class="btn-small btn-combine" @click="startGroupInput">组合</button>
+                    <button class="btn-small btn-front" @click="bringSelectedToFront">置顶</button>
                     <button class="btn-small" @click="clearSelection">清除</button>
                   </span>
                   <span v-if="recordMode" class="record-action-selector">
@@ -1415,6 +1780,20 @@ onMounted(async () => {
                 ></div>
                 <!-- 框选矩形（lasso） -->
                 <div v-if="lassoState.active" class="lasso-rect" :style="lassoRectStyle"></div>
+                <!-- 拖拽起点标记 -->
+                <div v-if="dragCoordHint.visible" class="drag-start-dot" :style="dragStartDotStyle"></div>
+                <!-- 拖拽连线（起点→当前点） -->
+                <div v-if="dragCoordHint.visible" class="drag-line" :style="dragLineStyle"></div>
+                <!-- 拖拽坐标提示浮窗（起点/当前/偏移） -->
+                <div v-if="dragCoordHint.visible" class="drag-coord-hint" :style="dragCoordHintStyle">
+                  <div class="dc-row"><span class="dc-label">起点</span>({{ Math.round(dragCoordHint.startX) }}, {{ Math.round(dragCoordHint.startY) }})</div>
+                  <div class="dc-row"><span class="dc-label">当前</span>({{ Math.round(dragCoordHint.curX) }}, {{ Math.round(dragCoordHint.curY) }})</div>
+                  <div class="dc-row"><span class="dc-label">偏移</span>({{ Math.round(dragCoordHint.dx) }}, {{ -Math.round(dragCoordHint.dy) }})</div>
+                </div>
+                <!-- 常驻坐标轴位置显示：鼠标在 SVG 坐标系中的实时 X/Y -->
+                <div class="cursor-coord-readout" v-if="cursorSvgCoord && !dragCoordHint.visible">
+                  <span class="cc-axis">X 轴</span> {{ cursorSvgCoord.x }}<span class="cc-sep">|</span><span class="cc-axis">Y 轴</span> {{ cursorSvgCoord.y }}
+                </div>
               </div>
               <div class="svg-preview-url">{{ svgPreviewUrl }}</div>
             </div>
@@ -1439,12 +1818,21 @@ onMounted(async () => {
                 <input v-model="partSearch" placeholder="搜索部件..." class="part-search-input" />
                 <button v-if="partSearch" class="btn-clear" @click="partSearch = ''">×</button>
               </div>
-              <!-- 动作列表 -->
+              <!-- 动作列表（单击跳转到预设位置，双击编辑） -->
               <div class="motion-list">
-                <div v-for="(m, idx) in motionList" :key="idx" class="motion-item" :data-idx="idx">
+                <div
+                  v-for="(m, idx) in motionList"
+                  :key="idx"
+                  class="motion-item"
+                  :data-idx="idx"
+                  :class="{ 'motion-editing': editingMotionIdx === idx }"
+                  @click="onMotionClick(idx)"
+                  @dblclick="onMotionDblClick(idx)"
+                  title="单击跳转到预设位置，双击编辑"
+                >
                   <div class="motion-item-header">
                     <span class="motion-step">{{ m.step }}</span>
-                    <button class="btn-delete" @click="deleteMotion(idx)" title="删除">×</button>
+                    <button class="btn-delete" @click.stop="deleteMotion(idx)" title="删除">×</button>
                   </div>
                   <div class="motion-summary">{{ getMotionSummary(m) }}</div>
                   <div v-if="m.rules?.[0]?.when && m.rules[0].when !== 'true'" class="motion-when">
@@ -1454,6 +1842,7 @@ onMounted(async () => {
                 <div v-if="motionList.length === 0" class="empty-row">
                   暂无动作{{ recordMode ? '，拖拽SVG部件开始录制' : '' }}
                 </div>
+                <div v-if="motionList.length > 0" class="motion-list-tip">提示：单击跳转到预设位置，双击编辑播放时间与参数</div>
               </div>
               <!-- 部件列表（默认展开，可手动折叠；Ctrl+点击列表行多选） -->
               <details class="parts-details" open>
@@ -1463,11 +1852,30 @@ onMounted(async () => {
                     v-for="(key, idx) in targetKeys"
                     :key="'p'+idx"
                     class="part-mini-item"
-                    :data-part-id="isMotionJson ? editingConfig.parts[idx]?.part_id : key"
-                    :class="{ 'row-selected': selectedPartId === (isMotionJson ? editingConfig.parts[idx]?.part_id : key) || selectedPartIds.includes(isMotionJson ? editingConfig.parts[idx]?.part_id : key) }"
-                    @click="selectPartFromList(isMotionJson ? editingConfig.parts[idx]?.part_id : key, $event)"
+                    :data-part-id="isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key"
+                    :class="{ 'row-selected': selectedPartId === (isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key) || selectedPartIds.includes(isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key) }"
+                    @click="selectPartFromList(isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key, $event)"
+                    @dblclick.stop="isMotionJson && startEditPartName(Number(key))"
+                    :title="isMotionJson ? '单击选中，Ctrl+单击多选，双击编辑名称' : ''"
                   >
-                    {{ isMotionJson ? editingConfig.parts[idx]?.part_id : key }}
+                    <template v-if="isMotionJson && editingPartIdx === Number(key)">
+                      <input
+                        :ref="setPartNameInputRef"
+                        v-model="editingPartNameInput"
+                        class="part-name-input"
+                        @click.stop
+                        @keyup.enter="savePartName(Number(key))"
+                        @keyup.esc="cancelPartName"
+                        @blur="savePartName(Number(key))"
+                      />
+                    </template>
+                    <template v-else>
+                      <span class="part-id-label">{{ isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key }}</span>
+                      <span
+                        v-if="isMotionJson && editingConfig.parts[Number(key)]?.part_name && editingConfig.parts[Number(key)].part_name !== editingConfig.parts[Number(key)].part_id"
+                        class="part-name-sub"
+                      >— {{ editingConfig.parts[Number(key)].part_name }}</span>
+                    </template>
                   </div>
                 </div>
               </details>
@@ -1489,15 +1897,35 @@ onMounted(async () => {
                 <label>动作类型</label>
                 <input :value="ACTION_TYPE_OPTIONS.find(a => a.value === recordForm.actionType)?.label" disabled class="record-readonly" />
               </div>
-              <!-- offset 参数 -->
+              <!-- offset 参数：起终点坐标可微调，自动重算偏移量 -->
               <template v-if="recordForm.actionType === 'offset'">
                 <div class="record-field-row">
                   <div class="record-field">
-                    <label>offset_x</label>
+                    <label>起点 X (start_x)</label>
+                    <input type="number" v-model.number="recordForm.startX" @input="recomputeOffset" />
+                  </div>
+                  <div class="record-field">
+                    <label>起点 Y (start_y)</label>
+                    <input type="number" v-model.number="recordForm.startY" @input="recomputeOffset" />
+                  </div>
+                </div>
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>终点 X (end_x)</label>
+                    <input type="number" v-model.number="recordForm.endX" @input="recomputeOffset" />
+                  </div>
+                  <div class="record-field">
+                    <label>终点 Y (end_y)</label>
+                    <input type="number" v-model.number="recordForm.endY" @input="recomputeOffset" />
+                  </div>
+                </div>
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>偏移 X (offset_x)</label>
                     <input type="number" v-model.number="recordForm.offsetX" />
                   </div>
                   <div class="record-field">
-                    <label>offset_y</label>
+                    <label>偏移 Y (offset_y)</label>
                     <input type="number" v-model.number="recordForm.offsetY" />
                   </div>
                 </div>
@@ -1569,6 +1997,98 @@ onMounted(async () => {
               <div class="record-panel-actions">
                 <button class="btn-save" @click="saveRecord">保存录制</button>
                 <button class="btn-cancel-record" @click="cancelRecord">取消</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 已录制动作编辑面板（浮动，双击动作后出现，调整播放时间等） -->
+          <div v-if="showMotionEditPanel" class="record-panel motion-edit-panel">
+            <div class="record-panel-header">
+              <h4>编辑动作 #{{ (editingMotionIdx ?? 0) + 1 }}</h4>
+              <button class="btn-delete" @click="cancelMotionEdit" title="取消">×</button>
+            </div>
+            <div class="record-panel-body">
+              <div class="record-field">
+                <label>Step 名称（触发事件）</label>
+                <input v-model="editMotionForm.step" placeholder="如 POD_PLACED" @keyup.enter="saveMotionEdit" />
+              </div>
+              <div class="record-field">
+                <label>动作类型</label>
+                <select v-model="editMotionForm.actionType">
+                  <option v-for="a in ACTION_TYPE_OPTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
+                </select>
+              </div>
+              <template v-if="editMotionForm.actionType === 'offset'">
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>偏移 X (offset_x)</label>
+                    <input type="number" v-model.number="editMotionForm.offsetX" />
+                  </div>
+                  <div class="record-field">
+                    <label>偏移 Y (offset_y)</label>
+                    <input type="number" v-model.number="editMotionForm.offsetY" />
+                  </div>
+                </div>
+              </template>
+              <template v-if="editMotionForm.actionType === 'rotate'">
+                <div class="record-field">
+                  <label>angle (°)</label>
+                  <input type="number" v-model.number="editMotionForm.angle" />
+                </div>
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>pivot_x</label>
+                    <input type="number" v-model.number="editMotionForm.pivotX" />
+                  </div>
+                  <div class="record-field">
+                    <label>pivot_y</label>
+                    <input type="number" v-model.number="editMotionForm.pivotY" />
+                  </div>
+                </div>
+              </template>
+              <template v-if="editMotionForm.actionType === 'scale'">
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>scale_x</label>
+                    <input type="number" step="0.1" v-model.number="editMotionForm.scaleX" />
+                  </div>
+                  <div class="record-field">
+                    <label>scale_y</label>
+                    <input type="number" step="0.1" v-model.number="editMotionForm.scaleY" />
+                  </div>
+                </div>
+              </template>
+              <template v-if="editMotionForm.actionType === 'opacity'">
+                <div class="record-field">
+                  <label>opacity (0-1)</label>
+                  <input type="number" step="0.1" min="0" max="1" v-model.number="editMotionForm.opacity" />
+                </div>
+              </template>
+              <div class="record-field-row">
+                <div class="record-field">
+                  <label>duration (ms) · 播放时间</label>
+                  <input type="number" v-model.number="editMotionForm.duration" />
+                </div>
+                <div class="record-field">
+                  <label>easing</label>
+                  <select v-model="editMotionForm.easing">
+                    <option v-for="e in EASING_OPTIONS" :key="e" :value="e">{{ e }}</option>
+                  </select>
+                </div>
+              </div>
+              <hr class="record-divider" />
+              <div class="record-field">
+                <label>When 条件</label>
+                <input v-model="editMotionForm.when" placeholder="如 params.port == '1'" />
+                <div class="event-templates">
+                  <button v-for="t in EVENT_TEMPLATES" :key="t.when" class="event-template-btn" @click="editMotionForm.when = t.when">
+                    {{ t.label }}
+                  </button>
+                </div>
+              </div>
+              <div class="record-panel-actions">
+                <button class="btn-save" @click="saveMotionEdit">保存修改</button>
+                <button class="btn-cancel-record" @click="cancelMotionEdit">取消</button>
               </div>
             </div>
           </div>
@@ -2160,6 +2680,75 @@ onMounted(async () => {
   z-index: 50;
   border-radius: 2px;
 }
+/* 拖拽起点标记 */
+.drag-start-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 51;
+}
+/* 拖拽连线（起点→当前） */
+.drag-line {
+  position: absolute;
+  height: 0;
+  border-top: 2px dashed #ef4444;
+  pointer-events: none;
+  z-index: 51;
+  transform-origin: 0 0;
+}
+/* 拖拽坐标提示浮窗 */
+.drag-coord-hint {
+  position: absolute;
+  background: rgba(17, 24, 39, 0.92);
+  color: #f9fafb;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  z-index: 52;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.drag-coord-hint .dc-row { display: flex; gap: 4px; align-items: baseline; }
+.drag-coord-hint .dc-label {
+  color: #fca5a5;
+  font-weight: 600;
+  min-width: 28px;
+  font-size: 10px;
+}
+/* 常驻坐标轴位置显示 */
+.cursor-coord-readout {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  background: rgba(17, 24, 39, 0.82);
+  color: #e5e7eb;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+  z-index: 52;
+  white-space: nowrap;
+}
+.cursor-coord-readout .cc-axis {
+  color: #67e8f9;
+  font-weight: 600;
+  font-size: 10px;
+  margin-right: 2px;
+}
+.cursor-coord-readout .cc-sep {
+  margin: 0 6px;
+  color: #6b7280;
+}
 /* 选中部件显示区 */
 .selected-parts-box {
   background: rgba(6, 182, 212, 0.06);
@@ -2203,6 +2792,11 @@ onMounted(async () => {
 .btn-combine {
   background: var(--accent) !important;
   color: #000 !important;
+  font-weight: 600;
+}
+.btn-front {
+  background: var(--blue, #3b82f6) !important;
+  color: #fff !important;
   font-weight: 600;
 }
 .group-input-bar {
@@ -2264,6 +2858,24 @@ onMounted(async () => {
   transition: border-color 0.15s;
 }
 .motion-item:hover { border-color: var(--accent); }
+.motion-item[title] { cursor: pointer; }
+.motion-editing {
+  border-color: var(--yellow) !important;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.25);
+}
+.motion-list-tip {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  text-align: center;
+  opacity: 0.8;
+}
+/* 动作编辑浮窗（与录制面板同体，略偏右下） */
+.motion-edit-panel {
+  right: 12px;
+  left: auto;
+  z-index: 60;
+}
 .motion-item-header {
   display: flex;
   justify-content: space-between;
@@ -2306,6 +2918,20 @@ onMounted(async () => {
 }
 .part-mini-item:hover { background: var(--panel-2); }
 .part-mini-item.row-selected { background: rgba(6, 182, 212, 0.15); color: var(--accent); }
+.part-mini-item { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.part-id-label { font-family: monospace; }
+.part-name-sub { font-size: 11px; color: var(--text-muted, #9ca3af); }
+.part-name-input {
+  flex: 1;
+  min-width: 60px;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 1px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
 
 /* 录制面板 */
 .record-panel {

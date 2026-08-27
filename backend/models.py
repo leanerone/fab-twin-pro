@@ -113,6 +113,8 @@ class Machine(Base):
     y_pos = Column(Float, default=0)                   # 在产线布局中的Y坐标（3D视图）
     floor_x = Column(Float, default=0)                 # 楼层平面图X坐标（百分比）
     floor_y = Column(Float, default=0)                 # 楼层平面图Y坐标（百分比）
+    external_url = Column(String(500), default="")        # 外部跳转网站 URL（iframe 嵌入）
+    use_external_url = Column(Integer, default=0)         # 是否使用外部跳转网站：0=原路线，1=跳转网站
 
 
 class Lot(Base):

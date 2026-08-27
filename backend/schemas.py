@@ -27,6 +27,8 @@ class MachineOut(BaseModel):
     y_pos: Optional[float] = 0.0
     floor_x: Optional[float] = 0.0
     floor_y: Optional[float] = 0.0
+    external_url: Optional[str] = ""
+    use_external_url: Optional[int] = 0
 
 
 class EventOut(BaseModel):

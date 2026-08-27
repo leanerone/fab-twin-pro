@@ -1,15 +1,24 @@
 """机台相关 API"""
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Machine, Lot
+from models import Machine, Lot, User
+from routers.auth import get_current_user, check_permission
 from schemas import MachineOut
 
 router = APIRouter(prefix="/api/machines", tags=["machines"])
+
+
+def require_model_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """要求当前用户拥有 model_edit 权限（管理员）"""
+    if not check_permission(user, "model_edit", db):
+        raise HTTPException(status_code=403, detail="无权限：需要 model_edit 权限")
+    return user
 
 
 @router.get("", response_model=List[MachineOut])
@@ -75,4 +84,28 @@ def get_machine(machine_id: str, db: Session = Depends(get_db)):
     m = db.query(Machine).filter(Machine.id == machine_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="机台不存在")
+    return m
+
+
+class ExternalLinkPayload(BaseModel):
+    """外部跳转链接配置"""
+    external_url: Optional[str] = ""
+    use_external_url: Optional[int] = 0
+
+
+@router.patch("/{machine_id}/external-link", response_model=MachineOut)
+def update_external_link(
+    machine_id: str,
+    payload: ExternalLinkPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_model_edit),
+):
+    """更新机台外部跳转链接配置（仅管理员）"""
+    m = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="机台不存在")
+    m.external_url = (payload.external_url or "").strip()
+    m.use_external_url = 1 if payload.use_external_url else 0
+    db.commit()
+    db.refresh(m)
     return m
