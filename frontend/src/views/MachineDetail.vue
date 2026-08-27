@@ -45,6 +45,12 @@ const modelStore = useModelStore()
 const machine = ref(null)
 // 是否使用外部跳转网站（iframe 嵌入）替代原生 2D/3D 视图
 const useExternalView = computed(() => !!(machine.value?.use_external_url && machine.value?.external_url))
+// 嵌入用 URL：自动补全协议前缀，避免被浏览器解析为相对路径
+const externalFrameUrl = computed(() => {
+  const raw = (machine.value?.external_url || '').trim()
+  if (!raw) return ''
+  return /^https?:\/\//i.test(raw) ? raw : 'https://' + raw
+})
 const mode = ref('realtime')              // realtime / playback
 const playing = ref(true)
 const speed = ref(2)
@@ -1078,7 +1084,7 @@ onMounted(() => {
 
       <!-- 外部跳转网站：iframe 嵌入 -->
       <div v-if="useExternalView" class="ext-iframe-wrap">
-        <iframe :src="machine.external_url" class="oxe-iframe" frameborder="0" allow="fullscreen; clipboard-read; clipboard-write" allowfullscreen></iframe>
+        <iframe :src="externalFrameUrl" class="oxe-iframe" frameborder="0" allow="fullscreen; clipboard-read; clipboard-write" allowfullscreen></iframe>
       </div>
 
       <!-- 加载占位（避免闪现ETCH模型） -->

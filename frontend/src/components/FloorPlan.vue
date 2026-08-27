@@ -124,38 +124,50 @@ const savingExternalLink = ref(false)
 let machineClickTimer = null
 
 function canEditModel() {
-  return authStore.can && authStore.can('model_edit')
+  return authStore.hasPermission && authStore.hasPermission('model_edit')
 }
 
-function onMachineClick(m) {
-  // 管理员用计时器区分双击编辑；普通用户直接跳转
-  if (canEditModel()) {
-    if (machineClickTimer) { clearTimeout(machineClickTimer); machineClickTimer = null; return }
+function onMachineClick(m, e) {
+  if (e) e.stopPropagation()
+  // 管理员 + 编辑模式：延迟单击，给双击编辑机会
+  if (canEditModel() && editMode.value) {
+    if (machineClickTimer) clearTimeout(machineClickTimer)
     machineClickTimer = setTimeout(() => {
       selectMachine(m)
       machineClickTimer = null
-    }, 230)
+    }, 300)
   } else {
+    // 非编辑模式或非管理员：直接导航
     selectMachine(m)
   }
 }
-function onMachineDblClick(m) {
-  if (!canEditModel()) return
+function onMachineDblClick(m, e) {
+  if (e) e.stopPropagation()
   if (machineClickTimer) { clearTimeout(machineClickTimer); machineClickTimer = null }
+  // 只有编辑模式 + 管理员才能弹编辑框
+  if (!editMode.value) return
+  if (!canEditModel()) {
+    showToast('仅管理员可编辑机台外链配置', 'warn')
+    return
+  }
   openExternalLinkEditor(m)
 }
 function openExternalLinkEditor(m) {
-  editingLinkMachine.value = m
+  // 从最新 machines 数组中查找，确保数据是最新的
+  const latest = machines.value.find(x => x.id === m.id) || m
+  editingLinkMachine.value = latest
   externalLinkForm.value = {
-    external_url: m.external_url || '',
-    use_external_url: m.use_external_url ? 1 : 0,
+    external_url: latest.external_url || '',
+    use_external_url: latest.use_external_url ? 1 : 0,
   }
   showExternalLinkModal.value = true
 }
 async function saveExternalLink() {
   const m = editingLinkMachine.value
   if (!m) return
-  const url = (externalLinkForm.value.external_url || '').trim()
+  const rawUrl = (externalLinkForm.value.external_url || '').trim()
+  // 自动补全协议前缀（www.baidu.com → https://www.baidu.com）
+  const url = rawUrl && !/^https?:\/\//i.test(rawUrl) ? 'https://' + rawUrl : rawUrl
   if (externalLinkForm.value.use_external_url && !url) {
     showToast('启用跳转网站时必须填写 URL', 'error')
     return
@@ -166,9 +178,14 @@ async function saveExternalLink() {
       external_url: url,
       use_external_url: externalLinkForm.value.use_external_url ? 1 : 0,
     })
+    // 精确更新本地数据
     const idx = machines.value.findIndex(x => x.id === m.id)
-    if (idx >= 0) Object.assign(machines.value[idx], updated)
-    Object.assign(m, updated)
+    if (idx >= 0) {
+      machines.value[idx].external_url = updated.external_url
+      machines.value[idx].use_external_url = updated.use_external_url
+    }
+    m.external_url = updated.external_url
+    m.use_external_url = updated.use_external_url
     showExternalLinkModal.value = false
     showToast('外链配置已保存', 'success')
   } catch (e) {
@@ -822,8 +839,8 @@ onUnmounted(() => {
           top: m.floor_y + '%',
         }"
         :title="m.use_external_url ? `外链：${m.external_url}` : (canEditModel() ? '单击进入，双击编辑外链' : '')"
-        @click.stop="onMachineClick(m)"
-        @dblclick.stop="onMachineDblClick(m)"
+        @click="onMachineClick(m, $event)"
+        @dblclick="onMachineDblClick(m, $event)"
       >
         <span v-if="m.use_external_url" class="ext-link-badge" :title="`跳转网站：${m.external_url}`">↗</span>
         <div 
@@ -1470,7 +1487,19 @@ onUnmounted(() => {
   cursor: pointer;
   transition: transform 0.1s;
   z-index: 10;
+  /* 固定可点击区域 + 透明背景确保空白处也能点击，双击编辑不失效 */
+  width: 48px;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 2px;
+  background: transparent;  /* 允许空白处捕获点击事件 */
+  border-radius: 4px;
 }
+/* 机台内部元素不拦截事件，全部冒泡到外层 .machine-marker 统一处理（保证双击/单击稳定） */
+.machine-marker > * { pointer-events: none; }
 
 .machine-marker:hover {
   transform: translate(-50%, -50%) scale(1.3);
