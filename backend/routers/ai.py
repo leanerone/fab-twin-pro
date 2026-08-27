@@ -184,10 +184,30 @@ def get_usage_stats(days: int = Query(30, ge=1, le=365)):
 
 
 @router.get("/usage/logs")
-def get_usage_logs(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
-    """获取使用日志列表"""
-    logs = ai_middleware.get_usage_logs(limit=limit, offset=offset)
-    return {"logs": logs, "total": len(logs)}
+def get_usage_logs(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    provider: Optional[str] = Query(None, description="Provider 名称"),
+    success: Optional[bool] = Query(None, description="True只查成功, False只查失败"),
+):
+    """获取使用日志列表（支持日期/Provider/成功失败筛选 + 分页）"""
+    logs, total = ai_middleware.get_usage_logs(
+        limit=limit, offset=offset, include_details=False,
+        start_date=start_date, end_date=end_date,
+        provider=provider, success=success,
+    )
+    return {"logs": logs, "total": total}
+
+
+@router.get("/usage/logs/{log_id}")
+def get_usage_log_detail(log_id: int):
+    """获取单条使用日志详情（含 execution_log / tool_calls / answer_preview 全字段）"""
+    log = ai_middleware.get_usage_log_by_id(log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="日志不存在")
+    return log
 
 
 # ========== 会话管理 ==========

@@ -251,6 +251,7 @@ class AIUsageLogOut(BaseModel):
     session_id: Optional[str] = ""
     config_id: Optional[int] = None
     provider: str
+    provider_name: Optional[str] = None
     model: str
     prompt_tokens: int
     completion_tokens: int
@@ -258,4 +259,7 @@ class AIUsageLogOut(BaseModel):
     question_preview: str
     success: bool
     error_msg: Optional[str] = None
+    answer_preview: Optional[str] = None
+    tool_calls: Optional[Any] = None
+    execution_log: Optional[Any] = None
     created_at: str

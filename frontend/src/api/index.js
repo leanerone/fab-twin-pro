@@ -80,7 +80,15 @@ export const api = {
   aiSwitchModelConfig: (id) => request('POST', `/ai/model-configs/switch?config_id=${id}`),
   // AI 使用量统计
   aiGetUsageStats: (days = 30) => request('GET', `/ai/usage/stats?days=${days}`),
-  aiGetUsageLogs: (limit = 100, offset = 0) => request('GET', `/ai/usage/logs?limit=${limit}&offset=${offset}`),
+  aiGetUsageLogs: (params = {}) => {
+    const qs = new URLSearchParams({ limit: params.limit || 100, offset: params.offset || 0 });
+    if (params.start_date) qs.append('start_date', params.start_date);
+    if (params.end_date) qs.append('end_date', params.end_date);
+    if (params.provider) qs.append('provider', params.provider);
+    if (params.success !== undefined && params.success !== null) qs.append('success', params.success);
+    return request('GET', `/ai/usage/logs?${qs.toString()}`);
+  },
+  aiGetUsageLogDetail: (logId) => request('GET', `/ai/usage/logs/${logId}`),
   // AI 会话管理
   aiListSessions: (limit = 20) => request('GET', `/ai/sessions?limit=${limit}`),
   aiGetSession: (sessionId) => request('GET', `/ai/sessions/${sessionId}`),

@@ -23,7 +23,7 @@ import json
 import time
 import uuid
 import requests
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 
 from config import (
@@ -1339,20 +1339,53 @@ Lot ID 格式说明：
                 "daily_stats": [],
             }
 
-    def get_usage_logs(self, limit: int = 100, offset: int = 0, include_details: bool = True) -> List[Dict]:
-        """获取使用日志列表
+    def get_usage_logs(self, limit: int = 100, offset: int = 0, include_details: bool = True,
+                       start_date: str = None, end_date: str = None,
+                       provider: str = None, success: bool = None) -> Tuple[List[Dict], int]:
+        """获取使用日志列表（支持筛选 + 分页）
 
         Args:
             limit: 返回条数上限
             offset: 偏移量
             include_details: 是否包含详细执行日志（tool_calls, execution_log, answer）
+            start_date: 起始日期 YYYY-MM-DD（包含）
+            end_date: 结束日期 YYYY-MM-DD（包含，内部 +1 天）
+            provider: Provider 名称精确匹配（local/openai/zhipu/dify/hybrid）
+            success: True 只查成功，False 只查失败
+        Returns:
+            (logs_list, total_count)
         """
         try:
             db = _get_db()
             try:
                 from models import AIUsageLog
-                logs = db.query(AIUsageLog).order_by(AIUsageLog.created_at.desc()).offset(offset).limit(limit).all()
-                
+                from sqlalchemy import func
+
+                query = db.query(AIUsageLog)
+
+                # 日期筛选（created_at 存储格式为 "YYYY-MM-DD HH:MM:SS"）
+                if start_date:
+                    query = query.filter(AIUsageLog.created_at >= start_date)
+                if end_date:
+                    # end_date + 1 天以包含当天全部
+                    from datetime import datetime, timedelta
+                    end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+                    query = query.filter(AIUsageLog.created_at < end_dt.strftime("%Y-%m-%d"))
+
+                # Provider 筛选
+                if provider:
+                    query = query.filter(AIUsageLog.provider == provider)
+
+                # 成功/失败筛选
+                if success is not None:
+                    query = query.filter(AIUsageLog.success == success)
+
+                # 总数
+                total = query.count()
+
+                # 分页 + 排序
+                logs = query.order_by(AIUsageLog.created_at.desc()).offset(offset).limit(limit).all()
+
                 result = []
                 for log in logs:
                     item = {
@@ -1369,12 +1402,12 @@ Lot ID 格式说明：
                         "success": log.success,
                         "created_at": log.created_at,
                     }
-                    
+
                     # 解析 JSON 字段
                     if include_details:
                         item["answer_preview"] = log.answer_preview
                         item["error_msg"] = log.error_msg
-                        
+
                         # 解析 tool_calls
                         if log.tool_calls:
                             try:
@@ -1383,7 +1416,7 @@ Lot ID 格式说明：
                                 item["tool_calls"] = []
                         else:
                             item["tool_calls"] = []
-                        
+
                         # 解析 execution_log
                         if log.execution_log:
                             try:
@@ -1392,17 +1425,68 @@ Lot ID 格式说明：
                                 item["execution_log"] = []
                         else:
                             item["execution_log"] = []
-                    
+
                     result.append(item)
-                
-                return result
+
+                return result, total
             finally:
                 db.close()
         except Exception as e:
             print(f"[AI] 使用日志查询失败: {e}")
             import traceback
             traceback.print_exc()
-            return []
+            return [], 0
+
+    def get_usage_log_by_id(self, log_id: int) -> Optional[Dict]:
+        """获取单条使用日志详情（含全部字段）"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIUsageLog
+                log = db.query(AIUsageLog).filter(AIUsageLog.id == log_id).first()
+                if not log:
+                    return None
+
+                # 解析 JSON 字段
+                tool_calls_parsed = []
+                if log.tool_calls:
+                    try:
+                        tool_calls_parsed = json.loads(log.tool_calls)
+                    except (json.JSONDecodeError, TypeError):
+                        tool_calls_parsed = []
+
+                execution_log_parsed = []
+                if log.execution_log:
+                    try:
+                        execution_log_parsed = json.loads(log.execution_log)
+                    except (json.JSONDecodeError, TypeError):
+                        execution_log_parsed = []
+
+                return {
+                    "id": log.id,
+                    "session_id": log.session_id,
+                    "config_id": log.config_id,
+                    "provider": log.provider,
+                    "provider_name": log.provider_name,
+                    "model": log.model,
+                    "prompt_tokens": log.prompt_tokens,
+                    "completion_tokens": log.completion_tokens,
+                    "total_tokens": log.total_tokens,
+                    "question_preview": log.question_preview,
+                    "success": log.success,
+                    "error_msg": log.error_msg,
+                    "answer_preview": log.answer_preview,
+                    "tool_calls": tool_calls_parsed,
+                    "execution_log": execution_log_parsed,
+                    "created_at": log.created_at,
+                }
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 使用日志详情查询失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     # ==================== Provider 多配置管理 ====================
 

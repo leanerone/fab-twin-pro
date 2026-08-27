@@ -65,6 +65,37 @@ const mcpTools = ref([])
 const mcpTokenSet = ref(false)
 const mcpTokenPreview = ref('')
 
+// ========== 使用日志 ==========
+const logsLoading = ref(false)
+const logs = ref([])
+const logsTotal = ref(0)
+const logFilters = ref({
+  start_date: '',
+  end_date: '',
+  provider: '',
+  success: '',
+})
+const logPage = ref(1)
+const logPageSize = ref(20)
+const logDetailVisible = ref(false)
+const logDetail = ref(null)
+const logDetailLoading = ref(false)
+
+const providerOptions = [
+  { value: '', label: '全部 Provider' },
+  { value: 'local', label: '本地规则' },
+  { value: 'openai', label: 'OpenAI 兼容' },
+  { value: 'zhipu', label: '智谱 GLM' },
+  { value: 'dify', label: 'Dify' },
+  { value: 'hybrid', label: 'Hybrid 混合' },
+]
+
+const successOptions = [
+  { value: '', label: '全部' },
+  { value: 'true', label: '成功' },
+  { value: 'false', label: '失败' },
+]
+
 const selectedPreset = computed(() => {
   return providerPresets.value.find(p => p.id === form.value.provider) || null
 })
@@ -397,6 +428,83 @@ function formatNumber(n) {
   return n.toLocaleString('zh-CN')
 }
 
+// ========== 使用日志 ==========
+async function loadLogs() {
+  logsLoading.value = true
+  try {
+    const params = {
+      limit: logPageSize.value,
+      offset: (logPage.value - 1) * logPageSize.value,
+    }
+    if (logFilters.value.start_date) params.start_date = logFilters.value.start_date
+    if (logFilters.value.end_date) params.end_date = logFilters.value.end_date
+    if (logFilters.value.provider) params.provider = logFilters.value.provider
+    if (logFilters.value.success !== '') params.success = logFilters.value.success === 'true'
+    const res = await api.aiGetUsageLogs(params)
+    logs.value = res.logs || []
+    logsTotal.value = res.total || 0
+  } catch (e) {
+    console.error('加载使用日志失败', e)
+    showToast('error', '加载日志失败')
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+async function viewLogDetail(logId) {
+  logDetailVisible.value = true
+  logDetailLoading.value = true
+  logDetail.value = null
+  try {
+    const res = await api.aiGetUsageLogDetail(logId)
+    logDetail.value = res
+  } catch (e) {
+    console.error('加载日志详情失败', e)
+    showToast('error', '加载详情失败')
+  } finally {
+    logDetailLoading.value = false
+  }
+}
+
+function searchLogs() {
+  logPage.value = 1
+  loadLogs()
+}
+
+function resetLogFilters() {
+  logFilters.value = { start_date: '', end_date: '', provider: '', success: '' }
+  logPage.value = 1
+  loadLogs()
+}
+
+function onLogPageChange(page) {
+  logPage.value = page
+  loadLogs()
+}
+
+const logTotalPages = computed(() => Math.max(1, Math.ceil(logsTotal.value / logPageSize.value)))
+
+const executionSteps = computed(() => {
+  if (!logDetail.value?.execution_log) return []
+  const steps = logDetail.value.execution_log
+  if (Array.isArray(steps)) return steps
+  if (typeof steps === 'object') {
+    // 如果是对象格式，尝试转为数组
+    return Object.entries(steps).map(([k, v]) => ({ step: k, ...v }))
+  }
+  return []
+})
+
+const toolCallsParsed = computed(() => {
+  if (!logDetail.value?.tool_calls) return []
+  const tc = logDetail.value.tool_calls
+  if (Array.isArray(tc)) return tc
+  if (typeof tc === 'string') {
+    try { return JSON.parse(tc) } catch { return [] }
+  }
+  return []
+})
+
 onMounted(() => {
   loadConfigs()
   loadUsage()
@@ -414,6 +522,9 @@ function onTabChange(tab) {
   }
   if (tab === 'usage') {
     loadUsage()
+  }
+  if (tab === 'logs') {
+    loadLogs()
   }
 }
 </script>
@@ -436,6 +547,7 @@ function onTabChange(tab) {
         { name: 'configs', label: '模型配置' },
         { name: 'dify', label: 'Dify/N8N' },
         { name: 'usage', label: '使用统计' },
+        { name: 'logs', label: '使用日志' },
       ]" :key="tab.name"
         :class="['tab-item', { active: activeTab === tab.name }]"
         @click="onTabChange(tab.name)">
@@ -637,7 +749,165 @@ function onTabChange(tab) {
           </div>
         </div>
       </div>
+
+      <!-- 使用日志 -->
+      <div v-show="activeTab === 'logs'" class="tab-pane">
+        <!-- 筛选栏 -->
+        <div class="logs-filter-bar">
+          <div class="filter-group">
+            <label>起始日期</label>
+            <input type="date" v-model="logFilters.start_date" class="filter-input" />
+          </div>
+          <div class="filter-group">
+            <label>结束日期</label>
+            <input type="date" v-model="logFilters.end_date" class="filter-input" />
+          </div>
+          <div class="filter-group">
+            <label>Provider</label>
+            <select v-model="logFilters.provider" class="filter-input">
+              <option v-for="opt in providerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>结果</label>
+            <select v-model="logFilters.success" class="filter-input">
+              <option v-for="opt in successOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="filter-actions">
+            <button class="btn btn-primary" @click="searchLogs">查询</button>
+            <button class="btn btn-ghost" @click="resetLogFilters">重置</button>
+          </div>
+        </div>
+
+        <!-- 日志表格 -->
+        <div v-if="logsLoading" class="logs-loading">加载中...</div>
+        <div v-else-if="logs.length === 0" class="empty">暂无日志记录</div>
+        <div v-else class="logs-table-wrap">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>Provider</th>
+                <th>模型</th>
+                <th>Tokens (入/出/总)</th>
+                <th>问题预览</th>
+                <th>结果</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="log in logs" :key="log.id" :class="{ 'log-fail': !log.success }">
+                <td class="col-time">{{ log.created_at }}</td>
+                <td>
+                  <span class="log-provider">{{ log.provider }}</span>
+                  <span v-if="log.provider_name" class="log-provider-name">{{ log.provider_name }}</span>
+                </td>
+                <td class="col-model">{{ log.model || '-' }}</td>
+                <td class="col-tokens">
+                  <span class="tk-in">{{ log.prompt_tokens }}</span> /
+                  <span class="tk-out">{{ log.completion_tokens }}</span> /
+                  <span class="tk-total">{{ log.total_tokens }}</span>
+                </td>
+                <td class="col-question" :title="log.question_preview">{{ log.question_preview?.substring(0, 50) }}{{ log.question_preview?.length > 50 ? '...' : '' }}</td>
+                <td>
+                  <span class="log-badge" :class="log.success ? 'ok' : 'fail'">{{ log.success ? '✅ 成功' : '❌ 失败' }}</span>
+                </td>
+                <td>
+                  <button class="btn btn-ghost" @click="viewLogDetail(log.id)">查看详情</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 分页 -->
+          <div class="logs-pagination">
+            <span class="page-info">共 {{ logsTotal }} 条，第 {{ logPage }}/{{ logTotalPages }} 页</span>
+            <div class="page-btns">
+              <button class="btn btn-ghost" :disabled="logPage <= 1" @click="onLogPageChange(logPage - 1)">上一页</button>
+              <button class="btn btn-ghost" :disabled="logPage >= logTotalPages" @click="onLogPageChange(logPage + 1)">下一页</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- 日志详情抽屉 -->
+    <transition name="drawer">
+      <div v-if="logDetailVisible" class="log-drawer-overlay" @click.self="logDetailVisible = false">
+        <div class="log-drawer">
+          <div class="drawer-header">
+            <span>AI 调用日志详情 #{{ logDetail?.id }}</span>
+            <span class="close-btn" @click="logDetailVisible = false">&#10005;</span>
+          </div>
+          <div class="drawer-body">
+            <div v-if="logDetailLoading" class="logs-loading">加载中...</div>
+            <div v-else-if="logDetail" class="detail-content">
+              <!-- 1. 基本信息 -->
+              <div class="detail-section">
+                <div class="detail-section-title">基本信息</div>
+                <div class="detail-grid">
+                  <div><span class="dk">时间</span><span class="dv">{{ logDetail.created_at }}</span></div>
+                  <div><span class="dk">会话ID</span><span class="dv">{{ logDetail.session_id || '-' }}</span></div>
+                  <div><span class="dk">配置ID</span><span class="dv">{{ logDetail.config_id || '-' }}</span></div>
+                  <div><span class="dk">Provider</span><span class="dv">{{ logDetail.provider }}{{ logDetail.provider_name ? ' / ' + logDetail.provider_name : '' }}</span></div>
+                  <div><span class="dk">模型</span><span class="dv">{{ logDetail.model || '-' }}</span></div>
+                  <div><span class="dk">Tokens</span><span class="dv">{{ logDetail.prompt_tokens }} / {{ logDetail.completion_tokens }} / {{ logDetail.total_tokens }}</span></div>
+                  <div><span class="dk">结果</span><span class="dv"><span class="log-badge" :class="logDetail.success ? 'ok' : 'fail'">{{ logDetail.success ? '✅ 成功' : '❌ 失败' }}</span></span></div>
+                </div>
+              </div>
+
+              <!-- 2. 用户问题 -->
+              <div class="detail-section">
+                <div class="detail-section-title">用户问题</div>
+                <div class="detail-text-box">{{ logDetail.question_preview || '(无)' }}</div>
+              </div>
+
+              <!-- 3. AI回答 -->
+              <div class="detail-section">
+                <div class="detail-section-title">AI 回答</div>
+                <div class="detail-text-box">{{ logDetail.answer_preview || '(无回答)' }}</div>
+              </div>
+
+              <!-- 4. 工具调用链 -->
+              <div v-if="toolCallsParsed.length > 0" class="detail-section">
+                <div class="detail-section-title">工具调用链 ({{ toolCallsParsed.length }})</div>
+                <div class="tool-call-list">
+                  <div v-for="(tc, idx) in toolCallsParsed" :key="idx" class="tool-call-item">
+                    <span class="tc-name">{{ tc.name || tc.function?.name || `工具#${idx + 1}` }}</span>
+                    <pre class="tc-args">{{ JSON.stringify(tc.arguments || tc.function?.arguments || {}, null, 2) }}</pre>
+                    <span v-if="tc.result || tc.response" class="tc-result">{{ JSON.stringify(tc.result || tc.response, null, 2) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. 执行日志时间轴 -->
+              <div v-if="executionSteps.length > 0" class="detail-section">
+                <div class="detail-section-title">执行日志时间轴 ({{ executionSteps.length }} 步)</div>
+                <div class="exec-timeline">
+                  <div v-for="(step, idx) in executionSteps" :key="idx"
+                    :class="['exec-step', { 'exec-error': step.error || step.status === 'error' || (typeof step.step === 'string' && step.step.includes('error')) }]">
+                    <div class="exec-dot" :class="{ 'exec-dot-error': step.error || step.status === 'error' || (typeof step.step === 'string' && step.step.includes('error')) }"></div>
+                    <div class="exec-content">
+                      <span class="exec-step-name">{{ step.step || step.name || `Step ${idx + 1}` }}</span>
+                      <span v-if="step.timestamp || step.ts || step.time" class="exec-ts">{{ step.timestamp || step.ts || step.time }}</span>
+                      <div v-if="step.message || step.msg || step.detail" class="exec-msg">{{ step.message || step.msg || step.detail }}</div>
+                      <div v-if="step.error" class="exec-err-msg">{{ step.error }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6. 错误详情 -->
+              <div v-if="logDetail.error_msg" class="detail-section">
+                <div class="detail-section-title" style="color: #e74c3c;">错误详情</div>
+                <div class="error-box">{{ logDetail.error_msg }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- 创建/编辑弹窗 -->
     <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
@@ -1219,5 +1489,370 @@ function onTabChange(tab) {
   font-size: 12px;
   color: #888;
   margin-top: 2px;
+}
+
+/* ========== 使用日志 ========== */
+.logs-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 6px;
+}
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.filter-group label {
+  font-size: 11px;
+  color: var(--text-dim, #8a94a6);
+}
+.filter-input {
+  padding: 6px 8px;
+  background: var(--bg, #0f1419);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 4px;
+  color: var(--text, #e0e6ed);
+  font-size: 13px;
+  min-height: 32px;
+}
+.filter-input:focus {
+  outline: none;
+  border-color: #00d4ff;
+}
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.logs-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim, #8a94a6);
+  font-size: 13px;
+}
+
+.logs-table-wrap {
+  overflow-x: auto;
+}
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.logs-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--border, #2a3142);
+  color: var(--text-dim, #8a94a6);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.logs-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: var(--text, #e0e6ed);
+}
+.logs-table tr.log-fail {
+  background: rgba(231, 76, 60, 0.05);
+}
+.logs-table tr.log-fail:hover {
+  background: rgba(231, 76, 60, 0.1);
+}
+.logs-table tbody tr:hover {
+  background: rgba(0, 212, 255, 0.03);
+}
+.col-time {
+  white-space: nowrap;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+}
+.col-model {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+}
+.col-tokens {
+  white-space: nowrap;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+}
+.col-question {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tk-in { color: #8a94a6; }
+.tk-out { color: #f0ad4e; }
+.tk-total { color: #00d4ff; font-weight: 600; }
+
+.log-provider {
+  font-size: 11px;
+  font-weight: 600;
+  color: #00d4ff;
+}
+.log-provider-name {
+  display: block;
+  font-size: 10px;
+  color: var(--text-dim, #8a94a6);
+}
+
+.log-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.log-badge.ok {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+.log-badge.fail {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
+.logs-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+.page-info {
+  font-size: 12px;
+  color: var(--text-dim, #8a94a6);
+}
+.page-btns {
+  display: flex;
+  gap: 8px;
+}
+
+/* ========== 日志详情抽屉 ========== */
+.log-drawer-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 160;
+  display: flex;
+  justify-content: flex-end;
+}
+.log-drawer {
+  width: 55%;
+  min-width: 500px;
+  max-width: 800px;
+  height: 100%;
+  background: var(--bg-card, #1a1f2e);
+  border-left: 1px solid var(--border, #2a3142);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+}
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, #2a3142);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text, #e0e6ed);
+  background: rgba(0, 212, 255, 0.05);
+}
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e0e6ed);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.detail-grid > div {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.dk {
+  font-size: 11px;
+  color: var(--text-dim, #8a94a6);
+  min-width: 60px;
+}
+.dv {
+  font-size: 12px;
+  color: var(--text, #e0e6ed);
+  word-break: break-all;
+}
+.detail-text-box {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text, #e0e6ed);
+  line-height: 1.6;
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 工具调用链 */
+.tool-call-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-call-item {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.tc-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #00d4ff;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+.tc-args {
+  margin: 6px 0 0 0;
+  font-size: 11px;
+  color: var(--text-dim, #8a94a6);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.tc-result {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #2ecc71;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* 执行日志时间轴 */
+.exec-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 8px;
+}
+.exec-step {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  position: relative;
+}
+.exec-step::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 18px;
+  bottom: -6px;
+  width: 2px;
+  background: rgba(255,255,255,0.08);
+}
+.exec-step:last-child::before {
+  display: none;
+}
+.exec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #00d4ff;
+  flex-shrink: 0;
+  margin-top: 4px;
+  position: relative;
+  z-index: 1;
+  border: 2px solid var(--bg-card, #1a1f2e);
+}
+.exec-dot-error {
+  background: #e74c3c;
+}
+.exec-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.exec-step-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text, #e0e6ed);
+}
+.exec-error .exec-step-name {
+  color: #e74c3c;
+}
+.exec-ts {
+  font-size: 10px;
+  color: var(--text-dim, #8a94a6);
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+.exec-msg {
+  font-size: 11px;
+  color: var(--text-dim, #8a94a6);
+  word-break: break-all;
+}
+.exec-err-msg {
+  font-size: 11px;
+  color: #e74c3c;
+  word-break: break-all;
+}
+.error-box {
+  background: rgba(231, 76, 60, 0.08);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #e74c3c;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 抽屉动画 */
+.drawer-enter-active, .drawer-leave-active {
+  transition: opacity 0.3s;
+}
+.drawer-enter-active .log-drawer,
+.drawer-leave-active .log-drawer {
+  transition: transform 0.3s;
+}
+.drawer-enter-from, .drawer-leave-to {
+  opacity: 0;
+}
+.drawer-enter-from .log-drawer,
+.drawer-leave-to .log-drawer {
+  transform: translateX(100%);
 }
 </style>
