@@ -56,7 +56,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://your-fabtwin-backend/api/ai/chat",
+        "url": "={{ $env.FABTWIN_API_URL || 'http://localhost:8002' }}/api/ai/chat",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -67,12 +67,6 @@
           ]
         },
         "sendBody": true,
-        "body": {
-          "question": "={{ $json.question }}",
-          "machine_id": "={{ $json.machine_id }}",
-          "user_role": "={{ $json.user_role }}",
-          "session_id": "=n8n_general_query"
-        },
         "bodyParameters": {
           "parameters": [
             {
@@ -82,6 +76,14 @@
             {
               "name": "machine_id",
               "value": "={{ $json.machine_id }}"
+            },
+            {
+              "name": "user_role",
+              "value": "={{ $json.user_role }}"
+            },
+            {
+              "name": "session_id",
+              "value": "=n8n_general_query"
             }
           ]
         },

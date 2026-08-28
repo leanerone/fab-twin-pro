@@ -427,7 +427,7 @@ class AIMiddleware:
             elif self.provider in openai_compatible_providers:
                 print(f"[AI] provider={self.provider} 但未配置 base_url 或 api_key，回退本地规则")
                 execution_log.append({"step": "fallback", "reason": "缺少 base_url 或 api_key"})
-                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
+                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
             elif self.provider == "dify":
                 execution_log.append({"step": "call_dify"})
                 result = self._call_dify(
@@ -446,17 +446,17 @@ class AIMiddleware:
                     execution_log.append({"step": "fallback", "reason": f"Dify失败: {str(e)[:100]}"})
                     success = False
                     error_msg = f"Dify调用失败，回退本地规则: {str(e)}"
-                    result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
+                    result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
             else:
                 execution_log.append({"step": "call_local_rule"})
-                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
+                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
         except Exception as e:
             print(f"[AI] 调用失败，回退本地规则: {e}")
             execution_log.append({"step": "error", "error": str(e)[:200]})
             success = False
             error_msg = str(e)
             try:
-                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
+                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
             except Exception as e2:
                 print(f"[AI] 本地规则引擎也失败: {e2}")
                 execution_log.append({"step": "error", "error": f"本地规则引擎也失败: {str(e2)[:200]}"})
@@ -631,7 +631,8 @@ Lot ID 格式说明：
 
     def _local_rule_engine(self, question: str, machine_id: str = None,
                            user_role: str = "user", execution_log: list = None, 
-                           tool_calls_record: list = None) -> Dict[str, Any]:
+                           tool_calls_record: list = None,
+                           usage_tracker: Dict = None) -> Dict[str, Any]:
         """本地规则引擎 - 关键字匹配路由到 ai_tools 数据访问层"""
         db = _get_db()
         try:
@@ -645,9 +646,10 @@ Lot ID 格式说明：
             if user_role == "admin" and self._is_n8n_command(q):
                 if execution_log is not None:
                     execution_log.append({"step": "match_intent", "intent": "n8n_command"})
-                result = self._trigger_n8n_workflow(question, machine_id, user_role)
-                if tool_calls_record is not None:
-                    tool_calls_record.append({"tool": "n8n_workflow", "status": "success"})
+                result = self._trigger_n8n_workflow(
+                    question, machine_id, user_role,
+                    usage_tracker=usage_tracker, tool_calls_recorder=tool_calls_record,
+                )
                 return result
 
             # 从问题中提取机台ID（支持 PODOPENER-1 / OXE-1 / VPO-01 等格式）
@@ -677,9 +679,10 @@ Lot ID 格式说明：
                 if user_role == "admin" and ("导出" in q or "报表" in q):
                     if execution_log is not None:
                         execution_log.append({"step": "match_intent", "intent": "n8n_export_alarm"})
-                    result = self._trigger_n8n_workflow(question, machine_id, user_role, "export_alarm_report")
-                    if tool_calls_record is not None:
-                        tool_calls_record.append({"tool": "n8n_workflow", "status": "success"})
+                    result = self._trigger_n8n_workflow(
+                        question, machine_id, user_role, "export_alarm_report",
+                        usage_tracker=usage_tracker, tool_calls_recorder=tool_calls_record,
+                    )
                     return result
                 if execution_log is not None:
                     execution_log.append({"step": "match_intent", "intent": "get_machine_alarms", "machine_id": extracted_mid})
@@ -719,9 +722,10 @@ Lot ID 格式说明：
             if user_role == "admin" and any(k in q for k in ["工单", "work order", "故障单"]):
                 if execution_log is not None:
                     execution_log.append({"step": "match_intent", "intent": "n8n_generate_work_order"})
-                result = self._trigger_n8n_workflow(question, machine_id, user_role, "generate_work_order")
-                if tool_calls_record is not None:
-                    tool_calls_record.append({"tool": "n8n_workflow", "status": "success"})
+                result = self._trigger_n8n_workflow(
+                    question, machine_id, user_role, "generate_work_order",
+                    usage_tracker=usage_tracker, tool_calls_recorder=tool_calls_record,
+                )
                 return result
 
             # 状态/运行情况（默认）
@@ -1123,15 +1127,31 @@ Lot ID 格式说明：
     # ==================== N8N 工作流联动 ====================
 
     def _trigger_n8n_workflow(self, question: str, machine_id: str = None,
-                              user_role: str = "user", workflow_type: str = None) -> Dict[str, Any]:
-        """触发N8N工作流（MCP协议转发）"""
+                              user_role: str = "user", workflow_type: str = None,
+                              usage_tracker: Dict = None,
+                              tool_calls_recorder: List = None) -> Dict[str, Any]:
+        """触发N8N工作流
+        - 通过 Webhook 调用 n8n 工作流，支持 5 种 workflow_type
+        - 解析 n8n 返回的执行元数据（executionId / duration）写入 tool_calls_recorder
+        - 解析 n8n 返回的 token usage（若 n8n 内部调用了 LLM 节点）回写 usage_tracker
+        """
         if user_role != "admin":
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "n8n_workflow", "status": "denied",
+                    "reason": "需要管理员权限",
+                })
             return {
                 "answer": "抱歉，自动化流程操作需要管理员权限。请联系管理员。",
                 "sql": "",
             }
 
         if not self.n8n_enabled or not self.n8n_base_url:
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "n8n_workflow", "status": "skip",
+                    "reason": "N8N 未启用或缺少配置",
+                })
             return {
                 "answer": (
                     "N8N 自动化服务未配置。\n"
@@ -1159,7 +1179,8 @@ Lot ID 格式说明：
                 workflow_type = "general_query"
 
         try:
-            webhook_url = f"{self.n8n_base_url.rstrip('/')}/webhook/{workflow_type}"
+            base = self.n8n_base_url.rstrip('/')
+            webhook_url = f"{base}/webhook/{workflow_type}"
             if self.n8n_webhook_secret:
                 webhook_url += f"?secret={self.n8n_webhook_secret}"
 
@@ -1177,6 +1198,24 @@ Lot ID 格式说明：
 
             answer = result_data.get("answer", result_data.get("message", "工作流已触发，请稍候查看结果。"))
 
+            # 解析 n8n 返回的 token usage（n8n 内部 LLM 节点可能返回）
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+            n8n_usage = result_data.get("usage") or result_data.get("token_usage") or {}
+            if isinstance(n8n_usage, dict):
+                prompt_tokens = int(n8n_usage.get("prompt_tokens") or n8n_usage.get("input_tokens") or 0)
+                completion_tokens = int(n8n_usage.get("completion_tokens") or n8n_usage.get("output_tokens") or 0)
+                total_tokens = int(n8n_usage.get("total_tokens") or 0)
+                if total_tokens == 0:
+                    total_tokens = prompt_tokens + completion_tokens
+
+            if usage_tracker is not None:
+                usage_tracker["prompt_tokens"] = prompt_tokens
+                usage_tracker["completion_tokens"] = completion_tokens
+                usage_tracker["total_tokens"] = total_tokens
+
+            # 解析表格数据
             table_data = None
             if "data" in result_data and isinstance(result_data["data"], list):
                 if result_data["data"] and isinstance(result_data["data"][0], dict):
@@ -1184,19 +1223,50 @@ Lot ID 格式说明：
                     rows = [list(item.values()) for item in result_data["data"][:20]]
                     table_data = {"headers": headers, "rows": rows}
 
+            # 记录工具调用详情
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": f"n8n_{workflow_type}",
+                    "status": "success",
+                    "execution_id": result_data.get("executionId") or result_data.get("execution_id"),
+                    "duration_ms": result_data.get("duration") or result_data.get("elapsed_ms"),
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "rows_count": len(result_data["data"]) if isinstance(result_data.get("data"), list) else 0,
+                })
+
             return {
                 "answer": f"🤖 [N8N自动化] {answer}",
                 "sql": result_data.get("sql", ""),
                 "table_data": table_data,
-                "tool_calls": [{"tool": "n8n", "workflow": workflow_type, "status": "success"}],
                 "sources": [{"type": "n8n", "workflow": workflow_type}],
+            }
+        except requests.HTTPError as e:
+            body = ""
+            try:
+                body = e.response.text[:500]
+            except Exception:
+                pass
+            print(f"[AI] N8N调用失败 HTTP {e.response.status_code}: {body}")
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": f"n8n_{workflow_type}", "status": "error",
+                    "error": f"HTTP {e.response.status_code}: {body[:200]}",
+                })
+            return {
+                "answer": f"⚠️ N8N 工作流调用失败（HTTP {e.response.status_code}）：{body[:200]}\n\n请检查 N8N 服务配置和网络连接。",
+                "sql": "",
             }
         except Exception as e:
             print(f"[AI] N8N调用失败: {e}")
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": f"n8n_{workflow_type}", "status": "error",
+                    "error": str(e)[:200],
+                })
             return {
                 "answer": f"⚠️ N8N 工作流调用失败：{str(e)}\n\n请检查 N8N 服务配置和网络连接。",
                 "sql": "",
-                "tool_calls": [{"tool": "n8n", "workflow": workflow_type, "status": "failed", "error": str(e)}],
             }
 
     # ==================== 配置管理 ====================
@@ -1357,11 +1427,62 @@ Lot ID 格式说明：
                     return {"success": False, "message": f"Dify连接失败: {str(e2)}"}
 
             elif provider_type == "n8n":
-                url = f"{config.get('base_url', '').rstrip('/')}/healthz"
-                resp = requests.get(url, timeout=10)
-                if resp.status_code == 200:
-                    return {"success": True, "message": "N8N连接成功"}
-                return {"success": False, "message": f"N8N连接失败: HTTP {resp.status_code}"}
+                base = (config.get('base_url', '') or '').rstrip('/')
+                if not base:
+                    return {"success": False, "message": "N8N 地址不能为空"}
+                # 1. 健康检查
+                for health_path in ["/healthz", "/health", "/"]:
+                    try:
+                        resp = requests.get(f"{base}{health_path}", timeout=10)
+                        if resp.status_code == 200:
+                            # 2. 尝试获取工作流列表（验证 API Key 权限）
+                            wf_count = None
+                            try:
+                                # n8n public API: /api/v1/workflows
+                                api_key = config.get('api_key', '') or self.n8n_webhook_secret
+                                if api_key:
+                                    wf_resp = requests.get(
+                                        f"{base}/api/v1/workflows?limit=20",
+                                        headers={"X-N8N-API-KEY": api_key},
+                                        timeout=10,
+                                    )
+                                    if wf_resp.status_code == 200:
+                                        wf_data = wf_resp.json() or {}
+                                        wf_count = wf_data.get("count") or len(wf_data.get("data") or [])
+                            except Exception:
+                                pass
+                            msg = "N8N 连接成功"
+                            if wf_count is not None:
+                                msg += f"，工作流数：{wf_count}"
+                            # 3. 尝试 ping 已导入的 5 个 webhook 路径（若未导入则跳过）
+                            webhook_paths = [
+                                "export_alarm_report", "generate_work_order",
+                                "export_machine_data", "push_daily_report", "general_query",
+                            ]
+                            active_webhooks = []
+                            secret = config.get('api_key', '') or ''
+                            for wf_path in webhook_paths:
+                                try:
+                                    url = f"{base}/webhook/{wf_path}"
+                                    if secret:
+                                        url += f"?secret={secret}"
+                                    # 用 OPTIONS 或轻量 POST ping
+                                    pr = requests.post(
+                                        url, json={"ping": True, "test": True},
+                                        timeout=5,
+                                    )
+                                    if pr.status_code in (200, 400, 422):
+                                        active_webhooks.append(wf_path)
+                                except Exception:
+                                    pass
+                            if active_webhooks:
+                                msg += f"，已激活 Webhook：{len(active_webhooks)}/{len(webhook_paths)}"
+                            else:
+                                msg += "（Webhook 未导入或未激活，请先导入工作流模板）"
+                            return {"success": True, "message": msg}
+                    except Exception:
+                        continue
+                return {"success": False, "message": f"N8N 连接失败：服务不可达或未启动（{base}）"}
 
             return {"success": False, "message": "未知的provider类型"}
         except Exception as e:

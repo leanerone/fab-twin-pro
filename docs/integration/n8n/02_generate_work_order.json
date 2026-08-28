@@ -61,8 +61,8 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://your-fabtwin-backend/api/ai/alarms",
+        "method": "GET",
+        "url": "={{ $env.FABTWIN_API_URL || 'http://localhost:8002' }}/api/ai/alarms",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -72,16 +72,15 @@
             }
           ]
         },
-        "sendBody": true,
-        "body": {
-          "machine_id": "={{ $json.machine_id }}",
-          "limit": "={{ $json.limit || 10 }}"
-        },
-        "bodyParameters": {
+        "queryParameters": {
           "parameters": [
             {
               "name": "machine_id",
               "value": "={{ $json.machine_id }}"
+            },
+            {
+              "name": "limit",
+              "value": "=10"
             }
           ]
         },
@@ -123,7 +122,7 @@
     },
     {
       "parameters": {
-      "content": "=【故障工单自动生成】\n\n机台：{{ $json.machine_id }}\n告警数：{{ $json.length }} 条\n优先级：{{ $json.priority }}\n创建人：AI 助手\n\n---\n请尽快处理！",
+      "jsCode": "const setNode = $('解析请求参数').first().json;\nconst alarms = $('获取最新告警').first().json || [];\n\nreturn {\n  json: {\n    machine_id: setNode.machine_id,\n    alarm_count: alarms.length,\n    priority: setNode.priority,\n    work_order_id: 'WO-' + Date.now(),\n    content: `【故障工单自动生成】\\n\\n机台：${setNode.machine_id}\\n告警数：${alarms.length} 条\\n优先级：${setNode.priority}\\n创建人：AI 助手\\n\\n---\\n请尽快处理！`\n  }\n};\n",
       "options": {}
     },
       "id": "code-1",
@@ -135,7 +134,7 @@
     {
       "parameters": {
       "respondWith": "json",
-      "responseBody": "={\n  \"answer\": \"✅ 故障工单已生成！\\n\\n机台：\" + $json.machine_id + \"\\n工单号：WO-\" + Date.now() + \"\\n优先级：\" + $json.priority + \"\\n\\n工单内容已同步推送至运维组。\",\n  \"workflow\": \"generate_work_order\",\n  \"status\": \"success\"\n}",
+      "responseBody": "={\n  \"answer\": \"✅ 故障工单已生成！\\n\\n机台：\" + $json.machine_id + \"\\n工单号：\" + $json.work_order_id + \"\\n优先级：\" + $json.priority + \"\\n\\n工单内容已同步推送至运维组。\",\n  \"workflow\": \"generate_work_order\",\n  \"status\": \"success\"\n}",
       "options": {}
     },
       "id": "respond-1",

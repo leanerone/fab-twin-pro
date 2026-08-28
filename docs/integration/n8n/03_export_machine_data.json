@@ -50,7 +50,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://your-fabtwin-backend/api/machines",
+        "url": "={{ $env.FABTWIN_API_URL || 'http://localhost:8002' }}/api/machines",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -71,7 +71,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://your-fabtwin-backend/api/ai/alarms",
+        "url": "={{ $env.FABTWIN_API_URL || 'http://localhost:8002' }}/api/ai/alarms",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -100,7 +100,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://your-fabtwin-backend/api/ai/lot-info",
+        "url": "={{ $env.FABTWIN_API_URL || 'http://localhost:8002' }}/api/ai/lot-info",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -111,15 +111,15 @@
           ]
         },
         "sendBody": true,
-        "body": {
-          "machine_id": "={{ $json.machine_id }}",
-          "limit": "=50"
-        },
         "bodyParameters": {
           "parameters": [
             {
               "name": "machine_id",
               "value": "={{ $json.machine_id }}"
+            },
+            {
+              "name": "limit",
+              "value": "=50"
             }
           ]
         },
@@ -133,7 +133,7 @@
     },
     {
       "parameters": {
-      "jsCode": "// 合并所有数据生成报表\nconst machines = $('获取机台列表').item;\nconst alarms = $('获取告警数据').item;\nconst lots = $('获取 Lot 数据').item;\n\nreturn {\n  json: {\n    answer: `📊 设备数据导出完成\\n\\n- 机台总数：${machines.length || 0} 台\\n- 告警总数：${alarms.length || 0} 条\\n- Lot 总数：${lots.length || 0} 批\\n\\n数据已准备好，可下载 CSV 报表。`,\n    data: {\n      machines: machines,\n      alarms: alarms,\n      lots: lots\n    },\n    workflow: 'export_machine_data',\n    status: 'success'\n  }\n};\n",
+      "jsCode": "// 合并所有数据生成报表\nconst machines = $('获取机台列表').first().json;\nconst alarms = $('获取告警数据').first().json;\nconst lots = $('获取 Lot 数据').first().json;\n\nconst machineCount = Array.isArray(machines) ? machines.length : 0;\nconst alarmCount = Array.isArray(alarms) ? alarms.length : 0;\nconst lotCount = Array.isArray(lots) ? lots.length : 0;\n\nreturn {\n  json: {\n    answer: `📊 设备数据导出完成\\n\\n- 机台总数：${machineCount} 台\\n- 告警总数：${alarmCount} 条\\n- Lot 总数：${lotCount} 批\\n\\n数据已准备好，可下载 CSV 报表。`,\n    data: {\n      machines: machines,\n      alarms: alarms,\n      lots: lots\n    },\n    workflow: 'export_machine_data',\n    status: 'success'\n  }\n};\n",
       "options": {}
     },
       "id": "code-1",
@@ -178,12 +178,12 @@
           {
             "node": "获取告警数据",
             "type": "main",
-            "index": 1
+            "index": 0
           },
           {
             "node": "获取 Lot 数据",
             "type": "main",
-            "index": 2
+            "index": 0
           }
         ]
       ]

@@ -56,7 +56,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://your-fabtwin-backend/api/ai/alarms",
+        "url": "={{ $env.FABTWIN_API_URL || 'http://localhost:8002' }}/api/ai/alarms",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -102,7 +102,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"answer\": \"告警报表已生成，共 \" + $json.length + \" 条告警记录。\\n\\n报表已自动导出为 CSV 格式。\\n\\n- 统计概览：\\n  • 严重告警：\" + $json.filter(a => a.level === 'critical').length + \" 条\\n  • 警告：\" + $json.filter(a => a.level === 'warning').length + \" 条\\n  • 信息：\" + $json.filter(a => a.level === 'info').length + \" 条\",\n  \"data\": $json,\n  \"workflow\": \"export_alarm_report\",\n  \"status\": \"success\"\n}",
+        "responseBody": "={\n  \"answer\": \"告警报表已生成，共 \" + $('调用告警 API').first().json.length + \" 条告警记录。\\n\\n报表已自动导出为 CSV 格式。\\n\\n- 统计概览：\\n  • 严重告警：\" + $('调用告警 API').first().json.filter(a => a.level === 'critical').length + \" 条\\n  • 警告：\" + $('调用告警 API').first().json.filter(a => a.level === 'warning').length + \" 条\\n  • 信息：\" + $('调用告警 API').first().json.filter(a => a.level === 'info').length + \" 条\",\n  \"data\": $('调用告警 API').first().json,\n  \"workflow\": \"export_alarm_report\",\n  \"status\": \"success\"\n}",
         "options": {}
       },
       "id": "respond-1",
