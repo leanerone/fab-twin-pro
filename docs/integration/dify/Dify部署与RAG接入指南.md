@@ -132,7 +132,14 @@ robocopy <VolumeRoot>\app\storage <BackupDir>\storage-$ts /E /COPY:DAT
 ### 3.2 Step 2: 导入 FabTwin AI Assistant DSL 模板
 模板路径：[docs/integration/dify/fabtwin-ai-assistant.dsl.yaml](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/docs/integration/dify/fabtwin-ai-assistant.dsl.yaml)
 
-> ⚠️ **模板格式说明（重要）**：本 DSL 已按 Dify 0.6+ **新版 Schema** 重写（与您 DC 环境实际导出的 JSON 结构一致：`kind=app`、`mode=agent-chat`、`chat_prompt_config`、`dataset_configs`、`dependencies`、`sensitive_word_avoidance`、`external_data_tools`、`version: 0.6.0`），旧版 DSL 直接导入会报字段缺失错误，请使用本次更新后的文件。
+> ⚠️ **2026-08-28 根据您实际导入截图再次修正：mode=chat（Basic Chatbot），不是 agent-chat。**
+> Agent 模式 (`mode: agent-chat`) 的 Dify 应用需要把提示词写到 `agent_mode.prompt`、工具以 Function Calling 格式写到 `model_config.tools[]`，而且会生成左上角的 AGENT 标签；之前用 agent-chat + chat_prompt_config 的组合在您的 Dify 版本里被校验器直接清空了全部提示词和变量（提示词框里是 0 字符、"变量"栏变成了外部工具标签）。本次 DSL：
+> 1. 改为 `mode: chat`（和您截图左侧"编排"是普通聊天布局、不是 Agent 布局匹配）
+> 2. 删除了 Chat 应用不支持的字段：`dependencies / agent_mode / annotation_reply / external_data_tools`
+> 3. 提示词 `prompt_template`（老版）+ `chat_prompt_config.prompt`（新版）双写
+> 4. 对话变量 `variables`（老版）+ `conversation_variables`（新版）双写
+> 5. 工具**不写在 DSL 里**——Chat 模式 Dify 不支持 DSL 声明 external_data_tools，请在 Step 3 用 UI 手动从 OpenAPI/API 扩展导入 6 个 FabTwin 工具
+> 6. 模型4字段（completion_params/mode/name/provider）与您导出的模板 100% 一致
 
 1. 回到 Dify「工作室」首页 → 应用列表页面 → 某个应用卡右上角「···」菜单 → 「从 DSL 导入」。
 2. 选择 `fabtwin-ai-assistant.dsl.yaml`。
@@ -142,24 +149,26 @@ robocopy <VolumeRoot>\app\storage <BackupDir>\storage-$ts /E /COPY:DAT
    - **如果是 Azure OpenAI**：供应商选 `Azure OpenAI`（请先在全局「系统设置→模型供应商」配置 Azure Resource Name / API Key / Deployment ID）
    - **如果是国内供应商（通义/智谱/DeepSeek）**：先在全局供应商添加，再在这里选中
    - 保存后点击「连接测试」，绿灯即可
-4. 导入后再确认：
-   - [ ] 变量列表（应用 → 编排 → 对话变量）有 `machine_id`、`user_role`
-   - [ ] 工具面板（外部数据工具）已列出 6 个 FabTwin 自定义 API 工具定义
-   - [ ] 系统提示词开头包含「你是 FabTwin Pro 半导体产线数字孪生平台的 AI 助手」
+4. 导入后再确认（以下 4 项必须全部看到，说明 Chat 模式解析成功）：
+   - [ ] 提示词编辑器里**有文字**（不是空的 0 字符），开头是「你是 FabTwin Pro 半导体产线数字孪生平台的 AI 助手」
+   - [ ] 变量区域（不是 REQUIRED 标签样式！普通聊天变量卡片样式）有 `machine_id`（文本输入）+ `user_role`（下拉）
+   - [ ] 开场白（调试与预览面板上方）显示「👋 你好！我是 FabTwin Pro 数字孪生 AI 助手……」
+   - [ ] 左上角标题下**没有 AGENT 标签**（如果看到 AGENT 标签说明又走了 Agent 分支，请删掉这个应用用新的 DSL 重新导入）
    - [ ] 「设置 → 编排 → 知识库」里 `retriever_resource` 已开启（用于在 FabTwin 前端展示知识库引用来源）
 
 ### 3.3 Step 3: 配置 FabTwin API 工具（6 个）
-模板已声明 6 个 external_data_tools，但工具的 `API Base URL` 需要在 Dify「外部工具」里接入 OpenAPI/API 扩展后再绑定：
+**重要**：Chat 模式 Dify 不支持在 DSL 里写 `external_data_tools`（上一轮写入导致变量栏变成工具的 REQUIRED 标签，就是这个字段被错误解析了）。6 个 FabTwin 工具必须在 Dify UI「工具 → 添加工具」里手动接入，步骤：
 
-1. **方式 A（推荐，批量）**：先在 Dify「工作室 → 工具 → 添加工具 → OpenAPI/Swagger」上传 FabTwin 后端的 OpenAPI schema（`GET {fabtwin}/openapi.json` 导出），把 6 个查询接口一次性导入为自定义工具，然后：
-   - 进入「FabTwin AI Assistant」应用 → 「编排 → 外部数据工具」→ 对 6 个 FabTwin 工具点击「关联」
-2. **方式 B（逐个）**：在应用内的外部数据工具列表里逐个编辑，设置：
-   - API Base URL 填真实 FabTwin 后端地址：
-     - 开发：`http://localhost:8002`
-     - 测试：`http://10.30.116.137:8002`
-     - 量产：`https://fabtwin.xxfab.com/api`（走 Nginx 反代）
-   - 鉴权方式：**API Key**，Key 名 `Authorization`，值 `Bearer <FABTWIN_ADMIN_TOKEN>`。
+1. **方式 A（推荐，批量）**：先通过 OpenAPI schema 一次性导入：
+   - FabTwin 后端地址 + `/openapi.json` 导出（或在浏览器打开 `http://10.30.116.137:8002/openapi.json` 另存为 JSON）
+   - 进入 Dify「工作室 → 工具 → 添加工具 → OpenAPI/Swagger」→ 选择刚刚的 JSON / 直接填 URL
+   - 勾选 get_machine_status / get_machine_alarms / get_event_timeline / get_yield_stats / get_lot_info / get_recipe_info 共 6 个接口
+   - 鉴权方式选 **API Key**，Key 名 `Authorization`，值 `Bearer <FABTWIN_ADMIN_TOKEN>`
      - 获取 Token：`POST {fabtwin}/api/auth/login` Body: `{ "username": "admin", "password": "admin123" }`
+   - 导入成功后，回到「FabTwin AI Assistant」应用 → 编排 → 工具 → 「+ 添加」→ 选中刚导入的 6 个 → 确认
+2. **方式 B（逐个）**：每个工具单独"添加工具 → API 扩展"，填入：
+   - API Base URL：实际 FabTwin 后端地址（开发 `http://localhost:8002` / 测试 `http://10.30.116.137:8002` / 量产走 Nginx 反代 `https://fabtwin.xxfab.com/api`）
+   - 路径 & 参数与提示词里写的一致（machine_id 可选、limit 默认 20 等）
 3. 逐个工具 → 「测试」→ 成功后保存。
 
 ### 3.4 Step 4: 创建 RAG 知识库并绑定应用

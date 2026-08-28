@@ -1,12 +1,15 @@
 # ============================================================
-# FabTwin Pro Dify DSL 模板 — 兼容 Dify 0.6+ 新版 DSL Schema
-# 参考格式：用户 DC 环境实际导出的 app definition（agent-chat kind）
-# 导入方法：Dify 工作室 → 应用列表 → 「···」菜单 → 从 DSL 导入 → 选择本文件
-# 注意：
-#   1. 本模板默认 model.provider 使用占位符 "langgenius/azure_openai/azure_openai"，
-#      若您的 Dify 环境是官方 OpenAI / 通义 / 智谱 等供应商，导入后进入
-#      「设置 → 模型供应商」手动选择实际供应商和模型即可。
-#   2. 知识库（RAG）绑定需要先在 Dify 中创建知识库，再到「编排 → 知识库」添加。
+# FabTwin Pro Dify DSL 模板 — Chat 应用（Basic Chatbot 编排）
+# 格式依据：用户 Dify 环境实际导入截图结果（非 Agent 模式，否则提示词/工具为空）
+# 关键变更：
+#   · mode: chat（不是 agent-chat，Agent 模式提示词走 agent_mode.prompt 且必须 Function Calling tools[] 格式）
+#   · 删除 dependencies / agent_mode / annotation_reply / external_data_tools
+#       └─ Agent 专属字段；在 Chat 模式下这些字段一旦存在 Dify 导入校验器会丢弃全部 prompt 和变量
+#   · 提示词用顶层 prompt_template（老版 Chat DSL 兼容写法）
+#       + chat_prompt_config.prompt（新版 Dify Chat 格式） — 双写保证
+#   · 对话变量顶层写 variables + conversation_variables 双写
+#   · 工具不写在 DSL 里，Chat 模式下请在 Dify UI「工具 → 添加工具 → OpenAPI / API 扩展」手动接入
+# 导入方法：Dify 工作室 → 应用卡右上角「···」→ 从 DSL 导入 → 选择本文件
 # ============================================================
 
 app:
@@ -14,41 +17,80 @@ app:
   icon: 🤖
   icon_background: '#FFEAD5'
   icon_type: emoji
-  mode: agent-chat
+  mode: chat            # 关键：Chat 应用（Basic Chatbot 编排），不是 agent-chat！
   name: FabTwin AI Assistant
   use_icon_as_answer_icon: false
-
-# ---------- 插件依赖 ----------
-# 保持字段即可；导入时 Dify 会根据环境自动匹配，找不到会提示手动安装
-dependencies:
-  - current_identifier: null
-    type: package
-    value:
-      plugin_unique_identifier: langgenius/azure_openai:0.0.56@3410d96fe3aaece47897701a7e7ef468abb230dfaa4f5dcb49a17dbbdda43442
-      version: null
 
 kind: app
 
 # ================================================================
-# 核心：模型配置
+# 模型配置
 # ================================================================
 model_config:
 
-  # -------- Agent 模式（默认关闭，走纯 chat + 系统提示词工具调用） --------
-  agent_mode:
-    enabled: false
-    prompt: null
-    strategy: null
+  # -------- Chat Prompt（聊天应用唯一支持的格式） --------
+  # Dify 不同版本读取的字段不一致，双写保证：
+  #  · prompt_template — 老版 DSL 格式（Dify 0.4 / 0.5 用）
+  #  · chat_prompt_config.prompt — 新版 DSL 格式（Dify 0.6 用）
+  # 两个都写一样的内容，实际哪个生效看 Dify 版本
+  prompt_template:
+    - role: system
+      text: |
+        你是 FabTwin Pro 半导体产线数字孪生平台的 AI 助手。你的职责是帮助工程师和运维人员查询产线设备状态、告警信息、批次进度、产量统计等。
 
-  # -------- 工具列表（Agent mode 才用；默认空，工具靠提示词 + Function Calling） --------
-  tools: []
+        ## 可用工具
 
-  # -------- 标注回复（默认关闭） --------
-  annotation_reply:
-    enabled: false
+        你有以下工具可用，请根据用户问题选择合适的工具调用：
 
-  # -------- Chat / Completion Prompt 配置 --------
-  # 新版 Dify 用 chat_prompt_config（非简单模式）+ prompt_type: simple 双写
+        1. **get_machine_status** - 查询机台实时状态
+           - 输入：machine_id（可选，不传则查询全厂）
+           - 返回：最新事件、运行模式、当前Lot、机台列表
+
+        2. **get_machine_alarms** - 查询机台告警记录
+           - 输入：machine_id（可选）、limit（默认20）
+           - 返回：告警列表（alarm_code、description、timestamp、level）
+
+        3. **get_event_timeline** - 查询机台事件时间线
+           - 输入：machine_id（可选）、limit（默认20）
+           - 返回：事件类型分布、运行模式分布、最近事件列表
+
+        4. **get_yield_stats** - 查询产量统计
+           - 输入：machine_id（可选）
+           - 返回：Lot数量、晶圆总数、完成率、产出统计
+
+        5. **get_lot_info** - 查询Lot批次信息
+           - 输入：lot_id（可选）、machine_id（可选）
+           - 返回：Lot详细信息、当前状态、工艺步骤
+
+        6. **get_recipe_info** - 查询工艺配方
+           - 输入：machine_id（可选）
+           - 返回：温度、压力、RF功率、气体流量、工艺时间
+
+        ## 回答规范
+
+        1. **先思考再行动**：先分析用户问题，判断是否需要调用工具，再决定调用哪个工具。
+        2. **结构化回答**：
+           - 状态类问题：用表格展示关键指标
+           - 告警类问题：按等级分类，高亮严重告警
+           - Lot类问题：展示 Lot ID、当前步骤、预计完成时间
+           - 产量类问题：展示完成率、数量、趋势描述
+        3. **跳转回放**：如果用户询问某个时间点的事件或告警，在回答末尾附上跳转标记，格式为：
+           `JUMP_TIMESTAMP:YYYY-MM-DD HH:MM:SS`
+           `JUMP_MACHINE_ID:机台ID`
+           FabTwin 前端会识别这两行并显示「跳转回放」按钮。
+        4. **数据来源**：每次回答末尾注明数据来源（实时/历史）。
+        5. **不知道就说不知道**：如果工具返回的数据不足以回答问题，如实告知用户。
+
+        ## 当前上下文
+
+        - 当前机台：{{machine_id}}
+        - 用户角色：{{user_role}}
+
+        请用中文回答，语言简洁专业，符合半导体行业用语习惯。
+
+    - role: user
+      text: '{{#query#}}'
+
   chat_prompt_config:
     prompt:
       - role: system
@@ -110,7 +152,27 @@ model_config:
 
   completion_prompt_config: {}
 
-  # -------- 对话变量（供 FabTwin 后端调用 /v1/chat-messages 时传入） --------
+  # -------- 对话变量（双写：variables 老版 + conversation_variables 新版） --------
+  variables:
+    - label: 当前机台ID
+      key: machine_id
+      type: text-input
+      default: ''
+      max_length: 100
+      required: false
+      description: 当前查看的机台ID，如 PODOPENER-1、OXE-01
+
+    - label: 用户角色
+      key: user_role
+      type: select
+      default: user
+      options:
+        - user
+        - engineer
+        - admin
+      required: false
+      description: 用户角色，影响可访问的数据范围
+
   conversation_variables:
     - label: 当前机台ID
       key: machine_id
@@ -132,76 +194,11 @@ model_config:
       description: 用户角色，影响可访问的数据范围
 
   # -------- 数据集 / RAG 配置 --------
-  # retrieval_model = multiple 多知识库召回；导入后在 UI 里勾选具体知识库即可
   dataset_configs:
     retrieval_model: multiple
     dataset_query_variable: null
 
-  # -------- 外部 API 工具（6 个 FabTwin 后端工具） --------
-  # 新版 Dify external_data_tools 字段，等价于老版 tools: []
-  # 注意：provider_id 留空，导入后在 Dify UI 「外部工具」里绑定具体 OpenAPI / API 扩展
-  external_data_tools:
-    - enabled: true
-      name: get_machine_status
-      label: 查询机台实时状态
-      description: |
-        查询机台实时状态，包括最新事件、运行模式、当前 Lot、机台列表。
-        不传 machine_id 则返回全厂概览。
-      variable: ''
-      alias: get_machine_status
-      icon: 🖥️
-      icon_background: '#E0F2FE'
-
-    - enabled: true
-      name: get_machine_alarms
-      label: 查询机台告警记录
-      description: |
-        查询机台告警记录，从事件流中提取 alarm_code 非空的事件。
-        支持按 machine_id 过滤；limit 默认 20。
-      variable: ''
-      alias: get_machine_alarms
-      icon: 🚨
-      icon_background: '#FEE2E2'
-
-    - enabled: true
-      name: get_event_timeline
-      label: 查询机台事件时间线
-      description: 查询机台事件时间线，包括事件类型分布、运行模式分布和最近事件列表。
-      variable: ''
-      alias: get_event_timeline
-      icon: 📈
-      icon_background: '#FEF3C7'
-
-    - enabled: true
-      name: get_yield_stats
-      label: 查询产量统计
-      description: 查询产量统计，包括 Lot 数量、晶圆总数、完成率、产出统计。
-      variable: ''
-      alias: get_yield_stats
-      icon: 📊
-      icon_background: '#D1FAE5'
-
-    - enabled: true
-      name: get_lot_info
-      label: 查询 Lot 批次信息
-      description: |
-        查询 Lot 批次详细信息。可按 lot_id 查询单个批次，
-        或按 machine_id 列出该机台最近的 Lot。
-      variable: ''
-      alias: get_lot_info
-      icon: 📦
-      icon_background: '#EDE9FE'
-
-    - enabled: true
-      name: get_recipe_info
-      label: 查询工艺配方
-      description: 查询工艺配方参数，包括温度、压力、RF功率、气体流量、工艺时间。
-      variable: ''
-      alias: get_recipe_info
-      icon: ⚗️
-      icon_background: '#FCE7F3'
-
-  # -------- 文件上传 --------
+  # -------- 文件上传（与您导出的模板结构保持一致：image子块 + enabled双层） --------
   file_upload:
     image:
       detail: high
@@ -224,23 +221,17 @@ model_config:
       - .jpeg
     number_limit: 5
 
-  # -------- 核心模型 --------
-  # 默认与用户导出的占位 provider_path 一致，避免导入报错
-  # 导入后在「设置 → 模型和供应商」里改成您实际使用的供应商 + 模型
-  # ---------- 核心模型：字段结构与您 DC 环境实际导出的模板 100% 一致 ----------
-  # 导入成功后如需设置 temperature / max_tokens / top_p 等推理参数，
-  # 请在 Dify UI「编排 → 模型 → 推理参数」里手动调整（不要改 DSL 里的 completion_params 结构）
+  # -------- 模型：字段与您 DC 环境导出模板 100% 一致 --------
   model:
     completion_params: {}
     mode: chat
     name: gpt-5.3-codex
     provider: langgenius/azure_openai/azure_openai
 
-# -------- More Like This（相似问推荐，默认关闭） --------
+# -------- 应用级配置 --------
 more_like_this:
   enabled: false
 
-# -------- 开场白 & 推荐问题 --------
 opening_statement: |
   👋 你好！我是 FabTwin Pro 数字孪生 AI 助手。
 
@@ -258,38 +249,36 @@ opening_statement: |
 
 pre_prompt: null
 
-# simple / advanced；和 chat_prompt_config 并存，向后兼容
+# simple / advanced；Dify Chat 应用默认 simple
 prompt_type: simple
 
-# -------- 知识库引用溯源（重要：FabTwin 前端会读取 retriever_resources 字段） --------
+# -------- 知识库引用溯源（FabTwin 前端必填） --------
 retriever_resource:
   enabled: true
 
-# -------- 敏感词规避（默认关闭，按企业策略开启） --------
+# -------- 敏感词规避 --------
 sensitive_word_avoidance:
   config: {}
   enabled: false
   type: ''
 
-# -------- 语音转文字（默认关闭） --------
+# -------- 语音 --------
 speech_to_text:
   enabled: false
 
-# -------- 用户输入建议（默认空，FabTwin 前端自有快捷问题） --------
-suggested_questions: []
-
-# -------- 每条回答后追加推荐问题 --------
-suggested_questions_after_answer:
-  enabled: false
-
-# -------- 文字转语音（默认关闭） --------
 text_to_speech:
   enabled: false
 
-# -------- 用户自定义输入表单（默认无，靠 {{machine_id}} {{user_role}} 变量传） --------
+# -------- 建议问题（空，FabTwin 前端自有快捷问题） --------
+suggested_questions: []
+
+suggested_questions_after_answer:
+  enabled: false
+
+# -------- 用户输入表单（空，靠 {{machine_id}} {{user_role}} 变量传） --------
 user_input_form: []
 
 # ================================================================
-# DSL 版本号（必须与 Dify 导出的一致，否则导入校验失败）
+# DSL 版本号（与用户 DC 环境导出一致）
 # ================================================================
 version: 0.6.0
