@@ -227,10 +227,11 @@ model_config:
   # -------- 核心模型 --------
   # 默认与用户导出的占位 provider_path 一致，避免导入报错
   # 导入后在「设置 → 模型和供应商」里改成您实际使用的供应商 + 模型
+  # ---------- 核心模型：字段结构与您 DC 环境实际导出的模板 100% 一致 ----------
+  # 导入成功后如需设置 temperature / max_tokens / top_p 等推理参数，
+  # 请在 Dify UI「编排 → 模型 → 推理参数」里手动调整（不要改 DSL 里的 completion_params 结构）
   model:
-    completion_params:
-      temperature: 0.3
-      max_tokens: 2048
+    completion_params: {}
     mode: chat
     name: gpt-5.3-codex
     provider: langgenius/azure_openai/azure_openai
