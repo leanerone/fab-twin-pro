@@ -1,91 +1,124 @@
+# ============================================================
+# FabTwin Pro Dify DSL 模板 — 兼容 Dify 0.6+ 新版 DSL Schema
+# 参考格式：用户 DC 环境实际导出的 app definition（agent-chat kind）
+# 导入方法：Dify 工作室 → 应用列表 → 「···」菜单 → 从 DSL 导入 → 选择本文件
+# 注意：
+#   1. 本模板默认 model.provider 使用占位符 "langgenius/azure_openai/azure_openai"，
+#      若您的 Dify 环境是官方 OpenAI / 通义 / 智谱 等供应商，导入后进入
+#      「设置 → 模型供应商」手动选择实际供应商和模型即可。
+#   2. 知识库（RAG）绑定需要先在 Dify 中创建知识库，再到「编排 → 知识库」添加。
+# ============================================================
+
 app:
-  description: FabTwin Pro 半导体产线数字孪生 AI 助手 - 通过自然语言查询机台状态、告警、Lot 信息、产量统计，并可跳转到历史回放
+  description: 'FabTwin Pro 半导体产线数字孪生 AI 助手 — 通过自然语言查询机台状态、告警、Lot 信息、产量统计，支持跳转到历史回放时间点'
   icon: 🤖
-  icon_background: '#1a1f2e'
-  mode: chat
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: agent-chat
   name: FabTwin AI Assistant
+  use_icon_as_answer_icon: false
+
+# ---------- 插件依赖 ----------
+# 保持字段即可；导入时 Dify 会根据环境自动匹配，找不到会提示手动安装
+dependencies:
+  - current_identifier: null
+    type: package
+    value:
+      plugin_unique_identifier: langgenius/azure_openai:0.0.56@3410d96fe3aaece47897701a7e7ef468abb230dfaa4f5dcb49a17dbbdda43442
+      version: null
 
 kind: app
-version: 0.6.0
 
-# ========================================
-# Dify 应用配置 - 可直接导入 Dify 0.6+
-# 导入方法：Dify 工作室 → 创建应用 → 导入 DSL → 选择本文件
-# ========================================
-
-# ---------- 系统提示词 ----------
+# ================================================================
+# 核心：模型配置
+# ================================================================
 model_config:
-  model:
-    provider: openai
-    name: gpt-4o-mini
-    mode: chat
-    completion_params:
-      temperature: 0.3
-      max_tokens: 2048
 
-  prompt_template:
-    - role: system
-      text: |
-        你是 FabTwin Pro 半导体产线数字孪生平台的 AI 助手。你的职责是帮助工程师和运维人员查询产线设备状态、告警信息、批次进度、产量统计等。
+  # -------- Agent 模式（默认关闭，走纯 chat + 系统提示词工具调用） --------
+  agent_mode:
+    enabled: false
+    prompt: null
+    strategy: null
 
-        ## 可用工具
+  # -------- 工具列表（Agent mode 才用；默认空，工具靠提示词 + Function Calling） --------
+  tools: []
 
-        你有以下工具可用，请根据用户问题选择合适的工具调用：
+  # -------- 标注回复（默认关闭） --------
+  annotation_reply:
+    enabled: false
 
-        1. **get_machine_status** - 查询机台实时状态
-           - 输入：machine_id（可选，不传则查询全厂）
-           - 返回：最新事件、运行模式、当前Lot、机台列表
+  # -------- Chat / Completion Prompt 配置 --------
+  # 新版 Dify 用 chat_prompt_config（非简单模式）+ prompt_type: simple 双写
+  chat_prompt_config:
+    prompt:
+      - role: system
+        text: |
+          你是 FabTwin Pro 半导体产线数字孪生平台的 AI 助手。你的职责是帮助工程师和运维人员查询产线设备状态、告警信息、批次进度、产量统计等。
 
-        2. **get_machine_alarms** - 查询机台告警记录
-           - 输入：machine_id（可选）、limit（默认20）
-           - 返回：告警列表（alarm_code、description、timestamp、level）
+          ## 可用工具
 
-        3. **get_event_timeline** - 查询机台事件时间线
-           - 输入：machine_id（可选）、limit（默认20）
-           - 返回：事件类型分布、运行模式分布、最近事件列表
+          你有以下工具可用，请根据用户问题选择合适的工具调用：
 
-        4. **get_yield_stats** - 查询产量统计
-           - 输入：machine_id（可选）
-           - 返回：Lot数量、晶圆总数、完成率、产出统计
+          1. **get_machine_status** - 查询机台实时状态
+             - 输入：machine_id（可选，不传则查询全厂）
+             - 返回：最新事件、运行模式、当前Lot、机台列表
 
-        5. **get_lot_info** - 查询Lot批次信息
-           - 输入：lot_id（可选）、machine_id（可选）
-           - 返回：Lot详细信息、当前状态、工艺步骤
+          2. **get_machine_alarms** - 查询机台告警记录
+             - 输入：machine_id（可选）、limit（默认20）
+             - 返回：告警列表（alarm_code、description、timestamp、level）
 
-        6. **get_recipe_info** - 查询工艺配方
-           - 输入：machine_id（可选）
-           - 返回：温度、压力、RF功率、气体流量、工艺时间
+          3. **get_event_timeline** - 查询机台事件时间线
+             - 输入：machine_id（可选）、limit（默认20）
+             - 返回：事件类型分布、运行模式分布、最近事件列表
 
-        ## 回答规范
+          4. **get_yield_stats** - 查询产量统计
+             - 输入：machine_id（可选）
+             - 返回：Lot数量、晶圆总数、完成率、产出统计
 
-        1. **先思考再行动**：先分析用户问题，判断是否需要调用工具，再决定调用哪个工具。
-        2. **结构化回答**：
-           - 状态类问题：用表格展示关键指标
-           - 告警类问题：按等级分类，高亮严重告警
-           - Lot类问题：展示 Lot ID、当前步骤、预计完成时间
-           - 产量类问题：展示完成率、数量、趋势描述
-        3. **跳转回放**：如果用户询问某个时间点的事件或告警，在回答末尾附上「跳转回放」按钮，格式为：
-           `JUMP_TIMESTAMP:YYYY-MM-DD HH:MM:SS`
-           `JUMP_MACHINE_ID:机台ID`
-        4. **数据来源**：每次回答末尾注明数据来源（实时/历史）。
-        5. **不知道就说不知道**：如果工具返回的数据不足以回答问题，如实告知用户。
+          5. **get_lot_info** - 查询Lot批次信息
+             - 输入：lot_id（可选）、machine_id（可选）
+             - 返回：Lot详细信息、当前状态、工艺步骤
 
-        ## 当前上下文
+          6. **get_recipe_info** - 查询工艺配方
+             - 输入：machine_id（可选）
+             - 返回：温度、压力、RF功率、气体流量、工艺时间
 
-        - 当前机台：{{machine_id}}
-        - 用户角色：{{user_role}}
+          ## 回答规范
 
-        请用中文回答，语言简洁专业，符合半导体行业用语习惯。
+          1. **先思考再行动**：先分析用户问题，判断是否需要调用工具，再决定调用哪个工具。
+          2. **结构化回答**：
+             - 状态类问题：用表格展示关键指标
+             - 告警类问题：按等级分类，高亮严重告警
+             - Lot类问题：展示 Lot ID、当前步骤、预计完成时间
+             - 产量类问题：展示完成率、数量、趋势描述
+          3. **跳转回放**：如果用户询问某个时间点的事件或告警，在回答末尾附上跳转标记，格式为：
+             `JUMP_TIMESTAMP:YYYY-MM-DD HH:MM:SS`
+             `JUMP_MACHINE_ID:机台ID`
+             FabTwin 前端会识别这两行并显示「跳转回放」按钮。
+          4. **数据来源**：每次回答末尾注明数据来源（实时/历史）。
+          5. **不知道就说不知道**：如果工具返回的数据不足以回答问题，如实告知用户。
 
-  # ---------- 变量定义 ----------
-  variables:
+          ## 当前上下文
+
+          - 当前机台：{{machine_id}}
+          - 用户角色：{{user_role}}
+
+          请用中文回答，语言简洁专业，符合半导体行业用语习惯。
+
+      - role: user
+        text: '{{#query#}}'
+
+  completion_prompt_config: {}
+
+  # -------- 对话变量（供 FabTwin 后端调用 /v1/chat-messages 时传入） --------
+  conversation_variables:
     - label: 当前机台ID
       key: machine_id
       type: text-input
       default: ''
       max_length: 100
       required: false
-      description: 当前查看的机台ID，如 PODOPENER-1
+      description: 当前查看的机台ID，如 PODOPENER-1、OXE-01
 
     - label: 用户角色
       key: user_role
@@ -98,39 +131,115 @@ model_config:
       required: false
       description: 用户角色，影响可访问的数据范围
 
-  # ---------- 工具配置 ----------
-  tools:
-    - provider_id: custom
-      provider_type: api
-      tool_name: get_machine_status
-      description: 查询机台实时状态，包括最新事件、运行模式、当前Lot。不传machine_id则返回全厂概览。
+  # -------- 数据集 / RAG 配置 --------
+  # retrieval_model = multiple 多知识库召回；导入后在 UI 里勾选具体知识库即可
+  dataset_configs:
+    retrieval_model: multiple
+    dataset_query_variable: null
 
-    - provider_id: custom
-      provider_type: api
-      tool_name: get_machine_alarms
-      description: 查询机台告警记录，从事件流中提取alarm_code非空的事件。不传machine_id则查询全厂。
+  # -------- 外部 API 工具（6 个 FabTwin 后端工具） --------
+  # 新版 Dify external_data_tools 字段，等价于老版 tools: []
+  # 注意：provider_id 留空，导入后在 Dify UI 「外部工具」里绑定具体 OpenAPI / API 扩展
+  external_data_tools:
+    - enabled: true
+      name: get_machine_status
+      label: 查询机台实时状态
+      description: |
+        查询机台实时状态，包括最新事件、运行模式、当前 Lot、机台列表。
+        不传 machine_id 则返回全厂概览。
+      variable: ''
+      alias: get_machine_status
+      icon: 🖥️
+      icon_background: '#E0F2FE'
 
-    - provider_id: custom
-      provider_type: api
-      tool_name: get_event_timeline
-      description: 查询机台事件时间线，包括事件类型分布和运行模式分布。
+    - enabled: true
+      name: get_machine_alarms
+      label: 查询机台告警记录
+      description: |
+        查询机台告警记录，从事件流中提取 alarm_code 非空的事件。
+        支持按 machine_id 过滤；limit 默认 20。
+      variable: ''
+      alias: get_machine_alarms
+      icon: 🚨
+      icon_background: '#FEE2E2'
 
-    - provider_id: custom
-      provider_type: api
-      tool_name: get_yield_stats
-      description: 查询产量统计，包括Lot数量、晶圆总数、完成率。
+    - enabled: true
+      name: get_event_timeline
+      label: 查询机台事件时间线
+      description: 查询机台事件时间线，包括事件类型分布、运行模式分布和最近事件列表。
+      variable: ''
+      alias: get_event_timeline
+      icon: 📈
+      icon_background: '#FEF3C7'
 
-    - provider_id: custom
-      provider_type: api
-      tool_name: get_lot_info
-      description: 查询Lot批次信息。可按lot_id查询单个批次，或按machine_id列出该机台最近的Lot。
+    - enabled: true
+      name: get_yield_stats
+      label: 查询产量统计
+      description: 查询产量统计，包括 Lot 数量、晶圆总数、完成率、产出统计。
+      variable: ''
+      alias: get_yield_stats
+      icon: 📊
+      icon_background: '#D1FAE5'
 
-    - provider_id: custom
-      provider_type: api
-      tool_name: get_recipe_info
-      description: 查询工艺配方，包括温度、压力、RF功率、气体流量、工艺时间。
+    - enabled: true
+      name: get_lot_info
+      label: 查询 Lot 批次信息
+      description: |
+        查询 Lot 批次详细信息。可按 lot_id 查询单个批次，
+        或按 machine_id 列出该机台最近的 Lot。
+      variable: ''
+      alias: get_lot_info
+      icon: 📦
+      icon_background: '#EDE9FE'
 
-# ---------- 开场白 ----------
+    - enabled: true
+      name: get_recipe_info
+      label: 查询工艺配方
+      description: 查询工艺配方参数，包括温度、压力、RF功率、气体流量、工艺时间。
+      variable: ''
+      alias: get_recipe_info
+      icon: ⚗️
+      icon_background: '#FCE7F3'
+
+  # -------- 文件上传 --------
+  file_upload:
+    image:
+      detail: high
+      enabled: false
+      number_limits: 3
+      transfer_methods:
+        - remote_url
+        - local_file
+    enabled: true
+    allowed_file_types:
+      - document
+      - image
+    allowed_file_extensions:
+      - .txt
+      - .md
+      - .pdf
+      - .csv
+      - .png
+      - .jpg
+      - .jpeg
+    number_limit: 5
+
+  # -------- 核心模型 --------
+  # 默认与用户导出的占位 provider_path 一致，避免导入报错
+  # 导入后在「设置 → 模型和供应商」里改成您实际使用的供应商 + 模型
+  model:
+    completion_params:
+      temperature: 0.3
+      max_tokens: 2048
+    mode: chat
+    name: gpt-5.3-codex
+    provider: langgenius/azure_openai/azure_openai
+
+# -------- More Like This（相似问推荐，默认关闭） --------
+more_like_this:
+  enabled: false
+
+# -------- 开场白 & 推荐问题 --------
 opening_statement: |
   👋 你好！我是 FabTwin Pro 数字孪生 AI 助手。
 
@@ -142,45 +251,44 @@ opening_statement: |
   • 跳转到历史回放时间点
 
   试试问我：
-  "PODOPENER-1 现在状态怎么样？"
-  "今天有什么告警？"
+  "OXE-01 现在状态怎么样？"
+  "今天有什么严重告警？"
   "最近的 Lot 进度如何？"
 
-suggested_questions:
-  - PODOPENER-1 现在状态怎么样？
-  - 今天有什么告警？
-  - 最近的 Lot 进度如何？
-  - 产量统计数据
+pre_prompt: null
 
-# ---------- 语速与回复 ----------
+# simple / advanced；和 chat_prompt_config 并存，向后兼容
+prompt_type: simple
+
+# -------- 知识库引用溯源（重要：FabTwin 前端会读取 retriever_resources 字段） --------
+retriever_resource:
+  enabled: true
+
+# -------- 敏感词规避（默认关闭，按企业策略开启） --------
+sensitive_word_avoidance:
+  config: {}
+  enabled: false
+  type: ''
+
+# -------- 语音转文字（默认关闭） --------
 speech_to_text:
   enabled: false
 
+# -------- 用户输入建议（默认空，FabTwin 前端自有快捷问题） --------
+suggested_questions: []
+
+# -------- 每条回答后追加推荐问题 --------
+suggested_questions_after_answer:
+  enabled: false
+
+# -------- 文字转语音（默认关闭） --------
 text_to_speech:
   enabled: false
-  voice: default
 
-# ---------- 引用与溯源 ----------
-retriever_resource:
-  enabled: false
+# -------- 用户自定义输入表单（默认无，靠 {{machine_id}} {{user_role}} 变量传） --------
+user_input_form: []
 
-# ---------- 标注 ----------
-annotation:
-  enabled: false
-
-# ---------- 文件上传 ----------
-file_upload:
-  enabled: true
-  allowed_file_types:
-    - document
-    - image
-    - audio
-  allowed_file_extensions:
-    - .txt
-    - .md
-    - .pdf
-    - .csv
-    - .png
-    - .jpg
-    - .jpeg
-  number_limit: 5
+# ================================================================
+# DSL 版本号（必须与 Dify 导出的一致，否则导入校验失败）
+# ================================================================
+version: 0.6.0

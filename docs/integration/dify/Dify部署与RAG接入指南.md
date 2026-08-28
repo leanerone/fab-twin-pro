@@ -132,24 +132,35 @@ robocopy <VolumeRoot>\app\storage <BackupDir>\storage-$ts /E /COPY:DAT
 ### 3.2 Step 2: 导入 FabTwin AI Assistant DSL 模板
 模板路径：[docs/integration/dify/fabtwin-ai-assistant.dsl.yaml](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/docs/integration/dify/fabtwin-ai-assistant.dsl.yaml)
 
-1. 回到 Dify「工作室」首页 → 右上角「创建应用」→「从 DSL 导入」。
+> ⚠️ **模板格式说明（重要）**：本 DSL 已按 Dify 0.6+ **新版 Schema** 重写（与您 DC 环境实际导出的 JSON 结构一致：`kind=app`、`mode=agent-chat`、`chat_prompt_config`、`dataset_configs`、`dependencies`、`sensitive_word_avoidance`、`external_data_tools`、`version: 0.6.0`），旧版 DSL 直接导入会报字段缺失错误，请使用本次更新后的文件。
+
+1. 回到 Dify「工作室」首页 → 应用列表页面 → 某个应用卡右上角「···」菜单 → 「从 DSL 导入」。
 2. 选择 `fabtwin-ai-assistant.dsl.yaml`。
-3. 导入后确认：
-   - [ ] 变量列表有 `machine_id`、`user_role`
-   - [ ] 工具面板有 6 个 FabTwin 自定义 API 工具定义
-   - [ ] 系统提示词开头包含「你是 FabTwin 半导体数字孪生平台 AI 助手」
+3. **导入后必做的一步：切换模型供应商**（默认占位符是 Azure OpenAI，按您实际环境改）：
+   - 进入应用 → 右上角「设置」→「模型和供应商」→「模型」Tab
+   - **如果您的环境是官方 OpenAI**：供应商选 `OpenAI`，模型选 `gpt-4o-mini` 或 `gpt-5.3-codex`
+   - **如果是 Azure OpenAI**：供应商选 `Azure OpenAI`（请先在全局「系统设置→模型供应商」配置 Azure Resource Name / API Key / Deployment ID）
+   - **如果是国内供应商（通义/智谱/DeepSeek）**：先在全局供应商添加，再在这里选中
+   - 保存后点击「连接测试」，绿灯即可
+4. 导入后再确认：
+   - [ ] 变量列表（应用 → 编排 → 对话变量）有 `machine_id`、`user_role`
+   - [ ] 工具面板（外部数据工具）已列出 6 个 FabTwin 自定义 API 工具定义
+   - [ ] 系统提示词开头包含「你是 FabTwin Pro 半导体产线数字孪生平台的 AI 助手」
+   - [ ] 「设置 → 编排 → 知识库」里 `retriever_resource` 已开启（用于在 FabTwin 前端展示知识库引用来源）
 
 ### 3.3 Step 3: 配置 FabTwin API 工具（6 个）
-模板已声明工具，但 `API Base URL` 必须替换为真实 FabTwin 后端地址：
+模板已声明 6 个 external_data_tools，但工具的 `API Base URL` 需要在 Dify「外部工具」里接入 OpenAPI/API 扩展后再绑定：
 
-1. 进入 FabTwin AI Assistant 应用 → 「工具」→ 展开每个工具 → 编辑。
-2. 把 `https://fabtwin-backend.example.com` 替换为实际地址，例如：
-   - 开发：`http://localhost:8002`
-   - 测试：`http://10.30.116.137:8002`
-   - 量产：`https://fabtwin.xxfab.com/api`（走 Nginx 反代）
-3. 鉴权方式选 **API Key**，Key 名 `Authorization`，值 `Bearer <FABTWIN_ADMIN_TOKEN>`。
-   - 获取 Token 方式：`POST {fabtwin}/api/auth/login` Body: `{ "username": "admin", "password": "admin123" }`
-4. 逐个工具 → 「测试」→ 成功后保存。
+1. **方式 A（推荐，批量）**：先在 Dify「工作室 → 工具 → 添加工具 → OpenAPI/Swagger」上传 FabTwin 后端的 OpenAPI schema（`GET {fabtwin}/openapi.json` 导出），把 6 个查询接口一次性导入为自定义工具，然后：
+   - 进入「FabTwin AI Assistant」应用 → 「编排 → 外部数据工具」→ 对 6 个 FabTwin 工具点击「关联」
+2. **方式 B（逐个）**：在应用内的外部数据工具列表里逐个编辑，设置：
+   - API Base URL 填真实 FabTwin 后端地址：
+     - 开发：`http://localhost:8002`
+     - 测试：`http://10.30.116.137:8002`
+     - 量产：`https://fabtwin.xxfab.com/api`（走 Nginx 反代）
+   - 鉴权方式：**API Key**，Key 名 `Authorization`，值 `Bearer <FABTWIN_ADMIN_TOKEN>`。
+     - 获取 Token：`POST {fabtwin}/api/auth/login` Body: `{ "username": "admin", "password": "admin123" }`
+3. 逐个工具 → 「测试」→ 成功后保存。
 
 ### 3.4 Step 4: 创建 RAG 知识库并绑定应用
 知识库种子文档路径：
