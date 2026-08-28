@@ -430,11 +430,17 @@ class AIMiddleware:
                 result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record)
             elif self.provider == "dify":
                 execution_log.append({"step": "call_dify"})
-                result = self._call_dify(question, session_id, machine_id, user_role)
+                result = self._call_dify(
+                    question, session_id, machine_id, user_role,
+                    usage_tracker=usage, tool_calls_recorder=tool_calls_record,
+                )
             elif self.provider == "hybrid":
                 try:
                     execution_log.append({"step": "call_dify_hybrid"})
-                    result = self._call_dify(question, session_id, machine_id, user_role)
+                    result = self._call_dify(
+                        question, session_id, machine_id, user_role,
+                        usage_tracker=usage, tool_calls_recorder=tool_calls_record,
+                    )
                 except Exception as e:
                     print(f"[AI] Dify调用失败，回退本地规则: {e}")
                     execution_log.append({"step": "fallback", "reason": f"Dify失败: {str(e)[:100]}"})
@@ -973,13 +979,26 @@ Lot ID 格式说明：
     # ==================== Provider: Dify ====================
 
     def _call_dify(self, question: str, session_id: str, machine_id: str = None,
-                   user_role: str = "user") -> Dict[str, Any]:
-        """调用Dify应用"""
+                   user_role: str = "user",
+                   usage_tracker: Dict = None,
+                   tool_calls_recorder: List = None) -> Dict[str, Any]:
+        """调用Dify应用
+        - 解析 Dify 返回的 metadata.usage 写回 usage_tracker（用于日志计费）
+        - 解析 retriever_resources（RAG 知识库引用片段）放入 sources 字段
+        - 支持 workflow 模式和 chatbot 模式
+        """
         if not self.dify_enabled or not self.dify_base_url or not self.dify_api_key:
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "fallback_local", "status": "skip",
+                    "reason": "Dify未启用或缺少配置",
+                })
             return self._local_rule_engine(question, machine_id, user_role)
 
         try:
-            url = f"{self.dify_base_url.rstrip('/')}/v1/chat-messages"
+            base = self.dify_base_url.rstrip('/')
+            # 若用户填写的是 /v4 结尾的 URL，自动保留版本前缀不重复
+            url = f"{base}/chat-messages" if base.endswith('/v1') else f"{base}/v1/chat-messages"
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.dify_api_key}",
@@ -991,31 +1010,114 @@ Lot ID 格式说明：
                 },
                 "query": question,
                 "response_mode": "blocking",
-                "conversation_id": session_id,
+                "conversation_id": session_id if session_id and session_id != "" else "",
                 "user": f"fabtwin_{user_role}",
+                "files": [],
             }
-            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            resp = requests.post(url, json=payload, headers=headers, timeout=90)
             resp.raise_for_status()
             data = resp.json()
 
             answer = data.get("answer", "")
-            conversation_id = data.get("conversation_id", session_id)
+            conversation_id = data.get("conversation_id") or session_id
 
-            # 提取表格数据
-            table_data = None
-            if "table_data" in str(data):
-                # Dify返回中可能包含结构化数据
-                pass
+            # 解析 usage token（Dify 返回字段通常在 metadata.usage）
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+            metadata = data.get("metadata") or {}
+            if isinstance(metadata, dict):
+                mu = metadata.get("usage") or {}
+                prompt_tokens = int(mu.get("prompt_tokens") or mu.get("input_tokens") or 0)
+                completion_tokens = int(mu.get("completion_tokens") or mu.get("output_tokens") or 0)
+                total_tokens = int(mu.get("total_tokens") or 0)
+                if total_tokens == 0:
+                    total_tokens = prompt_tokens + completion_tokens
+
+            # 兼容 dify workflow 顶层 usage 字段
+            if total_tokens == 0 and isinstance(data.get("usage"), dict):
+                u = data["usage"]
+                prompt_tokens = int(u.get("prompt_tokens") or u.get("input_tokens") or 0)
+                completion_tokens = int(u.get("completion_tokens") or u.get("output_tokens") or 0)
+                total_tokens = prompt_tokens + completion_tokens
+
+            # 回写 token 用量给日志记录层
+            if usage_tracker is not None:
+                usage_tracker["prompt_tokens"] = prompt_tokens
+                usage_tracker["completion_tokens"] = completion_tokens
+                usage_tracker["total_tokens"] = total_tokens
+
+            # 解析 RAG 知识库引用（retriever_resources）
+            sources = [{"type": "dify", "app_id": self.dify_app_id}]
+            rag_refs = data.get("retriever_resources") or []
+            if not rag_refs:
+                # Dify 0.10+ 可能改名为 docs
+                rag_refs = data.get("docs") or []
+            for i, doc in enumerate(rag_refs[:10]):
+                if isinstance(doc, dict):
+                    score = doc.get("score") or doc.get("rerank_score")
+                    sources.append({
+                        "type": "rag",
+                        "doc_id": doc.get("id") or doc.get("document_id") or doc.get("segment_id") or f"rag_{i}",
+                        "doc_name": doc.get("name") or doc.get("document_name") or doc.get("title") or f"文档{i+1}",
+                        "content": (doc.get("content") or doc.get("text") or doc.get("segment_content") or "")[:500],
+                        "page": doc.get("page") or doc.get("page_number"),
+                        "score": float(score) if score is not None else None,
+                    })
+
+            # 记录 Dify 工具调用（Dify 返回的 agent_thoughts 或 workflow_steps）
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "dify_chat",
+                    "status": "success",
+                    "conversation_id": conversation_id,
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "rag_docs_count": max(0, len(sources) - 1),
+                })
+                # workflow 步骤
+                steps = (metadata.get("workflow_steps")
+                         or metadata.get("workflow_run")
+                         or data.get("workflow_steps")
+                         or [])
+                if isinstance(steps, list) and len(steps) > 0:
+                    for s in steps:
+                        if isinstance(s, dict):
+                            tool_calls_recorder.append({
+                                "tool": f"dify_workflow_{s.get('node_type') or s.get('type') or 'step'}",
+                                "status": s.get("status") or "success",
+                                "node_id": s.get("node_id"),
+                                "elapsed": s.get("elapsed_time") or s.get("execution_time"),
+                            })
 
             return {
                 "answer": answer,
                 "sql": "",
                 "jump_timestamp": None,
-                "table_data": table_data,
-                "sources": [{"type": "dify", "app_id": self.dify_app_id}],
+                "table_data": None,
+                "sources": sources,
+                "conversation_id": conversation_id,
             }
+        except requests.HTTPError as e:
+            body = ""
+            try:
+                body = e.response.text[:500]
+            except Exception:
+                pass
+            print(f"[AI] Dify调用失败 HTTP {e.response.status_code}: {body}")
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "dify_chat", "status": "error",
+                    "error": f"HTTP {e.response.status_code}: {body[:200]}",
+                })
+            raise
         except Exception as e:
             print(f"[AI] Dify调用失败: {e}")
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "dify_chat", "status": "error",
+                    "error": str(e)[:200],
+                })
             raise
 
     # ==================== N8N 工作流联动 ====================
@@ -1198,12 +1300,61 @@ Lot ID 格式说明：
                 return {"success": False, "message": f"连接失败: HTTP {resp.status_code} - {resp.text[:200]}"}
 
             elif provider_type == "dify":
-                url = f"{config.get('base_url', '').rstrip('/')}/v1/parameters"
+                base = (config.get('base_url', '') or '').rstrip('/')
+                if not base:
+                    return {"success": False, "message": "Dify 地址不能为空"}
                 headers = {"Authorization": f"Bearer {config.get('api_key', '')}"}
-                resp = requests.get(url, headers=headers, timeout=10)
-                if resp.status_code == 200:
-                    return {"success": True, "message": "Dify连接成功"}
-                return {"success": False, "message": f"Dify连接失败: HTTP {resp.status_code}"}
+                # 1. 优先用 /v1/info（兼容性最好的健康检查端点，返回应用基本信息）
+                for suffix, method in [
+                    ("/v1/info", "GET"),
+                    ("/v1/parameters", "GET"),
+                ]:
+                    try:
+                        url = f"{base}{suffix}"
+                        resp = requests.get(url, headers=headers, timeout=10)
+                        if resp.status_code == 200:
+                            data = resp.json() or {}
+                            app_name = data.get("app", {}).get("name") if isinstance(data.get("app"), dict) else data.get("name")
+                            msg = "Dify 连接成功"
+                            if app_name:
+                                msg += f"，应用：{app_name}"
+                            # 额外探测知识库列表（用于确认 RAG 功能就绪）
+                            try:
+                                ds_resp = requests.get(
+                                    f"{base}/v1/datasets?page=1&limit=3",
+                                    headers=headers, timeout=10,
+                                )
+                                if ds_resp.status_code == 200:
+                                    ds_data = ds_resp.json() or {}
+                                    ds_total = ds_data.get("total") or len(ds_data.get("data") or [])
+                                    msg += f"，知识库数：{ds_total}"
+                            except Exception:
+                                pass
+                            return {"success": True, "message": msg}
+                    except Exception:
+                        continue
+                # 2. 作为兜底，使用 chat-messages 发一条极短 hello（消耗少量token，但能真正验证链路）
+                try:
+                    chat_url = base.rstrip('/')
+                    chat_url = f"{chat_url}/chat-messages" if chat_url.endswith('/v1') else f"{chat_url}/v1/chat-messages"
+                    ping_headers = dict(headers)
+                    ping_headers["Content-Type"] = "application/json"
+                    resp = requests.post(
+                        chat_url, headers=ping_headers, timeout=15,
+                        json={
+                            "query": "ping",
+                            "response_mode": "blocking",
+                            "user": "fabtwin_conn_test",
+                            "inputs": {},
+                        },
+                    )
+                    if resp.status_code == 200:
+                        d = resp.json()
+                        a = (d.get("answer") or "")[:60]
+                        return {"success": True, "message": f"Dify 连接成功（对话验证），回复：{a}"}
+                    return {"success": False, "message": f"Dify连接失败: HTTP {resp.status_code} - {resp.text[:200]}"}
+                except Exception as e2:
+                    return {"success": False, "message": f"Dify连接失败: {str(e2)}"}
 
             elif provider_type == "n8n":
                 url = f"{config.get('base_url', '').rstrip('/')}/healthz"
