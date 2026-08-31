@@ -3,6 +3,7 @@ import json
 from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -123,8 +124,12 @@ def add_area(floor_id: int, area: dict, db: Session = Depends(get_db), _: User =
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
-    
+
+    # Oracle 表无 identity 列，需手动生成 ID
+    max_id = db.query(func.max(FloorArea.id)).scalar() or 0
+
     new_area = FloorArea(
+        id=max_id + 1,
         floor_id=floor_id,
         name=area.get("name"),
         area_type=area.get("area_type", "equipment"),
@@ -167,7 +172,7 @@ def update_area(floor_id: int, area_id: int, data: dict, db: Session = Depends(g
 @router.post("/{floor_id}/machines")
 def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
     """添加新机台到楼层
-    
+
     支持字段：
     - id: 机台ID（必填）
     - name: 名称（可选，默认同ID）
@@ -175,28 +180,48 @@ def add_machine(floor_id: int, machine: dict, db: Session = Depends(get_db), _: 
     - process_type: 工艺类型（可选）
     - line: 产线（可选）
     - floor_x, floor_y: 地图位置（百分比）
+
+    若机台ID已存在但未分配楼层（从平面图删除后），则重新分配到当前楼层，而非报错。
     """
     from models import MachineModelConfig
-    
+
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
-    
+
     machine_id = machine.get("id")
     if not machine_id:
         raise HTTPException(status_code=400, detail="机台ID不能为空")
-    
-    existing = db.query(Machine).filter(Machine.id == machine_id).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="机台ID已存在")
-    
-    # 检查模型是否存在
+
+    # 检查模型是否存在（新建和重新分配都校验）
     model_id = machine.get("model")
     if model_id:
         model_config = db.query(MachineModelConfig).filter(MachineModelConfig.model_id == model_id).first()
         if not model_config:
             raise HTTPException(status_code=400, detail=f"模型 '{model_id}' 不存在，请先创建模型配置")
-    
+
+    existing = db.query(Machine).filter(Machine.id == machine_id).first()
+    if existing:
+        # 机台已存在：已分配到其它楼层 → 报错；未分配（删除后）→ 重新分配
+        if existing.floor is not None and existing.floor != floor_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"机台ID已存在且已分配到楼层 {existing.floor}，请先从该楼层移除",
+            )
+        existing.floor = floor_id
+        existing.floor_x = machine.get("floor_x", existing.floor_x)
+        existing.floor_y = machine.get("floor_y", existing.floor_y)
+        if machine.get("name"):
+            existing.name = machine["name"]
+        if model_id:
+            existing.model = model_id
+        if machine.get("process_type"):
+            existing.process_type = machine["process_type"]
+        if machine.get("line") is not None:
+            existing.line = machine["line"]
+        db.commit()
+        return {"id": existing.id, "name": existing.name, "model": existing.model, "message": "机台已重新添加到楼层"}
+
     new_machine = Machine(
         id=machine_id,
         model=model_id or "GENERIC-ETCH",
@@ -261,6 +286,23 @@ def update_machine_position(floor_id: int, machine_id: str, position: dict, db: 
     machine.floor = floor_id
     db.commit()
     return {"message": "位置更新成功"}
+
+
+@router.put("/{floor_id}/machines/{machine_id}")
+def update_machine_info(floor_id: int, machine_id: str, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
+    """更新机台信息（名称/工艺类型/产线）"""
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="机台不存在")
+
+    if "name" in data and data["name"]:
+        machine.name = data["name"]
+    if "process_type" in data and data["process_type"]:
+        machine.process_type = data["process_type"]
+    if "line" in data and data["line"] is not None:
+        machine.line = data["line"]
+    db.commit()
+    return {"id": machine.id, "name": machine.name, "process_type": machine.process_type, "line": machine.line, "message": "机台信息更新成功"}
 
 
 @router.post("/import")

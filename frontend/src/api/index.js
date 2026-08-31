@@ -130,6 +130,7 @@ export const api = {
   deleteFloorArea: (floorId, areaId) => request('DELETE', `/floors/${floorId}/areas/${areaId}`),
   deleteFloorMachine: (floorId, machineId) => request('DELETE', `/floors/${floorId}/machines/${machineId}`),
   updateMachinePosition: (floorId, machineId, position) => request('PUT', `/floors/${floorId}/machines/${machineId}/position`, position),
+  updateFloorMachine: (floorId, machineId, data) => request('PUT', `/floors/${floorId}/machines/${machineId}`, data),
   importFloorPlan: (data) => request('POST', '/floors/import', data),
   exportFloorPlan: (floorId) => request('GET', `/floors/export/${floorId}`),
   // 天车轨迹

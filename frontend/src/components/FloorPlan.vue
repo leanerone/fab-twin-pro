@@ -19,6 +19,9 @@ const vehicles = ref([])
 const isLoading = ref(true)
 const editMode = ref(false)
 const selectedMachine = ref(null)
+// 选中机台名称编辑草稿（保存时才提交后端）
+const editMachineName = ref('')
+const savingMachine = ref(false)
 const selectedArea = ref(null)
 const hoverVehicle = ref(null)
 const mousePos = ref({ x: 0, y: 0 })
@@ -32,6 +35,10 @@ const drawingArea = ref(null)
 const dragInfo = ref(null)
 // 新区域表单
 const newArea = ref({ name: '', area_type: 'equipment', color: '#1e3a5f' })
+// 选中区域编辑草稿（名称/颜色），保存时才提交后端
+const editAreaName = ref('')
+const editAreaColor = ref('#1e3a5f')
+const savingArea = ref(false)
 // 轨迹绘制
 const drawingTrack = ref([])  // 正在绘制的轨迹点 [[x,y],...]
 const newTrack = ref({ name: '', color: '#00d4ff', speed: 1.0 })
@@ -104,9 +111,53 @@ function quickAddArea() {
     y_pos: 30,
     width: 15,
     height: 15,
-    color: areaTypeColors[newArea.value.area_type] || '#1e3a5f',
+    color: newArea.value.color || areaTypeColors[newArea.value.area_type] || '#1e3a5f',
   })
   newArea.value.name = ''
+}
+
+// 切换区域类型时自动套用该类型默认颜色（用户可再用颜色选择器覆盖）
+watch(() => newArea.value.area_type, (t) => {
+  newArea.value.color = areaTypeColors[t] || '#1e3a5f'
+})
+
+// 选中区域变化时，把名称/颜色同步到编辑草稿框
+watch(selectedArea, (a) => {
+  if (a) {
+    editAreaName.value = a.name || ''
+    editAreaColor.value = a.color || '#1e3a5f'
+  }
+}, { immediate: true })
+
+// 保存选中区域的名称/颜色到后端
+async function saveAreaProps() {
+  const a = selectedArea.value
+  if (!a) return
+  const newName = (editAreaName.value || '').trim() || a.name
+  const newColor = editAreaColor.value || a.color
+  // 无变更直接返回
+  if (newName === a.name && newColor === a.color) {
+    showToast('无变更', 'info')
+    return
+  }
+  savingArea.value = true
+  try {
+    await api.updateFloorArea(props.floorId, a.id, { name: newName, color: newColor })
+    // 同步本地对象，避免整页刷新
+    a.name = newName
+    a.color = newColor
+    editAreaName.value = newName
+    editAreaColor.value = newColor
+    showToast('区域已保存', 'success')
+  } catch (err) {
+    console.error('[FloorPlan] 区域保存失败:', err)
+    showToast('保存失败: ' + err.message, 'error')
+    // 回滚草稿框
+    editAreaName.value = a.name
+    editAreaColor.value = a.color
+  } finally {
+    savingArea.value = false
+  }
 }
 
 function selectMachine(m) {
@@ -314,7 +365,7 @@ function docMouseUp(e) {
       y_pos: d.y,
       width: w,
       height: h,
-      color: areaTypeColors[newArea.value.area_type] || '#1e3a5f',
+      color: newArea.value.color || areaTypeColors[newArea.value.area_type] || '#1e3a5f',
     })
     newArea.value.name = ''
     drawingArea.value = null
@@ -398,6 +449,41 @@ function confirmDeleteArea(area) {
 function confirmDeleteMachine(m) {
   pendingDelete.value = { type: 'machine', item: m }
   showDeleteConfirm.value = true
+}
+
+// 选中机台变化时同步名称草稿
+watch(selectedMachine, (m) => {
+  if (m) {
+    editMachineName.value = m.name || m.id || ''
+  }
+}, { immediate: true })
+
+// 保存机台名称到后端
+async function saveMachineName() {
+  const m = selectedMachine.value
+  if (!m) return
+  const newName = (editMachineName.value || '').trim()
+  if (!newName) {
+    showToast('名称不能为空', 'error')
+    return
+  }
+  if (newName === m.name) {
+    showToast('无变更', 'info')
+    return
+  }
+  savingMachine.value = true
+  try {
+    await api.updateFloorMachine(props.floorId, m.id, { name: newName })
+    m.name = newName
+    editMachineName.value = newName
+    showToast('机台名称已保存', 'success')
+  } catch (err) {
+    console.error('[FloorPlan] 机台改名失败:', err)
+    showToast('改名失败: ' + err.message, 'error')
+    editMachineName.value = m.name || m.id || ''
+  } finally {
+    savingMachine.value = false
+  }
 }
 
 function doDelete() {
@@ -736,6 +822,7 @@ onUnmounted(() => {
           <option value="elevator">电梯</option>
           <option value="exit">逃生门</option>
         </select>
+        <input v-model="newArea.color" type="color" class="tool-input-color" :title="newArea.color" />
         <button class="tool-btn primary" @click="quickAddArea">+ 直接创建</button>
         <span class="tool-hint">或 在地图上拖拽画框</span>
       </div>
@@ -762,13 +849,46 @@ onUnmounted(() => {
         <button class="tool-btn primary" @click="handleAddVehicleDirect">+ 添加天车</button>
       </div>
       
-      <div v-if="editTool === 'select' && selectedMachine" class="tool-info">
-        <span>选中机台: {{ selectedMachine.id }}</span>
+      <div v-if="editTool === 'select' && selectedMachine" class="tool-info area-edit-info">
+        <span class="ae-label">机台:</span>
+        <span class="ae-mid">{{ selectedMachine.id }}</span>
+        <input
+          v-model="editMachineName"
+          placeholder="机台名称"
+          class="tool-input ae-name"
+          @keyup.enter="saveMachineName"
+        />
+        <button
+          class="tool-btn primary"
+          :disabled="savingMachine"
+          @click="saveMachineName"
+        >
+          {{ savingMachine ? '保存中…' : '💾 改名' }}
+        </button>
         <button class="tool-btn danger" @click="confirmDeleteMachine(selectedMachine)">🗑 删除</button>
       </div>
       
-      <div v-if="editTool === 'select' && selectedArea" class="tool-info">
-        <span>选中区域: {{ selectedArea.name }}</span>
+      <div v-if="editTool === 'select' && selectedArea" class="tool-info area-edit-info">
+        <span class="ae-label">选中区域:</span>
+        <input
+          v-model="editAreaName"
+          placeholder="区域名称"
+          class="tool-input ae-name"
+          @keyup.enter="saveAreaProps"
+        />
+        <input
+          v-model="editAreaColor"
+          type="color"
+          class="tool-input-color"
+          :title="editAreaColor"
+        />
+        <button
+          class="tool-btn primary"
+          :disabled="savingArea"
+          @click="saveAreaProps"
+        >
+          {{ savingArea ? '保存中…' : '💾 保存' }}
+        </button>
         <button class="tool-btn danger" @click="confirmDeleteArea(selectedArea)">🗑 删除</button>
       </div>
       
@@ -1211,6 +1331,32 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 11px;
   color: var(--accent);
+}
+
+/* 选中区域编辑表单 */
+.area-edit-info {
+  padding: 6px 8px;
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 6px;
+}
+
+.ae-label {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ae-name {
+  width: 120px;
+}
+
+.ae-mid {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 /* 画布 */
