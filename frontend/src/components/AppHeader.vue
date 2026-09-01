@@ -30,6 +30,10 @@ function goModelEditor() {
   router.push('/model-editor')
 }
 
+function goMachineManagement() {
+  router.push('/machines')
+}
+
 function goUserManagement() {
   router.push('/users')
 }
@@ -57,6 +61,7 @@ function onDocClick(e) {
 const isDashboard = computed(() => route.name === 'dashboard')
 const isDetail = computed(() => route.name === 'machine-detail')
 const isModelEditor = computed(() => route.name === 'model-editor')
+const isMachineManagement = computed(() => route.name === 'machine-management')
 const isUserManagement = computed(() => route.name === 'user-management')
 const isAIConfig = computed(() => route.name === 'ai-config')
 
@@ -87,6 +92,14 @@ onUnmounted(() => {
         @click="goModelEditor"
       >
         模型编辑器
+      </button>
+      <button
+        v-if="authStore.hasPermission('model_edit')"
+        class="nav-tab"
+        :class="{ active: isMachineManagement }"
+        @click="goMachineManagement"
+      >
+        机台管理
       </button>
       <button
         v-if="authStore.hasPermission('user_manage')"

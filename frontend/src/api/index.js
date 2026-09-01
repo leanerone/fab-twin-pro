@@ -35,7 +35,15 @@ async function request(method, path, data = null, requireAuth = true) {
         window.location.hash = '#/login';
       }
     }
-    throw new Error(`API error: ${res.status}`);
+    // 尝试从响应体提取 detail 消息（FastAPI 错误格式 {detail: "..."}）
+    let detail = '';
+    try {
+      const errBody = await res.json();
+      detail = errBody.detail || errBody.message || errBody.error || '';
+    } catch (_) {
+      try { detail = await res.text(); } catch (_) {}
+    }
+    throw new Error(detail ? `${detail}` : `API error: ${res.status}`);
   }
   return res.json();
 }
@@ -45,6 +53,8 @@ export const api = {
   getMachines: () => request('GET', '/machines'),
   getMachine: (id) => request('GET', `/machines/${id}`),
   getMachineStats: () => request('GET', '/machines/stats'),
+  updateMachine: (id, payload) => request('PATCH', `/machines/${id}`, payload),
+  deleteMachine: (id) => request('DELETE', `/machines/${id}`),
   updateMachineExternalLink: (id, payload) => request('PATCH', `/machines/${id}/external-link`, payload),
 
   // 事件API

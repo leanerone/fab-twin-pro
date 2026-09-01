@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from database import get_db
 from models import Machine, Lot, User
@@ -109,3 +110,67 @@ def update_external_link(
     db.commit()
     db.refresh(m)
     return m
+
+
+class MachineUpdatePayload(BaseModel):
+    """机台信息更新（改名/改型号/产线/工艺/腔数）"""
+    name: Optional[str] = None
+    model: Optional[str] = None
+    line: Optional[int] = None
+    process_type: Optional[str] = None
+    chamber_count: Optional[int] = None
+
+
+@router.patch("/{machine_id}", response_model=MachineOut)
+def update_machine(
+    machine_id: str,
+    payload: MachineUpdatePayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_model_edit),
+):
+    """更新机台基本信息（改名/型号/产线/工艺/腔数，仅管理员）"""
+    m = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="机台不存在")
+    if payload.name is not None and payload.name.strip():
+        m.name = payload.name.strip()
+    if payload.model is not None and payload.model.strip():
+        m.model = payload.model.strip()
+    if payload.line is not None:
+        m.line = payload.line
+    if payload.process_type is not None and payload.process_type.strip():
+        m.process_type = payload.process_type.strip()
+    if payload.chamber_count is not None and payload.chamber_count > 0:
+        m.chamber_count = payload.chamber_count
+    db.commit()
+    db.refresh(m)
+    return m
+
+
+@router.delete("/{machine_id}")
+def delete_machine_record(
+    machine_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_model_edit),
+):
+    """彻底删除机台记录（连带从平面图移除，仅管理员）
+
+    注意：DT_* 量产表不动；仅删 FABTWIN.MACHINES 记录。
+    若有关联的 FABTWIN 事件/Lot 外键约束，会返回 409 提示先清理。
+    """
+    m = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="机台不存在")
+    try:
+        db.delete(m)
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"该机台存在关联数据（事件/Lot/区域），无法直接删除。请先清理关联记录。原因：{e.orig}",
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除失败：{e}")
+    return {"message": f"机台 {machine_id} 已彻底删除", "id": machine_id}

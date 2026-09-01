@@ -57,6 +57,15 @@ export const useAppStore = defineStore('app', {
       }
       return data
     },
+    // 刷新机台列表（机台管理页改/删后调用，同步左侧栏）
+    async refreshMachines() {
+      try {
+        const data = await api.getMachines()
+        if (data) this.machines = data
+        // 同步刷新KPI统计
+        await this.fetchStats()
+      } catch (_) {}
+    },
     // 获取 KPI 统计
     async fetchStats() {
       const data = await api.getMachineStats()

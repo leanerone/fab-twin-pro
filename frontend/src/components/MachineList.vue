@@ -15,9 +15,21 @@ const emit = defineEmits(['select'])
 // 当前查看的产线
 const viewLine = ref(1)
 
-// 当前产线的机台列表
+// 机台名称搜索（非空时跨产线按 id/name/model 模糊匹配）
+const searchQuery = ref('')
+
+// 当前显示的机台列表：有搜索词时跨产线搜索，否则按产线过滤
 const lineMachines = computed(() => {
-  return appStore.machines.filter(m => m.line === viewLine.value)
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    return appStore.machines.filter(
+      (m) =>
+        (m.id && m.id.toLowerCase().includes(q)) ||
+        (m.name && m.name.toLowerCase().includes(q)) ||
+        (m.model && m.model.toLowerCase().includes(q))
+    )
+  }
+  return appStore.machines.filter((m) => m.line === viewLine.value)
 })
 
 // 选择机台
@@ -31,12 +43,21 @@ function selectMachine(m) {
   <div class="machine-sidebar">
     <div class="sidebar-title">产线 & 机台</div>
     <div class="line-selector">
-      <button class="line-btn" :class="{ active: viewLine === 1 }" @click="viewLine = 1">
+      <button class="line-btn" :class="{ active: viewLine === 1 && !searchQuery }" @click="viewLine = 1">
         Line 1<span class="smif-tag">无 SMIF</span>
       </button>
-      <button class="line-btn" :class="{ active: viewLine === 2 }" @click="viewLine = 2">
+      <button class="line-btn" :class="{ active: viewLine === 2 && !searchQuery }" @click="viewLine = 2">
         Line 2<span class="smif-tag">SMIF / OHT</span>
       </button>
+    </div>
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input
+        v-model="searchQuery"
+        class="search-input"
+        placeholder="搜索机台ID/名称/型号"
+      />
+      <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">✕</button>
     </div>
     <div class="machine-list">
       <div
@@ -53,7 +74,9 @@ function selectMachine(m) {
         </div>
         <span v-if="m.alarm_count" class="mach-alarm-badge">{{ m.alarm_count }}</span>
       </div>
-      <div v-if="!lineMachines.length" class="empty-state">加载中...</div>
+      <div v-if="!lineMachines.length" class="empty-state">
+        {{ searchQuery ? '无匹配机台' : '加载中...' }}
+      </div>
     </div>
   </div>
 </template>
@@ -109,6 +132,43 @@ function selectMachine(m) {
   margin-top: 2px;
   opacity: 0.7;
   font-weight: 400;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.search-icon {
+  font-size: 12px;
+  opacity: 0.6;
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.search-input:focus {
+  border-color: var(--accent);
+}
+.search-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+.search-clear:hover {
+  color: var(--text);
 }
 .machine-list {
   flex: 1;

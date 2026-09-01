@@ -30,6 +30,12 @@ const routes = [
     meta: { requiresAuth: true, requirePermission: 'model_edit' },
   },
   {
+    path: '/machines',
+    name: 'machine-management',
+    component: () => import('../views/MachineManagement.vue'),
+    meta: { requiresAuth: true, requirePermission: 'model_edit' },
+  },
+  {
     path: '/users',
     name: 'user-management',
     component: () => import('../views/UserManagement.vue'),

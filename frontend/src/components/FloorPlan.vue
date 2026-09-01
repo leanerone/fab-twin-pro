@@ -26,6 +26,18 @@ const selectedArea = ref(null)
 const hoverVehicle = ref(null)
 const mousePos = ref({ x: 0, y: 0 })
 
+// === 多选/框选/调整大小 ===
+// 多选集合：存 "machine:ID" / "area:ID" 形式
+const multiSelection = ref(new Set())
+// 框选矩形（拖拽空白处时）
+const boxSelect = ref(null)
+// 当前拖拽类型：'move' | 'resize-<handle>' | 'box-select' | 'multi-move'
+const dragMode = ref(null)
+// 区域 resize 手柄名（tl/tr/bl/br/t/r/b/l）
+const resizeHandle = ref(null)
+// 多选移动时的起始点 + 各项起始坐标
+const multiMoveStart = ref(null)
+
 // 编辑工具: select/machine/area/track/vehicle
 const editTool = ref('select')
 // 新机台表单
@@ -254,12 +266,54 @@ function getPercent(e) {
   return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
 }
 
+// === 多选辅助 ===
+function multiKey(e) {
+  // Ctrl/Meta(⌘) 或 Shift 视为多选修饰键
+  return e.ctrlKey || e.metaKey || e.shiftKey
+}
+function isMultiSelected(type, id) {
+  return multiSelection.value.has(`${type}:${id}`)
+}
+function clearMultiSelection() {
+  multiSelection.value = new Set()
+}
+// 把单个机台/区域加入多选（不替换）
+function addToMultiSelection(type, id) {
+  const s = new Set(multiSelection.value)
+  s.add(`${type}:${id}`)
+  multiSelection.value = s
+}
+// 框选命中的机台/区域加入多选
+function computeBoxSelection(box) {
+  if (!box) return
+  const x1 = Math.min(box.startX, box.x)
+  const x2 = Math.max(box.startX, box.x)
+  const y1 = Math.min(box.startY, box.y)
+  const y2 = Math.max(box.startY, box.y)
+  const s = new Set(multiSelection.value)
+  // 机台点中心在框内即选中
+  machines.value.forEach((m) => {
+    if (m.floor_x >= x1 && m.floor_x <= x2 && m.floor_y >= y1 && m.floor_y <= y2) {
+      s.add(`machine:${m.id}`)
+    }
+  })
+  // 区域中心在框内或与框相交即选中
+  areas.value.forEach((a) => {
+    const ax2 = a.x_pos + a.width
+    const ay2 = a.y_pos + a.height
+    if (a.x_pos < x2 && ax2 > x1 && a.y_pos < y2 && ay2 > y1) {
+      s.add(`area:${a.id}`)
+    }
+  })
+  multiSelection.value = s
+}
+
 function handleMouseDown(e) {
   if (!editMode.value) return
-  
+
   // 如果点击的是删除按钮，不触发画框/拖拽
   if (e.target.closest('.area-delete')) return
-  
+
   const pos = getPercent(e)
   mousePos.value = pos
 
@@ -278,38 +332,141 @@ function handleMouseDown(e) {
     // 点击放置天车（需要先选轨迹）
     handleAddVehicle(pos)
   } else if (editTool.value === 'select') {
+    // 优先：点击区域 resize 手柄
+    const handleEl = e.target.closest('.resize-handle')
+    if (handleEl) {
+      const aid = parseInt(handleEl.dataset.aid)
+      const h = handleEl.dataset.handle
+      const a = areas.value.find(x => x.id === aid)
+      if (a) {
+        selectedArea.value = a
+        selectedMachine.value = null
+        if (!multiKey(e)) clearMultiSelection()
+        dragMode.value = `resize-${h}`
+        resizeHandle.value = h
+        dragInfo.value = { area: a, startX: pos.x, startY: pos.y, origX: a.x_pos, origY: a.y_pos, origW: a.width, origH: a.height }
+        document.addEventListener('mousemove', docMouseMove)
+        document.addEventListener('mouseup', docMouseUp)
+      }
+      return
+    }
+
     // 检查是否点击了机台（拖拽）
     const machineEl = e.target.closest('.machine-marker')
     if (machineEl) {
       const mid = machineEl.dataset.mid
       const m = machines.value.find(x => x.id === mid)
       if (m) {
-        selectedMachine.value = m
-        selectedArea.value = null
-        dragInfo.value = { machine: m, offsetX: pos.x - m.floor_x, offsetY: pos.y - m.floor_y }
-        document.addEventListener('mousemove', docMouseMove)
-        document.addEventListener('mouseup', docMouseUp)
+        // 多选修饰键：toggle 加入多选
+        if (multiKey(e)) {
+          if (isMultiSelected('machine', m.id)) {
+            const s = new Set(multiSelection.value)
+            s.delete(`machine:${m.id}`)
+            multiSelection.value = s
+          } else {
+            addToMultiSelection('machine', m.id)
+          }
+          selectedMachine.value = m
+          selectedArea.value = null
+          return
+        }
+        // 普通点击：若该机台已在多选中，则开始多选移动；否则单选
+        if (isMultiSelected('machine', m.id) && multiSelection.value.size > 1) {
+          // 开始多选移动
+          selectedMachine.value = m
+          selectedArea.value = null
+          dragMode.value = 'multi-move'
+          // 记录所有选中项的起始坐标
+          const starts = {}
+          multiSelection.value.forEach((key) => {
+            const [t, id] = key.split(':')
+            if (t === 'machine') {
+              const mm = machines.value.find(x => x.id === id)
+              if (mm) starts[key] = { x: mm.floor_x, y: mm.floor_y }
+            } else if (t === 'area') {
+              const aa = areas.value.find(x => x.id === parseInt(id))
+              if (aa) starts[key] = { x: aa.x_pos, y: aa.y_pos }
+            }
+          })
+          multiMoveStart.value = { startX: pos.x, startY: pos.y, starts }
+          document.addEventListener('mousemove', docMouseMove)
+          document.addEventListener('mouseup', docMouseUp)
+        } else {
+          // 单选 + 拖拽
+          clearMultiSelection()
+          selectedMachine.value = m
+          selectedArea.value = null
+          dragMode.value = 'move'
+          dragInfo.value = { machine: m, offsetX: pos.x - m.floor_x, offsetY: pos.y - m.floor_y }
+          document.addEventListener('mousemove', docMouseMove)
+          document.addEventListener('mouseup', docMouseUp)
+        }
       }
       return
     }
-    
+
     // 检查是否点击了区域（拖拽）
     const areaEl = e.target.closest('.floor-area')
     if (areaEl) {
       const aid = parseInt(areaEl.dataset.aid)
       const a = areas.value.find(x => x.id === aid)
       if (a) {
-        selectedArea.value = a
-        selectedMachine.value = null
-        dragInfo.value = { area: a, offsetX: pos.x - a.x_pos, offsetY: pos.y - a.y_pos }
-        document.addEventListener('mousemove', docMouseMove)
-        document.addEventListener('mouseup', docMouseUp)
+        if (multiKey(e)) {
+          if (isMultiSelected('area', a.id)) {
+            const s = new Set(multiSelection.value)
+            s.delete(`area:${a.id}`)
+            multiSelection.value = s
+          } else {
+            addToMultiSelection('area', a.id)
+          }
+          selectedArea.value = a
+          selectedMachine.value = null
+          return
+        }
+        if (isMultiSelected('area', a.id) && multiSelection.value.size > 1) {
+          selectedArea.value = a
+          selectedMachine.value = null
+          dragMode.value = 'multi-move'
+          const starts = {}
+          multiSelection.value.forEach((key) => {
+            const [t, id] = key.split(':')
+            if (t === 'machine') {
+              const mm = machines.value.find(x => x.id === id)
+              if (mm) starts[key] = { x: mm.floor_x, y: mm.floor_y }
+            } else if (t === 'area') {
+              const aa = areas.value.find(x => x.id === parseInt(id))
+              if (aa) starts[key] = { x: aa.x_pos, y: aa.y_pos }
+            }
+          })
+          multiMoveStart.value = { startX: pos.x, startY: pos.y, starts }
+          document.addEventListener('mousemove', docMouseMove)
+          document.addEventListener('mouseup', docMouseUp)
+        } else {
+          clearMultiSelection()
+          selectedArea.value = a
+          selectedMachine.value = null
+          dragMode.value = 'move'
+          dragInfo.value = { area: a, offsetX: pos.x - a.x_pos, offsetY: pos.y - a.y_pos }
+          document.addEventListener('mousemove', docMouseMove)
+          document.addEventListener('mouseup', docMouseUp)
+        }
       }
+      return
     }
+
+    // 点空白处：开始框选（select 工具 + 无多选修饰键时清空多选）
+    if (!multiKey(e)) clearMultiSelection()
+    // 同时取消单选
+    selectedMachine.value = null
+    selectedArea.value = null
+    dragMode.value = 'box-select'
+    boxSelect.value = { startX: pos.x, startY: pos.y, x: pos.x, y: pos.y }
+    document.addEventListener('mousemove', docMouseMove)
+    document.addEventListener('mouseup', docMouseUp)
   }
 }
 
-// document 级别的鼠标移动处理（画框/拖拽）
+// document 级别的鼠标移动处理（画框/拖拽/多选/resize）
 function docMouseMove(e) {
   if (!editMode.value) return
   // 用 canvas 的 rect 计算百分比坐标
@@ -331,7 +488,80 @@ function docMouseMove(e) {
       w: Math.abs(pos.x - d.startX),
       h: Math.abs(pos.y - d.startY),
     }
-  } else if (dragInfo.value) {
+    return
+  }
+
+  // 框选矩形
+  if (dragMode.value === 'box-select' && boxSelect.value) {
+    boxSelect.value = { ...boxSelect.value, x: pos.x, y: pos.y }
+    return
+  }
+
+  // 多选批量移动
+  if (dragMode.value === 'multi-move' && multiMoveStart.value) {
+    const dx = pos.x - multiMoveStart.value.startX
+    const dy = pos.y - multiMoveStart.value.startY
+    multiSelection.value.forEach((key) => {
+      const [t, id] = key.split(':')
+      const st = multiMoveStart.value.starts[key]
+      if (!st) return
+      const nx = Math.max(0, Math.min(100, st.x + dx))
+      const ny = Math.max(0, Math.min(100, st.y + dy))
+      if (t === 'machine') {
+        const mm = machines.value.find(z => z.id === id)
+        if (mm) { mm.floor_x = nx; mm.floor_y = ny }
+      } else if (t === 'area') {
+        const aa = areas.value.find(z => z.id === parseInt(id))
+        if (aa) { aa.x_pos = nx; aa.y_pos = ny }
+      }
+    })
+    return
+  }
+
+  // 区域 resize
+  if (dragMode.value && dragMode.value.startsWith('resize-') && dragInfo.value) {
+    const a = dragInfo.value.area
+    const h = resizeHandle.value
+    let { origX, origY, origW, origH } = dragInfo.value
+    let newX = origX, newY = origY, newW = origW, newH = origH
+    const dx = pos.x - dragInfo.value.startX
+    const dy = pos.y - dragInfo.value.startY
+    if (h.includes('l')) {
+      newX = origX + dx
+      newW = origW - dx
+    }
+    if (h.includes('r')) {
+      newW = origW + dx
+    }
+    if (h.includes('t')) {
+      newY = origY + dy
+      newH = origH - dy
+    }
+    if (h.includes('b')) {
+      newH = origH + dy
+    }
+    // 最小尺寸 2%
+    const MIN = 2
+    if (newW < MIN) {
+      if (h.includes('l')) newX = origX + origW - MIN
+      newW = MIN
+    }
+    if (newH < MIN) {
+      if (h.includes('t')) newY = origY + origH - MIN
+      newH = MIN
+    }
+    // 边界限制 0~100
+    newX = Math.max(0, Math.min(100 - newW, newX))
+    newY = Math.max(0, Math.min(100 - newH, newY))
+    a.x_pos = newX
+    a.y_pos = newY
+    a.width = newW
+    a.height = newH
+    return
+  }
+
+  // 单选拖拽
+  if (dragInfo.value) {
     const newX = pos.x - dragInfo.value.offsetX
     const newY = pos.y - dragInfo.value.offsetY
     const clampedX = Math.max(0, Math.min(100, newX))
@@ -351,8 +581,16 @@ function docMouseUp(e) {
   document.removeEventListener('mousemove', docMouseMove)
   document.removeEventListener('mouseup', docMouseUp)
 
-  if (!editMode.value) return
+  if (!editMode.value) {
+    dragMode.value = null
+    boxSelect.value = null
+    multiMoveStart.value = null
+    resizeHandle.value = null
+    dragInfo.value = null
+    return
+  }
 
+  // 画区域完成
   if (drawingArea.value && editTool.value === 'area') {
     const d = drawingArea.value
     const w = d.w < 3 ? 8 : d.w
@@ -369,7 +607,59 @@ function docMouseUp(e) {
     })
     newArea.value.name = ''
     drawingArea.value = null
-  } else if (dragInfo.value) {
+    dragMode.value = null
+    return
+  }
+
+  // 框选完成 → 计算命中并加入多选
+  if (dragMode.value === 'box-select' && boxSelect.value) {
+    const b = boxSelect.value
+    // 只有拖拽距离足够才算框选，否则视为单击空白（已清空多选）
+    if (Math.abs(b.x - b.startX) > 1 || Math.abs(b.y - b.startY) > 1) {
+      computeBoxSelection(b)
+    }
+    boxSelect.value = null
+    dragMode.value = null
+    return
+  }
+
+  // 多选批量移动完成 → 保存所有选中项位置
+  if (dragMode.value === 'multi-move' && multiMoveStart.value) {
+    multiSelection.value.forEach((key) => {
+      const [t, id] = key.split(':')
+      if (t === 'machine') {
+        const mm = machines.value.find(z => z.id === id)
+        if (mm) {
+          api.updateMachinePosition(props.floorId, mm.id, { x: mm.floor_x, y: mm.floor_y })
+        }
+      } else if (t === 'area') {
+        const aa = areas.value.find(z => z.id === parseInt(id))
+        if (aa) {
+          api.updateFloorArea(props.floorId, aa.id, {
+            x_pos: aa.x_pos, y_pos: aa.y_pos, width: aa.width, height: aa.height,
+          })
+        }
+      }
+    })
+    multiMoveStart.value = null
+    dragMode.value = null
+    return
+  }
+
+  // resize 完成 → 保存区域尺寸
+  if (dragMode.value && dragMode.value.startsWith('resize-') && dragInfo.value) {
+    const a = dragInfo.value.area
+    api.updateFloorArea(props.floorId, a.id, {
+      x_pos: a.x_pos, y_pos: a.y_pos, width: a.width, height: a.height,
+    })
+    resizeHandle.value = null
+    dragInfo.value = null
+    dragMode.value = null
+    return
+  }
+
+  // 单选拖拽完成
+  if (dragInfo.value) {
     if (dragInfo.value.machine) {
       api.updateMachinePosition(props.floorId, dragInfo.value.machine.id, {
         x: dragInfo.value.machine.floor_x,
@@ -386,6 +676,7 @@ function docMouseUp(e) {
     }
     dragInfo.value = null
   }
+  dragMode.value = null
 }
 
 function handleAddMachine(pos) {
@@ -716,6 +1007,50 @@ const drawingPreview = computed(() => {
   }
 })
 
+// 框选矩形预览
+const boxSelectPreview = computed(() => {
+  if (!boxSelect.value) return null
+  const b = boxSelect.value
+  const x = Math.min(b.startX, b.x)
+  const y = Math.min(b.startY, b.y)
+  const w = Math.abs(b.x - b.startX)
+  const h = Math.abs(b.y - b.startY)
+  if (w < 0.5 && h < 0.5) return null
+  return {
+    left: x + '%',
+    top: y + '%',
+    width: w + '%',
+    height: h + '%',
+  }
+})
+
+// 多选数量
+const multiSelectCount = computed(() => multiSelection.value.size)
+
+// 批量删除所有多选项
+async function batchDeleteMultiSelection() {
+  if (multiSelection.value.size === 0) return
+  if (!confirm(`确认删除选中的 ${multiSelection.value.size} 个对象（机台仅从平面图移除）？`)) return
+  const keys = Array.from(multiSelection.value)
+  for (const key of keys) {
+    const [t, id] = key.split(':')
+    try {
+      if (t === 'machine') {
+        await api.deleteFloorMachine(props.floorId, id)
+      } else if (t === 'area') {
+        await api.deleteFloorArea(props.floorId, parseInt(id))
+      }
+    } catch (err) {
+      console.error('[FloorPlan] 批量删除单项失败:', key, err)
+    }
+  }
+  clearMultiSelection()
+  selectedMachine.value = null
+  selectedArea.value = null
+  showToast('批量删除完成', 'success')
+  await loadFloorData()
+}
+
 watch(() => props.floorId, () => {
   loadFloorData()
 })
@@ -725,6 +1060,11 @@ watch(editMode, (val) => {
     editTool.value = 'select'
     drawingArea.value = null
     dragInfo.value = null
+    dragMode.value = null
+    boxSelect.value = null
+    multiMoveStart.value = null
+    resizeHandle.value = null
+    clearMultiSelection()
   }
 })
 
@@ -793,6 +1133,14 @@ onUnmounted(() => {
         <button class="tool-btn" :class="{ active: editTool === 'vehicle' }" @click="editTool = 'vehicle'">
           🚁 添加天车
         </button>
+      </div>
+
+      <!-- 多选信息条 -->
+      <div v-if="multiSelectCount > 0" class="multi-info">
+        <span class="mi-count">已选 {{ multiSelectCount }} 项</span>
+        <span class="mi-hint">拖拽任一选中项批量移动 | Ctrl/Shift 单击增减</span>
+        <button class="tool-btn" @click="clearMultiSelection">取消选择</button>
+        <button class="tool-btn danger" @click="batchDeleteMultiSelection">🗑 批量删除</button>
       </div>
       
       <div v-if="editTool === 'machine'" class="tool-form">
@@ -918,12 +1266,16 @@ onUnmounted(() => {
       </div>
       
       <!-- 区域 -->
-      <div 
-        v-for="area in areas" 
+      <div
+        v-for="area in areas"
         :key="area.id"
         class="floor-area"
         :data-aid="area.id"
-        :class="{ 'area-editable': editMode, 'area-selected': selectedArea?.id === area.id }"
+        :class="{
+          'area-editable': editMode,
+          'area-selected': selectedArea?.id === area.id,
+          'area-multi': isMultiSelected('area', area.id),
+        }"
         :style="{
           left: area.x_pos + '%',
           top: area.y_pos + '%',
@@ -938,21 +1290,36 @@ onUnmounted(() => {
           {{ area.name }}
         </div>
         <div v-if="editMode" class="area-delete" @click.stop="confirmDeleteArea(area)">✕</div>
+        <!-- resize 手柄：仅 select 工具 + 区域被选中时显示 -->
+        <template v-if="editMode && editTool === 'select' && (selectedArea?.id === area.id || isMultiSelected('area', area.id))">
+          <div class="resize-handle handle-tl" :data-aid="area.id" data-handle="tl"></div>
+          <div class="resize-handle handle-tr" :data-aid="area.id" data-handle="tr"></div>
+          <div class="resize-handle handle-bl" :data-aid="area.id" data-handle="bl"></div>
+          <div class="resize-handle handle-br" :data-aid="area.id" data-handle="br"></div>
+          <div class="resize-handle handle-t" :data-aid="area.id" data-handle="t"></div>
+          <div class="resize-handle handle-r" :data-aid="area.id" data-handle="r"></div>
+          <div class="resize-handle handle-b" :data-aid="area.id" data-handle="b"></div>
+          <div class="resize-handle handle-l" :data-aid="area.id" data-handle="l"></div>
+        </template>
       </div>
       
       <!-- 画框预览 -->
       <div v-if="drawingPreview" class="drawing-preview" :style="drawingPreview"></div>
+
+      <!-- 框选矩形预览 -->
+      <div v-if="boxSelectPreview" class="box-select-preview" :style="boxSelectPreview"></div>
       
       <!-- 机台标记 -->
-      <div 
-        v-for="m in machines" 
+      <div
+        v-for="m in machines"
         :key="m.id"
         class="machine-marker"
         :data-mid="m.id"
-        :class="{ 
+        :class="{
           selected: selectedMachine?.id === m.id,
           'edit-movable': editMode,
           'machine-stk': m.process_type === 'STK',
+          'machine-multi': isMultiSelected('machine', m.id),
         }"
         :style="{
           left: m.floor_x + '%',
@@ -1060,7 +1427,7 @@ onUnmounted(() => {
       <!-- 编辑提示 -->
       <div v-if="editMode" class="edit-hint">
         <span v-if="editTool === 'select'">
-          🖱 拖拽机台或区域调整位置 | 点击选中后可删除
+          🖱 拖拽机台/区域调整位置 | 空白处拖拽框选 | 选中区域拖角调整大小 | Ctrl/Shift 单击多选
         </span>
         <span v-if="editTool === 'machine'">
           ➕ 点击地图放置机台: X={{ mousePos.x.toFixed(1) }} Y={{ mousePos.y.toFixed(1) }}
@@ -1439,6 +1806,70 @@ onUnmounted(() => {
   background: rgba(0, 212, 255, 0.1);
   pointer-events: none;
   border-radius: 4px;
+}
+
+/* 框选矩形预览 */
+.box-select-preview {
+  position: absolute;
+  border: 1px dashed rgba(0, 212, 255, 0.8);
+  background: rgba(0, 212, 255, 0.08);
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 18;
+}
+
+/* 多选高亮 */
+.floor-area.area-multi {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.5), 0 0 12px rgba(168, 85, 247, 0.3);
+  z-index: 6;
+}
+.machine-marker.machine-multi {
+  z-index: 18;
+}
+.machine-marker.machine-multi .marker-dot,
+.machine-marker.machine-multi .marker-stk {
+  box-shadow: 0 0 0 2px #a855f7, 0 0 10px rgba(168, 85, 247, 0.6);
+}
+
+/* 区域 resize 手柄 */
+.resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border: 1.5px solid #fff;
+  border-radius: 2px;
+  z-index: 30;
+  box-sizing: border-box;
+}
+.resize-handle.handle-tl { top: -5px; left: -5px; cursor: nwse-resize; }
+.resize-handle.handle-tr { top: -5px; right: -5px; cursor: nesw-resize; }
+.resize-handle.handle-bl { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.resize-handle.handle-br { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.resize-handle.handle-t  { top: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; width: 14px; height: 8px; }
+.resize-handle.handle-r  { right: -5px; top: 50%; transform: translateY(-50%); cursor: ew-resize; width: 8px; height: 14px; }
+.resize-handle.handle-b  { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; width: 14px; height: 8px; }
+.resize-handle.handle-l  { left: -5px; top: 50%; transform: translateY(-50%); cursor: ew-resize; width: 8px; height: 14px; }
+
+/* 多选信息条 */
+.multi-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.multi-info .mi-count {
+  color: #a855f7;
+  font-weight: 700;
+}
+.multi-info .mi-hint {
+  color: var(--text-dim);
+  font-size: 10px;
 }
 
 /* 轨迹SVG层 */
