@@ -143,6 +143,11 @@ export const api = {
   updateFloorMachine: (floorId, machineId, data) => request('PUT', `/floors/${floorId}/machines/${machineId}`, data),
   importFloorPlan: (data) => request('POST', '/floors/import', data),
   exportFloorPlan: (floorId) => request('GET', `/floors/export/${floorId}`),
+  // 平面图层级操作（D 批）
+  cloneFloorAreas: (floorId, areaIds, offset = { x: 3, y: 3 }) => request('POST', `/floors/${floorId}/areas/batch-clone`, { area_ids: areaIds, offset_x: offset.x, offset_y: offset.y }),
+  cloneFloorMachines: (floorId, machineIds, offset = { x: 3, y: 3 }) => request('POST', `/floors/${floorId}/machines/batch-clone`, { machine_ids: machineIds, offset_x: offset.x, offset_y: offset.y }),
+  reorderFloorArea: (floorId, areaId, action) => request('POST', `/floors/${floorId}/areas/reorder`, { area_id: areaId, action }),
+  reorderFloorMachine: (floorId, machineId, action) => request('POST', `/floors/${floorId}/machines/reorder`, { machine_id: machineId, action }),
   // 天车轨迹
   addTrack: (floorId, data) => request('POST', `/floors/${floorId}/tracks`, data),
   updateTrack: (floorId, trackId, data) => request('PUT', `/floors/${floorId}/tracks/${trackId}`, data),

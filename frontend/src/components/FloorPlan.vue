@@ -51,6 +51,33 @@ const newArea = ref({ name: '', area_type: 'equipment', color: '#1e3a5f' })
 const editAreaName = ref('')
 const editAreaColor = ref('#1e3a5f')
 const savingArea = ref(false)
+// 选中区域尺寸/位置编辑草稿（D-#1：手动输入长宽度+坐标）
+const editAreaX = ref(0)
+const editAreaY = ref(0)
+const editAreaW = ref(10)
+const editAreaH = ref(10)
+// 草稿 - 米制换算（按楼层宽高换算；若楼层宽高没填则 fallback 100×100）
+const editAreaWM = computed(() => {
+  const w = floorData.value?.width
+  const scale = typeof w === 'number' && w > 0 ? w / 100 : 1
+  return +(editAreaW.value * scale).toFixed(2)
+})
+const editAreaHM = computed(() => {
+  const h = floorData.value?.height
+  const scale = typeof h === 'number' && h > 0 ? h / 100 : 1
+  return +(editAreaH.value * scale).toFixed(2)
+})
+// 把米制改回百分比（用户手动填写米时反向）
+function applyAreaMeters(mW, mH) {
+  const w = floorData.value?.width || 100
+  const h = floorData.value?.height || 100
+  editAreaW.value = clampPct((+mW / (w || 100)) * 100, 0.5, 100)
+  editAreaH.value = clampPct((+mH / (h || 100)) * 100, 0.5, 100)
+}
+function clampPct(v, min = 0, max = 100) {
+  if (Number.isNaN(+v)) return min
+  return Math.max(min, Math.min(max, +v))
+}
 // 轨迹绘制
 const drawingTrack = ref([])  // 正在绘制的轨迹点 [[x,y],...]
 const newTrack = ref({ name: '', color: '#00d4ff', speed: 1.0 })
@@ -133,33 +160,56 @@ watch(() => newArea.value.area_type, (t) => {
   newArea.value.color = areaTypeColors[t] || '#1e3a5f'
 })
 
-// 选中区域变化时，把名称/颜色同步到编辑草稿框
+// 选中区域变化时，把名称/颜色/尺寸/坐标同步到编辑草稿框
 watch(selectedArea, (a) => {
   if (a) {
     editAreaName.value = a.name || ''
     editAreaColor.value = a.color || '#1e3a5f'
+    editAreaX.value = +Number(a.x_pos ?? 0).toFixed(2)
+    editAreaY.value = +Number(a.y_pos ?? 0).toFixed(2)
+    editAreaW.value = +Number(a.width ?? 10).toFixed(2)
+    editAreaH.value = +Number(a.height ?? 10).toFixed(2)
   }
 }, { immediate: true })
 
-// 保存选中区域的名称/颜色到后端
+// 保存选中区域的名称/颜色/尺寸/坐标到后端（D-#1 支持手动输入尺寸）
 async function saveAreaProps() {
   const a = selectedArea.value
   if (!a) return
   const newName = (editAreaName.value || '').trim() || a.name
   const newColor = editAreaColor.value || a.color
+  const nx = clampPct(+editAreaX.value || 0, 0, 100)
+  const ny = clampPct(+editAreaY.value || 0, 0, 100)
+  const nw = clampPct(+editAreaW.value || 1, 0.5, 100)
+  const nh = clampPct(+editAreaH.value || 1, 0.5, 100)
+  // 边界限制：x+w 与 y+h 不能超过 100
+  const newX = Math.min(nx, 100 - nw)
+  const newY = Math.min(ny, 100 - nh)
   // 无变更直接返回
-  if (newName === a.name && newColor === a.color) {
+  if (
+    newName === a.name && newColor === a.color
+    && Math.abs(newX - a.x_pos) < 0.01
+    && Math.abs(newY - a.y_pos) < 0.01
+    && Math.abs(nw - a.width) < 0.01
+    && Math.abs(nh - a.height) < 0.01
+  ) {
     showToast('无变更', 'info')
     return
   }
   savingArea.value = true
   try {
-    await api.updateFloorArea(props.floorId, a.id, { name: newName, color: newColor })
+    await api.updateFloorArea(props.floorId, a.id, {
+      name: newName, color: newColor,
+      x_pos: newX, y_pos: newY, width: nw, height: nh,
+    })
     // 同步本地对象，避免整页刷新
     a.name = newName
     a.color = newColor
+    a.x_pos = newX; a.y_pos = newY; a.width = nw; a.height = nh
     editAreaName.value = newName
     editAreaColor.value = newColor
+    editAreaX.value = +newX.toFixed(2); editAreaY.value = +newY.toFixed(2)
+    editAreaW.value = +nw.toFixed(2); editAreaH.value = +nh.toFixed(2)
     showToast('区域已保存', 'success')
   } catch (err) {
     console.error('[FloorPlan] 区域保存失败:', err)
@@ -167,6 +217,10 @@ async function saveAreaProps() {
     // 回滚草稿框
     editAreaName.value = a.name
     editAreaColor.value = a.color
+    editAreaX.value = +(a.x_pos ?? 0).toFixed(2)
+    editAreaY.value = +(a.y_pos ?? 0).toFixed(2)
+    editAreaW.value = +(a.width ?? 10).toFixed(2)
+    editAreaH.value = +(a.height ?? 10).toFixed(2)
   } finally {
     savingArea.value = false
   }
@@ -306,6 +360,83 @@ function computeBoxSelection(box) {
     }
   })
   multiSelection.value = s
+}
+
+// === D-#2: 批量复制 ===
+const batchCloning = ref(false)
+async function batchCloneSelected(offset = { x: 3, y: 3 }) {
+  if (multiSelection.value.size === 0) return
+  batchCloning.value = true
+  try {
+    const areaIds = []; const machineIds = []
+    for (const k of multiSelection.value) {
+      const [t, id] = k.split(':', 2)
+      if (t === 'area') areaIds.push(+id)
+      else if (t === 'machine') machineIds.push(id)
+    }
+    let createdAreas = [], createdMachines = []
+    if (areaIds.length) {
+      const r = await api.cloneFloorAreas(props.floorId, areaIds, offset)
+      createdAreas = r.items || []
+    }
+    if (machineIds.length) {
+      const r = await api.cloneFloorMachines(props.floorId, machineIds, offset)
+      createdMachines = r.items || []
+    }
+    showToast(`已复制 ${createdAreas.length + createdMachines.length} 个对象`, 'success')
+    // 把复制结果对应加入多选（替换原多选集）
+    const ns = new Set()
+    createdAreas.forEach(a => ns.add(`area:${a.id}`))
+    createdMachines.forEach(m => ns.add(`machine:${m.id}`))
+    multiSelection.value = ns
+    await loadFloor()
+  } catch (e) {
+    showToast('批量复制失败: ' + e.message, 'error')
+  } finally {
+    batchCloning.value = false
+  }
+}
+
+// === D-#3: 图层重排（支持单选+多选集合）===
+const reordering = ref(false)
+function reorderTargets(action) {
+  // 优先级：多选集合 > 单选区域 > 单选机台
+  const list = []
+  for (const k of multiSelection.value) {
+    const [t, id] = k.split(':', 2)
+    list.push({ t, id: t === 'area' ? +id : id })
+  }
+  if (!list.length && selectedArea.value) {
+    list.push({ t: 'area', id: selectedArea.value.id })
+  }
+  if (!list.length && selectedMachine.value) {
+    list.push({ t: 'machine', id: selectedMachine.value.id })
+  }
+  return list
+}
+async function reorderSelected(action) {
+  const list = reorderTargets(action)
+  if (!list.length) return
+  reordering.value = true
+  try {
+    // 批量时，top/down 需要从前向后保持顺序；bottom/up 从后向前
+    let order = list
+    if (action === 'top' || action === 'down') order = [...list]
+    if (action === 'bottom' || action === 'up') order = [...list].reverse()
+    for (const it of order) {
+      if (it.t === 'area') {
+        await api.reorderFloorArea(props.floorId, it.id, action)
+      } else {
+        await api.reorderFloorMachine(props.floorId, it.id, action)
+      }
+    }
+    showToast(`图层${{top:'置顶',bottom:'置底',up:'上移一层',down:'下移一层'}[action]}完成`, 'success')
+    await loadFloor()
+  } catch (e) {
+    showToast('图层操作失败: ' + e.message, 'error')
+  } finally {
+    reordering.value = false
+  }
 }
 
 function handleMouseDown(e) {
@@ -1135,10 +1266,16 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- 多选信息条 -->
+      <!-- 多选信息条（D-#2 批量复制 + D-#3 图层操作） -->
       <div v-if="multiSelectCount > 0" class="multi-info">
         <span class="mi-count">已选 {{ multiSelectCount }} 项</span>
         <span class="mi-hint">拖拽任一选中项批量移动 | Ctrl/Shift 单击增减</span>
+        <button class="tool-btn" :disabled="batchCloning" @click="batchCloneSelected({x:3,y:3})">⎘ 批量复制 (+3,+3)</button>
+        <button class="tool-btn" :disabled="batchCloning" @click="batchCloneSelected({x:6,y:6})">⎘ 复制 (+6,+6)</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('bottom')">⬇ 置底</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('down')">↧ 下移</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('up')">↥ 上移</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('top')">⬆ 置顶</button>
         <button class="tool-btn" @click="clearMultiSelection">取消选择</button>
         <button class="tool-btn danger" @click="batchDeleteMultiSelection">🗑 批量删除</button>
       </div>
@@ -1213,31 +1350,59 @@ onUnmounted(() => {
         >
           {{ savingMachine ? '保存中…' : '💾 改名' }}
         </button>
+        <button class="tool-btn" :disabled="batchCloning" @click="(()=>{ addToMultiSelection('machine', selectedMachine.id); batchCloneSelected({x:3,y:3}); })">
+          ⎘ 复制
+        </button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('bottom')">⬇置底</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('down')">↧</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('up')">↥</button>
+        <button class="tool-btn" :disabled="reordering" @click="reorderSelected('top')">⬆置顶</button>
         <button class="tool-btn danger" @click="confirmDeleteMachine(selectedMachine)">🗑 删除</button>
       </div>
       
-      <div v-if="editTool === 'select' && selectedArea" class="tool-info area-edit-info">
-        <span class="ae-label">选中区域:</span>
-        <input
-          v-model="editAreaName"
-          placeholder="区域名称"
-          class="tool-input ae-name"
-          @keyup.enter="saveAreaProps"
-        />
-        <input
-          v-model="editAreaColor"
-          type="color"
-          class="tool-input-color"
-          :title="editAreaColor"
-        />
-        <button
-          class="tool-btn primary"
-          :disabled="savingArea"
-          @click="saveAreaProps"
-        >
-          {{ savingArea ? '保存中…' : '💾 保存' }}
-        </button>
-        <button class="tool-btn danger" @click="confirmDeleteArea(selectedArea)">🗑 删除</button>
+      <!-- 选中区域编辑信息（D-#1：手动输入长宽/位置 + D-#3：图层操作） -->
+      <div v-if="editTool === 'select' && selectedArea" class="tool-info area-edit-info area-edit-info-d">
+        <div class="ae-row">
+          <span class="ae-label">选中区域:</span>
+          <input
+            v-model="editAreaName"
+            placeholder="区域名称"
+            class="tool-input ae-name"
+            @keyup.enter="saveAreaProps"
+          />
+          <input
+            v-model="editAreaColor"
+            type="color"
+            class="tool-input-color"
+            :title="editAreaColor"
+          />
+          <button class="tool-btn primary" :disabled="savingArea" @click="saveAreaProps">
+            {{ savingArea ? '保存中…' : '💾 保存' }}
+          </button>
+          <button class="tool-btn danger" @click="confirmDeleteArea(selectedArea)">🗑 删除</button>
+        </div>
+        <div class="ae-row ae-row-grid">
+          <label class="ae-sub">X (%)</label>
+          <input v-model.number="editAreaX" type="number" step="0.1" min="0" max="100" class="tool-input ae-wh" />
+          <label class="ae-sub">Y (%)</label>
+          <input v-model.number="editAreaY" type="number" step="0.1" min="0" max="100" class="tool-input ae-wh" />
+          <label class="ae-sub">宽 (%)</label>
+          <input v-model.number="editAreaW" type="number" step="0.1" min="0.5" max="100" class="tool-input ae-wh" />
+          <label class="ae-sub">高 (%)</label>
+          <input v-model.number="editAreaH" type="number" step="0.1" min="0.5" max="100" class="tool-input ae-wh" />
+          <label class="ae-sub">宽 (m)</label>
+          <input :value="editAreaWM" type="number" step="0.1" class="tool-input ae-wh"
+            @change="(e)=>{ const w=+e.target.value||0; applyAreaMeters(w, editAreaHM) }" />
+          <label class="ae-sub">高 (m)</label>
+          <input :value="editAreaHM" type="number" step="0.1" class="tool-input ae-wh"
+            @change="(e)=>{ const h=+e.target.value||0; applyAreaMeters(editAreaWM, h) }" />
+        </div>
+        <div class="ae-row ae-layer-row">
+          <button class="tool-btn" :disabled="reordering" @click="reorderSelected('bottom')">⬇ 置底</button>
+          <button class="tool-btn" :disabled="reordering" @click="reorderSelected('down')">↧ 下移</button>
+          <button class="tool-btn" :disabled="reordering" @click="reorderSelected('up')">↥ 上移</button>
+          <button class="tool-btn" :disabled="reordering" @click="reorderSelected('top')">⬆ 置顶</button>
+        </div>
       </div>
       
       <!-- 天车列表（编辑模式下可见，方便删除） -->
@@ -1724,6 +1889,44 @@ onUnmounted(() => {
   font-size: 11px;
   color: #94a3b8;
   white-space: nowrap;
+}
+
+/* D 批：区域属性扩展行 */
+.area-edit-info-d {
+  display: block;
+  max-width: 560px;
+}
+.area-edit-info-d .ae-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 3px 0;
+}
+.area-edit-info-d .ae-row + .ae-row {
+  border-top: 1px dashed rgba(0, 212, 255, 0.15);
+  margin-top: 3px;
+}
+.area-edit-info-d .ae-row-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 8px;
+  align-items: center;
+}
+.area-edit-info-d .ae-row-grid .ae-sub,
+.area-edit-info-d .ae-row-grid .tool-input {
+  width: 100%;
+}
+.area-edit-info-d .ae-sub {
+  font-size: 10px;
+  color: #94a3b8;
+  text-align: right;
+}
+.area-edit-info-d .ae-wh {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+.area-edit-info-d .ae-layer-row {
+  justify-content: flex-end;
 }
 
 /* 画布 */

@@ -46,8 +46,12 @@ def get_floor(floor_id: int, db: Session = Depends(get_db)):
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
     
-    areas = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).all()
-    machines = db.query(Machine).filter(Machine.floor == floor_id).all()
+    areas = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(
+        func.coalesce(FloorArea.display_order, 0).asc(), FloorArea.id.asc()
+    ).all()
+    machines = db.query(Machine).filter(Machine.floor == floor_id).order_by(
+        func.coalesce(Machine.display_order, 0).asc(), Machine.id.asc()
+    ).all()
     tracks = db.query(Track).filter(Track.floor_id == floor_id).all()
     vehicles = db.query(Vehicle).filter(Vehicle.floor_id == floor_id).all()
     
@@ -67,6 +71,7 @@ def get_floor(floor_id: int, db: Session = Depends(get_db)):
             "height": a.height,
             "color": a.color,
             "description": a.description,
+            "display_order": a.display_order or 0,
         } for a in areas],
         "machines": [{
             "id": m.id,
@@ -77,6 +82,7 @@ def get_floor(floor_id: int, db: Session = Depends(get_db)):
             "alarm_count": m.alarm_count,
             "floor_x": m.floor_x,
             "floor_y": m.floor_y,
+            "display_order": m.display_order or 0,
         } for m in machines],
         "tracks": [{
             "id": t.id,
@@ -139,6 +145,7 @@ def add_area(floor_id: int, area: dict, db: Session = Depends(get_db), _: User =
         height=area.get("height", 10),
         color=area.get("color", "#1e293b"),
         description=area.get("description"),
+        display_order=area.get("display_order"),
     )
     db.add(new_area)
     db.commit()
@@ -164,7 +171,12 @@ def update_area(floor_id: int, area_id: int, data: dict, db: Session = Depends(g
         area.name = data["name"]
     if "color" in data:
         area.color = data["color"]
-    
+    if "display_order" in data:
+        try:
+            area.display_order = int(data["display_order"])
+        except Exception:
+            pass
+
     db.commit()
     return {"message": "区域更新成功"}
 
@@ -303,6 +315,190 @@ def update_machine_info(floor_id: int, machine_id: str, data: dict, db: Session 
         machine.line = data["line"]
     db.commit()
     return {"id": machine.id, "name": machine.name, "process_type": machine.process_type, "line": machine.line, "message": "机台信息更新成功"}
+
+
+# ================= D 批：区域/机台 批量复制 + 置顶置底 =================
+
+@router.post("/{floor_id}/areas/batch-clone")
+def batch_clone_areas(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
+    """批量复制区域（每个 area_id 的副本：名称加后缀 _copy + 位置偏移 + 置顶 display_order）
+
+    payload: { area_ids: [id,...], offset_x: 3, offset_y: 3 }
+    返回: [ {id, name, x_pos, y_pos}, ... ] 新建的区域。
+    """
+    floor = db.query(Floor).filter(Floor.id == floor_id).first()
+    if not floor:
+        raise HTTPException(status_code=404, detail="楼层不存在")
+    area_ids = data.get("area_ids", []) or []
+    offset_x = float(data.get("offset_x", 3))
+    offset_y = float(data.get("offset_y", 3))
+    max_id = db.query(func.max(FloorArea.id)).scalar() or 0
+    max_order = db.query(func.max(func.coalesce(FloorArea.display_order, 0))).filter(
+        FloorArea.floor_id == floor_id
+    ).scalar() or 0
+    next_id = max_id + 1
+    next_order = max_order + 1
+    result = []
+    for aid in area_ids:
+        src = db.query(FloorArea).filter(FloorArea.id == int(aid)).first()
+        if not src:
+            continue
+        nx = max(0.0, min(100.0, (src.x_pos or 0) + offset_x))
+        ny = max(0.0, min(100.0, (src.y_pos or 0) + offset_y))
+        nw = min(float(src.width or 10), 100 - nx)
+        nh = min(float(src.height or 10), 100 - ny)
+        if nw < 1: nw = min(float(src.width or 10), 100)
+        if nh < 1: nh = min(float(src.height or 10), 100)
+        new_name = f"{src.name or 'area'}_copy"
+        clone = FloorArea(
+            id=next_id,
+            floor_id=floor_id,
+            name=new_name,
+            area_type=src.area_type,
+            x_pos=nx, y_pos=ny, width=nw, height=nh,
+            color=src.color,
+            description=src.description,
+            display_order=next_order,
+        )
+        db.add(clone)
+        result.append({"id": next_id, "name": new_name, "x_pos": nx, "y_pos": ny})
+        next_id += 1
+        next_order += 1
+    db.commit()
+    return {"created": len(result), "items": result}
+
+
+@router.post("/{floor_id}/machines/batch-clone")
+def batch_clone_machines(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
+    """批量复制机台（机台 ID 不允许重复：new_id="{old_id}_copy1/_copy2/..." 自动递增；若不存在则直接用 new_id 创建）
+
+    payload: { machine_ids: ["ID1", ...], offset_x: 3, offset_y: 3 }
+    返回: [ {id, name, floor_x, floor_y}, ... ]
+    """
+    floor = db.query(Floor).filter(Floor.id == floor_id).first()
+    if not floor:
+        raise HTTPException(status_code=404, detail="楼层不存在")
+    machine_ids = data.get("machine_ids", []) or []
+    offset_x = float(data.get("offset_x", 3))
+    offset_y = float(data.get("offset_y", 3))
+    max_order = db.query(func.max(func.coalesce(Machine.display_order, 0))).filter(
+        Machine.floor == floor_id
+    ).scalar() or 0
+    next_order = max_order + 1
+    result = []
+    for mid in machine_ids:
+        src = db.query(Machine).filter(Machine.id == mid).first()
+        if not src:
+            continue
+        # 生成不重复的新 ID
+        base = src.id
+        idx = 1
+        new_id = f"{base}_copy{idx}"
+        while db.query(Machine.id).filter(Machine.id == new_id).first():
+            idx += 1
+            new_id = f"{base}_copy{idx}"
+        nx = max(0.0, min(100.0, (src.floor_x or 0) + offset_x))
+        ny = max(0.0, min(100.0, (src.floor_y or 0) + offset_y))
+        clone = Machine(
+            id=new_id,
+            model=src.model,
+            name=f"{src.name or src.id} (副本)",
+            line=src.line,
+            floor=floor_id,
+            chamber_count=src.chamber_count,
+            process_type=src.process_type,
+            state="idle",
+            floor_x=nx, floor_y=ny,
+            display_order=next_order,
+        )
+        db.add(clone)
+        result.append({"id": new_id, "name": clone.name, "floor_x": nx, "floor_y": ny})
+        next_order += 1
+    db.commit()
+    return {"created": len(result), "items": result}
+
+
+@router.post("/{floor_id}/areas/reorder")
+def reorder_areas(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
+    """区域图层重排：置顶/置底/前一层/后一层
+
+    payload: { area_id: int, action: "top" | "bottom" | "up" | "down" }
+    """
+    action = data.get("action")
+    area_id = int(data.get("area_id", 0))
+    area = db.query(FloorArea).filter(FloorArea.id == area_id, FloorArea.floor_id == floor_id).first()
+    if not area:
+        raise HTTPException(status_code=404, detail="区域不存在")
+    # 获取所有同楼层按 display_order+id 排序列表
+    rows = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(
+        func.coalesce(FloorArea.display_order, 0).asc(), FloorArea.id.asc()
+    ).all()
+    try:
+        idx = next(i for i, r in enumerate(rows) if r.id == area.id)
+    except StopIteration:
+        idx = -1
+    if action == "bottom":
+        # 置底：比当前最小 order 再小 1
+        min_o = min((r.display_order or 0) for r in rows) if rows else 0
+        area.display_order = min_o - 1
+    elif action == "top":
+        max_o = max((r.display_order or 0) for r in rows) if rows else 0
+        area.display_order = max_o + 1
+    elif action == "up" and idx > 0:
+        # 与前一项交换
+        prev = rows[idx - 1]
+        prev_order = prev.display_order or 0
+        cur_order = area.display_order or 0
+        prev.display_order = cur_order
+        area.display_order = prev_order
+    elif action == "down" and 0 <= idx < len(rows) - 1:
+        nxt = rows[idx + 1]
+        nxt_order = nxt.display_order or 0
+        cur_order = area.display_order or 0
+        nxt.display_order = cur_order
+        area.display_order = nxt_order
+    db.commit()
+    return {"message": "重排成功", "area_id": area.id, "action": action, "new_order": area.display_order}
+
+
+@router.post("/{floor_id}/machines/reorder")
+def reorder_machines(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
+    """机台图层重排：置顶/置底/前一层/后一层
+
+    payload: { machine_id: str, action: "top" | "bottom" | "up" | "down" }
+    """
+    action = data.get("action")
+    machine_id = str(data.get("machine_id", ""))
+    machine = db.query(Machine).filter(Machine.id == machine_id, Machine.floor == floor_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="机台不存在")
+    rows = db.query(Machine).filter(Machine.floor == floor_id).order_by(
+        func.coalesce(Machine.display_order, 0).asc(), Machine.id.asc()
+    ).all()
+    try:
+        idx = next(i for i, r in enumerate(rows) if r.id == machine.id)
+    except StopIteration:
+        idx = -1
+    if action == "bottom":
+        min_o = min((r.display_order or 0) for r in rows) if rows else 0
+        machine.display_order = min_o - 1
+    elif action == "top":
+        max_o = max((r.display_order or 0) for r in rows) if rows else 0
+        machine.display_order = max_o + 1
+    elif action == "up" and idx > 0:
+        prev = rows[idx - 1]
+        prev_order = prev.display_order or 0
+        cur_order = machine.display_order or 0
+        prev.display_order = cur_order
+        machine.display_order = prev_order
+    elif action == "down" and 0 <= idx < len(rows) - 1:
+        nxt = rows[idx + 1]
+        nxt_order = nxt.display_order or 0
+        cur_order = machine.display_order or 0
+        nxt.display_order = cur_order
+        machine.display_order = nxt_order
+    db.commit()
+    return {"message": "重排成功", "machine_id": machine.id, "action": action, "new_order": machine.display_order}
 
 
 @router.post("/import")

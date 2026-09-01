@@ -115,6 +115,8 @@ class Machine(Base):
     floor_y = Column(Float, default=0)                 # 楼层平面图Y坐标（百分比）
     external_url = Column(String(500), default="")        # 外部跳转网站 URL（iframe 嵌入）
     use_external_url = Column(Integer, default=0)         # 是否使用外部跳转网站：0=原路线，1=跳转网站
+    # 显示顺序（小的先画=底层；大的后画=顶层）——用于置顶/置底。NULL视作0。
+    display_order = Column(Integer, nullable=True, default=0)
 
 
 class Lot(Base):
@@ -261,6 +263,8 @@ class FloorArea(Base):
     height = Column(Float)                             # 区域高度（百分比）
     color = Column(String(255), default="#1e293b")          # 区域颜色
     description = Column(String(255), nullable=True)
+    # 显示顺序（小的先画，底层；大的后画，顶层）—— 用于置顶/置底。NULL 视作 0。
+    display_order = Column(Integer, nullable=True, default=0)
 
 
 class Track(Base):
