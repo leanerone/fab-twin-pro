@@ -1364,10 +1364,17 @@ Lot ID 格式说明：
                     "max_tokens": 5,
                     "stream": False,
                 }
-                resp = requests.post(url, json=payload, headers=headers, timeout=15)
-                if resp.status_code == 200:
-                    return {"success": True, "message": "连接成功，模型可正常响应"}
-                return {"success": False, "message": f"连接失败: HTTP {resp.status_code} - {resp.text[:200]}"}
+                try:
+                    resp = requests.post(url, json=payload, headers=headers, timeout=15)
+                    if resp.status_code == 200:
+                        return {"success": True, "message": "连接成功，模型可正常响应"}
+                    return {"success": False, "message": f"连接失败: HTTP {resp.status_code} - {resp.text[:200]} | 实际调用: {url}"}
+                except requests.exceptions.ConnectionError:
+                    return {"success": False, "message": f"无法连接到服务：{url}（请确认地址、端口、防火墙及服务是否启动）"}
+                except requests.exceptions.Timeout:
+                    return {"success": False, "message": f"连接超时（15s）：{url}（服务响应过慢或不可达）"}
+                except Exception as e:
+                    return {"success": False, "message": f"请求异常：{str(e)} | 实际调用: {url}"}
 
             elif provider_type == "dify":
                 base = (config.get('base_url', '') or '').rstrip('/')

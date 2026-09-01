@@ -317,8 +317,8 @@ function onProviderChange() {
   const preset = selectedPreset.value
   if (!preset) return
   if (preset.default_url && !form.value.base_url) {
-    // 默认地址也去除 /v1 后缀，保持统一
-    form.value.base_url = preset.default_url.replace(/\/v1\/?$/, '')
+    // 直接采用预设默认地址（含 /v1 也保留，后端会自动处理）
+    form.value.base_url = preset.default_url
   }
   if (preset.default_model && !form.value.model) {
     form.value.model = preset.default_model
@@ -337,8 +337,8 @@ async function saveConfig() {
   loading.value = true
   try {
     const data = { ...form.value }
-    // 去除 base_url 末尾斜杠和 /v1 后缀，由后端统一拼接
-    data.base_url = (data.base_url || '').replace(/\/v1\/?$/, '').trim()
+    // 仅去除末尾斜杠与首尾空白，保留用户填写的 /v1（后端 _build_chat_url 会按是否带版本号自动拼接 /chat/completions）
+    data.base_url = (data.base_url || '').trim().replace(/\/+$/, '')
     if (!data.api_key) delete data.api_key
     if (editingId.value) {
       await api.aiUpdateModelConfig(editingId.value, data)
@@ -611,19 +611,22 @@ function onTabChange(tab) {
             </label>
           </div>
           <div class="hint-box">
-            Dify 是开源的 LLM 应用开发平台。配置后，AI 助手的问题将转发到 Dify 应用处理。
+            Dify 是开源的 LLM 应用开发平台。配置后，AI 助手的问题将转发到 Dify 应用处理。<b>API Key</b> 是调用 Dify 应用的唯一凭据（必填）；<b>App ID</b> 仅用于日志溯源，可留空。
           </div>
           <div class="form-group">
             <label>Dify 服务地址</label>
             <input v-model="difyConfig.dify_base_url" class="form-input" placeholder="如：http://localhost:3000" />
+            <div class="hint">Dify 实例地址；后端自动拼接 <code>/v1/chat-messages</code> 调用，无需带 <code>/v1</code>。</div>
           </div>
           <div class="form-group">
-            <label>Dify API Key</label>
-            <input v-model="difyConfig.dify_api_key" type="password" class="form-input" placeholder="Dify 应用的 API Key" />
+            <label>Dify API Key *</label>
+            <input v-model="difyConfig.dify_api_key" type="password" class="form-input" placeholder="如：app-xxxxxxxxxxxxxxxx" />
+            <div class="hint">在 Dify 应用 →「访问 API」（或「发布」→「API 访问」）页面创建的密钥，格式 <code>app-xxx</code>。这是 Dify 鉴权凭据，必填。</div>
           </div>
           <div class="form-group">
             <label>Dify App ID（可选）</label>
-            <input v-model="difyConfig.dify_app_id" class="form-input" placeholder="Dify 应用 ID" />
+            <input v-model="difyConfig.dify_app_id" class="form-input" placeholder="如：a1b2c3d4-xxxx-xxxx-xxxx" />
+            <div class="hint">Dify 应用的唯一标识（应用 URL 中 <code>/app/&lt;app_id&gt;</code> 那一段，或在「访问 API」页面可见）。API 调用实际用 API Key 鉴权，本字段仅用于日志/溯源，可留空。</div>
           </div>
           <div class="form-actions">
             <button class="btn btn-ghost" :disabled="testingDify" @click="testDifyConnection">
@@ -918,7 +921,7 @@ function onTabChange(tab) {
         </div>
         <div class="modal-body">
           <div class="hint-box">
-            系统会自动在 API 地址后拼接 <code>/v1/chat/completions</code> 进行调用，因此基础地址只需填写到版本号之前。例如 OpenAI 填写 <code>https://api.openai.com</code> 即可，无需加 <code>/v1</code>。
+            系统按是否带版本号自动拼接：<b>不带</b> <code>/v1</code> 时追加 <code>/v1/chat/completions</code>；<b>已带</b> <code>/v1</code>、<code>/v4</code> 等版本号时只追加 <code>/chat/completions</code>。例如 <code>http://10.30.6.6/v1</code> 与 <code>http://10.30.6.6</code> 均可，最终都调用 <code>http://10.30.6.6/v1/chat/completions</code>。
           </div>
           <div class="form-row">
             <div class="form-group" style="flex: 1.2;">
@@ -936,8 +939,8 @@ function onTabChange(tab) {
             <label>API 基础地址</label>
             <input v-model="form.base_url" class="form-input" :placeholder="selectedPreset?.default_url || 'https://...'" />
             <div v-if="selectedPreset?.default_url" class="hint">
-              默认: {{ selectedPreset.default_url.replace(/\/v1\/?$/, '') }}
-              <span class="link" @click="form.base_url = selectedPreset.default_url.replace(/\/v1\/?$/, '')">使用默认</span>
+              默认: {{ selectedPreset.default_url }}
+              <span class="link" @click="form.base_url = selectedPreset.default_url">使用默认</span>
             </div>
           </div>
           <div class="form-group">
