@@ -62,8 +62,8 @@ const activeState = reactive({
   doorProgress: 0,
   portDoorProgress: { PORT1: 0, PORT2: 0 },
   portVisuals: {
-    PORT1: { podPlaced: false, podLocked: false, podLift: 0, podPlaceProgress: 0, podCarryProgress: 0, cassetteAt: 'SMIF1', podSmif: 'SMIF1', cassettePos: null, cassetteSlots: new Array(25).fill(true) },
-    PORT2: { podPlaced: false, podLocked: false, podLift: 0, podPlaceProgress: 0, podCarryProgress: 0, cassetteAt: 'SMIF2', podSmif: 'SMIF2', cassettePos: null, cassetteSlots: new Array(25).fill(true) },
+    PORT1: { podPlaced: false, cassettePresent: false, podLocked: false, podLift: 0, podPlaceProgress: 0, podCarryProgress: 0, cassetteAt: 'SMIF1', podSmif: 'SMIF1', cassettePos: null, cassetteSlots: new Array(25).fill(true) },
+    PORT2: { podPlaced: false, cassettePresent: false, podLocked: false, podLift: 0, podPlaceProgress: 0, podCarryProgress: 0, cassetteAt: 'SMIF2', podSmif: 'SMIF2', cassettePos: null, cassetteSlots: new Array(25).fill(true) },
   },
   chamberStates: { CHAMBER_A: 'idle', CHAMBER_B: 'idle', CHAMBER_C: 'idle' },
   mappingActive: false,
@@ -268,6 +268,28 @@ function smifFromPort(portId) {
   return normalizePortId(portId) === 'PORT2' ? 'SMIF2' : 'SMIF1'
 }
 
+// line1/line2 OXE 判断：OXE-编号 >= 50 为 line2(带SMIF外壳)，< 50 为 line1(无SMIF/MIC MOC事件)
+function toolHasSmif(toolId) {
+  const normalized = String(toolId || '').trim().toUpperCase()
+  const match = /^OXE-(\d+)/.exec(normalized)
+  if (match) {
+    return Number(match[1]) >= 50
+  }
+  return true
+}
+
+function currentToolHasSmif() {
+  return toolHasSmif(props.machine?.id || '')
+}
+
+function getPortHomeUnitId(portId) {
+  const normalizedPort = normalizePortId(portId)
+  if (!currentToolHasSmif()) {
+    return normalizedPort
+  }
+  return normalizedPort === 'PORT2' ? 'SMIF2' : 'SMIF1'
+}
+
 function displayUnitLabel(unitId) {
   if (unitId === 'CHAMBER_A' || unitId === 'CHAMBER_B' || unitId === 'CHAMBER_C') return unitId
   return unitId
@@ -325,6 +347,9 @@ function getVisibleUnits() {
   let arr = [UNITS.PA, UNITS.CHAMBER_A, UNITS.CHAMBER_B, UNITS.CHAMBER_C, UNITS.ARM, UNITS.PORT1, UNITS.PORT2, UNITS.SMIF1, UNITS.SMIF2]
   if (activeState.chamberCount === 2) {
     arr = [UNITS.PA, UNITS.CHAMBER_A, UNITS.CHAMBER_B, UNITS.ARM, UNITS.PORT1, UNITS.PORT2, UNITS.SMIF1, UNITS.SMIF2]
+  }
+  if (!currentToolHasSmif()) {
+    arr = arr.filter(function (unit) { return unit.id !== 'SMIF1' && unit.id !== 'SMIF2' })
   }
   return arr
 }
@@ -507,7 +532,7 @@ function getCassetteDisplayCenterForPort(portId) {
     const p = UNITS[visual.cassetteAt]
     return { x: p.x + p.w * 0.5, y: p.y + p.d * 0.64, z: 8 }
   }
-  return getUnitCenter(visual.cassetteAt || smifFromPort(normalizedPort))
+  return getUnitCenter(visual.cassetteAt || getPortHomeUnitId(normalizedPort))
 }
 
 function getCassetteSlotsForPort(portId, fallbackSlots) {
@@ -614,24 +639,31 @@ function drawRobotArm() {
 function drawPodAndCassetteForPort(portId) {
   const normalizedPort = normalizePortId(portId)
   const visual = getPortVisual(normalizedPort)
+  const hasSmif = currentToolHasSmif()
   const lotInfo = activeState.lotStatus[normalizedPort] || { lot: 'NULL', status: 'IDLE' }
   const lot = String(lotInfo.lot || '').toUpperCase()
   const status = String(lotInfo.status || '').toUpperCase()
   const lotActive = lot && lot !== 'NULL' && status !== 'IDLE'
-  if (!visual.podPlaced && !lotActive) return
-  const smifUnitId = visual.podSmif || smifFromPort(normalizedPort)
-  const smifCenter = getUnitCenter(smifUnitId)
-  const placingOffset = (1 - visual.podPlaceProgress) * 170
-  const shellCenter = {
-    x: smifCenter.x - placingOffset - visual.podCarryProgress * 170,
-    y: smifCenter.y - placingOffset * 0.2 - visual.podCarryProgress * 36,
-    z: smifCenter.z + 7 + visual.podLift + (1 - visual.podPlaceProgress) * 4 + visual.podCarryProgress * 6,
+  const showPodShell = hasSmif && (!!visual.podPlaced || visual.podPlaceProgress > 0.001 || visual.podCarryProgress > 0.001 || visual.podLocked)
+  if (!showPodShell && !visual.cassettePresent && !lotActive) return
+
+  const smifUnitId = visual.podSmif || getPortHomeUnitId(normalizedPort)
+  let shellCenter = null
+  if (showPodShell) {
+    const smifCenter = getUnitCenter(smifUnitId)
+    const placingOffset = (1 - visual.podPlaceProgress) * 170
+    shellCenter = {
+      x: smifCenter.x - placingOffset - visual.podCarryProgress * 170,
+      y: smifCenter.y - placingOffset * 0.2 - visual.podCarryProgress * 36,
+      z: smifCenter.z + 7 + visual.podLift + (1 - visual.podPlaceProgress) * 4 + visual.podCarryProgress * 6,
+    }
+    drawPodShell(shellCenter)
+    drawHandsForPod(shellCenter, visual.podPlaceProgress, visual.podCarryProgress)
+    if (visual.podLocked && visual.podCarryProgress < 0.98) drawPodLockMarks(shellCenter, 0)
   }
-  drawPodShell(shellCenter)
-  drawHandsForPod(shellCenter, visual.podPlaceProgress, visual.podCarryProgress)
-  if (visual.podLocked && visual.podCarryProgress < 0.98) drawPodLockMarks(shellCenter, 0)
+
   let cassetteCenter
-  if (visual.podCarryProgress > 0.001 || visual.podPlaceProgress < 0.999) {
+  if (shellCenter && (visual.podCarryProgress > 0.001 || visual.podPlaceProgress < 0.999)) {
     cassetteCenter = { x: shellCenter.x, y: shellCenter.y, z: shellCenter.z - 2 }
   } else {
     cassetteCenter = getCassetteDisplayCenterForPort(normalizedPort)
@@ -889,8 +921,9 @@ function applyLotStatusByEvent(ev) {
   const eventName = getEffectiveEventName(ev)
   let cmKey = resolveEventPortId(ev, activeState.lastEventPortId)
   if (eventName === 'STARTMAPPING_RIGHT') cmKey = 'PORT2'
-  if (eventName === 'POD_PLACED') activeState.lotStatus[cmKey].status = 'POD_PLACED'
-  else if (eventName === 'LOCK_PORT_COMPLETED') activeState.lotStatus[cmKey].status = 'CHECK RCMS'
+  if (isPodPlacedEventName(eventName)) {
+    activeState.lotStatus[cmKey].status = eventName === 'MIC' ? 'MIC' : 'POD_PLACED'
+  } else if (eventName === 'LOCK_PORT_COMPLETED') activeState.lotStatus[cmKey].status = 'CHECK RCMS'
   else if (eventName === 'MVIN') activeState.lotStatus[cmKey].status = 'loading lot'
   else if (eventName === 'LOAD_CYCLE_STARTED') activeState.lotStatus[cmKey].status = 'LOAD_START'
   else if (eventName === 'LOAD_CYCLE_COMPLETED') activeState.lotStatus[cmKey].status = 'LOAD_OK'
@@ -899,10 +932,10 @@ function applyLotStatusByEvent(ev) {
   else if (eventName === 'START') activeState.lotStatus[cmKey].status = 'PP-SELECT OK'
   else if (eventName === 'PS') activeState.lotStatus[cmKey].status = 'Processing'
   else if (eventName === 'PE') activeState.lotStatus[cmKey].status = 'Processing end'
-  else if (eventName === 'DOOR_OPEN') activeState.lotStatus[cmKey].status = 'DOOR_OPEN'
+  else if (isDoorOpenEventName(eventName)) activeState.lotStatus[cmKey].status = 'DOOR_OPEN'
   else if (eventName === 'UNLOAD_CYCLE_COMPLETED') activeState.lotStatus[cmKey].status = 'UNLOAD_OK'
   else if (eventName === 'MVOU') activeState.lotStatus[cmKey].status = '出站成功'
-  else if (eventName === 'POD_REMOVED') { activeState.lotStatus[cmKey].lot = 'NULL'; activeState.lotStatus[cmKey].status = 'IDLE' }
+  else if (isPodRemovedEventName(eventName)) { activeState.lotStatus[cmKey].lot = 'NULL'; activeState.lotStatus[cmKey].status = 'IDLE' }
   else if (eventName === 'BATCH_INFO_FROM_ECUI') {
     activeState.lotStatus[cmKey].lot = ev.lot_id || ev.LOT_ID || ev.lot || 'NULL'
     activeState.lotStatus[cmKey].status = 'BATCH_INFO'
@@ -1039,7 +1072,7 @@ function applyEvent(ev) {
   activeState.machineState = ev.machine_state || activeState.machineState
   const eventPort = resolveEventPortId(ev, activeState.lastEventPortId)
   activeState.lastEventPortId = eventPort
-  activeState.activeUnitId = eventPort === 'PORT2' ? 'SMIF2' : 'SMIF1'
+  activeState.activeUnitId = getPortHomeUnitId(eventPort)
   kpiLot.value = ev.lot_id || '-'
   kpiRecipe.value = ev.recipe || '-'
   kpiEvent.value = eventName || ev.event_type
@@ -1047,41 +1080,43 @@ function applyEvent(ev) {
   appendTimeline(ev)
   applyLotStatusByEvent(ev)
 
-  if (eventName === 'POD_PLACED') {
+  if (isPodPlacedEventName(eventName)) {
     const podVisual = getPortVisual(eventPort)
-    podVisual.podPlaced = true
-    podVisual.podPlaceProgress = 0
+    const hasPodShell = currentToolHasSmif() && eventName !== 'MIC'
+    podVisual.podPlaced = hasPodShell
+    podVisual.cassettePresent = true
+    podVisual.podPlaceProgress = hasPodShell ? 0 : 1
     podVisual.podCarryProgress = 0
     podVisual.podLocked = false
     podVisual.podLift = 0
-    podVisual.podSmif = smifFromPort(eventPort)
-    podVisual.cassetteAt = podVisual.podSmif
+    podVisual.podSmif = getPortHomeUnitId(eventPort)
+    podVisual.cassetteAt = hasPodShell ? podVisual.podSmif : eventPort
     podVisual.cassettePos = null
     activeState.mappingActive = false
     activeState.mappingPortId = eventPort
-    // 修复：POD_PLACED 时立即初始化 Wafer Map 为全灰色(1)，否则 Wafer Map 面板会一直空
-    // （等 WAFER_MAPPING 事件才画的话，回放中经常缺失 mapping_value，就看不到晶圆）
     podVisual.cassetteSlots = new Array(25).fill(true)
     activeState.waferMap[eventPort] = new Array(25).fill(1)
-    animateValue(0, 1, scaleDuration(1000), function (v) { podVisual.podPlaceProgress = v })
+    if (hasPodShell) {
+      animateValue(0, 1, scaleDuration(1000), function (v) { podVisual.podPlaceProgress = v })
+    }
   } else if (eventName === 'UNLOCK_PORT_COMPLETED') {
     getPortVisual(eventPort).podLocked = false
-    activeState.activeUnitId = eventPort === 'PORT2' ? 'SMIF2' : 'SMIF1'
+    activeState.activeUnitId = getPortHomeUnitId(eventPort)
   } else if (eventName === 'LOCK_PORT_COMPLETED') {
     getPortVisual(eventPort).podLocked = true
   } else if (eventName === 'MVIN') {
     const mvinVisual = getPortVisual(eventPort)
     animateValue(mvinVisual.podLift, 34, scaleDuration(900), function (v) { mvinVisual.podLift = v })
-  } else if (eventName === 'DOOR_OPEN') {
+  } else if (isDoorOpenEventName(eventName)) {
     animateValue(activeState.portDoorProgress[eventPort] || 0, 1, scaleDuration(700), function (v) { activeState.portDoorProgress[eventPort] = v })
   } else if (eventName === 'LOAD_CYCLE_STARTED') {
-    const loadSmif = smifFromPort(eventPort)
+    const loadSmif = getPortHomeUnitId(eventPort)
     animateCassetteTransfer(eventPort, loadSmif, eventPort, scaleDuration(1500))
   } else if (eventName === 'LOAD_CYCLE_COMPLETED') {
     const doneVisual = getPortVisual(eventPort)
     doneVisual.cassetteAt = eventPort
     doneVisual.cassettePos = null
-  } else if (eventName === 'DOOR_CLOSE') {
+  } else if (isDoorCloseEventName(eventName)) {
     animateValue(activeState.portDoorProgress[eventPort] || 0, 0, scaleDuration(700), function (v) { activeState.portDoorProgress[eventPort] = v })
   } else if (eventName === 'STARTMAPPING_LEFT' || eventName === 'STARTMAPPING_RIGHT') {
     activeState.mappingActive = true
@@ -1140,7 +1175,7 @@ function applyEvent(ev) {
     handleWaferUnloaded(ev)
     markWaferAsCompleted(eventPort, ev.slot || ev.wafer_id || ev.slot_id || ev.payload?.slot || ev.payload?.wafer_id || ev.payload?.slot_id)
   } else if (eventName === 'UNLOAD_CYCLE_COMPLETED') {
-    const unloadSmif = smifFromPort(eventPort)
+    const unloadSmif = getPortHomeUnitId(eventPort)
     const unloadVisual = getPortVisual(eventPort)
     const unloadChamber = eventPort === 'PORT2' ? 'CHAMBER_B' : 'CHAMBER_A'
     animateCassetteTransfer(eventPort, eventPort, unloadSmif, scaleDuration(1500), function () {
@@ -1150,18 +1185,20 @@ function applyEvent(ev) {
       activeState.waferAtPA = false
       setChamberState(unloadChamber, 'idle')
     })
-  } else if (eventName === 'POD_REMOVED') {
+  } else if (isPodRemovedEventName(eventName)) {
     const removedVisual = getPortVisual(eventPort)
     const removedChamber = eventPort === 'PORT2' ? 'CHAMBER_B' : 'CHAMBER_A'
     activeState.waferMap[eventPort] = emptyWaferMap()
-    activeState.activeUnitId = eventPort === 'PORT2' ? 'SMIF2' : 'SMIF1'
-    animateValue(0, 1, scaleDuration(1000), function (v) { removedVisual.podCarryProgress = v }, function () {
+    activeState.activeUnitId = getPortHomeUnitId(eventPort)
+    const shouldAnimatePodCarry = removedVisual.podPlaced
+    const finalizeRemoval = function () {
       removedVisual.podPlaced = false
+      removedVisual.cassettePresent = false
       removedVisual.podLocked = false
       removedVisual.podPlaceProgress = 0
       removedVisual.podCarryProgress = 0
       removedVisual.podLift = 0
-      removedVisual.podSmif = smifFromPort(eventPort)
+      removedVisual.podSmif = getPortHomeUnitId(eventPort)
       removedVisual.cassetteAt = removedVisual.podSmif
       removedVisual.cassettePos = null
       removedVisual.cassetteSlots = new Array(25).fill(false)
@@ -1175,7 +1212,12 @@ function applyEvent(ev) {
         activeState.alarmLeft = []
         activeState.alarmExpandedLeft = false
       }
-    })
+    }
+    if (shouldAnimatePodCarry) {
+      animateValue(0, 1, scaleDuration(1000), function (v) { removedVisual.podCarryProgress = v }, finalizeRemoval)
+    } else {
+      finalizeRemoval()
+    }
   } else if (eventName === 'FDC_CLEARCONTEXT') {
     const clearChamber = eventPort === 'PORT2' ? 'CHAMBER_B' : 'CHAMBER_A'
     bumpChamberEpoch(clearChamber)
@@ -1233,12 +1275,28 @@ function getEventTsMs(ev) {
 
 function isPodPlacedEventName(eventName) {
   const s = String(eventName || '').toUpperCase()
+  return s === 'POD_PLACED' || s === 'POD_PLACE' || s === 'MIC'
+}
+
+// line1 OXE(MIC)没有SMIF外壳，line2 OXE(POD_PLACED/PLACE)有外壳动画
+function isPodShellPlacedEventName(eventName) {
+  const s = String(eventName || '').toUpperCase()
   return s === 'POD_PLACED' || s === 'POD_PLACE'
 }
 
 function isPodRemovedEventName(eventName) {
   const s = String(eventName || '').toUpperCase()
-  return s === 'POD_REMOVED' || s === 'POD_REMOVE'
+  return s === 'POD_REMOVED' || s === 'POD_REMOVE' || s === 'MOC'
+}
+
+function isDoorOpenEventName(eventName) {
+  const s = String(eventName || '').toUpperCase()
+  return s === 'DOOR_OPEN' || s === 'OPEN_DOOR'
+}
+
+function isDoorCloseEventName(eventName) {
+  const s = String(eventName || '').toUpperCase()
+  return s === 'DOOR_CLOSE' || s === 'CLOSE_DOOR'
 }
 
 function cloneEventAsType(ev, eventType) {
@@ -1298,12 +1356,13 @@ function buildBootstrapReplayEvents(context) {
   if (!context || !context.active || !context.podPlacedEvent) return []
   const events = []
   const latestEventName = context.latestEvent ? getEffectiveEventName(context.latestEvent) : ''
-  const shouldReplayPodPlaced = !latestEventName || latestEventName === 'POD_PLACED'
-  const replaySet8 = { LOCK_PORT_COMPLETED: true, MVIN: true, DOOR_OPEN: true, DOOR_CLOSE: true, BATCH_INFO_FROM_ECUI: true }
+  const podPlacedEventName = getEffectiveEventName(context.podPlacedEvent) || 'POD_PLACED'
+  const shouldReplayPodPlaced = !latestEventName || isPodPlacedEventName(latestEventName)
+  const replaySet8 = { LOCK_PORT_COMPLETED: true, MVIN: true, OPEN_DOOR: true, DOOR_OPEN: true, CLOSE_DOOR: true, DOOR_CLOSE: true, BATCH_INFO_FROM_ECUI: true }
   const replaySet9 = { STARTMAPPING_LEFT: true, PS: true, WAFERLOADED: true, WAFERUNLOADED: true, PE: true, READYTOUNLOAD: true, MVOU: true }
-  if (shouldReplayPodPlaced) events.push(cloneEventAsType(context.podPlacedEvent, 'POD_PLACED'))
+  if (shouldReplayPodPlaced) events.push(cloneEventAsType(context.podPlacedEvent, podPlacedEventName))
   if (!context.batchEvent) {
-    if (!events.length) events.push(cloneEventAsType(context.podPlacedEvent, 'POD_PLACED'))
+    if (!events.length) events.push(cloneEventAsType(context.podPlacedEvent, podPlacedEventName))
     return events
   }
   events.push(cloneEventAsType(context.batchEvent, 'BATCH_INFO_FROM_ECUI'))
@@ -1324,14 +1383,18 @@ function primeBootstrapPortVisual(context) {
   if (!context || !context.portId) return
   const portId = normalizePortId(context.portId)
   const visual = getPortVisual(portId)
-  visual.podPlaced = !!context.active
-  visual.podPlaceProgress = context.active ? 1 : 0
+  const openEventName = context.podPlacedEvent ? getEffectiveEventName(context.podPlacedEvent) : ''
+  visual.podPlaced = !!context.active && currentToolHasSmif() && isPodShellPlacedEventName(openEventName)
+  visual.cassettePresent = !!context.active
+  visual.podPlaceProgress = visual.podPlaced ? 1 : 0
   visual.podCarryProgress = 0
   visual.podLift = 0
-  visual.podSmif = smifFromPort(portId)
+  visual.podSmif = getPortHomeUnitId(portId)
   visual.cassettePos = null
+  visual.cassetteAt = context.active ? portId : visual.podSmif
   if (!context.active) {
     visual.podLocked = false
+    visual.cassettePresent = false
     visual.cassetteAt = visual.podSmif
   }
 }
@@ -1434,6 +1497,7 @@ watch(() => props.paused, (isPaused) => {
 watch(() => props.mode, (newMode) => {
   lastEventTs = ''
   lastEventTsMs = 0
+  resetView()
   if (newMode === 'playback') {
     stopLivePolling()
   } else {
@@ -1485,6 +1549,43 @@ function stopLivePolling() {
   }
 }
 
+// ==================== resetView（重置 activeState，根据 line1/line2 动态适配 SMIF/PORT）====================
+function resetView() {
+  stopAllAnimations()
+  timelineEntries.value = []
+  kpiLot.value = '-'
+  kpiRecipe.value = '-'
+  kpiEvent.value = '-'
+  const home1 = getPortHomeUnitId('PORT1')
+  const home2 = getPortHomeUnitId('PORT2')
+
+  activeState.activeUnitId = home1
+  activeState.doorProgress = 0
+  activeState.portDoorProgress = { PORT1: 0, PORT2: 0 }
+  activeState.portVisuals = {
+    PORT1: { podPlaced: false, cassettePresent: false, podLocked: false, podLift: 0, podPlaceProgress: 0, podCarryProgress: 0, cassetteAt: home1, podSmif: home1, cassettePos: null, cassetteSlots: new Array(25).fill(true) },
+    PORT2: { podPlaced: false, cassettePresent: false, podLocked: false, podLift: 0, podPlaceProgress: 0, podCarryProgress: 0, cassetteAt: home2, podSmif: home2, cassettePos: null, cassetteSlots: new Array(25).fill(true) },
+  }
+  activeState.chamberStates = { CHAMBER_A: 'idle', CHAMBER_B: 'idle', CHAMBER_C: 'idle' }
+  activeState.mappingActive = false
+  activeState.mappingPortId = 'PORT1'
+  activeState.mappingPhase = 0
+  activeState.movingWafer = null
+  activeState.movingWaferLabel = ''
+  activeState.waferAtPA = false
+  activeState.waferInChamber = { CHAMBER_A: false, CHAMBER_B: false, CHAMBER_C: false }
+  activeState.chamberWaferLabel = { CHAMBER_A: '', CHAMBER_B: '', CHAMBER_C: '' }
+  activeState.chamberEpoch = { CHAMBER_A: 0, CHAMBER_B: 0, CHAMBER_C: 0 }
+  activeState.waferMap = { PORT1: emptyWaferMap(), PORT2: emptyWaferMap() }
+  activeState.armTarget = null
+  activeState.lotStatus = {
+    PORT1: { lot: 'NULL', status: 'IDLE' },
+    PORT2: { lot: 'NULL', status: 'IDLE' },
+  }
+  setStateText('Idle')
+  render()
+}
+
 // ==================== Canvas 尺寸适配 ====================
 function resizeCanvas() {
   if (!canvas || !containerRef.value) return
@@ -1523,6 +1624,9 @@ onMounted(() => {
   resizeCanvas()
   window.addEventListener('resize', resizeCanvas)
   canvas.addEventListener('click', onCanvasClick)
+
+  // 先根据当前机台（line1/line2）动态重置初始状态
+  resetView()
 
   // 启动渲染循环
   frameLoop()
