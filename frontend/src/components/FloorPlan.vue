@@ -11,6 +11,18 @@ const emit = defineEmits(['select-machine'])
 
 const authStore = useAuthStore()
 
+// === 缩放/平移 ===
+const zoom = ref(1)          // 缩放倍率，1=原始大小
+const canvasInnerRef = ref(null)  // 内层画布 ref（用于坐标计算）
+function zoomIn() { zoom.value = Math.min(5, +(zoom.value + 0.25).toFixed(2)) }
+function zoomOut() { zoom.value = Math.max(0.5, +(zoom.value - 0.25).toFixed(2)) }
+function zoomReset() { zoom.value = 1 }
+function onWheel(e) {
+  e.preventDefault()
+  if (e.deltaY < 0) zoomIn()
+  else zoomOut()
+}
+
 const floorData = ref(null)
 const machines = ref([])
 const areas = ref([])
@@ -324,9 +336,10 @@ async function saveExternalLink() {
   }
 }
 
-// 获取百分比坐标
+// 获取百分比坐标（基于内层画布，支持缩放）
 function getPercent(e) {
-  const rect = e.currentTarget.getBoundingClientRect()
+  const el = canvasInnerRef.value || e.currentTarget
+  const rect = el.getBoundingClientRect()
   const x = ((e.clientX - rect.left) / rect.width) * 100
   const y = ((e.clientY - rect.top) / rect.height) * 100
   return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
@@ -612,8 +625,8 @@ function handleMouseDown(e) {
 // document 级别的鼠标移动处理（画框/拖拽/多选/resize）
 function docMouseMove(e) {
   if (!editMode.value) return
-  // 用 canvas 的 rect 计算百分比坐标
-  const canvas = document.querySelector('.fp-canvas')
+  // 用内层画布的 rect 计算百分比坐标（支持缩放）
+  const canvas = canvasInnerRef.value || document.querySelector('.fp-canvas-inner') || document.querySelector('.fp-canvas')
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
   const x = ((e.clientX - rect.left) / rect.width) * 100
@@ -1241,6 +1254,12 @@ onUnmounted(() => {
         <span class="fp-desc">{{ floorData?.description }}</span>
       </div>
       <div class="fp-actions">
+        <div class="zoom-controls">
+          <button class="action-btn zoom-btn" @click="zoomOut" title="缩小">−</button>
+          <span class="zoom-level">{{ Math.round(zoom * 100) }}%</span>
+          <button class="action-btn zoom-btn" @click="zoomIn" title="放大">+</button>
+          <button class="action-btn" @click="zoomReset" title="重置缩放">1:1</button>
+        </div>
         <label v-if="authStore.hasPermission('floor_edit')" class="action-btn import-btn">
           📥 导入
           <input type="file" accept=".json" @change="importFloorPlan" />
@@ -1432,11 +1451,13 @@ onUnmounted(() => {
       </div>
     </div>
     
-    <div 
-      class="fp-canvas" 
+    <div
+      class="fp-canvas"
       @mousedown="handleMouseDown"
+      @wheel="onWheel"
       :class="{ 'cursor-cross': editTool === 'machine' || editTool === 'area' || editTool === 'track' || editTool === 'vehicle', 'cursor-grab': editTool === 'select' && editMode }"
     >
+     <div ref="canvasInnerRef" class="fp-canvas-inner" :style="{ width: (zoom * 100) + '%', height: (zoom * 100) + '%' }">
       <div class="canvas-grid">
         <div v-for="i in 20" :key="'h'+i" class="grid-line horizontal" :style="{ top: (i * 5) + '%' }"></div>
         <div v-for="i in 20" :key="'v'+i" class="grid-line vertical" :style="{ left: (i * 5) + '%' }"></div>
@@ -1690,7 +1711,8 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    
+     </div><!-- /.fp-canvas-inner -->
+
     <div class="fp-legend">
       <div class="legend-title">图例说明</div>
       <div class="legend-items">
@@ -1761,6 +1783,31 @@ onUnmounted(() => {
 .fp-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+}
+.zoom-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+.zoom-level {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 36px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .action-btn {
@@ -1946,8 +1993,15 @@ onUnmounted(() => {
   flex: 1;
   position: relative;
   background: #0a1120;
-  overflow: hidden;
+  overflow: auto;
   user-select: none;
+}
+
+.fp-canvas-inner {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 100%;
+  min-height: 100%;
 }
 
 .cursor-cross { cursor: crosshair; }
@@ -2370,6 +2424,9 @@ onUnmounted(() => {
 }
 
 .fp-legend {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   padding: 8px 14px;
   border-top: 1px solid var(--border);
   background: var(--panel-2);

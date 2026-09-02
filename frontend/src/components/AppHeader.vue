@@ -119,13 +119,6 @@ onUnmounted(() => {
       </button>
     </nav>
     <div class="header-right">
-      <div class="header-item">
-        <span class="live-dot" :class="{ offline: !appStore.wsConnected }"></span>
-        tibrv <b>{{ appStore.wsConnected ? '已连接' : '断开' }}</b>
-      </div>
-      <div class="header-item">Oracle <b>19c</b></div>
-      <div class="header-item">机台总数 <b>{{ appStore.totalMachines }}</b></div>
-      <div class="header-item">事件 <b>{{ appStore.totalEvents }}</b></div>
       <div class="header-item"><b>{{ clock }}</b></div>
       <div ref="userMenuRef" class="user-menu-wrapper">
         <button class="user-btn" @click="toggleUserMenu">

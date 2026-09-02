@@ -2,55 +2,21 @@
 import { computed } from 'vue'
 import { useAppStore } from '../stores/app'
 
-// KPI 卡片组：7 个关键指标
 const appStore = useAppStore()
-
-const stats = computed(() => appStore.stats)
 const total = computed(() => appStore.totalMachines)
-
-// 稼动率
-const util = computed(() => {
+const DT_TOTAL = 905
+const dtRate = computed(() => {
   if (!total.value) return 0
-  return Math.floor((stats.value.running / total.value) * 100)
+  return Math.floor((total.value / DT_TOTAL) * 100)
 })
 </script>
 
 <template>
   <div class="kpi-row">
     <div class="kpi-card kpi-green">
-      <div class="kpi-label">运行中机台</div>
-      <div class="kpi-value">{{ stats.running }}/{{ total }}</div>
-      <div class="kpi-sub">稼动率 {{ util }}%</div>
-    </div>
-    <div class="kpi-card kpi-yellow">
-      <div class="kpi-label">空闲机台</div>
-      <div class="kpi-value">{{ stats.idle }}</div>
-      <div class="kpi-sub">等待物料/排程</div>
-    </div>
-    <div class="kpi-card kpi-red">
-      <div class="kpi-label">故障告警</div>
-      <div class="kpi-value">{{ stats.total_alarms }}</div>
-      <div class="kpi-sub">严重 {{ Math.floor(stats.total_alarms * 0.3) }} / 警告 {{ stats.total_alarms - Math.floor(stats.total_alarms * 0.3) }}</div>
-    </div>
-    <div class="kpi-card kpi-blue">
-      <div class="kpi-label">今日产量</div>
-      <div class="kpi-value">{{ stats.total_wafers }}</div>
-      <div class="kpi-sub">片晶圆</div>
-    </div>
-    <div class="kpi-card kpi-purple">
-      <div class="kpi-label">在制品 WIP</div>
-      <div class="kpi-value">{{ stats.wip }}</div>
-      <div class="kpi-sub">批 lot</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">平均节拍</div>
-      <div class="kpi-value">{{ stats.avg_cycle_time_min }}<span class="unit"> min</span></div>
-      <div class="kpi-sub">单工艺周期</div>
-    </div>
-    <div class="kpi-card kpi-green">
-      <div class="kpi-label">OEE 综合效率</div>
-      <div class="kpi-value">{{ stats.oee }}%</div>
-      <div class="kpi-sub">目标 85%</div>
+      <div class="kpi-label">已接入DT机台</div>
+      <div class="kpi-value">{{ total }}/{{ DT_TOTAL }}</div>
+      <div class="kpi-sub">DT上线率 {{ dtRate }}%</div>
     </div>
   </div>
 </template>
@@ -58,7 +24,7 @@ const util = computed(() => {
 <style scoped>
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: auto;
   gap: 10px;
 }
 .kpi-card {

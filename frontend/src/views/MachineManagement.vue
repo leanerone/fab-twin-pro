@@ -192,7 +192,7 @@ onMounted(() => {
     </div>
 
     <div class="page-tip">
-      💡 此页面用于<b>机台基础信息维护</b>（改名/型号/产线/工艺/腔数/外部链接）和<b>彻底删除机台</b>。
+      💡 此页面用于<b>机台基础信息维护</b>（改名/型号/产线/工艺/外部链接）和<b>彻底删除机台</b>。
       删除会同时从平面图移除机台，且不可恢复；DT量产表数据不动。
     </div>
 
@@ -228,7 +228,6 @@ onMounted(() => {
             <th>型号</th>
             <th>产线</th>
             <th>工艺</th>
-            <th>腔数</th>
             <th>状态</th>
             <th>告警</th>
             <th>外部链接</th>
@@ -242,7 +241,6 @@ onMounted(() => {
             <td>{{ m.model || '-' }}</td>
             <td>Line {{ m.line ?? '-' }}</td>
             <td>{{ m.process_type || '-' }}</td>
-            <td>{{ m.chamber_count ?? '-' }}</td>
             <td>
               <span class="state-badge" :class="stateBadgeClass(m.state)">
                 {{ stateLabel(m.state) }}
@@ -295,13 +293,9 @@ onMounted(() => {
               <input v-model.number="editingMachine.line" type="number" min="1" class="input" />
             </div>
             <div class="form-group half">
-              <label>腔数</label>
-              <input v-model.number="editingMachine.chamber_count" type="number" min="1" class="input" />
+              <label>工艺类型</label>
+              <input v-model="editingMachine.process_type" class="input" placeholder="如 ETCH / DEP / LITHO" />
             </div>
-          </div>
-          <div class="form-group">
-            <label>工艺类型</label>
-            <input v-model="editingMachine.process_type" class="input" placeholder="如 ETCH / DEP / LITHO" />
           </div>
           <div class="form-divider"></div>
           <div class="form-group">

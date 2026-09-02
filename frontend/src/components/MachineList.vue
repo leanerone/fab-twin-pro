@@ -70,7 +70,7 @@ function selectMachine(m) {
         <div class="status-dot" :class="m.state"></div>
         <div class="mach-info">
           <div class="mach-id">{{ m.id }}</div>
-          <div class="mach-sub">{{ m.model }} · {{ m.chamber_count }}腔 · {{ m.process_type }}</div>
+          <div class="mach-sub">{{ m.model }} · {{ m.process_type }}</div>
         </div>
         <span v-if="m.alarm_count" class="mach-alarm-badge">{{ m.alarm_count }}</span>
       </div>

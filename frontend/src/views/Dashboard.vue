@@ -15,7 +15,7 @@ const authStore = useAuthStore()
 
 const floors = ref([])
 const currentFloor = ref(3)  // 默认主生产楼层
-const viewMode = ref('3d')   // 3d / plan
+const viewMode = ref('plan')   // 3d / plan
 const refreshKey = ref(0)    // 强制刷新3D数据的key
 
 async function loadFloors() {
