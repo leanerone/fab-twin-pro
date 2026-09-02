@@ -1,8 +1,9 @@
 # FabTwin 上线部署 SOP（标准操作流程）
 
-> **适用场景**：将 FabTwin 系统从开发环境部署到量产服务器，并连接量产 Oracle 数据库
+> **适用场景**：将 FabTwin 系统从开发环境部署到量产服务器（离线/内网），并连接量产 Oracle 数据库
 > **目标读者**：IT 运维人员、系统管理员
 > **生成日期**：2026-07-20
+> **最后更新**：2026-09-02（v3.0，覆盖 ver2.9.0 A/B/C/D/E/F/G 七批变更）
 
 ---
 
@@ -18,6 +19,159 @@
 8. [Windows 服务注册（推荐）](#8-windows-服务注册推荐)
 9. [Nginx 反向代理（可选）](#9-nginx-反向代理可选)
 10. [常见问题排查](#10-常见问题排查)
+11. [ver2.9.0 变更摘要（本次部署必读）](#11-ver290-变更摘要本次部署必读)
+12. [Prod 环境变量配置注意事项（必读）](#12-prod-环境变量配置注意事项必读)
+
+---
+
+## 11. ver2.9.0 变更摘要（本次部署必读）
+
+> 本节汇总 ver2.9.0（2026-09-01~09-02）A/B/C/D/E/F/G 七批全部变更，部署前**务必**确认 SQL 脚本和 env 配置已同步更新。
+
+### 11.1 数据库结构变更
+
+| 变更 | 影响表 | 处理方式 | SQL 脚本 |
+|------|--------|----------|----------|
+| 新增 `DISPLAY_ORDER` 列（图层置顶/置底功能） | `MACHINES`、`FLOOR_AREAS` | **已内置**于 `init_oracle_db.sql`（新建库自动含此列）；旧库由后端启动时 `_ensure_missing_columns()` 自动 ALTER 补齐 | `sql/init_oracle_db.sql`、`sql/v2.7_add_display_order.sql`（手动兜底） |
+| AI 相关 3 张表（D 批前已存在） | `AI_CONFIGS`、`AI_PROVIDER_CONFIGS`、`AI_USAGE_LOGS` | **必须单独执行** `sql/create_ai_tables.sql` 建表 | `sql/create_ai_tables.sql` |
+
+**关键提醒**：
+- `init_oracle_db.sql` 已在 ver2.9.0 更新，新建库的 `MACHINES`/`FLOOR_AREAS` 表会自动包含 `DISPLAY_ORDER` 列（DEFAULT 0）
+- **旧库升级**（已有数据）：后端启动时 `database.py` 的 `_ensure_missing_columns()` 会自动检测并 ALTER 补齐，无需手动执行升级脚本；如需留审计痕迹，可手动执行 `sql/v2.7_add_display_order.sql`
+- **AI 表**不在 `init_oracle_db.sql` 中，**必须**单独执行 `sql/create_ai_tables.sql`（新建库和旧库升级都要执行）
+
+### 11.2 功能变更（A~G 批）
+
+| 批次 | 变更内容 | 部署影响 |
+|------|----------|----------|
+| A | 平面图区域 resize/多选框选 + 机台管理页 + 机台搜索 | 前端构建产物需更新 |
+| B | 机台实时状态推导 + KPI 真实统计（读 DT 量产表） | 后端 `machines.py` 更新；依赖 DT 表（量产在用，无需初始化） |
+| C | Dify 提示词修复 + AI URL 拼接透明化 | 后端 `ai_middleware.py` 更新 |
+| D | 平面图手动输入尺寸 + 批量复制 + 置顶/置底图层管理 | 后端 `floors.py` 新增 4 个端点；前端 `FloorPlan.vue` 更新；需 `DISPLAY_ORDER` 列 |
+| E | 自动补 `DISPLAY_ORDER` 列修复 ORA-00904 | 后端 `database.py` 新增 `_ensure_missing_columns()`；启动时自动 ALTER |
+| F | AI 配置接口 500 + AI 用量 ORA-00979 + 平面图错误可读化 | 后端 `schemas.py`/`ai_middleware.py`/`floors.py` 更新 |
+| G | 平面图批量复制/置顶置底"假失败"修复 | 前端 `FloorPlan.vue` 修复 `loadFloor()`→`loadFloorData()` 函数名 |
+
+### 11.3 部署前检查清单
+
+- [ ] `sql/init_oracle_db.sql` 已更新到 ver2.9.0（含 `DISPLAY_ORDER` 列）
+- [ ] `sql/init_oracle_aqua.sql` 已同步更新
+- [ ] `sql/create_ai_tables.sql` 已包含在离线包中
+- [ ] `sql/v2.7_add_display_order.sql` 已包含（旧库手动升级兜底）
+- [ ] 后端代码已包含 `database.py` 的 `_ensure_missing_columns()` 自动补列逻辑
+- [ ] 前端 `dist/` 已重新构建（包含 G 批 `loadFloorData` 修复）
+- [ ] `env.bat` 已按 prod 实际 Oracle 连接信息配置（见第 12 节）
+
+---
+
+## 12. Prod 环境变量配置注意事项（必读）
+
+> Prod 服务器离线部署，所有环境变量必须在 `env.bat` 或 NSSM `AppEnvironmentExtra` 中显式设置，不依赖默认值。
+
+### 12.1 必须配置的环境变量（6 项）
+
+| 变量名 | 说明 | prod 示例值 | 配置位置 |
+|--------|------|------------|----------|
+| `DB_TYPE` | 数据库类型（仅支持 oracle） | `oracle` | `env.bat` + NSSM |
+| `ORACLE_HOST` | Oracle 主机 IP（DB 组提供） | `10.30.8.119` | `env.bat` + NSSM |
+| `ORACLE_PORT` | Oracle 端口 | `1521` | `env.bat` + NSSM |
+| `ORACLE_SERVICE` | Oracle PDB 服务名/SID（DB 组提供） | `APCDB` | `env.bat` + NSSM |
+| `ORACLE_USER` | Oracle 业务用户名（DB 组创建） | `emuuser` | `env.bat` + NSSM |
+| `ORACLE_PASSWORD` | Oracle 业务用户密码 | `********` | `env.bat` + NSSM |
+
+### 12.2 关键兼容性环境变量（2 项，按 Oracle 版本决定）
+
+| 变量名 | 何时需要 | prod 示例值 | 不设的后果 |
+|--------|----------|------------|-----------|
+| `ORACLE_DSN_TYPE` | **10g/11g 必须设为 `sid`**；12c+ 设为 `service_name`（默认） | `sid`（10g/11g） | 10g/11g 不设会连接失败或 ORA-03134 |
+| `ORACLE_CLIENT_DIR` | **10g/11g 必须设**（指向 64-bit Oracle Client 19c+ 安装目录）；12c+ 不需要 | `C:\app\client\c11463\product\19.0.0\client_1` | 10g/11g 不设会 ORA-03134/ORA-28040 |
+
+**判断 Oracle 版本的方法**（向 DB 组确认）：
+- Oracle 10g / 11g → `ORACLE_DSN_TYPE=sid` + `ORACLE_CLIENT_DIR=<path>`（Thick 模式）
+- Oracle 12c / 18c / 19c / 21c+ → 默认 `service_name`，无需 `ORACLE_CLIENT_DIR`（Thin 模式，纯 Python）
+
+### 12.3 可选环境变量（AI / 模拟 / 语音）
+
+| 变量名 | 默认值 | 说明 | prod 建议 |
+|--------|--------|------|----------|
+| `SIMULATION_ENABLED` | `False` | 模拟器开关 | prod 设 `False` |
+| `DB_POLLER_ENABLED` | `True` | DB 事件轮询开关 | prod 设 `True`（读取 DT 表实时数据） |
+| `AI_PROVIDER` | `local` | AI 提供方（local/openai/dify） | prod 默认 `local`；如需 LLM 在前端「AI配置管理」面板添加（持久化到 DB），**无需** env 配置 |
+| `AI_BASE_URL` | （空） | OpenAI 兼容 API 地址 | 仅当 env 级配置 LLM 时设；推荐用前端面板配置 |
+| `AI_API_KEY` | （空） | API Key | 同上 |
+| `AI_MODEL` | `glm-5.2` | 模型名称 | 同上 |
+| `DIFY_ENABLED` | `False` | Dify 开关 | prod 默认 `False`；如需在 AI 配置面板开启 |
+| `N8N_ENABLED` | `False` | N8N 开关 | prod 默认 `False` |
+| `WHISPER_MODEL_SIZE` | `tiny` | 语音识别模型大小 | prod 离线环境保持 `tiny`（避免下载大模型） |
+| `WHISPER_DEVICE` | `cpu` | 语音识别设备 | prod 设 `cpu`（无 GPU） |
+
+**AI 配置策略**（prod 离线环境）：
+- 默认使用「本地规则引擎」（`AI_PROVIDER=local`），无需联网，开箱可用
+- 如需接入 LLM（智谱 GLM/OpenAI 等），**不要**在 env 中硬编码 API Key
+- 在前端「AI 配置管理」面板（用户管理旁边）添加 Provider 配置，会持久化到 `AI_PROVIDER_CONFIGS` 表
+- 前端面板支持配置管理、删除、禁用、设为默认、Token 用量统计
+- AI 使用日志记录在 `AI_USAGE_LOGS` 表（可在前端查看执行日志）
+
+### 12.4 完整 `env.bat` 模板（prod 离线环境）
+
+```bat
+@echo off
+REM FabTwin Prod Environment Configuration
+REM IMPORTANT: Do NOT use Chinese characters in this file
+
+REM ===== 数据库（必填，DB 组提供）=====
+set DB_TYPE=oracle
+set ORACLE_HOST=10.30.8.119
+set ORACLE_PORT=1521
+set ORACLE_SERVICE=APCDB
+set ORACLE_USER=emuuser
+set ORACLE_PASSWORD=apcuser
+
+REM ===== Oracle 版本兼容（10g/11g 必填，12c+ 删除以下两行）=====
+set ORACLE_DSN_TYPE=sid
+set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
+
+REM ===== 运行模式（prod 固定）=====
+set SIMULATION_ENABLED=False
+set DB_POLLER_ENABLED=True
+
+REM ===== AI（默认本地规则引擎，无需联网）=====
+set AI_PROVIDER=local
+
+REM ===== 语音识别（prod 离线保持 tiny + cpu）=====
+set WHISPER_MODEL_SIZE=tiny
+set WHISPER_DEVICE=cpu
+```
+
+### 12.5 NSSM 服务注册时的环境变量传递
+
+NSSM 注册 Windows 服务时，`AppEnvironmentExtra` 会追加到系统环境变量之后。**必须**把 6 项必填 + 2 项兼容性变量全部传入：
+
+```cmd
+nssm install FabTwinBackend "D:\deploy\fab-twin-pro\backend\venv\Scripts\python.exe" "D:\deploy\fab-twin-pro\backend\main.py"
+nssm set FabTwinBackend AppDirectory "D:\deploy\fab-twin-pro\backend"
+nssm set FabTwinBackend AppEnvironmentExtra ^
+  "DB_TYPE=oracle" ^
+  "ORACLE_HOST=10.30.8.119" ^
+  "ORACLE_PORT=1521" ^
+  "ORACLE_SERVICE=APCDB" ^
+  "ORACLE_USER=emuuser" ^
+  "ORACLE_PASSWORD=apcuser" ^
+  "ORACLE_DSN_TYPE=sid" ^
+  "ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1" ^
+  "SIMULATION_ENABLED=False" ^
+  "DB_POLLER_ENABLED=True" ^
+  "AI_PROVIDER=local" ^
+  "WHISPER_MODEL_SIZE=tiny" ^
+  "WHISPER_DEVICE=cpu"
+nssm set FabTwinBackend Start SERVICE_AUTO_START
+nssm start FabTwinBackend
+```
+
+**常见坑**：
+- NSSM 服务**不读取** `env.bat`（bat 文件只在 cmd 会话中生效），必须用 `AppEnvironmentExtra` 传参
+- `ORACLE_DSN_TYPE` 和 `ORACLE_CLIENT_DIR` 在 10g/11g 环境**必须**传入 NSSM，否则服务启动后连接 Oracle 失败
+- 如用 `start_backend.bat`（cmd 启动而非服务），则会先 `call env.bat` 加载环境变量，无需重复传参
 
 ---
 
@@ -134,7 +288,10 @@ fabtwin-deploy-YYYYMMDD.zip
 │   ├── package.json
 │   └── vite.config.js
 ├── sql/
-│   ├── init_oracle_db.sql      # 数据库初始化SQL（不含DT表）
+│   ├── init_oracle_db.sql      # 数据库初始化SQL（20张平台表，含 DISPLAY_ORDER 列，不含DT表/AI表）
+│   ├── init_oracle_aqua.sql    # Aqua Data Studio 兼容版（无 SQL*Plus 命令）
+│   ├── create_ai_tables.sql    # AI 相关 3 张表建表脚本（必须单独执行）
+│   ├── v2.7_add_display_order.sql  # 旧库手动升级补 DISPLAY_ORDER 列（兜底，一般无需手动执行）
 │   └── cleanup_db.sql          # 数据清理脚本
 ├── deploy.bat                  # 一键部署（开发/测试）
 ├── deploy_iis_nt_final.bat     # IIS NT认证部署（量产推荐）
@@ -316,9 +473,10 @@ python gen_aqua_sql.py
 
 **该脚本会完成：**
 - 删除旧表（如存在）
-- 创建 20 张平台表（不含 DT 表）
+- 创建 20 张平台表（不含 DT 表、不含 AI 表）
 - 导入基础数据（机台定义、角色、权限、用户等）
 - 创建 11 个 SEQUENCE + TRIGGER（模拟 IDENTITY 自增主键）
+- ver2.9.0：MACHINES / FLOOR_AREAS 表已内置 `DISPLAY_ORDER` 列（DEFAULT 0）
 
 **重要说明：**
 - DT 开头的 5 个表（DT_EVENT_RAW, DT_EVENT_RAW_CUR, DT_EVENT_STD, DT_ALARM_EVENT, DT_STATE_SNAPSHOT）**不在 init_oracle_db.sql 中**，由量产环境自行管理
@@ -328,23 +486,61 @@ python gen_aqua_sql.py
   - DASHBOARD_KPI, FLOOR_AREAS, TRACKS, ROLE_PERMISSIONS
   - MACHINE_TOOL_MAPPINGS, EVENT_ACTION_MAPPINGS
 
+### 5.2.1 执行 AI 表建表脚本（必须，新建库和旧库升级都要执行）
+
+> **AI 相关 3 张表不在 `init_oracle_db.sql` 中**，必须单独执行 `sql/create_ai_tables.sql`。此脚本幂等（DROP...PURGE + CREATE），重复执行不会报错。
+
+**方式 1：sqlplus 执行（推荐）**
+
+```cmd
+REM 设置 Oracle 连接环境变量（如未设置）
+set ORACLE_HOST=192.168.x.x
+set ORACLE_PORT=1521
+set ORACLE_SERVICE=ORCLPDB
+set ORACLE_USER=fabtwin
+set ORACLE_PASSWORD=********
+
+REM 执行 AI 表建表脚本
+sqlplus -S "%ORACLE_USER%/%ORACLE_PASSWORD%@%ORACLE_HOST%:%ORACLE_PORT%/%ORACLE_SERVICE%" @sql\create_ai_tables.sql
+```
+
+**方式 2：Aqua Data Studio / DBeaver 执行**
+
+打开 `sql/create_ai_tables.sql`，整段执行（F5 / Execute All）。
+
+**方式 3：Python 远程执行（无需 sqlplus）**
+
+```cmd
+cd /d D:\deploy\fab-twin-pro\backend
+venv\Scripts\python.exe -c "import oracledb; conn=oracledb.connect(user='fabtwin', password='********', dsn='192.168.x.x:1521/ORCLPDB'); cur=conn.cursor(); sql=open('../sql/create_ai_tables.sql').read(); cur.execute(sql); conn.commit(); print('AI表建表完成')"
+```
+
+> 注：`create_ai_tables.sql` 包含 PL/SQL 块（TRIGGER...END;/），Python `execute` 可能无法整段执行。推荐用方式 1（sqlplus）或方式 2（Aqua/DBeaver）。
+
+**该脚本会完成：**
+- 创建 3 张 AI 表：`AI_CONFIGS`（键值对配置）、`AI_PROVIDER_CONFIGS`（LLM 多配置）、`AI_USAGE_LOGS`（Token 用量日志）
+- 创建 3 个 SEQUENCE + 3 个 TRIGGER
+- 导入默认配置：1 条「本地规则引擎」Provider + 12 条 Dify/N8N/MCP 键值对
+
+**旧库升级注意**：如库中已有 AI 表数据，`create_ai_tables.sql` 会先 `DROP...PURGE` 再重建，**会清空 AI 配置数据**。如需保留现有 AI 配置，请在执行前备份 `AI_PROVIDER_CONFIGS` 和 `AI_CONFIGS` 表数据。
+
 ### 5.3 验证数据库（远程连接）
 
 ```sql
 REM 使用 DB 组提供的连接信息
 sqlplus fabtwin/********@192.168.x.x:1521/ORCLPDB
 
--- 检查平台表数量（不含 DT 表）
+-- 检查平台表数量（不含 DT 表，含 AI 表）
 SELECT COUNT(*) FROM user_tables WHERE table_name NOT LIKE 'DT_%';
--- 预期: 20
+-- 预期: 23（20 张平台表 + 3 张 AI 表）
 
 -- 检查 SEQUENCE 数量
 SELECT COUNT(*) FROM user_sequences;
--- 预期: 11
+-- 预期: 14（11 个平台表 + 3 个 AI 表）
 
 -- 检查 TRIGGER 数量
 SELECT COUNT(*) FROM user_triggers WHERE trigger_name LIKE 'TRG_%_ID';
--- 预期: 11
+-- 预期: 14（11 个平台表 + 3 个 AI 表）
 
 -- 检查关键表数据
 SELECT COUNT(*) FROM machines;          -- 机台定义（预期: 38）
@@ -352,6 +548,16 @@ SELECT COUNT(*) FROM users;             -- 用户
 SELECT COUNT(*) FROM roles;             -- 角色（预期: 3 - admin/engineer/user）
 SELECT COUNT(*) FROM perm_data;         -- 权限（预期: 10）
 SELECT COUNT(*) FROM role_permissions;  -- 角色权限映射
+
+-- ver2.9.0 新增：检查 DISPLAY_ORDER 列是否存在
+SELECT column_name FROM user_tab_columns WHERE table_name='MACHINES' AND column_name='DISPLAY_ORDER';
+SELECT column_name FROM user_tab_columns WHERE table_name='FLOOR_AREAS' AND column_name='DISPLAY_ORDER';
+-- 预期: 各返回 1 行
+
+-- 检查 AI 表（create_ai_tables.sql 执行后）
+SELECT COUNT(*) FROM ai_provider_configs;  -- 预期: 1（本地规则引擎默认配置）
+SELECT COUNT(*) FROM ai_configs;          -- 预期: 12（Dify/N8N/MCP 键值对）
+SELECT COUNT(*) FROM ai_usage_logs;        -- 预期: 0（使用后才有数据）
 
 EXIT;
 ```
@@ -890,20 +1096,37 @@ REM 重启应用
 
 ## 附录 A：环境变量完整清单
 
+> 详见第 12 节「Prod 环境变量配置注意事项」的分组说明和配置策略。
+
 | 变量名 | 默认值 | 必填 | 说明 |
 |--------|--------|------|------|
-| DB_TYPE | oracle | 是 | 数据库类型 |
+| DB_TYPE | oracle | 是 | 数据库类型（仅支持 oracle） |
 | ORACLE_HOST | localhost | 是 | Oracle 主机（**DB 组提供**） |
 | ORACLE_PORT | 1521 | 是 | Oracle 端口（**DB 组提供**） |
-| ORACLE_SERVICE | ORCLPDB | 是 | Oracle PDB 服务名（**DB 组提供**） |
+| ORACLE_SERVICE | ORCLPDB | 是 | Oracle PDB 服务名/SID（**DB 组提供**） |
 | ORACLE_USER | fabtwin | 是 | Oracle 用户名（**DB 组创建**） |
 | ORACLE_PASSWORD | fabtwin | 是 | Oracle 密码（**DB 组创建**） |
-| ORACLE_CLIENT_DIR | （空） | **10g/11g 必填** | Oracle Instant Client 路径（如 `C:\oracle\instantclient_19_x`），12c+ 不需要 |
-| SIMULATION_ENABLED | False | 否 | 模拟器（生产环境关闭） |
-| DB_POLLER_ENABLED | True | 否 | DB 事件轮询 |
-| AI_PROVIDER | local | 否 | AI 提供方 |
-| AI_API_KEY | - | 否 | AI API Key |
-| AI_MODEL | glm-5.2 | 否 | AI 模型 |
+| ORACLE_DSN_TYPE | service_name | **10g/11g 必填** | DSN 类型：`sid`（10g/11g）或 `service_name`（12c+，默认） |
+| ORACLE_CLIENT_DIR | （空） | **10g/11g 必填** | 64-bit Oracle Client 19c+ 安装目录（如 `C:\app\client\...\client_1`），12c+ 不需要 |
+| SIMULATION_ENABLED | False | 否 | 模拟器（prod 关闭） |
+| DB_POLLER_ENABLED | True | 否 | DB 事件轮询（prod 开启，读 DT 表实时数据） |
+| AI_PROVIDER | local | 否 | AI 提供方（prod 默认 local；LLM 配置走前端面板持久化到 DB） |
+| AI_BASE_URL | （空） | 否 | OpenAI 兼容 API 地址（推荐用前端面板配置） |
+| AI_API_KEY | （空） | 否 | AI API Key（推荐用前端面板配置） |
+| AI_MODEL | glm-5.2 | 否 | AI 模型名称 |
+| AI_TEMPERATURE | 0.7 | 否 | 生成温度 |
+| AI_MAX_TOKENS | 2048 | 否 | 最大 token 数 |
+| DIFY_ENABLED | False | 否 | Dify 开关 |
+| DIFY_BASE_URL | （空） | 否 | Dify API 地址 |
+| DIFY_API_KEY | （空） | 否 | Dify API Key |
+| DIFY_APP_ID | （空） | 否 | Dify 应用 ID |
+| N8N_ENABLED | False | 否 | N8N 开关 |
+| N8N_BASE_URL | （空） | 否 | N8N 服务地址 |
+| N8N_WEBHOOK_SECRET | （空） | 否 | N8N Webhook 密钥 |
+| WHISPER_MODEL_SIZE | tiny | 否 | 语音识别模型（prod 离线保持 tiny） |
+| WHISPER_DEVICE | cpu | 否 | 语音识别设备（prod 设 cpu） |
+| WHISPER_COMPUTE_TYPE | int8 | 否 | 语音识别计算类型 |
+| NLS_LANG | （空） | 否 | Oracle NLS 字符集（中文乱码时设 `SIMPLIFIED CHINESE_CHINA.AL32UTF8`） |
 
 ## 附录 B：端口清单
 
@@ -980,9 +1203,10 @@ Config Error: This configuration section cannot be used at this path.
 
 ---
 
-**文档版本**：v2.0
-**最后更新**：2026-07-22
+**文档版本**：v3.0
+**最后更新**：2026-09-02
 **变更说明**：
+- v3.0 (2026-09-02): 覆盖 ver2.9.0 A/B/C/D/E/F/G 七批变更；新增第 11 节「ver2.9.0 变更摘要」；新增第 12 节「Prod 环境变量配置注意事项」；`init_oracle_db.sql` 更新含 `DISPLAY_ORDER` 列；新增 5.2.1 节「AI 表建表脚本执行」；更新离线包清单（含 `create_ai_tables.sql`、`v2.7_add_display_order.sql`）；更新数据库验证清单（表 23 张、SEQUENCE 14 个、TRIGGER 14 个、DISPLAY_ORDER 列检查、AI 表数据检查）；更新附录 A 环境变量清单
 - v2.0 (2026-07-22): 重构部署方案，IIS + ASP 桥接 Windows NT 认证作为推荐量产部署方式；新增 `deploy_iis_nt_final.bat` 和 `start_backend.bat`；移除 `start_prod.bat`、`start_full.bat`、`start_proxy.bat` 等中间版本脚本；新增 IIS 部署问题排查章节；更新端口清单（端口 80 由 IIS 使用）；更新服务注册章节（前端由 IIS 管理）；清理 31 个临时调试脚本
 - v1.3 (2026-07-20): 新增 Oracle 10g/11g 兼容性说明（Thick 模式 + ORACLE_CLIENT_DIR）；新增 Aqua Data Studio 初始化 SQL 使用方式；新增 Windows Server UTF-8/GBK 编码问题处理；新增 bat 脚本闪退排查章节；所有 bat 文件改为纯英文避免编码问题
 - v1.2 (2026-07-20): 明确 Oracle 数据库由 DB 组搭建运维，应用部署方仅需索取连接信息；移除"安装 Oracle Client"要求；业务用户/表空间创建改为由 DB 组执行；init_db.bat 支持远程执行或由 DB 组在 DB 服务器执行；故障排查章节调整为联系 DB 组

@@ -1,6 +1,7 @@
 /* ================================================================
    FabTwin Oracle 数据库初始化脚本（精简版）
    生成时间: 2026-07-24
+   最后更新: 2026-09-02 (ver2.9.0 G批)
    用户: fabtwin
    表数量: 20（不含5个DT表，不含3个AI表）
    说明:
@@ -10,6 +11,8 @@
        由 sql/create_ai_tables.sql 手动建表，不在本脚本中
      - 历史时序数据（ALARMS / MACHINE_EVENTS / CHAMBER_SNAPSHOTS / LOTS / OHT_POSITIONS）
        后续由量产 DT 表提供，初始化时不导入
+     - ver2.9.0 (2026-09-02): MACHINES / FLOOR_AREAS 表新增 DISPLAY_ORDER 列
+       （图层置顶/置底功能），含 DEFAULT 0，INSERT 不指定时自动填 0
    ================================================================ */
 
 SET DEFINE OFF;
@@ -138,6 +141,7 @@ CREATE TABLE FLOOR_AREAS (
     HEIGHT FLOAT,
     COLOR VARCHAR2(4000),
     DESCRIPTION VARCHAR2(4000),
+    DISPLAY_ORDER NUMBER DEFAULT 0,
     CONSTRAINT PK_FLOOR_AREAS PRIMARY KEY (ID)
 );
 
@@ -177,6 +181,7 @@ CREATE TABLE MACHINES (
     Y_POS FLOAT,
     FLOOR_X FLOAT,
     FLOOR_Y FLOAT,
+    DISPLAY_ORDER NUMBER DEFAULT 0,
     CONSTRAINT PK_MACHINES PRIMARY KEY (ID)
 );
 
