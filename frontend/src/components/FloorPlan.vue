@@ -78,6 +78,18 @@ function clampPct(v, min = 0, max = 100) {
   if (Number.isNaN(+v)) return min
   return Math.max(min, Math.min(max, +v))
 }
+// 后端返回统一友好错误：err.response?.data?.detail（FastAPI 400/500 的 JSON body.detail）
+// 顺序：detail > message > 默认 fallback
+function errMsg(err, fallback = '请求失败') {
+  if (!err) return fallback
+  const d = (err && err.response && err.response.data && err.response.data.detail) || err.detail
+  if (d) {
+    if (typeof d === 'string') return d
+    if (Array.isArray(d)) return d.map(x => x?.msg || String(x)).join('；')
+    if (typeof d === 'object') return Object.values(d).map(x => String(x)).join('；')
+  }
+  return err.message || String(err) || fallback
+}
 // 轨迹绘制
 const drawingTrack = ref([])  // 正在绘制的轨迹点 [[x,y],...]
 const newTrack = ref({ name: '', color: '#00d4ff', speed: 1.0 })
@@ -213,7 +225,7 @@ async function saveAreaProps() {
     showToast('区域已保存', 'success')
   } catch (err) {
     console.error('[FloorPlan] 区域保存失败:', err)
-    showToast('保存失败: ' + err.message, 'error')
+    showToast('保存失败: ' + errMsg(err, err.message || ''), 'error')
     // 回滚草稿框
     editAreaName.value = a.name
     editAreaColor.value = a.color
@@ -306,7 +318,7 @@ async function saveExternalLink() {
     showExternalLinkModal.value = false
     showToast('外链配置已保存', 'success')
   } catch (e) {
-    showToast(`保存失败: ${e.message}`, 'error')
+    showToast('保存失败: ' + errMsg(e, e.message || ''), 'error')
   } finally {
     savingExternalLink.value = false
   }
@@ -391,7 +403,7 @@ async function batchCloneSelected(offset = { x: 3, y: 3 }) {
     multiSelection.value = ns
     await loadFloor()
   } catch (e) {
-    showToast('批量复制失败: ' + e.message, 'error')
+    showToast('批量复制失败: ' + errMsg(e, e.message || ''), 'error')
   } finally {
     batchCloning.value = false
   }
@@ -433,7 +445,7 @@ async function reorderSelected(action) {
     showToast(`图层${{top:'置顶',bottom:'置底',up:'上移一层',down:'下移一层'}[action]}完成`, 'success')
     await loadFloor()
   } catch (e) {
-    showToast('图层操作失败: ' + e.message, 'error')
+    showToast('图层操作失败: ' + errMsg(e, e.message || ''), 'error')
   } finally {
     reordering.value = false
   }
@@ -834,7 +846,7 @@ function handleAddMachine(pos) {
     showToast('机台添加成功', 'success')
   }).catch(err => {
     console.error('[FloorPlan] 机台添加失败:', err)
-    showToast('添加失败: ' + err.message, 'error')
+    showToast('添加失败: ' + errMsg(err, err.message || ''), 'error')
   })
 }
 
@@ -846,7 +858,7 @@ function handleAddArea(areaData) {
     showToast('区域创建成功', 'success')
   }).catch(err => {
     console.error('[FloorPlan] 区域创建失败:', err)
-    showToast('添加区域失败: ' + err.message, 'error')
+    showToast('添加区域失败: ' + errMsg(err, err.message || ''), 'error')
   })
 }
 
@@ -901,7 +913,7 @@ async function saveMachineName() {
     showToast('机台名称已保存', 'success')
   } catch (err) {
     console.error('[FloorPlan] 机台改名失败:', err)
-    showToast('改名失败: ' + err.message, 'error')
+    showToast('改名失败: ' + errMsg(err, err.message || ''), 'error')
     editMachineName.value = m.name || m.id || ''
   } finally {
     savingMachine.value = false
@@ -957,7 +969,7 @@ function saveTrack() {
     newTrack.value.name = ''
     showToast('轨迹保存成功', 'success')
   }).catch(err => {
-    showToast('轨迹保存失败: ' + err.message, 'error')
+    showToast('轨迹保存失败: ' + errMsg(err, err.message || ''), 'error')
   })
 }
 
@@ -992,7 +1004,7 @@ function handleAddVehicle(pos) {
     newVehicle.value.name = ''
     showToast('天车添加成功', 'success')
   }).catch(err => {
-    showToast('天车添加失败: ' + err.message, 'error')
+    showToast('天车添加失败: ' + errMsg(err, err.message || ''), 'error')
   })
 }
 
@@ -1030,7 +1042,7 @@ function handleAddVehicleDirect() {
     newVehicle.value.name = ''
     showToast(`天车 "${autoId}" 添加成功，绑定轨迹`, 'success')
   }).catch(err => {
-    showToast('天车添加失败: ' + err.message, 'error')
+    showToast('天车添加失败: ' + errMsg(err, err.message || ''), 'error')
   })
 }
 

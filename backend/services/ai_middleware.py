@@ -1272,20 +1272,31 @@ Lot ID 格式说明：
     # ==================== 配置管理 ====================
 
     def get_config(self) -> Dict[str, Any]:
-        """获取当前AI配置（脱敏）"""
+        """获取当前AI配置（脱敏）。所有返回字段保证非 None 可安全序列化。"""
+        # 本地規則引擎或未配置 LLM 时，self.model / self.temperature 可能是 None，
+        # F-#1 统一降级，避免 Pydantic AIConfigOut 对 str/int 抛 ValidationError。
+        try:
+            temperature = float(self.temperature) if self.temperature is not None else 0.7
+        except (TypeError, ValueError):
+            temperature = 0.7
+        try:
+            max_tokens = int(self.max_tokens) if self.max_tokens is not None else 0
+        except (TypeError, ValueError):
+            max_tokens = 0
+        dify_app_id_masked = self._mask_key(self.dify_api_key) if self.dify_api_key else ""
         return {
-            "provider": self.provider,
-            "provider_name": self.provider_name or self._infer_provider_name(),
-            "model": self.model,
-            "base_url_masked": self._mask_url(self.base_url),
+            "provider": self.provider or "local",
+            "provider_name": self.provider_name or self._infer_provider_name() or "",
+            "model": self.model or "",
+            "base_url_masked": self._mask_url(self.base_url) or "",
             "has_api_key": bool(self.api_key),
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "dify_enabled": self.dify_enabled,
-            "dify_base_url_masked": self._mask_url(self.dify_base_url),
-            "dify_app_id_masked": self._mask_key(self.dify_api_key) if self.dify_api_key else "",
-            "n8n_enabled": self.n8n_enabled,
-            "n8n_base_url_masked": self._mask_url(self.n8n_base_url),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "dify_enabled": bool(self.dify_enabled),
+            "dify_base_url_masked": self._mask_url(self.dify_base_url) or "",
+            "dify_app_id_masked": dify_app_id_masked,
+            "n8n_enabled": bool(self.n8n_enabled),
+            "n8n_base_url_masked": self._mask_url(self.n8n_base_url) or "",
         }
 
     def update_config(self, config: Dict[str, Any]) -> bool:
@@ -1553,18 +1564,32 @@ Lot ID 格式说明：
             traceback.print_exc()
 
     def get_usage_stats(self, days: int = 30) -> Dict[str, Any]:
-        """获取使用量统计"""
+        """获取使用量统计（F-#2：修复 Oracle ORA-00979 not a GROUP BY expression）
+
+        根因：`substr(created_at, 1, 10)` 在 Oracle 中对 DATE/TIMESTAMP 列先做隐式 NLS 转字符串，
+        SELECT/GROUP BY/ORDER BY 三处表达式的参数化绑定不保证列位置等价，触发 ORA-00979。
+        修复：按方言选择"真实日期截断函数"并复用同一 ColumnElement 取别名 group_by。
+        """
         try:
             db = _get_db()
             try:
                 from models import AIUsageLog
-                from sqlalchemy import func
+                from sqlalchemy import func, column, select
                 from datetime import datetime, timedelta
 
-                # 计算起始日期
-                start_date = (datetime.now() - timedelta(days=days)).isoformat()
+                start_date = (datetime.now() - timedelta(days=days))
+                # created_at 列在 DB 里可能是 DATE/TIMESTAMP/Oracle VARCHAR2/SQLite TEXT，
+                # 为兼容 Oracle DATE/TIMESTAMP + SQLite TEXT(ISO-8601) 两种历史布局：
+                # Oracle 用 TRUNC(date_col)；SQLite 用 date(strftime(...))；都产出日粒度值。
+                dialect = db.bind.dialect.name if db.bind else "sqlite"
+                if dialect.lower().startswith("oracle"):
+                    day_expr = func.TRUNC(AIUsageLog.created_at)
+                    day_to_str = func.TO_CHAR(day_expr, "YYYY-MM-DD")
+                else:
+                    # SQLite: date(col) 对 ISO-8601 / yyyy-mm-dd hh:mm:ss 都安全
+                    day_expr = func.date(AIUsageLog.created_at)
+                    day_to_str = day_expr
 
-                # 总调用次数和token
                 totals = db.query(
                     func.count(AIUsageLog.id).label("total_calls"),
                     func.coalesce(func.sum(AIUsageLog.prompt_tokens), 0).label("total_prompt"),
@@ -1572,7 +1597,6 @@ Lot ID 格式说明：
                     func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
                 ).filter(AIUsageLog.created_at >= start_date).first()
 
-                # 按Provider统计
                 provider_stats = db.query(
                     AIUsageLog.provider,
                     func.count(AIUsageLog.id).label("calls"),
@@ -1581,25 +1605,36 @@ Lot ID 格式说明：
 
                 provider_breakdown = {}
                 for p in provider_stats:
-                    provider_breakdown[p.provider] = {
+                    provider_breakdown[p.provider or "unknown"] = {
                         "calls": p.calls,
                         "tokens": int(p.tokens),
                     }
 
-                # 按天统计
-                daily = db.query(
-                    func.substr(AIUsageLog.created_at, 1, 10).label("day"),
-                    func.count(AIUsageLog.id).label("calls"),
-                    func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("tokens"),
-                ).filter(AIUsageLog.created_at >= start_date).group_by(func.substr(AIUsageLog.created_at, 1, 10)).order_by(func.substr(AIUsageLog.created_at, 1, 10)).all()
+                # 按天统计（关键：day_expr 与 GROUP BY 使用同一个 Python 对象，避免绑定参数位置不等价）
+                day_col = day_to_str.label("day")
+                calls_col = func.count(AIUsageLog.id).label("calls")
+                tokens_col = func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("tokens")
+                daily = db.query(day_col, calls_col, tokens_col) \
+                    .filter(AIUsageLog.created_at >= start_date) \
+                    .group_by(day_col) \
+                    .order_by(day_col.asc()) \
+                    .all()
 
-                daily_stats = [{"date": d.day, "calls": d.calls, "tokens": int(d.tokens)} for d in daily]
+                daily_stats = []
+                for d in daily:
+                    # TRUNC/TO_CHAR 出来是 datetime/str 的兼容写法：统一转字符串
+                    val = d.day
+                    if isinstance(val, datetime):
+                        day_str = val.strftime("%Y-%m-%d")
+                    else:
+                        day_str = str(val)[:10]
+                    daily_stats.append({"date": day_str, "calls": d.calls, "tokens": int(d.tokens)})
 
                 return {
-                    "total_calls": totals.total_calls,
-                    "total_prompt_tokens": int(totals.total_prompt),
-                    "total_completion_tokens": int(totals.total_completion),
-                    "total_tokens": int(totals.total_tokens),
+                    "total_calls": int(totals.total_calls or 0),
+                    "total_prompt_tokens": int(totals.total_prompt or 0),
+                    "total_completion_tokens": int(totals.total_completion or 0),
+                    "total_tokens": int(totals.total_tokens or 0),
                     "provider_breakdown": provider_breakdown,
                     "daily_stats": daily_stats,
                 }

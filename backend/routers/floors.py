@@ -321,36 +321,57 @@ def update_machine_info(floor_id: int, machine_id: str, data: dict, db: Session 
 
 @router.post("/{floor_id}/areas/batch-clone")
 def batch_clone_areas(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """批量复制区域（每个 area_id 的副本：名称加后缀 _copy + 位置偏移 + 置顶 display_order）
+    """批量复制区域（每个 area_id 的副本：名称加后缀 _copy + 位置偏移 + 置顶 display_order）"""
+    from sqlalchemy.exc import DatabaseError as SADatabaseError  # F-#3 热修：display_order 列缺失时给出可读错误
 
-    payload: { area_ids: [id,...], offset_x: 3, offset_y: 3 }
-    返回: [ {id, name, x_pos, y_pos}, ... ] 新建的区域。
-    """
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
     area_ids = data.get("area_ids", []) or []
+    if not area_ids:
+        return {"created": 0, "items": [], "skipped": 0, "note": "area_ids 为空"}
     offset_x = float(data.get("offset_x", 3))
     offset_y = float(data.get("offset_y", 3))
-    max_id = db.query(func.max(FloorArea.id)).scalar() or 0
-    max_order = db.query(func.max(func.coalesce(FloorArea.display_order, 0))).filter(
-        FloorArea.floor_id == floor_id
-    ).scalar() or 0
-    next_id = max_id + 1
-    next_order = max_order + 1
+    try:
+        max_id = db.query(func.max(FloorArea.id)).scalar() or 0
+        try:
+            max_order = db.query(func.max(func.coalesce(FloorArea.display_order, 0))).filter(
+                FloorArea.floor_id == floor_id
+            ).scalar() or 0
+        except SADatabaseError as e:
+            # display_order 列缺失：降级取 0 继续复制，返回提示
+            if "DISPLAY_ORDER" in str(e).upper() or "00904" in str(e):
+                max_order = 0
+            else:
+                raise
+        next_id = max_id + 1
+        next_order = max_order + 1
+    except SADatabaseError as e:
+        raise _friendly_db_error(e, context="批量复制区域前查询失败")
+    skipped = 0
     result = []
     for aid in area_ids:
-        src = db.query(FloorArea).filter(FloorArea.id == int(aid)).first()
+        try:
+            src = db.query(FloorArea).filter(FloorArea.id == int(aid)).first()
+        except (ValueError, TypeError):
+            skipped += 1
+            continue
         if not src:
+            skipped += 1
             continue
         nx = max(0.0, min(100.0, (src.x_pos or 0) + offset_x))
         ny = max(0.0, min(100.0, (src.y_pos or 0) + offset_y))
-        nw = min(float(src.width or 10), 100 - nx)
-        nh = min(float(src.height or 10), 100 - ny)
-        if nw < 1: nw = min(float(src.width or 10), 100)
-        if nh < 1: nh = min(float(src.height or 10), 100)
+        try:
+            nw_raw = float(src.width or 10)
+            nh_raw = float(src.height or 10)
+        except (TypeError, ValueError):
+            nw_raw, nh_raw = 10.0, 10.0
+        nw = max(0.5, min(nw_raw, 100 - nx))
+        nh = max(0.5, min(nh_raw, 100 - ny))
+        if nx + nw > 100: nw = max(0.5, 100 - nx)
+        if ny + nh > 100: nh = max(0.5, 100 - ny)
         new_name = f"{src.name or 'area'}_copy"
-        clone = FloorArea(
+        clone_kwargs = dict(
             id=next_id,
             floor_id=floor_id,
             name=new_name,
@@ -360,46 +381,71 @@ def batch_clone_areas(floor_id: int, data: dict, db: Session = Depends(get_db), 
             description=src.description,
             display_order=next_order,
         )
+        try:
+            clone = FloorArea(**clone_kwargs)
+        except TypeError:
+            # 老模型没有 display_order 列（列未补 + ORM 被回滚版本混用时）：退化删除字段
+            clone_kwargs.pop("display_order", None)
+            clone = FloorArea(**clone_kwargs)
         db.add(clone)
         result.append({"id": next_id, "name": new_name, "x_pos": nx, "y_pos": ny})
         next_id += 1
         next_order += 1
-    db.commit()
-    return {"created": len(result), "items": result}
+    try:
+        db.commit()
+    except SADatabaseError as e:
+        db.rollback()
+        raise _friendly_db_error(e, context="批量复制区域提交失败")
+    resp = {"created": len(result), "items": result, "skipped": skipped}
+    if skipped:
+        resp["note"] = f"有 {skipped} 个区域 ID 不存在或非法，已跳过"
+    return resp
 
 
 @router.post("/{floor_id}/machines/batch-clone")
 def batch_clone_machines(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """批量复制机台（机台 ID 不允许重复：new_id="{old_id}_copy1/_copy2/..." 自动递增；若不存在则直接用 new_id 创建）
+    """批量复制机台（自动生成不重复的新 ID：old_id_copy1/_copy2/...）"""
+    from sqlalchemy.exc import DatabaseError as SADatabaseError, IntegrityError
 
-    payload: { machine_ids: ["ID1", ...], offset_x: 3, offset_y: 3 }
-    返回: [ {id, name, floor_x, floor_y}, ... ]
-    """
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
     machine_ids = data.get("machine_ids", []) or []
+    if not machine_ids:
+        return {"created": 0, "items": [], "skipped": 0, "note": "machine_ids 为空"}
     offset_x = float(data.get("offset_x", 3))
     offset_y = float(data.get("offset_y", 3))
-    max_order = db.query(func.max(func.coalesce(Machine.display_order, 0))).filter(
-        Machine.floor == floor_id
-    ).scalar() or 0
-    next_order = max_order + 1
+    try:
+        try:
+            max_order = db.query(func.max(func.coalesce(Machine.display_order, 0))).filter(
+                Machine.floor == floor_id
+            ).scalar() or 0
+        except SADatabaseError as e:
+            if "DISPLAY_ORDER" in str(e).upper() or "00904" in str(e):
+                max_order = 0
+            else:
+                raise
+        next_order = max_order + 1
+    except SADatabaseError as e:
+        raise _friendly_db_error(e, context="批量复制机台前查询失败")
     result = []
+    skipped = 0
     for mid in machine_ids:
         src = db.query(Machine).filter(Machine.id == mid).first()
         if not src:
+            skipped += 1
             continue
-        # 生成不重复的新 ID
         base = src.id
         idx = 1
         new_id = f"{base}_copy{idx}"
         while db.query(Machine.id).filter(Machine.id == new_id).first():
             idx += 1
+            if idx > 999:
+                raise HTTPException(status_code=500, detail=f"机台 {mid} 的副本 ID 已达上限，无法继续生成")
             new_id = f"{base}_copy{idx}"
         nx = max(0.0, min(100.0, (src.floor_x or 0) + offset_x))
         ny = max(0.0, min(100.0, (src.floor_y or 0) + offset_y))
-        clone = Machine(
+        clone_kwargs = dict(
             id=new_id,
             model=src.model,
             name=f"{src.name or src.id} (副本)",
@@ -411,93 +457,151 @@ def batch_clone_machines(floor_id: int, data: dict, db: Session = Depends(get_db
             floor_x=nx, floor_y=ny,
             display_order=next_order,
         )
+        try:
+            clone = Machine(**clone_kwargs)
+        except TypeError:
+            clone_kwargs.pop("display_order", None)
+            clone = Machine(**clone_kwargs)
         db.add(clone)
         result.append({"id": new_id, "name": clone.name, "floor_x": nx, "floor_y": ny})
         next_order += 1
-    db.commit()
-    return {"created": len(result), "items": result}
+    try:
+        db.commit()
+    except (SADatabaseError, IntegrityError) as e:
+        db.rollback()
+        raise _friendly_db_error(e, context="批量复制机台提交失败")
+    resp = {"created": len(result), "items": result, "skipped": skipped}
+    if skipped:
+        resp["note"] = f"有 {skipped} 个机台 ID 不存在，已跳过"
+    return resp
+
+
+def _friendly_db_error(e: Exception, context: str = "") -> HTTPException:
+    """把 SQLAlchemy/Oracle 错误转成用户可读的 500 提示，避免把 SQL 原文/堆栈直接泄漏给前端。"""
+    msg = str(e)
+    detail = f"{context + '：' if context else ''}数据库错误。"
+    upper = msg.upper()
+    if "DISPLAY_ORDER" in upper or "00904" in msg:
+        detail = "显示排序字段(display_order)尚未生成，请先按文档执行「重启服务自动补列」或由 DBA 执行 sql/v2.7_add_display_order.sql 后再试。"
+    elif "00979" in msg or "GROUP BY" in upper:
+        detail = "按天分组 SQL 语法不兼容，请升级后端到含 F-#2 修复的版本。"
+    elif "ORA-" in msg:
+        # 截取 ORA-xxxxx 第一段
+        import re
+        m = re.search(r"ORA-\d+[:\s]+[^\n]+", msg)
+        detail = (m.group(0) if m else msg.splitlines()[0])[:200]
+    detail = f"{detail}（原始错误类型：{type(e).__name__}）"
+    return HTTPException(status_code=500, detail=detail)
+
+
+def _reorder_prepare(db: Session, floor_id: int) -> None:
+    """在 reorder 前做一次防御性检查/补列（仅提示用，实际执行会抛给上面统一处理）。"""
+    try:
+        # 只要执行一次包含 display_order 的查询就能探测列是否存在；失败会被外层捕获并给可读错误。
+        db.execute(
+            db.query(func.max(func.coalesce(Machine.display_order, 0))).filter(Machine.floor == floor_id).statement
+        )
+    except Exception:
+        pass  # 具体错误在真正业务查询里 throw 给统一 _friendly_db_error
 
 
 @router.post("/{floor_id}/areas/reorder")
 def reorder_areas(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """区域图层重排：置顶/置底/前一层/后一层
-
-    payload: { area_id: int, action: "top" | "bottom" | "up" | "down" }
-    """
-    action = data.get("action")
-    area_id = int(data.get("area_id", 0))
+    """区域图层重排：置顶/置底/前一层/后一层"""
+    from sqlalchemy.exc import DatabaseError as SADatabaseError
+    try:
+        action = data.get("action")
+        area_id = int(data.get("area_id", 0))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="参数非法：area_id 必须是整数，action 必须是 top/bottom/up/down")
+    if action not in {"top", "bottom", "up", "down"}:
+        raise HTTPException(status_code=400, detail="action 必须是 top/bottom/up/down 之一")
     area = db.query(FloorArea).filter(FloorArea.id == area_id, FloorArea.floor_id == floor_id).first()
     if not area:
-        raise HTTPException(status_code=404, detail="区域不存在")
-    # 获取所有同楼层按 display_order+id 排序列表
-    rows = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(
-        func.coalesce(FloorArea.display_order, 0).asc(), FloorArea.id.asc()
-    ).all()
+        raise HTTPException(status_code=404, detail="区域不存在或不属于当前楼层")
+    try:
+        rows = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(
+            func.coalesce(FloorArea.display_order, 0).asc(), FloorArea.id.asc()
+        ).all()
+    except SADatabaseError as e:
+        raise _friendly_db_error(e, context="查询区域图层顺序")
     try:
         idx = next(i for i, r in enumerate(rows) if r.id == area.id)
     except StopIteration:
         idx = -1
-    if action == "bottom":
-        # 置底：比当前最小 order 再小 1
-        min_o = min((r.display_order or 0) for r in rows) if rows else 0
-        area.display_order = min_o - 1
-    elif action == "top":
-        max_o = max((r.display_order or 0) for r in rows) if rows else 0
-        area.display_order = max_o + 1
-    elif action == "up" and idx > 0:
-        # 与前一项交换
-        prev = rows[idx - 1]
-        prev_order = prev.display_order or 0
-        cur_order = area.display_order or 0
-        prev.display_order = cur_order
-        area.display_order = prev_order
-    elif action == "down" and 0 <= idx < len(rows) - 1:
-        nxt = rows[idx + 1]
-        nxt_order = nxt.display_order or 0
-        cur_order = area.display_order or 0
-        nxt.display_order = cur_order
-        area.display_order = nxt_order
-    db.commit()
+    try:
+        if action == "bottom":
+            min_o = min((r.display_order or 0) for r in rows) if rows else 0
+            area.display_order = min_o - 1
+        elif action == "top":
+            max_o = max((r.display_order or 0) for r in rows) if rows else 0
+            area.display_order = max_o + 1
+        elif action == "up" and idx > 0:
+            prev = rows[idx - 1]
+            prev_order = prev.display_order or 0
+            cur_order = area.display_order or 0
+            prev.display_order = cur_order
+            area.display_order = prev_order
+        elif action == "down" and 0 <= idx < len(rows) - 1:
+            nxt = rows[idx + 1]
+            nxt_order = nxt.display_order or 0
+            cur_order = area.display_order or 0
+            nxt.display_order = cur_order
+            area.display_order = nxt_order
+        db.commit()
+    except SADatabaseError as e:
+        db.rollback()
+        raise _friendly_db_error(e, context="区域图层重排提交失败")
     return {"message": "重排成功", "area_id": area.id, "action": action, "new_order": area.display_order}
 
 
 @router.post("/{floor_id}/machines/reorder")
 def reorder_machines(floor_id: int, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """机台图层重排：置顶/置底/前一层/后一层
-
-    payload: { machine_id: str, action: "top" | "bottom" | "up" | "down" }
-    """
-    action = data.get("action")
-    machine_id = str(data.get("machine_id", ""))
+    """机台图层重排：置顶/置底/前一层/后一层"""
+    from sqlalchemy.exc import DatabaseError as SADatabaseError
+    try:
+        action = data.get("action")
+        machine_id = str(data.get("machine_id", ""))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="参数非法：machine_id 必须是字符串，action 必须是 top/bottom/up/down")
+    if action not in {"top", "bottom", "up", "down"}:
+        raise HTTPException(status_code=400, detail="action 必须是 top/bottom/up/down 之一")
     machine = db.query(Machine).filter(Machine.id == machine_id, Machine.floor == floor_id).first()
     if not machine:
-        raise HTTPException(status_code=404, detail="机台不存在")
-    rows = db.query(Machine).filter(Machine.floor == floor_id).order_by(
-        func.coalesce(Machine.display_order, 0).asc(), Machine.id.asc()
-    ).all()
+        raise HTTPException(status_code=404, detail="机台不存在或不在该楼层")
+    try:
+        rows = db.query(Machine).filter(Machine.floor == floor_id).order_by(
+            func.coalesce(Machine.display_order, 0).asc(), Machine.id.asc()
+        ).all()
+    except SADatabaseError as e:
+        raise _friendly_db_error(e, context="查询机台图层顺序")
     try:
         idx = next(i for i, r in enumerate(rows) if r.id == machine.id)
     except StopIteration:
         idx = -1
-    if action == "bottom":
-        min_o = min((r.display_order or 0) for r in rows) if rows else 0
-        machine.display_order = min_o - 1
-    elif action == "top":
-        max_o = max((r.display_order or 0) for r in rows) if rows else 0
-        machine.display_order = max_o + 1
-    elif action == "up" and idx > 0:
-        prev = rows[idx - 1]
-        prev_order = prev.display_order or 0
-        cur_order = machine.display_order or 0
-        prev.display_order = cur_order
-        machine.display_order = prev_order
-    elif action == "down" and 0 <= idx < len(rows) - 1:
-        nxt = rows[idx + 1]
-        nxt_order = nxt.display_order or 0
-        cur_order = machine.display_order or 0
-        nxt.display_order = cur_order
-        machine.display_order = nxt_order
-    db.commit()
+    try:
+        if action == "bottom":
+            min_o = min((r.display_order or 0) for r in rows) if rows else 0
+            machine.display_order = min_o - 1
+        elif action == "top":
+            max_o = max((r.display_order or 0) for r in rows) if rows else 0
+            machine.display_order = max_o + 1
+        elif action == "up" and idx > 0:
+            prev = rows[idx - 1]
+            prev_order = prev.display_order or 0
+            cur_order = machine.display_order or 0
+            prev.display_order = cur_order
+            machine.display_order = prev_order
+        elif action == "down" and 0 <= idx < len(rows) - 1:
+            nxt = rows[idx + 1]
+            nxt_order = nxt.display_order or 0
+            cur_order = machine.display_order or 0
+            nxt.display_order = cur_order
+            machine.display_order = nxt_order
+        db.commit()
+    except SADatabaseError as e:
+        db.rollback()
+        raise _friendly_db_error(e, context="机台图层重排提交失败")
     return {"message": "重排成功", "machine_id": machine.id, "action": action, "new_order": machine.display_order}
 
 

@@ -163,11 +163,11 @@ class AIConfigOut(BaseModel):
     """AI 配置输出（脱敏）"""
     provider: str
     provider_name: str
-    model: str
+    model: Optional[str] = ""  # F-#1: 历史/本地规则引擎可能为 None
     base_url_masked: str
     has_api_key: bool
-    temperature: float
-    max_tokens: int
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 0
     dify_enabled: bool
     dify_base_url_masked: str
     dify_app_id_masked: str
