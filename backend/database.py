@@ -1,16 +1,7 @@
-"""数据库初始化与连接管理（Oracle only）
-
-Oracle 兼容性说明：
-- Thin 模式（默认）：仅支持 Oracle 12.1+，无需 Oracle Client
-- Thick 模式：支持 Oracle 9.2+（含 10g/11g），需 Oracle Instant Client 11.2+
-
-如需连接 10g/11g，请设置环境变量 ORACLE_CLIENT_DIR 指向 Oracle Client 根目录
-（如 C:\\app\\client\\<user>\\product\\19.0.0\\client_1），本模块会自动检测
-oci.dll 位置（bin 子目录或 Instant Client 根目录）并切换到 Thick 模式。
-"""
+"""数据库初始化与连接管理（Oracle + SQLite 本地测试双兼容）"""
 import os
 import logging
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 from config import (
@@ -138,7 +129,7 @@ Base = declarative_base()
 
 
 def init_db():
-    """根据模型定义创建所有数据表
+    """根据模型定义创建所有数据表，并幂等补齐历史遗漏的列。
 
     注意：AI 相关表（ai_configs / ai_provider_configs / ai_usage_logs）
     不在代码中自动创建，由 DBA 手动执行 sql/create_ai_tables.sql 完成。
@@ -149,6 +140,52 @@ def init_db():
         if t.name not in ai_table_names
     ]
     Base.metadata.create_all(bind=engine, tables=tables_to_create)
+    # 在 create_all 之后做"缺列补 ALTER"——只对历史表有效。
+    # SQLite 本地测试通常经 create_all 新表不会缺列，这里也走一遍不会出错。
+    try:
+        _ensure_missing_columns(engine)
+    except Exception as e:
+        logger.warning(f"[database] 补齐缺失列时出错（忽略，降级处理）：{e}")
+
+
+def _has_column(conn, table_name: str, column_name: str) -> bool:
+    """跨数据库幂等列存在性检查。"""
+    url = str(conn.engine.url) if hasattr(conn, 'engine') else str(engine.url)
+    lower = url.startswith('sqlite:')
+    if lower:
+        # SQLite PRAGMA table_info('machines') 返回行：cid name type notnull dflt_value pk
+        rows = conn.execute(text(f"PRAGMA table_info('{table_name}')")).all()
+        col_names = [r[1].lower() for r in rows]
+        return column_name.lower() in col_names
+    # Oracle：USER_TAB_COLUMNS 是当前 schema 下所有表列
+    sql = text("SELECT COUNT(*) FROM USER_TAB_COLUMNS WHERE TABLE_NAME = UPPER(:t) AND COLUMN_NAME = UPPER(:c)")
+    r = conn.execute(sql, {"t": table_name, "c": column_name}).scalar()
+    return r and r > 0
+
+
+def _ensure_missing_columns(eng):
+    """对 D 批新增的 display_order 做幂等列补齐（Oracle + SQLite）。"""
+    specs = [
+        # (table, column, oracle_ddl_type, sqlite_ddl_type, default_value_sql_oracle_for_existing_rows)
+        ("machines",      "display_order", "NUMBER(10)",  "INTEGER DEFAULT 0", "DEFAULT 0"),
+        ("floor_areas",   "display_order", "NUMBER(10)",  "INTEGER DEFAULT 0", "DEFAULT 0"),
+    ]
+    with eng.connect() as conn:
+        for table, column, ora_dtype, lite_dtype, ora_default in specs:
+            if _has_column(conn, table, column):
+                logger.info(f"[database] {table}.{column} 列已存在，跳过")
+                continue
+            url = str(eng.url)
+            if url.startswith("sqlite:"):
+                ddl = f"ALTER TABLE {table} ADD COLUMN {column} {lite_dtype}"
+            else:
+                # Oracle 对已有行添加 NOT NULL 列必须给默认值。我们这里允许 NULL，默认 0 即可；
+                # 若要安全起见，不写 NOT NULL 约束，模型里也是 nullable。
+                ddl = f"ALTER TABLE {table} ADD ({column} {ora_dtype} {ora_default})"
+            logger.warning(f"[database] 列 {table}.{column} 不存在，自动执行 ALTER：{ddl}")
+            conn.execute(text(ddl))
+            conn.commit()
+            logger.info(f"[database] {table}.{column} 已自动补齐。")
 
 
 def get_db():
