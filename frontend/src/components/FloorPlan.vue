@@ -401,7 +401,7 @@ async function batchCloneSelected(offset = { x: 3, y: 3 }) {
     createdAreas.forEach(a => ns.add(`area:${a.id}`))
     createdMachines.forEach(m => ns.add(`machine:${m.id}`))
     multiSelection.value = ns
-    await loadFloor()
+    await loadFloorData()
   } catch (e) {
     showToast('批量复制失败: ' + errMsg(e, e.message || ''), 'error')
   } finally {
@@ -443,7 +443,7 @@ async function reorderSelected(action) {
       }
     }
     showToast(`图层${{top:'置顶',bottom:'置底',up:'上移一层',down:'下移一层'}[action]}完成`, 'success')
-    await loadFloor()
+    await loadFloorData()
   } catch (e) {
     showToast('图层操作失败: ' + errMsg(e, e.message || ''), 'error')
   } finally {

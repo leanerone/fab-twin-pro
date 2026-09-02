@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import DatabaseError as SADatabaseError
 
 from database import get_db
 from models import Floor, FloorArea, Machine, Track, Vehicle
@@ -41,17 +42,31 @@ def list_floors(db: Session = Depends(get_db)):
 
 @router.get("/{floor_id}", response_model=dict)
 def get_floor(floor_id: int, db: Session = Depends(get_db)):
-    """获取楼层详情（含区域、机台、轨迹、天车）"""
+    """获取楼层详情（含区域、机台、轨迹、天车）
+
+    G-#1: display_order 列可能尚未补齐，排序查询失败时降级到 id 排序。
+    """
     floor = db.query(Floor).filter(Floor.id == floor_id).first()
     if not floor:
         raise HTTPException(status_code=404, detail="楼层不存在")
-    
-    areas = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(
-        func.coalesce(FloorArea.display_order, 0).asc(), FloorArea.id.asc()
-    ).all()
-    machines = db.query(Machine).filter(Machine.floor == floor_id).order_by(
-        func.coalesce(Machine.display_order, 0).asc(), Machine.id.asc()
-    ).all()
+
+    # 尝试按 display_order 排序；列不存在时降级到 id 排序
+    # 关键：第一次查询失败后 Session 会进入"已回滚"脏状态，必须先 db.rollback()
+    # 清理后才能执行第二次查询，否则会抛 StatementError（非 DatabaseError，无法被此 except 捕获）
+    try:
+        areas = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(
+            func.coalesce(FloorArea.display_order, 0).asc(), FloorArea.id.asc()
+        ).all()
+    except SADatabaseError:
+        db.rollback()
+        areas = db.query(FloorArea).filter(FloorArea.floor_id == floor_id).order_by(FloorArea.id.asc()).all()
+    try:
+        machines = db.query(Machine).filter(Machine.floor == floor_id).order_by(
+            func.coalesce(Machine.display_order, 0).asc(), Machine.id.asc()
+        ).all()
+    except SADatabaseError:
+        db.rollback()
+        machines = db.query(Machine).filter(Machine.floor == floor_id).order_by(Machine.id.asc()).all()
     tracks = db.query(Track).filter(Track.floor_id == floor_id).all()
     vehicles = db.query(Vehicle).filter(Vehicle.floor_id == floor_id).all()
     
