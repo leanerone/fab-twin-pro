@@ -23,6 +23,27 @@ function onWheel(e) {
   else zoomOut()
 }
 
+// === 画布扩展 ===
+const canvasScaleW = ref(1)   // 画布宽度倍率 1=原始 2=双倍
+const canvasScaleH = ref(1)   // 画布高度倍率
+const canvasMaxX = computed(() => 100 * canvasScaleW.value)  // 逻辑坐标最大X
+const canvasMaxY = computed(() => 100 * canvasScaleH.value)  // 逻辑坐标最大Y
+function expandCanvas() {
+  canvasScaleW.value = Math.min(5, +(canvasScaleW.value + 0.5).toFixed(1))
+  canvasScaleH.value = Math.min(5, +(canvasScaleH.value + 0.5).toFixed(1))
+}
+function shrinkCanvas() {
+  canvasScaleW.value = Math.max(1, +(canvasScaleW.value - 0.5).toFixed(1))
+  canvasScaleH.value = Math.max(1, +(canvasScaleH.value - 0.5).toFixed(1))
+}
+function resetCanvasSize() {
+  canvasScaleW.value = 1
+  canvasScaleH.value = 1
+}
+// 逻辑坐标 → CSS百分比（扩展后需按倍率换算，保持已有元素视觉位置不变）
+function pctX(val) { return (val / canvasScaleW.value) + '%' }
+function pctY(val) { return (val / canvasScaleH.value) + '%' }
+
 const floorData = ref(null)
 const machines = ref([])
 const areas = ref([])
@@ -59,6 +80,16 @@ const drawingArea = ref(null)
 const dragInfo = ref(null)
 // 新区域表单
 const newArea = ref({ name: '', area_type: 'equipment', color: '#1e3a5f' })
+// 待确认的区域草稿（画框/直接创建后先暂存，用户确认才提交后端）
+const pendingArea = ref(null)
+function confirmCreateArea() {
+  if (!pendingArea.value) return
+  handleAddArea(pendingArea.value)
+  pendingArea.value = null
+}
+function cancelCreateArea() {
+  pendingArea.value = null
+}
 // 选中区域编辑草稿（名称/颜色），保存时才提交后端
 const editAreaName = ref('')
 const editAreaColor = ref('#1e3a5f')
@@ -83,8 +114,8 @@ const editAreaHM = computed(() => {
 function applyAreaMeters(mW, mH) {
   const w = floorData.value?.width || 100
   const h = floorData.value?.height || 100
-  editAreaW.value = clampPct((+mW / (w || 100)) * 100, 0.5, 100)
-  editAreaH.value = clampPct((+mH / (h || 100)) * 100, 0.5, 100)
+  editAreaW.value = clampPct((+mW / (w || 100)) * 100, 0.5, canvasMaxX.value)
+  editAreaH.value = clampPct((+mH / (h || 100)) * 100, 0.5, canvasMaxY.value)
 }
 function clampPct(v, min = 0, max = 100) {
   if (Number.isNaN(+v)) return min
@@ -164,10 +195,10 @@ async function loadFloorData() {
   isLoading.value = false
 }
 
-// 直接创建区域（不依赖鼠标画框）
+// 直接创建区域（不依赖鼠标画框）→ 暂存为待确认草稿
 function quickAddArea() {
   const name = newArea.value.name || `${newArea.value.area_type}_${Date.now().toString().slice(-4)}`
-  handleAddArea({
+  pendingArea.value = {
     name,
     area_type: newArea.value.area_type,
     x_pos: 30,
@@ -175,7 +206,7 @@ function quickAddArea() {
     width: 15,
     height: 15,
     color: newArea.value.color || areaTypeColors[newArea.value.area_type] || '#1e3a5f',
-  })
+  }
   newArea.value.name = ''
 }
 
@@ -202,13 +233,13 @@ async function saveAreaProps() {
   if (!a) return
   const newName = (editAreaName.value || '').trim() || a.name
   const newColor = editAreaColor.value || a.color
-  const nx = clampPct(+editAreaX.value || 0, 0, 100)
-  const ny = clampPct(+editAreaY.value || 0, 0, 100)
-  const nw = clampPct(+editAreaW.value || 1, 0.5, 100)
-  const nh = clampPct(+editAreaH.value || 1, 0.5, 100)
-  // 边界限制：x+w 与 y+h 不能超过 100
-  const newX = Math.min(nx, 100 - nw)
-  const newY = Math.min(ny, 100 - nh)
+  const nx = clampPct(+editAreaX.value || 0, 0, canvasMaxX.value)
+  const ny = clampPct(+editAreaY.value || 0, 0, canvasMaxY.value)
+  const nw = clampPct(+editAreaW.value || 1, 0.5, canvasMaxX.value)
+  const nh = clampPct(+editAreaH.value || 1, 0.5, canvasMaxY.value)
+  // 边界限制：x+w 与 y+h 不能超过画布范围
+  const newX = Math.min(nx, canvasMaxX.value - nw)
+  const newY = Math.min(ny, canvasMaxY.value - nh)
   // 无变更直接返回
   if (
     newName === a.name && newColor === a.color
@@ -336,13 +367,13 @@ async function saveExternalLink() {
   }
 }
 
-// 获取百分比坐标（基于内层画布，支持缩放）
+// 获取逻辑坐标（基于内层画布，支持缩放和画布扩展）
 function getPercent(e) {
   const el = canvasInnerRef.value || e.currentTarget
   const rect = el.getBoundingClientRect()
-  const x = ((e.clientX - rect.left) / rect.width) * 100
-  const y = ((e.clientY - rect.top) / rect.height) * 100
-  return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
+  const x = ((e.clientX - rect.left) / rect.width) * canvasMaxX.value
+  const y = ((e.clientY - rect.top) / rect.height) * canvasMaxY.value
+  return { x: Math.max(0, Math.min(canvasMaxX.value, x)), y: Math.max(0, Math.min(canvasMaxY.value, y)) }
 }
 
 // === 多选辅助 ===
@@ -629,9 +660,9 @@ function docMouseMove(e) {
   const canvas = canvasInnerRef.value || document.querySelector('.fp-canvas-inner') || document.querySelector('.fp-canvas')
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
-  const x = ((e.clientX - rect.left) / rect.width) * 100
-  const y = ((e.clientY - rect.top) / rect.height) * 100
-  const pos = { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
+  const x = ((e.clientX - rect.left) / rect.width) * canvasMaxX.value
+  const y = ((e.clientY - rect.top) / rect.height) * canvasMaxY.value
+  const pos = { x: Math.max(0, Math.min(canvasMaxX.value, x)), y: Math.max(0, Math.min(canvasMaxY.value, y)) }
   mousePos.value = pos
 
   if (drawingArea.value) {
@@ -661,8 +692,8 @@ function docMouseMove(e) {
       const [t, id] = key.split(':')
       const st = multiMoveStart.value.starts[key]
       if (!st) return
-      const nx = Math.max(0, Math.min(100, st.x + dx))
-      const ny = Math.max(0, Math.min(100, st.y + dy))
+      const nx = Math.max(0, Math.min(canvasMaxX.value, st.x + dx))
+      const ny = Math.max(0, Math.min(canvasMaxY.value, st.y + dy))
       if (t === 'machine') {
         const mm = machines.value.find(z => z.id === id)
         if (mm) { mm.floor_x = nx; mm.floor_y = ny }
@@ -706,9 +737,9 @@ function docMouseMove(e) {
       if (h.includes('t')) newY = origY + origH - MIN
       newH = MIN
     }
-    // 边界限制 0~100
-    newX = Math.max(0, Math.min(100 - newW, newX))
-    newY = Math.max(0, Math.min(100 - newH, newY))
+    // 边界限制 0~canvasMax
+    newX = Math.max(0, Math.min(canvasMaxX.value - newW, newX))
+    newY = Math.max(0, Math.min(canvasMaxY.value - newH, newY))
     a.x_pos = newX
     a.y_pos = newY
     a.width = newW
@@ -720,8 +751,8 @@ function docMouseMove(e) {
   if (dragInfo.value) {
     const newX = pos.x - dragInfo.value.offsetX
     const newY = pos.y - dragInfo.value.offsetY
-    const clampedX = Math.max(0, Math.min(100, newX))
-    const clampedY = Math.max(0, Math.min(100, newY))
+    const clampedX = Math.max(0, Math.min(canvasMaxX.value, newX))
+    const clampedY = Math.max(0, Math.min(canvasMaxY.value, newY))
     if (dragInfo.value.machine) {
       dragInfo.value.machine.floor_x = clampedX
       dragInfo.value.machine.floor_y = clampedY
@@ -746,13 +777,13 @@ function docMouseUp(e) {
     return
   }
 
-  // 画区域完成
+  // 画区域完成 → 暂存为待确认草稿（用户需点确认才真正创建）
   if (drawingArea.value && editTool.value === 'area') {
     const d = drawingArea.value
     const w = d.w < 3 ? 8 : d.w
     const h = d.h < 3 ? 8 : d.h
     const name = newArea.value.name || `${newArea.value.area_type}_${Date.now().toString().slice(-4)}`
-    handleAddArea({
+    pendingArea.value = {
       name,
       area_type: newArea.value.area_type,
       x_pos: d.x,
@@ -760,7 +791,7 @@ function docMouseUp(e) {
       width: w,
       height: h,
       color: newArea.value.color || areaTypeColors[newArea.value.area_type] || '#1e3a5f',
-    })
+    }
     newArea.value.name = ''
     drawingArea.value = null
     dragMode.value = null
@@ -1156,10 +1187,23 @@ function importFloorPlan(e) {
 const drawingPreview = computed(() => {
   if (!drawingArea.value || drawingArea.value.w < 1) return null
   return {
-    left: drawingArea.value.x + '%',
-    top: drawingArea.value.y + '%',
-    width: drawingArea.value.w + '%',
-    height: drawingArea.value.h + '%',
+    left: pctX(drawingArea.value.x),
+    top: pctY(drawingArea.value.y),
+    width: pctX(drawingArea.value.w),
+    height: pctY(drawingArea.value.h),
+  }
+})
+
+// 待确认区域预览
+const pendingAreaPreview = computed(() => {
+  if (!pendingArea.value) return null
+  return {
+    left: pctX(pendingArea.value.x_pos),
+    top: pctY(pendingArea.value.y_pos),
+    width: pctX(pendingArea.value.width),
+    height: pctY(pendingArea.value.height),
+    background: pendingArea.value.color + '40',
+    borderColor: pendingArea.value.color,
   }
 })
 
@@ -1173,10 +1217,10 @@ const boxSelectPreview = computed(() => {
   const h = Math.abs(b.y - b.startY)
   if (w < 0.5 && h < 0.5) return null
   return {
-    left: x + '%',
-    top: y + '%',
-    width: w + '%',
-    height: h + '%',
+    left: pctX(x),
+    top: pctY(y),
+    width: pctX(w),
+    height: pctY(h),
   }
 })
 
@@ -1215,6 +1259,7 @@ watch(editMode, (val) => {
   if (!val) {
     editTool.value = 'select'
     drawingArea.value = null
+    pendingArea.value = null
     dragInfo.value = null
     dragMode.value = null
     boxSelect.value = null
@@ -1259,6 +1304,11 @@ onUnmounted(() => {
           <span class="zoom-level">{{ Math.round(zoom * 100) }}%</span>
           <button class="action-btn zoom-btn" @click="zoomIn" title="放大">+</button>
           <button class="action-btn" @click="zoomReset" title="重置缩放">1:1</button>
+          <span class="zoom-sep">|</span>
+          <button class="action-btn zoom-btn" @click="shrinkCanvas" title="缩小画布" :disabled="canvasScaleW <= 1">◂</button>
+          <span class="zoom-level">{{ canvasScaleW }}x{{ canvasScaleH }}</span>
+          <button class="action-btn zoom-btn" @click="expandCanvas" title="扩大画布">▸</button>
+          <button class="action-btn" @click="resetCanvasSize" title="重置画布" :disabled="canvasScaleW === 1">⤢1x</button>
         </div>
         <label v-if="authStore.hasPermission('floor_edit')" class="action-btn import-btn">
           📥 导入
@@ -1340,7 +1390,7 @@ onUnmounted(() => {
         </select>
         <input v-model="newArea.color" type="color" class="tool-input-color" :title="newArea.color" />
         <button class="tool-btn primary" @click="quickAddArea">+ 直接创建</button>
-        <span class="tool-hint">或 在地图上拖拽画框</span>
+        <span class="tool-hint">或 在地图上拖拽画框（需确认后创建）</span>
       </div>
       
       <!-- 画轨迹工具表单 -->
@@ -1414,13 +1464,13 @@ onUnmounted(() => {
         </div>
         <div class="ae-row ae-row-grid">
           <label class="ae-sub">X (%)</label>
-          <input v-model.number="editAreaX" type="number" step="0.1" min="0" max="100" class="tool-input ae-wh" />
+          <input v-model.number="editAreaX" type="number" step="0.1" min="0" :max="canvasMaxX" class="tool-input ae-wh" />
           <label class="ae-sub">Y (%)</label>
-          <input v-model.number="editAreaY" type="number" step="0.1" min="0" max="100" class="tool-input ae-wh" />
+          <input v-model.number="editAreaY" type="number" step="0.1" min="0" :max="canvasMaxY" class="tool-input ae-wh" />
           <label class="ae-sub">宽 (%)</label>
-          <input v-model.number="editAreaW" type="number" step="0.1" min="0.5" max="100" class="tool-input ae-wh" />
+          <input v-model.number="editAreaW" type="number" step="0.1" min="0.5" :max="canvasMaxX" class="tool-input ae-wh" />
           <label class="ae-sub">高 (%)</label>
-          <input v-model.number="editAreaH" type="number" step="0.1" min="0.5" max="100" class="tool-input ae-wh" />
+          <input v-model.number="editAreaH" type="number" step="0.1" min="0.5" :max="canvasMaxY" class="tool-input ae-wh" />
           <label class="ae-sub">宽 (m)</label>
           <input :value="editAreaWM" type="number" step="0.1" class="tool-input ae-wh"
             @change="(e)=>{ const w=+e.target.value||0; applyAreaMeters(w, editAreaHM) }" />
@@ -1457,7 +1507,7 @@ onUnmounted(() => {
       @wheel="onWheel"
       :class="{ 'cursor-cross': editTool === 'machine' || editTool === 'area' || editTool === 'track' || editTool === 'vehicle', 'cursor-grab': editTool === 'select' && editMode }"
     >
-     <div ref="canvasInnerRef" class="fp-canvas-inner" :style="{ width: (zoom * 100) + '%', height: (zoom * 100) + '%' }">
+     <div ref="canvasInnerRef" class="fp-canvas-inner" :style="{ width: (zoom * canvasMaxX) + '%', height: (zoom * canvasMaxY) + '%' }">
       <div class="canvas-grid">
         <div v-for="i in 20" :key="'h'+i" class="grid-line horizontal" :style="{ top: (i * 5) + '%' }"></div>
         <div v-for="i in 20" :key="'v'+i" class="grid-line vertical" :style="{ left: (i * 5) + '%' }"></div>
@@ -1475,10 +1525,10 @@ onUnmounted(() => {
           'area-multi': isMultiSelected('area', area.id),
         }"
         :style="{
-          left: area.x_pos + '%',
-          top: area.y_pos + '%',
-          width: area.width + '%',
-          height: area.height + '%',
+          left: pctX(area.x_pos),
+          top: pctY(area.y_pos),
+          width: pctX(area.width),
+          height: pctY(area.height),
           background: area.color + '60',
           borderColor: area.color,
         }"
@@ -1504,6 +1554,19 @@ onUnmounted(() => {
       <!-- 画框预览 -->
       <div v-if="drawingPreview" class="drawing-preview" :style="drawingPreview"></div>
 
+      <!-- 待确认区域预览 + 确认/取消按钮 -->
+      <div v-if="pendingAreaPreview" class="pending-area" :style="pendingAreaPreview">
+        <div class="pending-area-label">
+          <span class="pending-icon">⏳</span>
+          <span class="pending-name">{{ pendingArea.name }}</span>
+          <span class="pending-size">{{ pendingArea.width.toFixed(1) }} × {{ pendingArea.height.toFixed(1) }}</span>
+        </div>
+        <div class="pending-area-actions">
+          <button class="pending-btn confirm" @click.stop="confirmCreateArea">✓ 确认创建</button>
+          <button class="pending-btn cancel" @click.stop="cancelCreateArea">✕ 取消</button>
+        </div>
+      </div>
+
       <!-- 框选矩形预览 -->
       <div v-if="boxSelectPreview" class="box-select-preview" :style="boxSelectPreview"></div>
       
@@ -1520,8 +1583,8 @@ onUnmounted(() => {
           'machine-multi': isMultiSelected('machine', m.id),
         }"
         :style="{
-          left: m.floor_x + '%',
-          top: m.floor_y + '%',
+          left: pctX(m.floor_x),
+          top: pctY(m.floor_y),
         }"
         :title="m.use_external_url ? `外链：${m.external_url}` : (canEditModel() ? '单击进入，双击编辑外链' : '')"
         @click="onMachineClick(m, $event)"
@@ -1549,7 +1612,7 @@ onUnmounted(() => {
       </div>
       
       <!-- 轨迹SVG层 -->
-      <svg class="track-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <svg class="track-svg" :viewBox="'0 0 ' + canvasMaxX + ' ' + canvasMaxY" preserveAspectRatio="none">
         <!-- 已保存的轨迹 -->
         <path 
           v-for="t in tracks" 
@@ -1600,8 +1663,8 @@ onUnmounted(() => {
         :key="'tl-' + t.id"
         class="track-label"
         :style="{
-          left: (t.points && t.points[0] ? t.points[0][0] : 0) + '%',
-          top: (t.points && t.points[0] ? t.points[0][1] : 0) + '%',
+          left: pctX(t.points && t.points[0] ? t.points[0][0] : 0),
+          top: pctY(t.points && t.points[0] ? t.points[0][1] : 0),
         }"
       >
         <span class="track-name" :style="{ color: t.color }">🛤 {{ t.name }}</span>
@@ -1614,7 +1677,7 @@ onUnmounted(() => {
         :key="'v-' + v.id"
         class="vehicle-marker"
         :class="{ 'vehicle-hover': hoverVehicle === v.id }"
-        :style="vehiclePos(v) ? { left: vehiclePos(v).x + '%', top: vehiclePos(v).y + '%' } : { display: 'none' }"
+        :style="vehiclePos(v) ? { left: pctX(vehiclePos(v).x), top: pctY(vehiclePos(v).y) } : { display: 'none' }"
       >
         <div class="vehicle-icon" :class="{ moving: v.state === 'moving' }">🚁</div>
         <div class="vehicle-id">{{ v.id }}</div>
@@ -2075,6 +2138,67 @@ onUnmounted(() => {
   background: rgba(0, 212, 255, 0.1);
   pointer-events: none;
   border-radius: 4px;
+}
+
+/* 待确认区域 */
+.pending-area {
+  position: absolute;
+  border: 2px dashed var(--yellow, #fbbf24);
+  border-radius: 6px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  animation: pending-pulse 1.5s ease-in-out infinite;
+}
+.pending-area-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yellow, #fbbf24);
+  background: rgba(0, 0, 0, 0.7);
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.pending-icon { font-size: 14px; }
+.pending-size { color: var(--text-dim); font-weight: 400; font-size: 10px; }
+.pending-area-actions {
+  display: flex;
+  gap: 6px;
+}
+.pending-btn {
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pending-btn.confirm {
+  background: var(--green, #22c55e);
+  color: #fff;
+}
+.pending-btn.confirm:hover { opacity: 0.85; }
+.pending-btn.cancel {
+  background: var(--red, #ef4444);
+  color: #fff;
+}
+.pending-btn.cancel:hover { opacity: 0.85; }
+@keyframes pending-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+.zoom-sep {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin: 0 2px;
 }
 
 /* 框选矩形预览 */
