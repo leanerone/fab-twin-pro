@@ -184,7 +184,27 @@ class AIMiddleware:
                     self._save_dify_n8n_to_db()
                     return
 
-                config_map = {c.config_key: c.config_value for c in configs}
+                # CLOB 字段读取兼容：Oracle 的 CONFIG_VALUE 是 CLOB，
+                # SQLAlchemy 读取可能返回 LOB 对象而非字符串，需 .read() 转换
+                def _read_clob(val):
+                    if val is None:
+                        return ""
+                    if hasattr(val, 'read'):  # CLOB/LOB 对象
+                        try:
+                            val = val.read()
+                        except Exception:
+                            val = str(val)
+                    if isinstance(val, bytes):
+                        try:
+                            val = val.decode('utf-8')
+                        except Exception:
+                            val = str(val)
+                    # 避免字符串 "None" 污染（之前 None 被存成字符串）
+                    if isinstance(val, str) and val == "None":
+                        val = ""
+                    return val if isinstance(val, str) else str(val)
+
+                config_map = {c.config_key: _read_clob(c.config_value) for c in configs}
                 if "dify_enabled" in config_map:
                     self.dify_enabled = config_map["dify_enabled"].lower() == "true"
                 if "dify_base_url" in config_map and config_map["dify_base_url"]:
@@ -326,12 +346,12 @@ class AIMiddleware:
                 now = datetime.now().isoformat()
                 all_config = {
                     "dify_enabled": str(self.dify_enabled),
-                    "dify_base_url": self.dify_base_url,
-                    "dify_api_key": self.dify_api_key,
-                    "dify_app_id": self.dify_app_id,
+                    "dify_base_url": self.dify_base_url or "",
+                    "dify_api_key": self.dify_api_key or "",
+                    "dify_app_id": self.dify_app_id or "",
                     "n8n_enabled": str(self.n8n_enabled),
-                    "n8n_base_url": self.n8n_base_url,
-                    "n8n_webhook_secret": self.n8n_webhook_secret,
+                    "n8n_base_url": self.n8n_base_url or "",
+                    "n8n_webhook_secret": self.n8n_webhook_secret or "",
                 }
                 for key, value in all_config.items():
                     existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
@@ -359,6 +379,9 @@ class AIMiddleware:
             try:
                 from models import AIConfig
                 now = datetime.now().isoformat()
+                # None 值存空字符串，避免 DB 存入字符串 "None"
+                if value is None:
+                    value = ""
                 existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
                 if existing:
                     existing.config_value = value
