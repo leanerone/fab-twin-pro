@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: FabTwin 产线数据查询工具
   description: |
-    FabTwin Pro 半导体产线数据查询工具集，通过 n8n 工作流调用 DB Proxy 查询 Oracle 和 Informix 数据库。
+    FabTwin Pro 半导体产线数据查询工具集，n8n 工作流直连数据库（Oracle 节点连 Oracle，ODBC 节点连 Informix）。
     共 7 个工具：告警查询、机台状态、事件时间线、Lot信息、产量统计、RCMS维修、MES Lot。
     在 Dify「工具 → 自定义工具」中导入本文件即可自动注册全部 7 个工具。
   version: 1.0.0

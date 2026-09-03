@@ -1,7 +1,7 @@
 # Dify + n8n 集成文档总览
 
 > FabTwin Pro 与 Dify / n8n 集成的全部模板和 SOP 文档。
-> 架构：Dify（AI 中枢）→ n8n（数据通道）→ DB Proxy（数据库代理）→ Oracle/Informix
+> 架构：Dify（AI 中枢）→ n8n（直连数据库：Oracle节点 + ODBC节点）→ Oracle/Informix
 
 ---
 
@@ -12,19 +12,14 @@ integration/
 ├── README.md                            ← 你在这里
 ├── DIFY_N8N_联通部署SOP.md             ← ★ 唯一 SOP（6步从零到联通）
 │
-├── db-proxy/
-│   ├── db_proxy.py                      ← DB Proxy 服务（FastAPI）
-│   ├── requirements.txt                 ← Python 依赖
-│   └── start.ps1                        ← 启动脚本（配置数据库连接）
-│
 ├── n8n/
-│   ├── 01_query_alarms.json             ← 工作流：告警查询
-│   ├── 02_query_machine_status.json     ← 工作流：机台状态
-│   ├── 03_query_events.json             ← 工作流：事件时间线
-│   ├── 04_query_lots.json               ← 工作流：Lot查询
-│   ├── 05_query_yield.json              ← 工作流：产量统计
-│   ├── 06_query_rcms_maintenance.json   ← 工作流：RCMS维修
-│   └── 07_query_mes_lot.json            ← 工作流：MES Lot
+│   ├── 01_query_alarms.json             ← 工作流：告警查询（Oracle节点）
+│   ├── 02_query_machine_status.json     ← 工作流：机台状态（Oracle节点）
+│   ├── 03_query_events.json             ← 工作流：事件时间线（Oracle节点）
+│   ├── 04_query_lots.json               ← 工作流：Lot查询（Oracle节点）
+│   ├── 05_query_yield.json              ← 工作流：产量统计（Oracle节点）
+│   ├── 06_query_rcms_maintenance.json   ← 工作流：RCMS维修（ODBC节点）
+│   └── 07_query_mes_lot.json            ← 工作流：MES Lot（ODBC节点）
 │
 └── dify/
     ├── fabtwin-ai-assistant.dsl.yaml    ← Dify 应用模板（可直接导入）
@@ -41,8 +36,8 @@ integration/
 **只需阅读一个文件**：[DIFY_N8N_联通部署SOP.md](DIFY_N8N_联通部署SOP.md)
 
 6 大步骤：
-1. 部署 DB Proxy 服务
-2. 导入 n8n 工作流（7个）
+1. 配置 n8n 数据库凭据（Oracle + Informix ODBC）
+2. 导入 n8n 工作流（7个）+ 绑定凭据
 3. 创建 Dify 智能体
 4. 配置 Dify 工具（接入 n8n）
 5. 网站后端配置
@@ -50,19 +45,9 @@ integration/
 
 ---
 
-## FabTwin 代码中的对接位置
-
-| 功能 | 文件 | 说明 |
-|------|------|------|
-| AI 中间层主逻辑 | `backend/services/ai_middleware.py` | Dify 调用、跳转标记解析 |
-| AI 配置面板 | `frontend/src/components/AIConfigPanel.vue` | Dify 地址和密钥配置界面 |
-| AI 路由 | `backend/routers/ai.py` | API 接口 |
-
----
-
 ## 版本信息
 
-- 文档版本：v2.0
+- 文档版本：v3.0（去掉 DB Proxy，n8n 直连数据库）
 - 更新日期：2026-09-03
 - 适用 Dify 版本：0.6+
-- 适用 n8n 版本：1.20+
+- 适用 n8n 版本：1.20+（需支持 Oracle/ODBC 节点）

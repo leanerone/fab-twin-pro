@@ -1,5 +1,5 @@
 {
-  "name": "6. 查询RCMS维修记录 (Informix)",
+  "name": "6. 查询RCMS维修记录 (Informix ODBC直连)",
   "nodes": [
     {
       "parameters": {
@@ -16,30 +16,34 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8010/rcms-maintenance",
-        "method": "POST",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.body) }}",
-        "options": {
-          "headers": {
-            "Authorization": "Bearer fabtwin-db-proxy-secret"
-          }
-        }
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nlet machineId = (body.machine_id || '').trim();\nmachineId = machineId.replace(/[^A-Za-z0-9_-]/g, '');\nreturn { json: { machine_id: machineId } };"
       },
-      "name": "Query DB",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (data.error) {\n  return { json: { ...data, summary: '查询失败: ' + data.error } };\n}\nconst records = data.records || [];\nlet text = '';\nif (records.length === 0) {\n  text = '未找到维修记录';\n} else {\n  text = records.map((r, i) => `${i+1}. ${r.pm_date || ''} ${r.pm_type || ''} 维修人: ${r.technician || ''} ${r.description || ''}`).join('\\n');\n}\nreturn { json: { ...data, summary: text, count: records.length } };"
+        "query": "SELECT FIRST 10 pm_type, pm_date, technician, description FROM maintenance_log WHERE machine_id = '{{ $json.machine_id }}' ORDER BY pm_date DESC",
+        "options": {}
+      },
+      "name": "Query Informix",
+      "type": "n8n-nodes-base.odbc",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "odbcApi": { "id": "", "name": "Informix RCMS" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json || [];\nconst arr = Array.isArray(rows) ? rows : [rows];\nconst count = arr.length;\nlet text = '';\nif (count === 0) {\n  text = '未找到维修记录';\n} else {\n  text = arr.map((r, i) => `${i+1}. ${r.pm_date || ''} ${r.pm_type || ''} 维修人: ${r.technician || ''} ${r.description || ''}`).join('\\n');\n}\nreturn { json: { records: arr, count: count, summary: text } };"
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [900, 300]
     },
     {
       "parameters": {
@@ -49,12 +53,13 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [900, 300]
+      "position": [1120, 300]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Query DB", "type": "main", "index": 0 }]] },
-    "Query DB": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Query Informix", "type": "main", "index": 0 }]] },
+    "Query Informix": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
     "Format": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   }
 }

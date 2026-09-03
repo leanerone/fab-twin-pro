@@ -2,7 +2,7 @@
 # FabTwin Pro Dify DSL 模板 — Chat 应用（Basic Chatbot 编排）
 # 更新日期: 2026-09-03
 # 架构说明：
-#   · Dify 作为 AI 中枢，通过 n8n 工作流调用 DB Proxy 查询数据库
+#   · Dify 作为 AI 中枢，n8n 工作流直连数据库（Oracle 节点连 Oracle，ODBC 节点连 Informix）
 #   · 网站仅作为显示和跳转执行端，不直接连接数据库
 #   · 7 个工具对应 7 个 n8n 工作流（见 n8n/ 目录）
 #

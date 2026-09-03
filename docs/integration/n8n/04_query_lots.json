@@ -1,5 +1,5 @@
 {
-  "name": "4. 查询Lot信息 (Oracle)",
+  "name": "4. 查询Lot批次信息 (Oracle直连)",
   "nodes": [
     {
       "parameters": {
@@ -16,30 +16,35 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8010/lots",
-        "method": "POST",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.body) }}",
-        "options": {
-          "headers": {
-            "Authorization": "Bearer fabtwin-db-proxy-secret"
-          }
-        }
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nlet lotId = (body.lot_id || '').trim();\nlet machineId = (body.machine_id || '').trim();\nlotId = lotId.replace(/[^A-Za-z0-9_-]/g, '');\nmachineId = machineId.replace(/[^A-Za-z0-9_-]/g, '');\nreturn { json: { lot_id: lotId, machine_id: machineId } };"
       },
-      "name": "Query DB",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst lots = data.lots || [];\nlet text = '';\nif (lots.length === 0) {\n  text = '未找到Lot记录';\n} else {\n  text = lots.map((l, i) => `${i+1}. Lot: ${l.lot_id || ''} 机台: ${l.machine_id || ''} 状态: ${l.status || ''} 数量: ${l.wafer_qty || ''}`).join('\\n');\n}\nreturn { json: { ...data, summary: text, count: lots.length } };"
+        "operation": "executeQuery",
+        "query": "={{ $json.lot_id ? \"SELECT * FROM LOTS WHERE lot_id = '\" + $json.lot_id + \"'\" : \"SELECT * FROM LOTS WHERE machine_id = '\" + $json.machine_id + \"' ORDER BY start_time DESC FETCH FIRST 20 ROWS ONLY\" }}",
+        "options": {}
+      },
+      "name": "Query Oracle",
+      "type": "n8n-nodes-base.oracle",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "oracleApi": { "id": "", "name": "FabTwin Oracle" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json || [];\nconst arr = Array.isArray(rows) ? rows : [rows];\nconst count = arr.length;\nlet text = '';\nif (count === 0) {\n  text = '未找到Lot记录';\n} else {\n  text = arr.map((r, i) => `${i+1}. Lot: ${r.lot_id || ''} 机台: ${r.machine_id || ''} 状态: ${r.status || ''} 晶圆: ${r.wafer_qty || 0}`).join('\\n');\n}\nreturn { json: { lots: arr, count: count, summary: text } };"
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [900, 300]
     },
     {
       "parameters": {
@@ -49,12 +54,13 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [900, 300]
+      "position": [1120, 300]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Query DB", "type": "main", "index": 0 }]] },
-    "Query DB": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Query Oracle", "type": "main", "index": 0 }]] },
+    "Query Oracle": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
     "Format": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   }
 }

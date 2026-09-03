@@ -1,5 +1,5 @@
 {
-  "name": "7. 查询MES Lot信息 (Informix)",
+  "name": "7. 查询MES Lot信息 (Informix ODBC直连)",
   "nodes": [
     {
       "parameters": {
@@ -16,30 +16,34 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8010/mes-lot",
-        "method": "POST",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.body) }}",
-        "options": {
-          "headers": {
-            "Authorization": "Bearer fabtwin-db-proxy-secret"
-          }
-        }
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nlet lotId = (body.lot_id || '').trim();\nlotId = lotId.replace(/[^A-Za-z0-9_-]/g, '');\nreturn { json: { lot_id: lotId } };"
       },
-      "name": "Query DB",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (data.error) {\n  return { json: { ...data, summary: '查询失败: ' + data.error } };\n}\nconst info = data.lot_info;\nlet text = '';\nif (!info) {\n  text = `未找到 Lot: ${data.lot_id}`;\n} else {\n  text = `Lot: ${info.lot_id || data.lot_id}\\n` +\n         `产品: ${info.product_id || '未知'}\\n` +\n         `当前站: ${info.current_step || '未知'}\\n` +\n         `状态: ${info.status || '未知'}\\n` +\n         `晶圆数: ${info.wafer_qty || 0}`;\n}\nreturn { json: { ...data, summary: text } };"
+        "query": "SELECT FIRST 1 lot_id, product_id, current_step, status, wafer_qty FROM lot_info WHERE lot_id = '{{ $json.lot_id }}'",
+        "options": {}
+      },
+      "name": "Query Informix",
+      "type": "n8n-nodes-base.odbc",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "odbcApi": { "id": "", "name": "Informix MES" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json || [];\nconst arr = Array.isArray(rows) ? rows : [rows];\nconst info = arr[0] || null;\nlet text = '';\nif (!info) {\n  text = '未找到 Lot: ' + ($input.first().json.lot_id || '');\n} else {\n  text = `Lot: ${info.lot_id || ''}\\n产品: ${info.product_id || '未知'}\\n当前站: ${info.current_step || '未知'}\\n状态: ${info.status || '未知'}\\n晶圆数: ${info.wafer_qty || 0}`;\n}\nreturn { json: { lot_info: info, summary: text } };"
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [900, 300]
     },
     {
       "parameters": {
@@ -49,12 +53,13 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [900, 300]
+      "position": [1120, 300]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Query DB", "type": "main", "index": 0 }]] },
-    "Query DB": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Query Informix", "type": "main", "index": 0 }]] },
+    "Query Informix": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
     "Format": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "2. 查询机台状态 (Oracle)",
+  "name": "2. 查询机台状态 (Oracle直连)",
   "nodes": [
     {
       "parameters": {
@@ -16,30 +16,35 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8010/status",
-        "method": "POST",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.body) }}",
-        "options": {
-          "headers": {
-            "Authorization": "Bearer fabtwin-db-proxy-secret"
-          }
-        }
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nlet machineId = (body.machine_id || '').trim();\nmachineId = machineId.replace(/[^A-Za-z0-9_-]/g, '');\nreturn { json: { machine_id: machineId } };"
       },
-      "name": "Query DB",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst m = data.machine;\nlet text = '';\nif (!m) {\n  text = '未找到该机台';\n} else {\n  text = `机台: ${m.id || ''}\\n型号: ${m.model || ''}\\n状态: ${m.status || ''}\\n当前Lot: ${m.current_lot_id || '无'}`;\n}\nreturn { json: { ...data, summary: text } };"
+        "operation": "executeQuery",
+        "query": "SELECT id, model, status, current_lot_id, last_event_ts FROM MACHINES WHERE id = '{{ $json.machine_id }}'",
+        "options": {}
+      },
+      "name": "Query Oracle",
+      "type": "n8n-nodes-base.oracle",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "oracleApi": { "id": "", "name": "FabTwin Oracle" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json || [];\nconst arr = Array.isArray(rows) ? rows : [rows];\nconst m = arr[0] || null;\nlet text = '';\nif (!m) {\n  text = '未找到机台';\n} else {\n  text = `机台: ${m.id}\\n型号: ${m.model || '未知'}\\n状态: ${m.status || '未知'}\\n当前Lot: ${m.current_lot_id || '无'}\\n最近事件: ${m.last_event_ts || '无'}`;\n}\nreturn { json: { machine: m, summary: text } };"
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [900, 300]
     },
     {
       "parameters": {
@@ -49,12 +54,13 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [900, 300]
+      "position": [1120, 300]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Query DB", "type": "main", "index": 0 }]] },
-    "Query DB": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Query Oracle", "type": "main", "index": 0 }]] },
+    "Query Oracle": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
     "Format": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   }
 }
