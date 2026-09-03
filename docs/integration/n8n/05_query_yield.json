@@ -1,0 +1,60 @@
+{
+  "name": "5. 查询产量统计 (Oracle)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "yield",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "yield-webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8010/yield",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer fabtwin-db-proxy-secret"
+          }
+        }
+      },
+      "name": "Query DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst stats = data.yield_stats || [];\nlet text = '';\nif (stats.length === 0) {\n  text = '未找到产量数据';\n} else {\n  text = stats.map((s, i) => `${i+1}. 机台: ${s.machine_id || ''} Lot数: ${s.lot_count || 0} 晶圆数: ${s.total_wafers || 0}`).join('\\n');\n}\nreturn { json: { ...data, summary: text } };"
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Query DB", "type": "main", "index": 0 }]] },
+    "Query DB": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Format": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  }
+}

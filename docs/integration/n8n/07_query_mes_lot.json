@@ -1,0 +1,60 @@
+{
+  "name": "7. 查询MES Lot信息 (Informix)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mes-lot",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "mes-lot-webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8010/mes-lot",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer fabtwin-db-proxy-secret"
+          }
+        }
+      },
+      "name": "Query DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (data.error) {\n  return { json: { ...data, summary: '查询失败: ' + data.error } };\n}\nconst info = data.lot_info;\nlet text = '';\nif (!info) {\n  text = `未找到 Lot: ${data.lot_id}`;\n} else {\n  text = `Lot: ${info.lot_id || data.lot_id}\\n` +\n         `产品: ${info.product_id || '未知'}\\n` +\n         `当前站: ${info.current_step || '未知'}\\n` +\n         `状态: ${info.status || '未知'}\\n` +\n         `晶圆数: ${info.wafer_qty || 0}`;\n}\nreturn { json: { ...data, summary: text } };"
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Query DB", "type": "main", "index": 0 }]] },
+    "Query DB": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Format": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  }
+}

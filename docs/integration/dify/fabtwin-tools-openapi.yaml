@@ -1,0 +1,272 @@
+openapi: 3.0.0
+info:
+  title: FabTwin 产线数据查询工具
+  description: |
+    FabTwin Pro 半导体产线数据查询工具集，通过 n8n 工作流调用 DB Proxy 查询 Oracle 和 Informix 数据库。
+    共 7 个工具：告警查询、机台状态、事件时间线、Lot信息、产量统计、RCMS维修、MES Lot。
+    在 Dify「工具 → 自定义工具」中导入本文件即可自动注册全部 7 个工具。
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5678/webhook
+    description: n8n Webhook 基址（按实际 n8n 部署地址修改）
+
+paths:
+  /alarms:
+    post:
+      operationId: query_alarms
+      summary: 查询机台告警记录
+      description: 查询指定机台最近的告警和错误事件（Oracle DT_EVENT_RAW 表）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine_id:
+                  type: string
+                  description: 机台ID，如 OXE-01、PODOPENER-1
+                limit:
+                  type: integer
+                  description: 返回条数，默认20
+                  default: 20
+              required:
+                - machine_id
+      responses:
+        '200':
+          description: 告警列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alarms:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_time: { type: string, description: 事件时间 }
+                        machine_id: { type: string }
+                        event_name: { type: string, description: 事件名 }
+                        event_value: { type: string, description: 事件值 }
+                  count: { type: integer }
+                  machine_id: { type: string }
+
+  /status:
+    post:
+      operationId: query_machine_status
+      summary: 查询机台实时状态
+      description: 查询指定机台的型号、运行状态、当前Lot、最近事件时间（Oracle MACHINES 表）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine_id:
+                  type: string
+                  description: 机台ID
+              required:
+                - machine_id
+      responses:
+        '200':
+          description: 机台状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  machine:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      model: { type: string, description: 机型 }
+                      status: { type: string, description: 运行状态 }
+                      current_lot_id: { type: string, description: 当前Lot }
+                      last_event_ts: { type: string, description: 最近事件时间 }
+                  machine_id: { type: string }
+
+  /events:
+    post:
+      operationId: query_events
+      summary: 查询机台事件时间线
+      description: 查询指定机台最近的事件记录（Oracle DT_EVENT_RAW 表，按时间倒序）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine_id:
+                  type: string
+                  description: 机台ID
+                limit:
+                  type: integer
+                  description: 返回条数，默认50
+                  default: 50
+              required:
+                - machine_id
+      responses:
+        '200':
+          description: 事件列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_time: { type: string }
+                        machine_id: { type: string }
+                        event_name: { type: string }
+                        event_value: { type: string }
+                  count: { type: integer }
+                  machine_id: { type: string }
+
+  /lots:
+    post:
+      operationId: query_lots
+      summary: 查询Lot批次信息
+      description: 按 lot_id 或 machine_id 查询 Lot 批次信息（Oracle LOTS 表）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lot_id:
+                  type: string
+                  description: Lot编号（可选）
+                machine_id:
+                  type: string
+                  description: 机台ID（可选，与lot_id二选一）
+      responses:
+        '200':
+          description: Lot列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        lot_id: { type: string }
+                        machine_id: { type: string }
+                        status: { type: string }
+                        wafer_qty: { type: integer }
+                        start_time: { type: string }
+                  count: { type: integer }
+
+  /yield:
+    post:
+      operationId: query_yield
+      summary: 查询产量统计
+      description: 查询指定机台或全厂的已完成Lot数量和晶圆总数（Oracle LOTS 表）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine_id:
+                  type: string
+                  description: 机台ID（可选，不传则查全厂）
+      responses:
+        '200':
+          description: 产量统计
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  yield_stats:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        machine_id: { type: string }
+                        lot_count: { type: integer }
+                        total_wafers: { type: integer }
+
+  /rcms-maintenance:
+    post:
+      operationId: query_rcms_maintenance
+      summary: 查询RCMS维修记录
+      description: 查询指定机台在 RCMS 系统中的维修保养记录（Informix 数据库）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machine_id:
+                  type: string
+                  description: 机台ID
+              required:
+                - machine_id
+      responses:
+        '200':
+          description: 维修记录
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pm_type: { type: string, description: 维修类型 }
+                        pm_date: { type: string, description: 维修日期 }
+                        technician: { type: string, description: 维修人 }
+                        description: { type: string, description: 维修描述 }
+                  count: { type: integer }
+                  machine_id: { type: string }
+
+  /mes-lot:
+    post:
+      operationId: query_mes_lot
+      summary: 查询MES Lot详细信息
+      description: 在 MES 系统中查询指定 Lot 的产品、当前工序、状态、晶圆数（Informix 数据库）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lot_id:
+                  type: string
+                  description: Lot编号
+              required:
+                - lot_id
+      responses:
+        '200':
+          description: MES Lot信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lot_info:
+                    type: object
+                    properties:
+                      lot_id: { type: string }
+                      product_id: { type: string, description: 产品型号 }
+                      current_step: { type: string, description: 当前工序 }
+                      status: { type: string }
+                      wafer_qty: { type: integer }
+                  lot_id: { type: string }
