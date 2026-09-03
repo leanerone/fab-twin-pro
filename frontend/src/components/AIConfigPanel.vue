@@ -519,6 +519,7 @@ const toolCallsParsed = computed(() => {
 const machineDifyConfigs = ref([])
 const machineDifyFormVisible = ref(false)
 const machineDifyEditingId = ref(null)
+const testingMachineDify = ref(false)
 const machineDifyForm = ref({
   config_name: '',
   model_id: '',
@@ -592,6 +593,30 @@ async function deleteMachineDifyConfig(cfg) {
     await loadMachineDifyConfigs()
   } catch (e) {
     showToast('error', '删除失败: ' + (e.message || e))
+  }
+}
+
+async function testMachineDifyConnection() {
+  const f = machineDifyForm.value
+  if (!f.dify_base_url) {
+    showToast('error', '请先填写 Dify 服务地址')
+    return
+  }
+  testingMachineDify.value = true
+  try {
+    const result = await api.aiTestConnection('dify', {
+      base_url: f.dify_base_url,
+      api_key: f.dify_api_key,
+    })
+    if (result.success) {
+      showToast('success', result.message || 'Dify 连接成功')
+    } else {
+      showToast('error', result.message || 'Dify 连接失败')
+    }
+  } catch (e) {
+    showToast('error', '测试失败：' + (e.message || '未知错误'))
+  } finally {
+    testingMachineDify.value = false
   }
 }
 
@@ -742,7 +767,8 @@ function onTabChange(tab) {
             </div>
             <div class="form-row">
               <label>Dify 服务地址</label>
-              <input v-model="machineDifyForm.dify_base_url" placeholder="http://dify地址:8088/v1" class="form-input" />
+              <input v-model="machineDifyForm.dify_base_url" placeholder="如：http://10.30.116.151:8088" class="form-input" />
+              <div class="hint" style="margin-top: 4px; font-size: 12px; color: #888;">Dify 实例地址，无需带 <code>/v1</code>，后端自动拼接 <code>/v1/chat-messages</code>。</div>
             </div>
             <div class="form-row">
               <label>Dify API Key</label>
@@ -755,6 +781,9 @@ function onTabChange(tab) {
               </label>
             </div>
             <div class="form-actions">
+              <button class="btn btn-ghost" :disabled="testingMachineDify" @click="testMachineDifyConnection">
+                {{ testingMachineDify ? '测试中...' : '测试连接' }}
+              </button>
               <button class="btn btn-primary" @click="saveMachineDifyConfig">保存</button>
               <button class="btn btn-ghost" @click="machineDifyFormVisible = false">取消</button>
             </div>
@@ -795,6 +824,9 @@ function onTabChange(tab) {
             <button class="btn btn-ghost" :disabled="testingDify" @click="testDifyConnection">
               {{ testingDify ? '测试中...' : '测试连接' }}
             </button>
+            <button class="btn btn-primary" :disabled="loading" @click="saveDifyConfig">
+              {{ loading ? '保存中...' : '保存 Dify 配置' }}
+            </button>
           </div>
         </div>
 
@@ -823,6 +855,9 @@ function onTabChange(tab) {
           <div class="form-actions">
             <button class="btn btn-ghost" :disabled="testingN8n" @click="testN8nConnection">
               {{ testingN8n ? '测试中...' : '测试连接' }}
+            </button>
+            <button class="btn btn-primary" :disabled="loading" @click="saveDifyConfig">
+              {{ loading ? '保存中...' : '保存 N8N 配置' }}
             </button>
           </div>
         </div>
