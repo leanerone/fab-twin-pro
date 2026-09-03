@@ -1,50 +1,43 @@
 -- ============================================================
--- FabTwin Pro — Dify 配置问题修复脚本 (ver2.9.5-P批)
+-- FabTwin Pro — Dify 配置问题修复脚本 v2 (ver2.9.5-P批)
 -- 日期: 2026-09-03
--- 用途: 修复 MACHINE_DIFY_CONFIGS 触发器 INVALID + 清理 "None" 脏数据
+-- 用途: 重建 MACHINE_DIFY_CONFIGS 触发器 + 清理 "None" 脏数据
 -- 运行环境: SQL Plus / SQL Developer，连接 emuuser@APCDB
--- 运行方式: @fix_dify_trigger_and_data.sql
+-- 注意: CONFIG_VALUE 是 CLOB 类型，必须用 DBMS_LOB 包操作
 -- ============================================================
 
 -- ============================================================
--- 1. 修复触发器 TRG_MACHINE_DIFY_CONFIGS_ID (INVALID → VALID)
+-- 1. 重建触发器 TRG_MACHINE_DIFY_CONFIGS_ID (强制重建，解决 INVALID)
 -- ============================================================
 
--- 先尝试编译（如果只是编译失效，这一句就够了）
-ALTER TRIGGER TRG_MACHINE_DIFY_CONFIGS_ID COMPILE;
-
-
--- 如果编译后还是 INVALID，用下面的 CREATE OR REPLACE 重建
--- （取消注释后执行）
--- CREATE OR REPLACE TRIGGER TRG_MACHINE_DIFY_CONFIGS_ID
--- BEFORE INSERT ON MACHINE_DIFY_CONFIGS
--- FOR EACH ROW
--- BEGIN
---     IF :NEW.ID IS NULL THEN
---         SELECT SEQ_MACHINE_DIFY_CONFIGS.NEXTVAL INTO :NEW.ID FROM DUAL;
---     END IF;
--- END;
--- /
-
+CREATE OR REPLACE TRIGGER TRG_MACHINE_DIFY_CONFIGS_ID
+BEFORE INSERT ON MACHINE_DIFY_CONFIGS
+FOR EACH ROW
+BEGIN
+    IF :NEW.ID IS NULL THEN
+        SELECT SEQ_MACHINE_DIFY_CONFIGS.NEXTVAL INTO :NEW.ID FROM DUAL;
+    END IF;
+END;
+/
 
 -- ============================================================
 -- 2. 清理 AI_CONFIGS 中的字符串 "None" 脏数据
---    之前 _save_to_db 把 Python None 存成了字符串 "None"
---    现在后端已修复（None→空字符串），这里清理历史脏数据
+--    CLOB 字段必须用 DBMS_LOB 操作，不能直接用 =
 -- ============================================================
 
 UPDATE AI_CONFIGS
-SET CONFIG_VALUE = '',
+SET CONFIG_VALUE = EMPTY_CLOB(),
     UPDATED_AT = TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     UPDATED_BY = 'cleanup'
-WHERE CONFIG_VALUE = 'None'
-   OR CONFIG_VALUE IS NULL;
+WHERE DBMS_LOB.SUBSTR(CONFIG_VALUE, 4000, 1) = 'None'
+   OR (CONFIG_VALUE IS NULL)
+   OR (DBMS_LOB.GETLENGTH(CONFIG_VALUE) = 0 AND CONFIG_VALUE IS NOT NULL);
 
 COMMIT;
 
 
 -- ============================================================
--- 3. 验证触发器状态（执行后看输出，应该都是 VALID）
+-- 3. 验证触发器状态（应该都是 ENABLED + VALID）
 -- ============================================================
 
 SELECT t.TRIGGER_NAME,
@@ -60,7 +53,7 @@ ORDER BY t.TRIGGER_NAME;
 
 
 -- ============================================================
--- 4. 验证 AI_CONFIGS 数据（确认 "None" 已清理）
+-- 4. 验证 AI_CONFIGS 数据（用 DBMS_LOB.SUBSTR 处理 CLOB）
 -- ============================================================
 
 SELECT CONFIG_KEY,
@@ -70,8 +63,8 @@ SELECT CONFIG_KEY,
          WHEN CONFIG_KEY LIKE '%api_key%'
            OR CONFIG_KEY LIKE '%secret%'
            OR CONFIG_KEY LIKE '%token%'
-         THEN SUBSTR(CONFIG_VALUE, 1, 8) || '****'
-         ELSE SUBSTR(CONFIG_VALUE, 1, 50)
+         THEN DBMS_LOB.SUBSTR(CONFIG_VALUE, 8, 1) || '****'
+         ELSE DBMS_LOB.SUBSTR(CONFIG_VALUE, 50, 1)
        END AS VALUE_PREVIEW,
        UPDATED_AT,
        UPDATED_BY
