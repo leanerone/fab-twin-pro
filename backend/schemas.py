@@ -172,12 +172,14 @@ class AIConfigOut(BaseModel):
     dify_base_url: str = ""
     dify_base_url_masked: str = ""
     dify_has_api_key: bool = False
+    dify_api_key_preview: str = ""   # 掩码预览，如 app-Tt5B****，前端用此值显示
     dify_app_id: str = ""
     dify_app_id_masked: str = ""
     n8n_enabled: bool
     n8n_base_url: str = ""
     n8n_base_url_masked: str = ""
     n8n_has_webhook_secret: bool = False
+    n8n_webhook_secret_preview: str = ""  # 掩码预览
 
 
 class AIConnectionTest(BaseModel):

@@ -54,6 +54,9 @@ const testingDify = ref(false)
 const testingN8n = ref(false)
 const difyHasApiKey = ref(false)  // 标记后端是否已保存 API Key
 const n8nHasSecret = ref(false)    // 标记后端是否已保存 Webhook Secret
+// 掩码预览值：加载时后端返回，保存时若输入仍等于预览值说明用户没改 → skip发送
+const savedDifyKeyPreview = ref('')
+const savedN8nSecretPreview = ref('')
 
 // MCP Server (N8N) 配置
 const mcpConfig = ref({
@@ -145,14 +148,18 @@ async function loadUsage() {
 async function loadDifyConfig() {
   try {
     const res = await api.aiGetConfig()
+    // 保存掩码预览值，用于后续判断用户是否改动了输入
+    savedDifyKeyPreview.value = res.dify_api_key_preview || ''
+    savedN8nSecretPreview.value = res.n8n_webhook_secret_preview || ''
     difyConfig.value = {
       dify_enabled: res.dify_enabled || false,
       dify_base_url: res.dify_base_url || '',
-      dify_api_key: '',  // API Key 不回显，用 dify_has_api_key 标记
+      // 已保存的 Key 填掩码预览值，让用户看到"有值"；真正要改时再输入新明文
+      dify_api_key: savedDifyKeyPreview.value,
       dify_app_id: res.dify_app_id || '',
       n8n_enabled: res.n8n_enabled || false,
       n8n_base_url: res.n8n_base_url || '',
-      n8n_webhook_secret: '',  // Webhook Secret 不回显
+      n8n_webhook_secret: savedN8nSecretPreview.value,
     }
     // 记录是否有已保存的 API Key / Secret（用于 UI 提示）
     difyHasApiKey.value = res.dify_has_api_key || false
@@ -165,13 +172,19 @@ async function loadDifyConfig() {
 async function saveDifyConfig() {
   loading.value = true
   try {
-    // 构建保存对象，空敏感字段不发送（避免覆盖已保存的值）
+    // 构建保存对象，敏感字段 skip 条件：
+    //   1) 空字符串 → 未填/清空，但 skip 避免覆盖
+    //   2) 等于 savedDifyKeyPreview / savedN8nSecretPreview → 用户未改动，skip（保留原值）
     const payload = { ...difyConfig.value }
-    if (!payload.dify_api_key) delete payload.dify_api_key
-    if (!payload.n8n_webhook_secret) delete payload.n8n_webhook_secret
+    if (!payload.dify_api_key || payload.dify_api_key === savedDifyKeyPreview.value) {
+      delete payload.dify_api_key
+    }
+    if (!payload.n8n_webhook_secret || payload.n8n_webhook_secret === savedN8nSecretPreview.value) {
+      delete payload.n8n_webhook_secret
+    }
     await api.aiUpdateConfig(payload)
     showToast('success', 'Dify/N8N 配置已保存')
-    await loadDifyConfig()  // 保存后重新加载，刷新 has_api_key 标记
+    await loadDifyConfig()  // 保存后重新加载，刷新预览值和标记
   } catch (e) {
     showToast('error', '保存失败：' + (e.message || '未知错误'))
   } finally {
@@ -184,11 +197,17 @@ async function testDifyConnection() {
     showToast('error', '请先填写 Dify 服务地址')
     return
   }
+  // 如果输入的 API Key 等于掩码预览值（用户未改动），提示先填新 Key 才能测试
+  let apiKey = difyConfig.value.dify_api_key
+  if (apiKey && savedDifyKeyPreview.value && apiKey === savedDifyKeyPreview.value) {
+    showToast('warn', 'API Key 已显示为脱敏值，如需验证连接请重新输入完整 Key')
+    return
+  }
   testingDify.value = true
   try {
     const result = await api.aiTestConnection('dify', {
       base_url: difyConfig.value.dify_base_url,
-      api_key: difyConfig.value.dify_api_key,
+      api_key: apiKey,
     })
     if (result.success) {
       showToast('success', result.message || 'Dify 连接成功')
@@ -520,6 +539,8 @@ const machineDifyConfigs = ref([])
 const machineDifyFormVisible = ref(false)
 const machineDifyEditingId = ref(null)
 const testingMachineDify = ref(false)
+// 记录编辑表单加载时的 API Key 掩码预览值，保存时若未改动则 skip 发送
+const savedMachineKeyPreview = ref('')
 const machineDifyForm = ref({
   config_name: '',
   model_id: '',
@@ -540,15 +561,18 @@ async function loadMachineDifyConfigs() {
 function openMachineDifyForm(cfg = null) {
   if (cfg) {
     machineDifyEditingId.value = cfg.id
+    // 编辑时：后端列表返回的是掩码预览值，直接填回表单，用户能看到"有值"
+    savedMachineKeyPreview.value = cfg.dify_api_key || ''
     machineDifyForm.value = {
       config_name: cfg.config_name,
       model_id: cfg.model_id,
       dify_base_url: cfg.dify_base_url,
-      dify_api_key: '',
+      dify_api_key: cfg.dify_api_key || '',  // 掩码预览
       is_active: cfg.is_active,
     }
   } else {
     machineDifyEditingId.value = null
+    savedMachineKeyPreview.value = ''
     machineDifyForm.value = {
       config_name: '',
       model_id: '',
@@ -561,7 +585,7 @@ function openMachineDifyForm(cfg = null) {
 }
 
 async function saveMachineDifyConfig() {
-  const f = machineDifyForm.value
+  const f = { ...machineDifyForm.value }
   if (!f.config_name.trim()) {
     showToast('error', '请填写配置名称')
     return
@@ -569,6 +593,18 @@ async function saveMachineDifyConfig() {
   if (!f.model_id.trim()) {
     showToast('error', '请填写关联机型')
     return
+  }
+  // 编辑模式：API Key 为空或等于掩码预览值，说明用户没改 → 不发送避免覆盖
+  if (machineDifyEditingId.value) {
+    if (!f.dify_api_key || (savedMachineKeyPreview.value && f.dify_api_key === savedMachineKeyPreview.value)) {
+      delete f.dify_api_key
+    }
+  } else {
+    // 新增模式：必填 API Key
+    if (!f.dify_api_key) {
+      showToast('error', '请填写 Dify API Key')
+      return
+    }
   }
   try {
     if (machineDifyEditingId.value) {
@@ -600,6 +636,11 @@ async function testMachineDifyConnection() {
   const f = machineDifyForm.value
   if (!f.dify_base_url) {
     showToast('error', '请先填写 Dify 服务地址')
+    return
+  }
+  // API Key 等于掩码预览值 → 提示输入完整 Key
+  if (savedMachineKeyPreview.value && f.dify_api_key === savedMachineKeyPreview.value) {
+    showToast('warn', 'API Key 已显示为脱敏值，如需验证连接请重新输入完整 Key')
     return
   }
   testingMachineDify.value = true
@@ -771,8 +812,13 @@ function onTabChange(tab) {
               <div class="hint" style="margin-top: 4px; font-size: 12px; color: #888;">Dify 实例地址，无需带 <code>/v1</code>，后端自动拼接 <code>/v1/chat-messages</code>。</div>
             </div>
             <div class="form-row">
-              <label>Dify API Key</label>
-              <input v-model="machineDifyForm.dify_api_key" placeholder="app-xxxxxxxx" class="form-input" type="password" />
+              <label>Dify API Key{{ machineDifyEditingId ? '（编辑时留空则不修改）' : '*' }}</label>
+              <input v-model="machineDifyForm.dify_api_key"
+                :placeholder="machineDifyEditingId ? '已保存，留空不修改' : 'app-xxxxxxxx'"
+                class="form-input" type="password" />
+              <div v-if="machineDifyEditingId" class="hint" style="margin-top: 4px; font-size: 12px; color: #888;">
+                当前已显示为脱敏值，直接保存不会覆盖；若需修改请输入新的完整 Key。
+              </div>
             </div>
             <div class="form-row">
               <label>

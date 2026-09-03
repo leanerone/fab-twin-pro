@@ -221,7 +221,17 @@ class AIMiddleware:
                 if "n8n_webhook_secret" in config_map and config_map["n8n_webhook_secret"]:
                     self.n8n_webhook_secret = config_map["n8n_webhook_secret"]
 
-                print(f"[AI] Dify/N8N配置加载成功")
+                # 加载诊断日志：用于排查"保存后重新进入为空"问题
+                _dk = "已设置(" + str(len(self.dify_api_key or "")) + "位)" if self.dify_api_key else "空"
+                _nk = "已设置" if self.n8n_webhook_secret else "空"
+                print(f"[AI] Dify/N8N配置加载成功: "
+                      f"dify_enabled={self.dify_enabled}, "
+                      f"dify_base_url={self.dify_base_url!r}, "
+                      f"dify_api_key={_dk}, "
+                      f"dify_app_id={self.dify_app_id!r}, "
+                      f"n8n_enabled={self.n8n_enabled}, "
+                      f"n8n_base_url={self.n8n_base_url!r}, "
+                      f"n8n_webhook_secret={_nk}")
             finally:
                 db.close()
         except Exception as e:
@@ -1397,7 +1407,9 @@ Lot ID 格式说明：
             max_tokens = int(self.max_tokens) if self.max_tokens is not None else 0
         except (TypeError, ValueError):
             max_tokens = 0
+        dify_api_key_preview = self._mask_key(self.dify_api_key) if self.dify_api_key else ""
         dify_app_id_masked = self._mask_key(self.dify_api_key) if self.dify_api_key else ""
+        n8n_secret_preview = self._mask_key(self.n8n_webhook_secret) if self.n8n_webhook_secret else ""
         return {
             "provider": self.provider or "local",
             "provider_name": self.provider_name or self._infer_provider_name() or "",
@@ -1410,12 +1422,14 @@ Lot ID 格式说明：
             "dify_base_url": self.dify_base_url or "",
             "dify_base_url_masked": self._mask_url(self.dify_base_url) or "",
             "dify_has_api_key": bool(self.dify_api_key),
+            "dify_api_key_preview": dify_api_key_preview,
             "dify_app_id": self.dify_app_id or "",
             "dify_app_id_masked": dify_app_id_masked,
             "n8n_enabled": bool(self.n8n_enabled),
             "n8n_base_url": self.n8n_base_url or "",
             "n8n_base_url_masked": self._mask_url(self.n8n_base_url) or "",
             "n8n_has_webhook_secret": bool(self.n8n_webhook_secret),
+            "n8n_webhook_secret_preview": n8n_secret_preview,
         }
 
     def update_config(self, config: Dict[str, Any]) -> bool:
