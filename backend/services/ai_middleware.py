@@ -1094,10 +1094,23 @@ Lot ID 格式说明：
                                 "elapsed": s.get("elapsed_time") or s.get("execution_time"),
                             })
 
+            # 从 Dify answer 中提取跳转标记（与 OpenAI 兼容模式格式一致）
+            jump_ts = None
+            jump_mid = None
+            jump_match = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
+            if jump_match:
+                jump_ts = jump_match.group(1).strip()
+                answer = re.sub(r'\[JUMP:\s*[^\]]+\]', '', answer).strip()
+            mid_match = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
+            if mid_match:
+                jump_mid = mid_match.group(1).strip()
+                answer = re.sub(r'\[MACHINE:\s*[^\]]+\]', '', answer).strip()
+
             return {
                 "answer": answer,
                 "sql": "",
-                "jump_timestamp": None,
+                "jump_timestamp": jump_ts,
+                "jump_machine_id": jump_mid or machine_id,
                 "table_data": None,
                 "sources": sources,
                 "conversation_id": conversation_id,
