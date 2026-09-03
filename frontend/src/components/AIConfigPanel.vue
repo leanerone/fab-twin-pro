@@ -505,15 +505,99 @@ const toolCallsParsed = computed(() => {
   return []
 })
 
+// ========== 机台专属 Dify 配置 ==========
+const machineDifyConfigs = ref([])
+const machineDifyFormVisible = ref(false)
+const machineDifyEditingId = ref(null)
+const machineDifyForm = ref({
+  config_name: '',
+  model_id: '',
+  dify_base_url: '',
+  dify_api_key: '',
+  is_active: 1,
+})
+
+async function loadMachineDifyConfigs() {
+  try {
+    const res = await api.aiGetMachineDifyConfigs()
+    machineDifyConfigs.value = res
+  } catch (e) {
+    showToast('error', '加载机台专属Dify配置失败: ' + (e.message || e))
+  }
+}
+
+function openMachineDifyForm(cfg = null) {
+  if (cfg) {
+    machineDifyEditingId.value = cfg.id
+    machineDifyForm.value = {
+      config_name: cfg.config_name,
+      model_id: cfg.model_id,
+      dify_base_url: cfg.dify_base_url,
+      dify_api_key: '',
+      is_active: cfg.is_active,
+    }
+  } else {
+    machineDifyEditingId.value = null
+    machineDifyForm.value = {
+      config_name: '',
+      model_id: '',
+      dify_base_url: '',
+      dify_api_key: '',
+      is_active: 1,
+    }
+  }
+  machineDifyFormVisible.value = true
+}
+
+async function saveMachineDifyConfig() {
+  const f = machineDifyForm.value
+  if (!f.config_name.trim()) {
+    showToast('error', '请填写配置名称')
+    return
+  }
+  if (!f.model_id.trim()) {
+    showToast('error', '请填写关联机型')
+    return
+  }
+  try {
+    if (machineDifyEditingId.value) {
+      await api.aiUpdateMachineDifyConfig(machineDifyEditingId.value, f)
+      showToast('success', '配置已更新')
+    } else {
+      await api.aiCreateMachineDifyConfig(f)
+      showToast('success', '配置已创建')
+    }
+    machineDifyFormVisible.value = false
+    await loadMachineDifyConfigs()
+  } catch (e) {
+    showToast('error', '保存失败: ' + (e.message || e))
+  }
+}
+
+async function deleteMachineDifyConfig(cfg) {
+  if (!confirm(`确认删除配置「${cfg.config_name}」？`)) return
+  try {
+    await api.aiDeleteMachineDifyConfig(cfg.id)
+    showToast('success', '配置已删除')
+    await loadMachineDifyConfigs()
+  } catch (e) {
+    showToast('error', '删除失败: ' + (e.message || e))
+  }
+}
+
 onMounted(() => {
   loadConfigs()
   loadUsage()
   loadDifyConfig()
   loadMcpConfig()
+  loadMachineDifyConfigs()
 })
 
 function onTabChange(tab) {
   activeTab.value = tab
+  if (tab === 'machine-dify') {
+    loadMachineDifyConfigs()
+  }
   if (tab === 'dify' && !difyConfig.value.dify_base_url && !difyConfig.value.n8n_base_url) {
     loadDifyConfig()
   }
@@ -545,6 +629,7 @@ function onTabChange(tab) {
     <div class="tab-nav">
       <div v-for="tab in [
         { name: 'configs', label: '模型配置' },
+        { name: 'machine-dify', label: '机台专属Dify' },
         { name: 'dify', label: 'Dify/N8N' },
         { name: 'usage', label: '使用统计' },
         { name: 'logs', label: '使用日志' },
@@ -595,6 +680,74 @@ function onTabChange(tab) {
 
           <div v-if="configs.length === 0" class="empty">
             暂无AI配置，点击"添加配置"创建第一个配置
+          </div>
+        </div>
+      </div>
+
+      <!-- 机台专属 Dify 配置 -->
+      <div v-show="activeTab === 'machine-dify'" class="tab-pane">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="btn btn-primary" @click="openMachineDifyForm()">+ 新增配置</button>
+            <button class="btn btn-ghost" @click="loadMachineDifyConfigs">刷新</button>
+          </div>
+          <span class="hint-text">为不同机型配置专属 Dify App，机台详情页 AI 自动使用</span>
+        </div>
+
+        <div class="config-list" v-if="machineDifyConfigs.length">
+          <div v-for="cfg in machineDifyConfigs" :key="cfg.id" class="config-card">
+            <div class="card-header">
+              <div class="cfg-name">
+                <span class="badge" :class="cfg.is_active ? 'default' : ''">{{ cfg.is_active ? '启用' : '禁用' }}</span>
+                {{ cfg.config_name }}
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-sm btn-ghost" @click="openMachineDifyForm(cfg)">编辑</button>
+                <button class="btn btn-sm btn-danger" @click="deleteMachineDifyConfig(cfg)">删除</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="cfg-detail"><span class="label">关联机型:</span> {{ cfg.model_id }}</div>
+              <div class="cfg-detail"><span class="label">Dify地址:</span> {{ cfg.dify_base_url || '(未配置)' }}</div>
+              <div class="cfg-detail"><span class="label">API Key:</span> {{ cfg.dify_api_key || '(未配置)' }}</div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          <p>暂无机台专属 Dify 配置</p>
+          <p class="hint-text">点击"新增配置"为机型绑定独立的 Dify App</p>
+        </div>
+
+        <!-- 机台专属 Dify 编辑表单 -->
+        <div v-if="machineDifyFormVisible" class="overlay" @click.self="machineDifyFormVisible = false">
+          <div class="form-card">
+            <h3>{{ machineDifyEditingId ? '编辑配置' : '新增配置' }}</h3>
+            <div class="form-row">
+              <label>配置名称</label>
+              <input v-model="machineDifyForm.config_name" placeholder="如：OXE助手" class="form-input" />
+            </div>
+            <div class="form-row">
+              <label>关联机型</label>
+              <input v-model="machineDifyForm.model_id" placeholder="如：OXE、VPO、PODOPENER" class="form-input" />
+            </div>
+            <div class="form-row">
+              <label>Dify 服务地址</label>
+              <input v-model="machineDifyForm.dify_base_url" placeholder="http://dify地址:8088/v1" class="form-input" />
+            </div>
+            <div class="form-row">
+              <label>Dify API Key</label>
+              <input v-model="machineDifyForm.dify_api_key" placeholder="app-xxxxxxxx" class="form-input" type="password" />
+            </div>
+            <div class="form-row">
+              <label>
+                <input type="checkbox" v-model="machineDifyForm.is_active" :true-value="1" :false-value="0" />
+                启用此配置
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" @click="saveMachineDifyConfig">保存</button>
+              <button class="btn btn-ghost" @click="machineDifyFormVisible = false">取消</button>
+            </div>
           </div>
         </div>
       </div>

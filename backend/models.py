@@ -473,3 +473,19 @@ class AIUsageLog(Base):
     error_msg = Column(Text, nullable=True)               # 错误信息（详细）
     tool_calls = Column(Text, nullable=True)              # 工具调用记录（JSON）
     execution_log = Column(Text, nullable=True)           # 执行日志（JSON，包含各步骤详情）
+
+
+class MachineDifyConfig(Base):
+    """机台专属 Dify 配置：每个机型可绑定独立的 Dify App
+    用于机台详情页 AI 助手自动路由到对应 Dify 应用
+    """
+    __tablename__ = "machine_dify_configs"
+
+    id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    config_name = Column(String(100), nullable=False)    # 配置名称（可重命名）
+    model_id = Column(String(255), nullable=False)       # 关联机型ID（如 OXE, VPO, PODOPENER）
+    dify_base_url = Column(String(500), default="")      # Dify API 地址
+    dify_api_key = Column(String(200), default="")       # Dify App API Key
+    is_active = Column(Integer, default=1)                # 是否启用：1=启用，0=禁用
+    created_at = Column(String(255))
+    updated_at = Column(String(255))

@@ -207,6 +207,68 @@ class AIMiddleware:
         except Exception as e:
             print(f"[AI] Dify/N8N配置加载失败，使用环境变量默认值: {e}")
 
+    def _get_machine_dify_config(self, machine_id):
+        """按机台ID查专属 Dify 配置
+
+        查找逻辑：
+        1. 查 machines 表获取 machine.model（机型名称）
+        2. 按 model 在 machine_dify_configs 表中查 is_active=1 的配置
+        3. machine.model 为空时，用机台ID前缀推断（如 OXE-01 → OXE）
+        """
+        try:
+            db = _get_db()
+            try:
+                from models import Machine, MachineDifyConfig
+
+                # 1. 查机台型号
+                machine = db.query(Machine).filter(Machine.id == machine_id).first()
+                model_id = None
+                if machine and machine.model:
+                    model_id = machine.model.strip().upper()
+                else:
+                    # 用机台ID前缀推断（取第一个 - 前的部分）
+                    mid = str(machine_id or "").strip().upper()
+                    if "-" in mid:
+                        model_id = mid.split("-")[0]
+                    else:
+                        model_id = mid
+
+                if not model_id:
+                    return None
+
+                # 2. 查专属 Dify 配置（精确匹配 + 模糊匹配）
+                # 先精确匹配
+                row = db.query(MachineDifyConfig).filter(
+                    MachineDifyConfig.model_id == model_id,
+                    MachineDifyConfig.is_active == 1
+                ).first()
+
+                # 精确没命中，用 LIKE 模糊匹配（如 OXE 匹配 OXE-01A 等）
+                if not row:
+                    row = db.query(MachineDifyConfig).filter(
+                        MachineDifyConfig.model_id.like(f"{model_id}%"),
+                        MachineDifyConfig.is_active == 1
+                    ).first()
+
+                if row:
+                    return {
+                        "id": row.id,
+                        "config_name": row.config_name,
+                        "model_id": row.model_id,
+                        "dify_base_url": row.dify_base_url,
+                        "dify_api_key": row.dify_api_key,
+                    }
+                return None
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 查机台专属 Dify 配置失败: {e}")
+            return None
+
+    def _load_default_config(self):
+        """加载默认 LLM 配置（无 config_id 时）"""
+        self._load_llm_config()
+
     def _load_llm_config(self, config_id: int = None):
         """从 ai_provider_configs 加载LLM配置
 
@@ -375,6 +437,22 @@ class AIMiddleware:
         # 如有指定config_id，切换到对应配置
         if config_id and config_id != self.current_config_id:
             self._load_llm_config(config_id)
+
+        # 机台专属 Dify 路由：未指定 config_id 时，按机台型号查专属 Dify 配置
+        if not config_id and machine_id:
+            machine_dify = self._get_machine_dify_config(machine_id)
+            if machine_dify:
+                self.provider = "dify"
+                self.dify_base_url = machine_dify.get("dify_base_url", "")
+                self.dify_api_key = machine_dify.get("dify_api_key", "")
+                self.model = f"dify-{machine_dify.get('config_name', '')}"
+                self.provider_name = machine_dify.get("config_name", "Dify")
+                self.current_config_id = None  # 机台专属配置不走 provider_configs 表
+                print(f"[AI] 机台 {machine_id} 命中专属 Dify: {machine_dify.get('config_name')}")
+            else:
+                # 没有专属配置，确保用默认配置
+                if not self.current_config_id:
+                    self._load_default_config()
 
         # 获取或创建会话
         if session_id not in self.sessions:

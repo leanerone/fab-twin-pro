@@ -88,6 +88,11 @@ export const api = {
   aiSetDefaultModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/default`),
   aiToggleModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/toggle`),
   aiSwitchModelConfig: (id) => request('POST', `/ai/model-configs/switch?config_id=${id}`),
+  // 机台专属 Dify 配置管理
+  aiGetMachineDifyConfigs: () => request('GET', '/ai/machine-dify'),
+  aiCreateMachineDifyConfig: (data) => request('POST', '/ai/machine-dify', data),
+  aiUpdateMachineDifyConfig: (id, data) => request('PUT', `/ai/machine-dify/${id}`, data),
+  aiDeleteMachineDifyConfig: (id) => request('DELETE', `/ai/machine-dify/${id}`),
   // AI 使用量统计
   aiGetUsageStats: (days = 30) => request('GET', `/ai/usage/stats?days=${days}`),
   aiGetUsageLogs: (params = {}) => {

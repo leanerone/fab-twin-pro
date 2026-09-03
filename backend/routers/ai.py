@@ -392,3 +392,88 @@ def speech_status():
         "model_size": speech_service._model_size,
         "device": speech_service._device,
     }
+
+
+# ========== 机台专属 Dify 配置管理 ==========
+
+@router.get("/machine-dify")
+def list_machine_dify_configs(db: Session = Depends(get_db)):
+    """获取所有机台专属 Dify 配置"""
+    from models import MachineDifyConfig
+    rows = db.query(MachineDifyConfig).order_by(MachineDifyConfig.id).all()
+    return [
+        {
+            "id": r.id,
+            "config_name": r.config_name,
+            "model_id": r.model_id,
+            "dify_base_url": r.dify_base_url,
+            "dify_api_key": r.dify_api_key[:8] + "****" if r.dify_api_key else "",
+            "is_active": r.is_active,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/machine-dify")
+def create_machine_dify_config(body: dict, db: Session = Depends(get_db)):
+    """新增机台专属 Dify 配置"""
+    from models import MachineDifyConfig
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    row = MachineDifyConfig(
+        config_name=body.get("config_name", ""),
+        model_id=body.get("model_id", ""),
+        dify_base_url=body.get("dify_base_url", ""),
+        dify_api_key=body.get("dify_api_key", ""),
+        is_active=body.get("is_active", 1),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "config_name": row.config_name,
+        "model_id": row.model_id,
+        "dify_base_url": row.dify_base_url,
+        "is_active": row.is_active,
+        "created_at": row.created_at,
+    }
+
+
+@router.put("/machine-dify/{config_id}")
+def update_machine_dify_config(config_id: int, body: dict, db: Session = Depends(get_db)):
+    """修改机台专属 Dify 配置（含重命名）"""
+    from models import MachineDifyConfig
+    from datetime import datetime
+    row = db.query(MachineDifyConfig).filter(MachineDifyConfig.id == config_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    if "config_name" in body:
+        row.config_name = body["config_name"]
+    if "model_id" in body:
+        row.model_id = body["model_id"]
+    if "dify_base_url" in body:
+        row.dify_base_url = body["dify_base_url"]
+    if "dify_api_key" in body and body["dify_api_key"]:
+        row.dify_api_key = body["dify_api_key"]
+    if "is_active" in body:
+        row.is_active = body["is_active"]
+    row.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.commit()
+    return {"id": row.id, "config_name": row.config_name, "updated_at": row.updated_at}
+
+
+@router.delete("/machine-dify/{config_id}")
+def delete_machine_dify_config(config_id: int, db: Session = Depends(get_db)):
+    """删除机台专属 Dify 配置"""
+    from models import MachineDifyConfig
+    row = db.query(MachineDifyConfig).filter(MachineDifyConfig.id == config_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    db.delete(row)
+    db.commit()
+    return {"status": "success", "message": f"配置 {config_id} 已删除"}
