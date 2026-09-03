@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 // 简化版 auth store - 独立开发版不需要真实登录
 export const useAuthStore = defineStore('auth', () => {
@@ -9,5 +9,15 @@ export const useAuthStore = defineStore('auth', () => {
     permissions: ['model_edit', 'user_manage', 'ai_config'],
   })
 
-  return { user }
+  const isAdmin = computed(() => user.value.role === 'admin')
+
+  function hasPermission(perm) {
+    return user.value.permissions.includes(perm)
+  }
+
+  function hasRole(role) {
+    return user.value.role === role
+  }
+
+  return { user, isAdmin, hasPermission, hasRole }
 })
