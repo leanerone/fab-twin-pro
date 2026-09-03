@@ -1384,10 +1384,15 @@ Lot ID 格式说明：
             "temperature": temperature,
             "max_tokens": max_tokens,
             "dify_enabled": bool(self.dify_enabled),
+            "dify_base_url": self.dify_base_url or "",
             "dify_base_url_masked": self._mask_url(self.dify_base_url) or "",
+            "dify_has_api_key": bool(self.dify_api_key),
+            "dify_app_id": self.dify_app_id or "",
             "dify_app_id_masked": dify_app_id_masked,
             "n8n_enabled": bool(self.n8n_enabled),
+            "n8n_base_url": self.n8n_base_url or "",
             "n8n_base_url_masked": self._mask_url(self.n8n_base_url) or "",
+            "n8n_has_webhook_secret": bool(self.n8n_webhook_secret),
         }
 
     def update_config(self, config: Dict[str, Any]) -> bool:

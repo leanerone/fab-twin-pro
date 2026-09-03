@@ -52,6 +52,8 @@ const difyConfig = ref({
 })
 const testingDify = ref(false)
 const testingN8n = ref(false)
+const difyHasApiKey = ref(false)  // 标记后端是否已保存 API Key
+const n8nHasSecret = ref(false)    // 标记后端是否已保存 Webhook Secret
 
 // MCP Server (N8N) 配置
 const mcpConfig = ref({
@@ -146,12 +148,15 @@ async function loadDifyConfig() {
     difyConfig.value = {
       dify_enabled: res.dify_enabled || false,
       dify_base_url: res.dify_base_url || '',
-      dify_api_key: res.dify_api_key || '',
+      dify_api_key: '',  // API Key 不回显，用 dify_has_api_key 标记
       dify_app_id: res.dify_app_id || '',
       n8n_enabled: res.n8n_enabled || false,
       n8n_base_url: res.n8n_base_url || '',
-      n8n_webhook_secret: res.n8n_webhook_secret || '',
+      n8n_webhook_secret: '',  // Webhook Secret 不回显
     }
+    // 记录是否有已保存的 API Key / Secret（用于 UI 提示）
+    difyHasApiKey.value = res.dify_has_api_key || false
+    n8nHasSecret.value = res.n8n_has_webhook_secret || false
   } catch (e) {
     console.error('加载Dify/N8N配置失败', e)
   }
@@ -160,8 +165,13 @@ async function loadDifyConfig() {
 async function saveDifyConfig() {
   loading.value = true
   try {
-    await api.aiUpdateConfig(difyConfig.value)
+    // 构建保存对象，空敏感字段不发送（避免覆盖已保存的值）
+    const payload = { ...difyConfig.value }
+    if (!payload.dify_api_key) delete payload.dify_api_key
+    if (!payload.n8n_webhook_secret) delete payload.n8n_webhook_secret
+    await api.aiUpdateConfig(payload)
     showToast('success', 'Dify/N8N 配置已保存')
+    await loadDifyConfig()  // 保存后重新加载，刷新 has_api_key 标记
   } catch (e) {
     showToast('error', '保存失败：' + (e.message || '未知错误'))
   } finally {
@@ -772,9 +782,9 @@ function onTabChange(tab) {
             <div class="hint">Dify 实例地址；后端自动拼接 <code>/v1/chat-messages</code> 调用，无需带 <code>/v1</code>。</div>
           </div>
           <div class="form-group">
-            <label>Dify API Key *</label>
-            <input v-model="difyConfig.dify_api_key" type="password" class="form-input" placeholder="如：app-xxxxxxxxxxxxxxxx" />
-            <div class="hint">在 Dify 应用 →「访问 API」（或「发布」→「API 访问」）页面创建的密钥，格式 <code>app-xxx</code>。这是 Dify 鉴权凭据，必填。</div>
+            <label>Dify API Key {{ difyHasApiKey ? '（已保存，留空不修改）' : '*' }}</label>
+            <input v-model="difyConfig.dify_api_key" type="password" class="form-input" :placeholder="difyHasApiKey ? '已保存，留空不修改' : '如：app-xxxxxxxxxxxxxxxx'" />
+            <div class="hint">在 Dify 应用 →「访问 API」（或「发布」→「API 访问」）页面创建的密钥，格式 <code>app-xxx</code>。{{ difyHasApiKey ? '已保存，留空保存不会覆盖。' : '这是 Dify 鉴权凭据，必填。' }}</div>
           </div>
           <div class="form-group">
             <label>Dify App ID（可选）</label>
@@ -807,8 +817,8 @@ function onTabChange(tab) {
             <input v-model="difyConfig.n8n_base_url" class="form-input" placeholder="如：http://localhost:5678" />
           </div>
           <div class="form-group">
-            <label>Webhook Secret（可选）</label>
-            <input v-model="difyConfig.n8n_webhook_secret" type="password" class="form-input" placeholder="N8N Webhook 验证密钥" />
+            <label>Webhook Secret {{ n8nHasSecret ? '（已保存，留空不修改）' : '（可选）' }}</label>
+            <input v-model="difyConfig.n8n_webhook_secret" type="password" class="form-input" :placeholder="n8nHasSecret ? '已保存，留空不修改' : 'N8N Webhook 验证密钥'" />
           </div>
           <div class="form-actions">
             <button class="btn btn-ghost" :disabled="testingN8n" @click="testN8nConnection">

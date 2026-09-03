@@ -422,26 +422,41 @@ def create_machine_dify_config(body: dict, db: Session = Depends(get_db)):
     from models import MachineDifyConfig
     from datetime import datetime
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    row = MachineDifyConfig(
-        config_name=body.get("config_name", ""),
-        model_id=body.get("model_id", ""),
-        dify_base_url=body.get("dify_base_url", ""),
-        dify_api_key=body.get("dify_api_key", ""),
-        is_active=body.get("is_active", 1),
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {
-        "id": row.id,
-        "config_name": row.config_name,
-        "model_id": row.model_id,
-        "dify_base_url": row.dify_base_url,
-        "is_active": row.is_active,
-        "created_at": row.created_at,
-    }
+    try:
+        row = MachineDifyConfig(
+            config_name=body.get("config_name", ""),
+            model_id=body.get("model_id", ""),
+            dify_base_url=body.get("dify_base_url", ""),
+            dify_api_key=body.get("dify_api_key", ""),
+            is_active=body.get("is_active", 1),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return {
+            "id": row.id,
+            "config_name": row.config_name,
+            "model_id": row.model_id,
+            "dify_base_url": row.dify_base_url,
+            "is_active": row.is_active,
+            "created_at": row.created_at,
+        }
+    except Exception as e:
+        db.rollback()
+        err_msg = str(e).lower()
+        if "table" in err_msg and "does not exist" in err_msg:
+            raise HTTPException(
+                status_code=500,
+                detail="MACHINE_DIFY_CONFIGS 表不存在，请执行 sql/create_ai_tables.sql 中的建表语句"
+            )
+        if "sequence" in err_msg or "trigger" in err_msg:
+            raise HTTPException(
+                status_code=500,
+                detail="序列或触发器不存在，请执行 sql/create_ai_tables.sql 中的 SEQ_MACHINE_DIFY_CONFIGS 和 TRG_MACHINE_DIFY_CONFIGS_ID"
+            )
+        raise HTTPException(status_code=500, detail=f"新增失败: {str(e)}")
 
 
 @router.put("/machine-dify/{config_id}")
@@ -449,22 +464,28 @@ def update_machine_dify_config(config_id: int, body: dict, db: Session = Depends
     """修改机台专属 Dify 配置（含重命名）"""
     from models import MachineDifyConfig
     from datetime import datetime
-    row = db.query(MachineDifyConfig).filter(MachineDifyConfig.id == config_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="配置不存在")
-    if "config_name" in body:
-        row.config_name = body["config_name"]
-    if "model_id" in body:
-        row.model_id = body["model_id"]
-    if "dify_base_url" in body:
-        row.dify_base_url = body["dify_base_url"]
-    if "dify_api_key" in body and body["dify_api_key"]:
-        row.dify_api_key = body["dify_api_key"]
-    if "is_active" in body:
-        row.is_active = body["is_active"]
-    row.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    db.commit()
-    return {"id": row.id, "config_name": row.config_name, "updated_at": row.updated_at}
+    try:
+        row = db.query(MachineDifyConfig).filter(MachineDifyConfig.id == config_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="配置不存在")
+        if "config_name" in body:
+            row.config_name = body["config_name"]
+        if "model_id" in body:
+            row.model_id = body["model_id"]
+        if "dify_base_url" in body:
+            row.dify_base_url = body["dify_base_url"]
+        if "dify_api_key" in body and body["dify_api_key"]:
+            row.dify_api_key = body["dify_api_key"]
+        if "is_active" in body:
+            row.is_active = body["is_active"]
+        row.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.commit()
+        return {"id": row.id, "config_name": row.config_name, "updated_at": row.updated_at}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"修改失败: {str(e)}")
 
 
 @router.delete("/machine-dify/{config_id}")
