@@ -197,11 +197,10 @@ async function testDifyConnection() {
     showToast('error', '请先填写 Dify 服务地址')
     return
   }
-  // 如果输入的 API Key 等于掩码预览值（用户未改动），提示先填新 Key 才能测试
+  // 如果输入等于掩码预览值（用户未改动），传空让后端回退用已保存Key测试
   let apiKey = difyConfig.value.dify_api_key
-  if (apiKey && savedDifyKeyPreview.value && apiKey === savedDifyKeyPreview.value) {
-    showToast('warn', 'API Key 已显示为脱敏值，如需验证连接请重新输入完整 Key')
-    return
+  if (savedDifyKeyPreview.value && apiKey === savedDifyKeyPreview.value) {
+    apiKey = ''
   }
   testingDify.value = true
   try {
@@ -638,16 +637,17 @@ async function testMachineDifyConnection() {
     showToast('error', '请先填写 Dify 服务地址')
     return
   }
-  // API Key 等于掩码预览值 → 提示输入完整 Key
-  if (savedMachineKeyPreview.value && f.dify_api_key === savedMachineKeyPreview.value) {
-    showToast('warn', 'API Key 已显示为脱敏值，如需验证连接请重新输入完整 Key')
-    return
+  // 机台专属 Dify：编辑模式下API Key是掩码预览值，无法用预览值鉴权测试
+  // 统一逻辑：等于掩码预览值 → 传空，后端若有全局已保存Key回退可用则测成功，否则提示填Key
+  let apiKey = f.dify_api_key
+  if (savedMachineKeyPreview.value && apiKey === savedMachineKeyPreview.value) {
+    apiKey = ''
   }
   testingMachineDify.value = true
   try {
     const result = await api.aiTestConnection('dify', {
       base_url: f.dify_base_url,
-      api_key: f.dify_api_key,
+      api_key: apiKey,
     })
     if (result.success) {
       showToast('success', result.message || 'Dify 连接成功')

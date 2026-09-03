@@ -1524,7 +1524,18 @@ Lot ID 格式说明：
                 base = (config.get('base_url', '') or '').rstrip('/')
                 if not base:
                     return {"success": False, "message": "Dify 地址不能为空"}
-                headers = {"Authorization": f"Bearer {config.get('api_key', '')}"}
+                # 如果请求没带 api_key（空字符串/None）或带了掩码预览值（含****），
+                # 回退到已保存的 dify_api_key，允许用户不重新输入就能验证连通
+                api_key = config.get('api_key', '') or ''
+                used_saved = False
+                if (not api_key) or ('****' in api_key):
+                    if self.dify_api_key:
+                        api_key = self.dify_api_key
+                        used_saved = True
+                    else:
+                        return {"success": False, "message": "Dify API Key 未配置，请先保存或在测试时输入完整 Key"}
+                headers = {"Authorization": f"Bearer {api_key}"}
+                using_msg = "（使用已保存Key）" if used_saved else ""
                 # 1. 优先用 /v1/info（兼容性最好的健康检查端点，返回应用基本信息）
                 for suffix, method in [
                     ("/v1/info", "GET"),
@@ -1536,7 +1547,7 @@ Lot ID 格式说明：
                         if resp.status_code == 200:
                             data = resp.json() or {}
                             app_name = data.get("app", {}).get("name") if isinstance(data.get("app"), dict) else data.get("name")
-                            msg = "Dify 连接成功"
+                            msg = "Dify 连接成功" + using_msg
                             if app_name:
                                 msg += f"，应用：{app_name}"
                             # 额外探测知识库列表（用于确认 RAG 功能就绪）
@@ -1572,7 +1583,7 @@ Lot ID 格式说明：
                     if resp.status_code == 200:
                         d = resp.json()
                         a = (d.get("answer") or "")[:60]
-                        return {"success": True, "message": f"Dify 连接成功（对话验证），回复：{a}"}
+                        return {"success": True, "message": f"Dify 连接成功（对话验证）{using_msg}，回复：{a}"}
                     return {"success": False, "message": f"Dify连接失败: HTTP {resp.status_code} - {resp.text[:200]}"}
                 except Exception as e2:
                     return {"success": False, "message": f"Dify连接失败: {str(e2)}"}
