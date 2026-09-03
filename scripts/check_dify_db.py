@@ -215,13 +215,26 @@ def main():
             print(f"    {'CONFIG_KEY':25} {'VALUE':50} {'UPDATED_AT':25} {'BY'}")
             print(f"    {'-'*25} {'-'*50} {'-'*25} {'-'*10}")
             for r in rows:
-                val = (r[1] or '')
+                # CONFIG_VALUE 是 CLOB，需要 .read() 转字符串
+                val = r[1]
+                if hasattr(val, 'read'):
+                    val = val.read()
+                val = (val or '') if isinstance(val, str) else str(val)
+                desc = r[2]
+                if hasattr(desc, 'read'):
+                    desc = desc.read()
+                updated_at = r[3]
+                if hasattr(updated_at, 'read'):
+                    updated_at = updated_at.read()
+                updated_by = r[4]
+                if hasattr(updated_by, 'read'):
+                    updated_by = updated_by.read()
                 # API Key 只显示前8位+****
                 if 'api_key' in r[0].lower() or 'secret' in r[0].lower() or 'token' in r[0].lower():
                     val = (val[:8] + '****') if val else '(空)'
-                print(f"    {r[0]:25} {val:50} {(r[3] or '')[:25]:25} {r[4] or ''}")
-                if r[2]:
-                    print(f"      └─ 说明: {r[2]}")
+                print(f"    {r[0]:25} {val:50} {(updated_at or '')[:25]:25} {updated_by or ''}")
+                if desc:
+                    print(f"      └─ 说明: {desc}")
 
     # ================================================================
     # 检查 2: AI_CONFIGS 序列 + 触发器
