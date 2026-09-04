@@ -1135,18 +1135,81 @@ Lot ID 格式说明：
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.dify_api_key}",
             }
+            # ============ Dify payload 兼容构造 ============
+            # 1) conversation_id: 只在"有效非空"时发送，空串省略（Dify 对空串 conversation_id 经常 400）
+            # 2) files: 空数组通常不会错，但某些 Dify 版本校验严格 → 省略
+            # 3) user: 必须非空字符串；user_role 空时回退 "fabtwin_user"
+            # 4) inputs: 若用户 Dify 应用未定义 machine_id/user_role 变量，传进去也会 400，
+            #    这里用 "宽松策略"：先按有 inputs 发送；若返回 400 且错误信息包含 "inputs"，
+            #    再自动重试 inputs={}（下方 HTTPError 处理块做回退）
             payload = {
                 "inputs": {
                     "machine_id": machine_id or "",
-                    "user_role": user_role,
+                    "user_role": user_role or "user",
                 },
                 "query": question,
                 "response_mode": "blocking",
-                "conversation_id": session_id if session_id and session_id != "" else "",
-                "user": f"fabtwin_{user_role}",
-                "files": [],
+                "user": f"fabtwin_{user_role}" if user_role else "fabtwin_user",
             }
+            if session_id and str(session_id).strip():
+                payload["conversation_id"] = str(session_id).strip()
+
+            # 诊断日志（避免打印 API Key）
+            print(f"[Dify] → POST {url}, payload keys={list(payload.keys())}, "
+                  f"query_len={len(question)}, user={payload['user']}")
             resp = requests.post(url, json=payload, headers=headers, timeout=90)
+            # ---------- 4xx 自动回退重试（兼容 Dify 不同应用类型） ----------
+            if resp.status_code >= 400 and resp.status_code < 500:
+                body_txt = ""
+                try:
+                    body_txt = resp.text
+                    body_json = resp.json() if body_txt else {}
+                except Exception:
+                    body_json = {}
+                msg = body_json.get("message") or body_json.get("error") or body_txt[:500]
+                print(f"[Dify] × HTTP {resp.status_code}（首次请求，尝试兼容回退）: {msg[:300]}")
+                # 若错误提示和 inputs 有关（如"unknown inputs"、"inputs do not match"），
+                # 重试：发送 inputs={}（Chatbot 未配置变量的场景）
+                already_bare = payload.get("inputs") == {}
+                if (("inputs" in str(msg).lower() or "field" in str(msg).lower() or "param" in str(msg).lower())
+                        and not already_bare):
+                    payload2 = dict(payload)
+                    payload2["inputs"] = {}
+                    print(f"[Dify] ↻ 回退重试：清空 inputs，keys={list(payload2.keys())}")
+                    resp2 = requests.post(url, json=payload2, headers=headers, timeout=90)
+                    if resp2.status_code < 400:
+                        resp = resp2  # 用回退成功的响应继续处理
+                        print(f"[Dify] ✓ 回退重试成功 HTTP {resp.status_code}")
+                    else:
+                        # 再次失败也保留"原始第一次的 resp"做错误抛出（消息更准确）
+                        print(f"[Dify] × 回退重试仍失败 HTTP {resp2.status_code}: {(resp2.text or '')[:300]}")
+                # 无论是否重试过，若最终仍是 4xx，把 Dify 完整响应体拼进错误信息再 raise
+                if resp.status_code >= 400:
+                    body_txt = ""
+                    body_json = {}
+                    try:
+                        body_txt = resp.text
+                        body_json = resp.json() if body_txt else {}
+                    except Exception:
+                        pass
+                    dify_msg = (body_json.get("message")
+                                or body_json.get("error")
+                                or body_json.get("detail")
+                                or "")
+                    if isinstance(dify_msg, list):
+                        try: dify_msg = "; ".join(str(x) for x in dify_msg)
+                        except Exception: dify_msg = str(dify_msg)
+                    other_fields = {k: v for k, v in body_json.items()
+                                    if k not in ("message", "error", "detail") and not k.startswith("_")}
+                    extra = ""
+                    if other_fields:
+                        import json as _json
+                        extra = " | " + _json.dumps(other_fields, ensure_ascii=False)[:500]
+                    raise RuntimeError(
+                        f"Dify HTTP {resp.status_code}: "
+                        f"{dify_msg or ('无 message 字段，原始body: '+body_txt[:400])}"
+                        f"{extra}"
+                    )
             resp.raise_for_status()
             data = resp.json()
 
