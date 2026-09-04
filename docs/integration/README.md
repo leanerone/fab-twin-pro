@@ -25,8 +25,8 @@ integration/
 │   └── F10_list_capabilities.json           ← 功能清单
 │
 └── dify/
-    ├── fabtwin-ai-assistant.dsl.yaml       ← Dify 应用模板（全局通用版，可直接导入）
-    ├── fabtwin-ai-assistant-OXE.dsl.yaml   ← Dify 应用模板（OXE 机台专属版）
+    ├── fabtwin-ai-assistant.dsl.yml         ← Dify 应用模板（全局通用版，可直接导入）
+    ├── fabtwin-ai-assistant-OXE.dsl.yml     ← Dify 应用模板（OXE 机台专属版）
     ├── fabtwin-tools-openapi.yaml           ← 10 个工具 OpenAPI 定义（导入 Dify 自定义工具）
     └── knowledgebase/
         └── OXE_Etcher_SOP_v1.0.md           ← RAG 知识库文档示例

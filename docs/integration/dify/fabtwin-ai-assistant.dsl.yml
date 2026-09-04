@@ -9,7 +9,7 @@ app:
 dependencies:
 - current_identifier: null
   type: package
-  value: 'plugin_unique_identifier: langgenius/azure_openai:0.0.56@3410d96fe3aaece47897701a7e7ef468abb230dfaa4f5dcb49a17dbbdda43442'
+  value: plugin_unique_identifier: langgenius/azure_openai:0.0.56@3410d96fe3aaece47897701a7e7ef468abb230dfaa4f5dcb49a17dbbdda43442
   version: null
 kind: app
 model_config:

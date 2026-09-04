@@ -319,18 +319,31 @@ def get_oxe_variables():
 def save(filename, dsl_dict):
     path = os.path.join(OUT_DIR, filename)
     with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(dsl_dict, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        out = yaml.dump(dsl_dict, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        # 修复 dependencies.value 去引号（Dify 要求不带引号）
+        # yaml.dump 输出: value: 'plugin_unique_identifier:...xxx'
+        # 需要去掉首尾单引号
+        out = out.replace(
+            "value: 'plugin_unique_identifier:",
+            "value: plugin_unique_identifier:"
+        )
+        # 去掉尾部的引号（在 version: null 之前）
+        out = out.replace(
+            "abb230dfaa4f5dcb49a17dbbdda43442'\n",
+            "abb230dfaa4f5dcb49a17dbbdda43442\n"
+        )
+        f.write(out)
     size = os.path.getsize(path)
     print(f"[OK] 生成 Dify DSL: {filename}  ({size} bytes)")
 
 
 def main():
     # 1. 全局通用版
-    save("fabtwin-ai-assistant.dsl.yaml",
+    save("fabtwin-ai-assistant.dsl.yml",
          build_dsl(SYSTEM_PROMPT, variables=get_global_variables()))
 
     # 2. OXE 专属示范版
-    save("fabtwin-ai-assistant-OXE.dsl.yaml",
+    save("fabtwin-ai-assistant-OXE.dsl.yml",
          build_dsl(OXE_PREFIX + SYSTEM_PROMPT,
                    variables=get_oxe_variables(),
                    app_name="FabTwin AI Assistant (OXE)",

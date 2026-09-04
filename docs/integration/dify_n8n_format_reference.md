@@ -4,7 +4,7 @@
 > 更新日期：2026-09-04
 > 来源：用户从测试环境真实导出的 `FabTwin_Agent_测试环境.yml` 和 `Zabbix Monitor To MySQL Alert Dify` 工作流
 
----
+***
 
 ## 一、Dify DSL 格式（YAML，0.6.0）
 
@@ -29,32 +29,32 @@ model_config:                 # ★ 全部配置在此节内
   # ...见下文 20 个子节...
 ```
 
-### 1.2 model_config 必须包含的 20 个子节
+### 1.2 model\_config 必须包含的 20 个子节
 
-| 子节 | 类型 | 说明 |
-|---|---|---|
-| `agent_mode` | object | Agent 配置：enabled/max_iteration/prompt/strategy/tools |
-| `annotation_reply` | object | 标注回复：{enabled: false} |
-| `chat_prompt_config` | object | 对话提示：{prompt: [{role: system, text: ''}]} |
-| `completion_prompt_config` | object | 补全提示：{conversation_histories_role: {...}, prompt: {text: ''}} |
-| `dataset_configs` | object | 知识库：{datasets: {datasets: [], retrieval_model: multiple, top_k: 4}, dataset_query_variable: ''} |
-| `external_data_tools` | array | 外部数据工具：[] |
-| `file_upload` | object | 文件上传配置 |
-| `model` | object | 模型：{completion_params: {stop: []}, mode: chat, name: gpt-5.2, provider: langgenius/azure_openai/azure_openai} |
-| `more_like_this` | object | {enabled: false} |
-| `opening_statement` | string | 开场白：'' |
-| `pre_prompt` | string | ★ System Prompt 放这里（不是 system_prompt！） |
-| `prompt_type` | string | 固定 simple |
-| `retriever_resource` | object | {enabled: true} |
-| `sensitive_word_avoidance` | object | {config: {}, enabled: false, type: ''} |
-| `speech_to_text` | object | {enabled: false} |
-| `suggested_questions` | array | [] |
-| `suggested_questions_after_answer` | object | {enabled: false} |
-| `text_to_speech` | object | {enabled: false, language: '', voice: ''} |
-| `user_input_form` | array | ★ 开始变量放这里（不是 app_variables！） |
-| `version` | string | 固定 0.6.0 |
+| 子节                                 | 类型     | 说明                                                                                                                |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| `agent_mode`                       | object | Agent 配置：enabled/max\_iteration/prompt/strategy/tools                                                             |
+| `annotation_reply`                 | object | 标注回复：{enabled: false}                                                                                             |
+| `chat_prompt_config`               | object | 对话提示：{prompt: \[{role: system, text: ''}]}                                                                        |
+| `completion_prompt_config`         | object | 补全提示：{conversation\_histories\_role: {...}, prompt: {text: ''}}                                                   |
+| `dataset_configs`                  | object | 知识库：{datasets: {datasets: \[], retrieval\_model: multiple, top\_k: 4}, dataset\_query\_variable: ''}              |
+| `external_data_tools`              | array  | 外部数据工具：\[]                                                                                                        |
+| `file_upload`                      | object | 文件上传配置                                                                                                            |
+| `model`                            | object | 模型：{completion\_params: {stop: \[]}, mode: chat, name: gpt-5.2, provider: langgenius/azure\_openai/azure\_openai} |
+| `more_like_this`                   | object | {enabled: false}                                                                                                  |
+| `opening_statement`                | string | 开场白：''                                                                                                            |
+| `pre_prompt`                       | string | ★ System Prompt 放这里（不是 system\_prompt！）                                                                           |
+| `prompt_type`                      | string | 固定 simple                                                                                                         |
+| `retriever_resource`               | object | {enabled: true}                                                                                                   |
+| `sensitive_word_avoidance`         | object | {config: {}, enabled: false, type: ''}                                                                            |
+| `speech_to_text`                   | object | {enabled: false}                                                                                                  |
+| `suggested_questions`              | array  | \[]                                                                                                               |
+| `suggested_questions_after_answer` | object | {enabled: false}                                                                                                  |
+| `text_to_speech`                   | object | {enabled: false, language: '', voice: ''}                                                                         |
+| `user_input_form`                  | array  | ★ 开始变量放这里（不是 app\_variables！）                                                                                     |
+| `version`                          | string | 固定 0.6.0                                                                                                          |
 
-### 1.3 agent_mode 结构
+### 1.3 agent\_mode 结构
 
 ```yaml
 agent_mode:
@@ -85,7 +85,7 @@ tools:
 > 对于 HTTP API 工具（OpenAPI），需导入 DSL 后在 Dify UI「工具 → 自定义工具 → OpenAPI」手动添加。
 > 因此我们生成的 DSL 中 `agent_mode.tools` 留空，配套 `fabtwin-tools-openapi.yaml` 供 UI 导入。
 
-### 1.5 user_input_form 项格式
+### 1.5 user\_input\_form 项格式
 
 ```yaml
 user_input_form:
@@ -113,7 +113,7 @@ user_input_form:
       default: ''
 ```
 
-### 1.6 file_upload 结构（直接复制即可）
+### 1.6 file\_upload 结构（直接复制即可）
 
 ```yaml
 file_upload:
@@ -138,7 +138,7 @@ model:
   provider: langgenius/azure_openai/azure_openai
 ```
 
----
+***
 
 ## 二、n8n 工作流 JSON 格式
 
@@ -161,18 +161,18 @@ model:
 
 ### 2.2 必须的顶层字段
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `name` | string | 工作流名称 |
-| `nodes` | array | 节点列表 |
-| `pinData` | object | 固定 `{}` |
-| `connections` | object | 连接关系 |
-| `active` | boolean | 导入后是否自动激活（建议 false） |
-| `settings` | object | `{"executionOrder": "v1"}` |
-| `versionId` | string | UUID（随机生成即可） |
-| `meta` | object | `{"templateCredsSetupCompleted": true, "instanceId": "..."}` |
-| `id` | string | UUID（随机生成即可） |
-| `tags` | array | 固定 `[]` |
+| 字段            | 类型      | 说明                                                           |
+| ------------- | ------- | ------------------------------------------------------------ |
+| `name`        | string  | 工作流名称                                                        |
+| `nodes`       | array   | 节点列表                                                         |
+| `pinData`     | object  | 固定 `{}`                                                      |
+| `connections` | object  | 连接关系                                                         |
+| `active`      | boolean | 导入后是否自动激活（建议 false）                                          |
+| `settings`    | object  | `{"executionOrder": "v1"}`                                   |
+| `versionId`   | string  | UUID（随机生成即可）                                                 |
+| `meta`        | object  | `{"templateCredsSetupCompleted": true, "instanceId": "..."}` |
+| `id`          | string  | UUID（随机生成即可）                                                 |
+| `tags`        | array   | 固定 `[]`                                                      |
 
 ### 2.3 节点（node）结构
 
@@ -190,17 +190,17 @@ model:
 
 ### 2.4 各节点 typeVersion 对照表
 
-| 节点类型 | type | typeVersion |
-|---|---|---|
-| Webhook | n8n-nodes-base.webhook | **2** |
-| Code（JS） | n8n-nodes-base.code | **2** |
-| Oracle | n8n-nodes-base.oracle | 1 |
-| MySQL | n8n-nodes-base.mySql | 2 |
-| HTTP Request | n8n-nodes-base.httpRequest | 4 |
-| IF | n8n-nodes-base.if | 2 |
-| Respond to Webhook | n8n-nodes-base.respondToWebhook | 1 |
-| Email Send | n8n-nodes-base.emailSend | 2 |
-| Schedule Trigger | n8n-nodes-base.scheduleTrigger | 1.3 |
+| 节点类型               | type                            | typeVersion |
+| ------------------ | ------------------------------- | ----------- |
+| Webhook            | n8n-nodes-base.webhook          | **2**       |
+| Code（JS）           | n8n-nodes-base.code             | **2**       |
+| Oracle             | n8n-nodes-base.oracle           | 1           |
+| MySQL              | n8n-nodes-base.mySql            | 2           |
+| HTTP Request       | n8n-nodes-base.httpRequest      | 4           |
+| IF                 | n8n-nodes-base.if               | 2           |
+| Respond to Webhook | n8n-nodes-base.respondToWebhook | 1           |
+| Email Send         | n8n-nodes-base.emailSend        | 2           |
+| Schedule Trigger   | n8n-nodes-base.scheduleTrigger  | 1.3         |
 
 ### 2.5 connections 格式
 
@@ -217,9 +217,13 @@ model:
 ```
 
 - 每个节点名作为 key
+
 - `main` 是固定 key
+
 - 值是数组的数组：`[[{node, type, index}]]`
+
 - 一对一连接就是 `[[{...}]]`
+
 - 一对多连接就是 `[[{...}, {...}]]`（分叉）
 
 ### 2.6 Webhook 节点 parameters
@@ -269,7 +273,7 @@ model:
 }
 ```
 
----
+***
 
 ## 三、Dify → n8n 工具对接方式
 
@@ -284,6 +288,7 @@ Dify App
 ```
 
 - 优点：Dify 自动发现工具，无需手动配 OpenAPI
+
 - 缺点：需要在 n8n 额外配置 MCP Server Trigger
 
 ### 方式 B：OpenAPI/HTTP API（我们当前生成模板使用的方式）
@@ -296,6 +301,7 @@ Dify App
 ```
 
 - 优点：n8n 端只需 Webhook 节点，无需 MCP Server
+
 - 缺点：Dify DSL 导入时 `agent_mode.tools` 留空，需导入后手动添加 OpenAPI 工具
 
 ### 当前 FabTwin 选用方式 B 的原因
@@ -304,7 +310,7 @@ Dify App
 2. OpenAPI 规范文件 `fabtwin-tools-openapi.yaml` 已生成，一次导入即定义 10 个工具
 3. 对用户更直观：每个工具 = 一个 n8n Webhook = 一个 OpenAPI path
 
----
+***
 
 ## 四、用户测试环境真实导出样本（脱敏）
 
@@ -393,7 +399,7 @@ model_config:
 }
 ```
 
----
+***
 
 ## 五、更新指南
 
@@ -403,3 +409,4 @@ model_config:
 2. **修改 n8n JSON**：编辑 `scripts/generate_n8n_workflows.py`，运行 `python scripts/generate_n8n_workflows.py`
 3. **修改 OpenAPI**：直接编辑 `docs/integration/dify/fabtwin-tools-openapi.yaml`
 4. 本文件（格式参考）在 Dify/n8n 版本升级或导出格式变化时更新
+
