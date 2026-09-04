@@ -420,6 +420,10 @@ print()
 print("=" * 90)
 print("  Step 6/6: 诊断总结")
 print("=" * 90)
+# 注意：这里用 .format() 注入 BACKEND，而不是 % 运算符。
+# 因为多行三引号字符串里若混入其他 %X 字符（例如 future 新增命令），会导致
+# "not enough arguments for format string" TypeError，隐蔽且难排查。
+B = BACKEND  # 短别名，format 参数更简洁
 print("""
 你本次输出里最典型的 3 个现象，对应结论：
 
@@ -440,10 +444,10 @@ print("""
   → 快速修复（任选其一，PowerShell 执行，注意先配好 $env:NO_PROXY）：
        # 方法 A: switch-global（推荐）
        $body = @{ target = "dify" } | ConvertTo-Json
-       Invoke-RestMethod -Uri "%s/api/ai/switch-global" -Method Post -Body $body -ContentType "application/json" -UseBasicParsing
+       Invoke-RestMethod -Uri "{b}/api/ai/switch-global" -Method Post -Body $body -ContentType "application/json" -UseBasicParsing
        # 方法 B: PUT /config
        $body = @{ provider = "dify"; dify_enabled = $true } | ConvertTo-Json
-       Invoke-RestMethod -Uri "%s/api/ai/config" -Method Put -Body $body -ContentType "application/json" -UseBasicParsing
+       Invoke-RestMethod -Uri "{b}/api/ai/config" -Method Put -Body $body -ContentType "application/json" -UseBasicParsing
   → 切换成功的标志：再次 GET /api/ai/config → provider = 'dify'。
   → 注意：若 Dify 和 n8n 部署在 同一台服务器（如 10.30.116.151:80 = Dify，10.30.116.151:5678 = n8n），
          本脚本 Step 2/6 只会在 URL 含 :5678 或 n8n 字样时才报 n8n 误用，不会再靠 IP 误判。
@@ -455,4 +459,4 @@ print("""
   → 最小验证命令:
         Select-String -Path services\\ai_middleware.py -Pattern "_dify_conv_map"
         没找到输出 → 直接把新文件覆盖过去；找到了输出 → 去 IIS/服务面板 点重启。
-""" % (BACKEND, BACKEND))
+""".format(b=B))
