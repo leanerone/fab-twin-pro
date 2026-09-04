@@ -17,6 +17,19 @@ v2.0 升级（针对上一次输出暴露的3个根因）:
 """
 import os, sys, json, argparse
 
+# ====== 启动即版本检查（避免 "SyntaxError: f-string invalid syntax" 这类"运行一半才报错"）======
+PY_VER = sys.version_info
+print("[INFO] Python 版本: %d.%d.%d" % (PY_VER.major, PY_VER.minor, PY_VER.micro))
+if (PY_VER.major, PY_VER.minor) < (3, 6):
+    print("[CRITICAL] 本脚本需要 Python 3.6+（你现在是 %d.%d）。" % (PY_VER.major, PY_VER.minor))
+    print("   如果 venv 已装 3.6+: 请用 .\\venv\\Scripts\\python.exe diagnose_dify.py")
+    print("   否则: 全局安装 Python 3.8+ 或切换到 FabTwin 项目自带的 venv。")
+    sys.exit(1)
+if (PY_VER.major, PY_VER.minor) == (3, 6):
+    # Python 3.6.0/3.6.1 有些 build 的 f-string 解析器对 !r/if-else 嵌套支持有限，
+    # 3.6.2+ 正常。脚本里已避免嵌套写法，下面只提示。
+    print("[WARN] Python 3.6 对 f-string 嵌套支持较弱，若仍报语法错请升级到 3.8+。")
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
@@ -25,7 +38,7 @@ ap.add_argument("--host", default=os.getenv("FABTWIN_HOST", "127.0.0.1"))
 ap.add_argument("--port", type=int, default=int(os.getenv("FABTWIN_PORT", "8002")))
 arg = ap.parse_args()
 
-BACKEND = f"http://{arg.host}:{arg.port}"
+BACKEND = "http://%s:%d" % (arg.host, arg.port)
 
 # 加载 .env (若有)
 if os.path.exists(os.path.join(HERE, ".env")):
@@ -41,9 +54,13 @@ if os.path.exists(os.path.join(HERE, ".env")):
                     os.environ[k] = v
         print("[INFO] 已加载 .env 环境变量")
     except Exception as e:
-        print(f"[WARN] .env 读取失败: {e}")
+        print("[WARN] .env 读取失败: %s" % (e,))
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    print("[CRITICAL] 缺少依赖 httpx。先执行: pip install httpx==0.25.0")
+    sys.exit(2)
 client = httpx.Client(timeout=30, trust_env=False)
 #  trust_env=False  ← 关键: 不读取 HTTP_PROXY/HTTPS_PROXY，避开公司 HJTC Proxy 劫持
 
@@ -141,7 +158,7 @@ for k, v in live_cfg.items():
                      "dify_base_url","n8n_base_url","dify_app_id"):
         if k in ("dify_base_url", "n8n_base_url") and v:
             v = v  # URL 本身可以直接看，不含密钥
-        print(f"  {k:32s} = {v!r}")
+        print("  %-32s = %r" % (k, v))
 
 
 print()
@@ -163,9 +180,9 @@ if not base:
     errors.append("❌ dify_base_url 为空 → 去网站 AI 配置页面填 Dify 地址并点保存")
 else:
     if not base.startswith("http"):
-        errors.append(f"❌ dify_base_url={base!r} 缺少 http:// 或 https:// 前缀")
+        errors.append("❌ dify_base_url=%r 缺少 http:// 或 https:// 前缀" % (base,))
     if ":5678" in base or "n8n" in base.lower() or "10.30.116.151" in base:
-        errors.append(f"❌ dify_base_url={base!r} 看起来是 n8n 地址（端口5678 / 含n8n / = 10.30.116.151 都是 n8n，不是 Dify）")
+        errors.append("❌ dify_base_url=%r 看起来是 n8n 地址（端口5678 / 含n8n / = 10.30.116.151 都是 n8n，不是 Dify）" % (base,))
 # 2.3 API Key
 if not has_key:
     errors.append("❌ Dify API Key 未保存（dify_has_api_key = False）"
@@ -220,8 +237,14 @@ else:
             print(f"---- {test_name} ({sid}) ----")
             print(f"POST {chat_url}")
             cid_show = payload_json.get("conversation_id")
-            print(f"  conversation_id = {(cid_show!r) if cid_show is not None else '(未传)'}")
-            print(f"  query = {payload_json['query']!r}")
+            # 注意: f-string 不支持 "!r + if/else" 同写在一对 {} 里，会报 SyntaxError。
+            # 这里改成普通字符串格式化 + repr() 预计算，兼容所有 Python 3.6+。
+            if cid_show is None:
+                cid_text = "(未传)"
+            else:
+                cid_text = repr(cid_show)
+            print("  conversation_id = %s" % (cid_text,))
+            print("  query = %r" % (payload_json["query"],))
             try:
                 r = client.post(chat_url, json=payload_json, headers=hdrs)
             except Exception as e:
@@ -332,7 +355,7 @@ print("=" * 90)
 sid_e2e = "sess_e2e_v2_" + os.urandom(8).hex()
 for i, q in enumerate(["你能帮我干什么", "机台状态怎么查", "今天产量"], start=1):
     print()
-    print(f"---- E2E Round {i}: {q!r} (session_id={sid_e2e}) ----")
+    print("---- E2E Round %d: %r (session_id=%s) ----" % (i, q, sid_e2e))
     try:
         r = client.post(BACKEND + "/api/ai/chat", json={
             "question": q, "machine_id": "", "session_id": sid_e2e,
@@ -366,7 +389,7 @@ for i, q in enumerate(["你能帮我干什么", "机台状态怎么查", "今天
     ok = data.get("ok") or data.get("answer") and "查询失败" not in (data.get("answer") or "")
     print(f"  [OK] answer(前300字): {ans}")
     if data.get("conversation_id"):
-        print(f"  [OK] conversation_id = {data.get('conversation_id')!r}")
+        print("  [OK] conversation_id = %r" % (data.get("conversation_id"),))
 
 
 print()
