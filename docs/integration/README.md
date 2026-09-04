@@ -1,7 +1,7 @@
 # Dify + n8n 集成文档总览
 
-> FabTwin Pro 与 Dify / n8n 集成的全部模板和 SOP 文档。
-> 架构：Dify（AI 中枢）→ n8n（直连数据库：Oracle节点 + ODBC节点）→ Oracle/Informix
+> FabTwin Pro 与 Dify / n8n 集成的全部模板和参考文档。
+> 架构：Dify（AI 中枢）→ n8n（Webhook 工作流 → Oracle 节点）→ Oracle DB
 
 ---
 
@@ -9,45 +9,56 @@
 
 ```
 integration/
-├── README.md                            ← 你在这里
-├── DIFY_N8N_联通部署SOP.md             ← ★ 唯一 SOP（6步从零到联通）
+├── README.md                              ← 你在这里
+├── dify_n8n_format_reference.md            ← ★ Dify/n8n 真实导出格式参考（后续更新用）
 │
 ├── n8n/
-│   ├── 01_query_alarms.json             ← 工作流：告警查询（Oracle节点）
-│   ├── 02_query_machine_status.json     ← 工作流：机台状态（Oracle节点）
-│   ├── 03_query_events.json             ← 工作流：事件时间线（Oracle节点）
-│   ├── 04_query_lots.json               ← 工作流：Lot查询（Oracle节点）
-│   ├── 05_query_yield.json              ← 工作流：产量统计（Oracle节点）
-│   ├── 06_query_rcms_maintenance.json   ← 工作流：RCMS维修（ODBC节点）
-│   └── 07_query_mes_lot.json            ← 工作流：MES Lot（ODBC节点）
+│   ├── F1_get_machine_status.json         ← 机台实时状态/全厂概览
+│   ├── F2_get_lot_info.json                ← Lot 位置/进度追踪
+│   ├── F3_get_machine_alarms.json          ← 报警统计/异常定位
+│   ├── F4_get_event_timeline.json          ← 温度趋势/事件时间线
+│   ├── F5_get_yield_stats.json             ← 产量/晶圆/完成率
+│   ├── F6_get_recipe_info.json             ← 工艺配方/Recipe
+│   ├── F7_get_mes_lot_info.json            ← MES Lot 详情（管理员）
+│   ├── F8_export_alarm_report.json         ← 导出报警报表 Excel（管理员）
+│   ├── F9_generate_work_order.json         ← 生成故障工单（管理员）
+│   └── F10_list_capabilities.json           ← 功能清单
 │
 └── dify/
-    ├── fabtwin-ai-assistant.dsl.yaml    ← Dify 应用模板（可直接导入）
-    ├── fabtwin-tools-openapi.yaml       ← 7个工具 OpenAPI 定义（导入 Dify）
-    ├── system_prompt.md                 ← 系统提示词（参考）
+    ├── fabtwin-ai-assistant.dsl.yaml       ← Dify 应用模板（全局通用版，可直接导入）
+    ├── fabtwin-ai-assistant-OXE.dsl.yaml   ← Dify 应用模板（OXE 机台专属版）
+    ├── fabtwin-tools-openapi.yaml           ← 10 个工具 OpenAPI 定义（导入 Dify 自定义工具）
     └── knowledgebase/
-        └── OXE_Etcher_SOP_v1.0.md       ← RAG 知识库文档示例
+        └── OXE_Etcher_SOP_v1.0.md           ← RAG 知识库文档示例
 ```
 
 ---
 
 ## 快速开始
 
-**只需阅读一个文件**：[DIFY_N8N_联通部署SOP.md](DIFY_N8N_联通部署SOP.md)
+### 1. 导入 n8n 工作流（10 个）
+逐个导入 `n8n/F1~F10*.json` → 双击 Oracle 节点选凭证 → 激活
 
-6 大步骤：
-1. 配置 n8n 数据库凭据（Oracle + Informix ODBC）
-2. 导入 n8n 工作流（7个）+ 绑定凭据
-3. 创建 Dify 智能体
-4. 配置 Dify 工具（接入 n8n）
-5. 网站后端配置
-6. 端到端调试
+### 2. 导入 Dify 应用
+导入 `dify/fabtwin-ai-assistant.dsl.yaml`（或 OXE 专属版）
+- System Prompt 已内置在 `pre_prompt` 里（10 类 4 步 + FABTWIN 结构化输出）
+- 开始变量已配置（machine_id / user_role）
+
+### 3. 配置 Dify 工具
+在 Dify 应用「工具 → 自定义工具 → OpenAPI Schema」中导入 `dify/fabtwin-tools-openapi.yaml`，填入 n8n 地址
+
+### 4. 后端配置
+```env
+ENABLE_LOCAL_RULE_FALLBACK=false
+MACHINE_DIFY_CONFIGS_OXE_DIFY_ENDPOINT=https://<dify>/v1
+MACHINE_DIFY_CONFIGS_OXE_DIFY_API_KEY=app-xxxx
+```
 
 ---
 
 ## 版本信息
 
-- 文档版本：v3.0（去掉 DB Proxy，n8n 直连数据库）
-- 更新日期：2026-09-03
-- 适用 Dify 版本：0.6+
-- 适用 n8n 版本：1.20+（需支持 Oracle/ODBC 节点）
+- 文档版本：v4.0（10 工作流 + Dify 0.6.0 格式对齐）
+- 更新日期：2026-09-04
+- 适用 Dify 版本：0.6.0
+- 适用 n8n 版本：1.20+（需支持 Oracle 节点）
