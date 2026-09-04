@@ -564,21 +564,32 @@ class AIMiddleware:
                 execution_log.append({"step": "call_local_rule"})
                 result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
         except Exception as e:
-            print(f"[AI] 调用失败，回退本地规则: {e}")
+            print(f"[AI] 调用失败: {e}")
             execution_log.append({"step": "error", "error": str(e)[:200]})
             success = False
             error_msg = str(e)
-            try:
-                result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
-            except Exception as e2:
-                print(f"[AI] 本地规则引擎也失败: {e2}")
-                execution_log.append({"step": "error", "error": f"本地规则引擎也失败: {str(e2)[:200]}"})
+            # 纯 Dify 模式：不做本地规则兜底，直接返回错误，便于调试真实 Dify 响应
+            if self.provider == "dify":
                 result = {
-                    "answer": f"抱歉，AI 服务暂时不可用。\n错误详情：{str(e)[:200]}\n\n请稍后重试，或联系管理员检查 AI 配置。",
+                    "answer": (
+                        f"❌ Dify 调用失败，未做本地兜底。\n"
+                        f"错误详情：{str(e)[:300]}\n\n"
+                        f"请检查 Dify 服务状态、API Key、Base URL 是否正确。"
+                    ),
                     "sql": "",
                 }
-                success = False
-                error_msg = f"双重失败: LLM={str(e)[:100]}, 本地={str(e2)[:100]}"
+            else:
+                try:
+                    result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
+                except Exception as e2:
+                    print(f"[AI] 本地规则引擎也失败: {e2}")
+                    execution_log.append({"step": "error", "error": f"本地规则引擎也失败: {str(e2)[:200]}"})
+                    result = {
+                        "answer": f"抱歉，AI 服务暂时不可用。\n错误详情：{str(e)[:200]}\n\n请稍后重试，或联系管理员检查 AI 配置。",
+                        "sql": "",
+                    }
+                    success = False
+                    error_msg = f"双重失败: LLM={str(e)[:100]}, 本地={str(e2)[:100]}"
 
         # 确保返回格式统一
         result = self._normalize_response(result)
@@ -1105,12 +1116,16 @@ Lot ID 格式说明：
         - 支持 workflow 模式和 chatbot 模式
         """
         if not self.dify_enabled or not self.dify_base_url or not self.dify_api_key:
+            # 纯 Dify 模式：不做本地规则兜底，直接抛错以便调试真实 Dify 链路
             if tool_calls_recorder is not None:
                 tool_calls_recorder.append({
-                    "tool": "fallback_local", "status": "skip",
-                    "reason": "Dify未启用或缺少配置",
+                    "tool": "dify_chat", "status": "error",
+                    "error": "Dify未启用或缺少配置（dify_base_url/dify_api_key 为空）",
                 })
-            return self._local_rule_engine(question, machine_id, user_role)
+            raise RuntimeError(
+                "Dify 未启用或缺少配置（dify_base_url/dify_api_key 为空），未做本地兜底。"
+                "请检查全局 Dify 配置或机台专属 Dify 配置。"
+            )
 
         try:
             base = self.dify_base_url.rstrip('/')

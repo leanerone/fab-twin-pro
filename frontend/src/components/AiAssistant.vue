@@ -12,8 +12,6 @@ const props = defineProps({
   showVoice: { type: Boolean, default: true },
   // 预填问题（从回放 Tab 的"AI分析当前回放"按钮传入）
   prefillQuestion: { type: String, default: '' },
-  // 是否显示顶部"当前AI来源"条（机台详情页:true；其他嵌入场景如AiFloatingBall内嵌可关）
-  showRoutingBar: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['jump'])
@@ -28,43 +26,7 @@ const voiceOutputRef = ref(null)
 const isRecording = ref(false)
 const interimText = ref('')
 
-// === 当前AI路由来源（用于顶部RountingBar展示） ===
-const routing = ref({
-  loading: true,
-  source: 'local',  // machine_dify / global_dify / llm / local
-  source_label: '加载中...',
-  provider_name: '',
-  model: '',
-  machine_dify: null,
-  global_dify: null,
-  llm_config: null,
-  machine_model_id: null,
-})
 const STORAGE_KEY = `fabtwin_ai_${props.sessionType}`
-
-// 对外暴露 routing 与 reloadRouting（父组件修改完机台Dify后调用刷新）
-async function reloadRouting() {
-  if (!props.machineId) return
-  routing.value.loading = true
-  try {
-    const r = await api.aiGetMachineAiRouting(props.machineId)
-    routing.value = Object.assign({ loading: false }, r)
-  } catch (e) {
-    console.warn('[AiAssistant] 加载AI路由来源失败:', e)
-    routing.value.loading = false
-  }
-}
-defineExpose({ reloadRouting, routing })
-
-const routingIcon = computed(() => {
-  switch (routing.value.source) {
-    case 'machine_dify': return '🎯'
-    case 'global_dify': return '🤖'
-    case 'llm': return '🧠'
-    default: return '🔧'
-  }
-})
-const routingClass = computed(() => 'routing-tag routing-' + routing.value.source)
 
 // 快捷问题：按机台型号动态生成（OXE 系列显示专用问题，其他显示通用问题）
 const isOxeMachine = computed(() => {
@@ -106,10 +68,6 @@ onMounted(() => {
       sessionId.value = data.sessionId || null
     } catch (e) {}
   }
-  // 初始化路由状态（AI来源显示）
-  if (props.showRoutingBar) {
-    reloadRouting()
-  }
 })
 
 watch([messages, sessionId, () => props.machineId], () => {
@@ -120,7 +78,7 @@ watch([messages, sessionId, () => props.machineId], () => {
   }))
 }, { deep: true })
 
-// 监听机台变化，切换会话 + 刷新AI路由来源
+// 监听机台变化，切换会话
 watch(() => props.machineId, (newId, oldId) => {
   if (newId !== oldId) {
     // 保存当前会话
@@ -144,10 +102,6 @@ watch(() => props.machineId, (newId, oldId) => {
     } else {
       messages.value = []
       sessionId.value = null
-    }
-    // 刷新AI路由来源
-    if (props.showRoutingBar) {
-      reloadRouting()
     }
   }
 })
@@ -265,16 +219,6 @@ function scrollToBottom() {
   <div class="ai-assistant">
     <div class="section-title-row">
       <div class="section-title">AI 助手</div>
-      <!-- AI 路由来源条（机台详情页显示） -->
-      <div v-if="showRoutingBar" class="routing-bar">
-        <span v-if="routing.loading" class="routing-tag routing-loading">⏳ 正在识别AI来源...</span>
-        <span v-else :class="routingClass" :title="[
-          '模型：' + (routing.model || '—'),
-          routing.machine_model_id ? ('机台型号匹配：' + routing.machine_model_id) : '',
-        ].filter(Boolean).join('\\n')">
-          {{ routingIcon }} {{ routing.source_label }}
-        </span>
-      </div>
     </div>
     <div ref="chatLogRef" class="chat-log">
       <div class="chat-msg ai welcome">
@@ -376,20 +320,6 @@ function scrollToBottom() {
   font-size: 13px;
   font-weight: 700;
 }
-.routing-bar { display: flex; gap: 6px; flex-shrink: 0; }
-.routing-tag {
-  display: inline-block;
-  font-size: 10.5px;
-  padding: 3px 8px;
-  border-radius: 10px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-}
-.routing-loading { color: #64748b; background: rgba(255,255,255,0.04); }
-.routing-machine_dify { color: #00d4ff; background: rgba(0, 212, 255, 0.14); border: 1px solid rgba(0,212,255,0.3); }
-.routing-global_dify { color: #a78bfa; background: rgba(167, 139, 250, 0.12); border: 1px solid rgba(167,139,250,0.3); }
-.routing-llm { color: #34d399; background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52,211,153,0.3); }
-.routing-local { color: #9ca3af; background: rgba(148, 163, 184, 0.08); }
 .chat-log {
   flex: 1;
   overflow-y: auto;

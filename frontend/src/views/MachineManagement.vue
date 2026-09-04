@@ -14,6 +14,9 @@ const success = ref('')
 
 const machines = ref([])
 
+// 机台专属 Dify 配置列表（按型号 model_id 匹配，用于在列表中展示每台机台命中的专属 Dify）
+const machineDifyConfigs = ref([])
+
 // 搜索/筛选
 const searchKeyword = ref('')
 const filterLine = ref('')
@@ -92,6 +95,32 @@ async function loadMachines() {
   } finally {
     loading.value = false
   }
+}
+
+// 加载全部机台专属 Dify 配置（用于列表展示每台机台命中的配置名）
+async function loadMachineDifyConfigs() {
+  try {
+    const data = await api.aiGetMachineDifyConfigs()
+    machineDifyConfigs.value = Array.isArray(data) ? data : (data?.items || [])
+  } catch (e) {
+    console.warn('[MachineManagement] 加载机台专属 Dify 配置失败:', e)
+    machineDifyConfigs.value = []
+  }
+}
+
+// 按机台型号匹配命中的「专属 Dify」配置（与后端 _get_machine_dify_config 一致：machine.model 匹配 model_id，且 is_active）
+function machineDifyOf(m) {
+  const model = String(m?.model || '').trim().toUpperCase()
+  if (!model) return null
+  return machineDifyConfigs.value.find(
+    (c) => c.is_active && String(c.model_id || '').trim().toUpperCase() === model
+  ) || null
+}
+
+// 点击「专属 Dify」单元格跳转到 AI 配置管理页（带上 model 便于定位）
+function goAiConfig(m) {
+  const cfg = machineDifyOf(m)
+  router.push({ path: '/ai-config', query: { tab: 'machine-dify', model: cfg ? cfg.model_id : (m?.model || '') } })
 }
 
 // ============== 编辑 ==============
@@ -179,6 +208,7 @@ function goDetail(m) {
 // ============== 生命周期 ==============
 onMounted(() => {
   loadMachines()
+  loadMachineDifyConfigs()
 })
 </script>
 
@@ -231,6 +261,7 @@ onMounted(() => {
             <th>状态</th>
             <th>告警</th>
             <th>外部链接</th>
+            <th>专属 Dify</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -253,6 +284,15 @@ onMounted(() => {
             <td>
               <span v-if="m.use_external_url && m.external_url" class="link-on" :title="m.external_url">已启用</span>
               <span v-else class="link-off">未启用</span>
+            </td>
+            <td>
+              <span
+                v-if="machineDifyOf(m)"
+                class="dify-tag dify-on"
+                :title="`型号 ${m.model} 命中专属 Dify，点击跳转配置页`"
+                @click="goAiConfig(m)"
+              >{{ machineDifyOf(m).config_name }}</span>
+              <span v-else class="dify-tag dify-off" :title="`型号 ${m.model || '—'} 无专属 Dify，点击去配置页新增`" @click="goAiConfig(m)">—</span>
             </td>
             <td class="actions">
               <button class="btn btn-sm" @click="goDetail(m)">查看</button>
@@ -481,6 +521,28 @@ onMounted(() => {
 }
 .link-on { color: #22c55e; font-size: 12px; }
 .link-off { color: var(--text-dim); font-size: 12px; }
+.dify-tag {
+  display: inline-block;
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.dify-on {
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.12);
+  border-color: rgba(0, 212, 255, 0.3);
+}
+.dify-on:hover { background: rgba(0, 212, 255, 0.2); }
+.dify-off { color: var(--text-dim); }
+.dify-off:hover { color: var(--text); }
 
 .actions { white-space: nowrap; }
 .btn {
