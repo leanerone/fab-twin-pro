@@ -175,14 +175,18 @@ warnings = []
 # 2.1 启用状态
 if not enabled:
     errors.append("❌ dify_enabled = False，Dify 未启用")
-# 2.2 URL 是否像 n8n（端口 5678、路径写 10.30.116.151 = n8n）
+# 2.2 URL 是否像 n8n（只看端口 5678 和 host/path 含 n8n 字样；不再硬编码 10.30.116.151=n8n）
+#     注: 10.30.116.151 可能同机部署了 Dify(80) + n8n(5678)，不能靠 IP 猜。
 if not base:
     errors.append("❌ dify_base_url 为空 → 去网站 AI 配置页面填 Dify 地址并点保存")
 else:
     if not base.startswith("http"):
         errors.append("❌ dify_base_url=%r 缺少 http:// 或 https:// 前缀" % (base,))
-    if ":5678" in base or "n8n" in base.lower() or "10.30.116.151" in base:
-        errors.append("❌ dify_base_url=%r 看起来是 n8n 地址（端口5678 / 含n8n / = 10.30.116.151 都是 n8n，不是 Dify）" % (base,))
+    bad_reasons = []
+    if ":5678" in base: bad_reasons.append("端口=5678(n8n默认端口)")
+    if "n8n" in base.lower(): bad_reasons.append("host/path含n8n字样")
+    if bad_reasons:
+        errors.append("❌ dify_base_url=%r 看起来是 n8n 地址（%s），不是 Dify" % (base, " / ".join(bad_reasons)))
 # 2.3 API Key
 if not has_key:
     errors.append("❌ Dify API Key 未保存（dify_has_api_key = False）"
@@ -192,6 +196,26 @@ for e in errors: print(e)
 for w in warnings: print(w)
 if not errors and not warnings:
     print("✅ 配置字段自检通过。")
+
+# 2.4 硬校验: provider 必须 == 'dify'（否则即使 dify_enabled=True 也不会走 Dify）
+current_provider = str(live_cfg.get("provider") or "").strip().lower()
+if current_provider != "dify":
+    provider_msg = ("当前 provider=%r（provider_name=%r），AI 仍然走【%s】，不会走 Dify。"
+                    % (live_cfg.get("provider"), live_cfg.get("provider_name"),
+                       live_cfg.get("provider_name") or "本地/LLM"))
+    errors.append("⚠️ " + provider_msg)
+    print("⚠️ " + provider_msg)
+    print("     → 切换到全局 Dify 的 2 种方法（任选其一）：")
+    print("        方法 A:  PowerShell 直接调后端 switch-global 接口（推荐）：")
+    print('          $body = @{ target = "dify" } | ConvertTo-Json')
+    print('          Invoke-RestMethod -Uri "%s/api/ai/switch-global" -Method Post '
+          '-Body $body -ContentType "application/json" -UseBasicParsing' % BACKEND)
+    print("        方法 B:  PowerShell 调 PUT config 接口：")
+    print('          $body = @{ provider = "dify"; dify_enabled = $true } | ConvertTo-Json')
+    print('          Invoke-RestMethod -Uri "%s/api/ai/config" -Method Put '
+          '-Body $body -ContentType "application/json" -UseBasicParsing' % BACKEND)
+    print("        方法 C:  网站登录 → 管理后台 → AI 配置面板 → 浮动球下拉 → 选【全局 Dify】")
+    print("     → 切换后重跑本脚本确认 Step 1/6 里 provider='dify'。")
 
 
 print()
@@ -397,7 +421,7 @@ print("=" * 90)
 print("  Step 6/6: 诊断总结")
 print("=" * 90)
 print("""
-你本次输出里最典型的 2 个现象，对应结论：
+你本次输出里最典型的 3 个现象，对应结论：
 
 现象 A: ORA-12541: TNS:no listener
   → 不是 DB 崩了，是诊断脚本自己在独立进程里没加载 Oracle Client。
@@ -411,9 +435,24 @@ print("""
         $env:NO_PROXY    = "127.0.0.1,localhost,10.30.0.0/16"
      或改用 --host 指定内网网卡 IP（不要用 127.0.0.1）。
 
-如果 Step 2/6 显示 Dify URL/Key 都对，但 E2E Step 5/6 仍然报 "must be a valid UUID":
+现象 C: Step 1/6 显示 provider='local' 或 其他 ≠ 'dify'（本次你遇到的就是这个！）
+  → 即使 dify_enabled=True、URL/Key 都正确，AI 实际走的仍然是 本地规则引擎/LLM，不是 Dify。
+  → 快速修复（任选其一，PowerShell 执行，注意先配好 $env:NO_PROXY）：
+       # 方法 A: switch-global（推荐）
+       $body = @{ target = "dify" } | ConvertTo-Json
+       Invoke-RestMethod -Uri "%s/api/ai/switch-global" -Method Post -Body $body -ContentType "application/json" -UseBasicParsing
+       # 方法 B: PUT /config
+       $body = @{ provider = "dify"; dify_enabled = $true } | ConvertTo-Json
+       Invoke-RestMethod -Uri "%s/api/ai/config" -Method Put -Body $body -ContentType "application/json" -UseBasicParsing
+  → 切换成功的标志：再次 GET /api/ai/config → provider = 'dify'。
+  → 注意：若 Dify 和 n8n 部署在 同一台服务器（如 10.30.116.151:80 = Dify，10.30.116.151:5678 = n8n），
+         本脚本 Step 2/6 只会在 URL 含 :5678 或 n8n 字样时才报 n8n 误用，不会再靠 IP 误判。
+         如果你仍然看到"= 10.30.116.151 都是 n8n"的报错 → 你跑的是 OLD 版本脚本，
+         请从仓库拉最新的 diagnose_dify.py 覆盖部署服务器上的那份。
+
+如果 Step 2/6 显示 Dify URL/Key/provider 都对，但 E2E Step 5/6 仍然报 "must be a valid UUID":
   → 100% 是"代码更新了但后端进程没重启"。
   → 最小验证命令:
         Select-String -Path services\\ai_middleware.py -Pattern "_dify_conv_map"
         没找到输出 → 直接把新文件覆盖过去；找到了输出 → 去 IIS/服务面板 点重启。
-""")
+""" % (BACKEND, BACKEND))
