@@ -476,12 +476,14 @@ class AIMiddleware:
             machine_dify = self._get_machine_dify_config(machine_id)
             if machine_dify:
                 self.provider = "dify"
+                self.dify_enabled = True  # 【关键修复】命中专属Dify必须显式启用，否则_call_dify守卫失败
                 self.dify_base_url = machine_dify.get("dify_base_url", "")
                 self.dify_api_key = machine_dify.get("dify_api_key", "")
                 self.model = f"dify-{machine_dify.get('config_name', '')}"
                 self.provider_name = machine_dify.get("config_name", "Dify")
                 self.current_config_id = None  # 机台专属配置不走 provider_configs 表
-                print(f"[AI] 机台 {machine_id} 命中专属 Dify: {machine_dify.get('config_name')}")
+                print(f"[AI] 机台 {machine_id} 命中专属 Dify: {machine_dify.get('config_name')}, "
+                      f"url={self.dify_base_url!r}, key_len={len(self.dify_api_key or '')}")
             else:
                 # 没有专属配置，确保用默认配置
                 if not self.current_config_id:

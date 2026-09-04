@@ -498,3 +498,179 @@ def delete_machine_dify_config(config_id: int, db: Session = Depends(get_db)):
     db.delete(row)
     db.commit()
     return {"status": "success", "message": f"配置 {config_id} 已删除"}
+
+
+# ========== 机台级 AI 路由诊断（前端显示AI来源用） ==========
+
+@router.get("/machine-routing/{machine_id}")
+def get_machine_ai_routing(machine_id: str, db: Session = Depends(get_db)):
+    """查询指定机台的AI路由决策结果（前端机台详情页显示"当前AI来源"）
+
+    返回优先级：
+    1. 机台专属 Dify → source='machine_dify'
+    2. 全局 Dify（dify_enabled + 有key）且 ai_configs.provider=='dify' → source='global_dify'
+    3. 默认 LLM 配置（ai_provider_configs 中默认/启用的第一条） → source='llm'
+    4. 回退本地规则 → source='local'
+    """
+    from models import Machine, MachineDifyConfig, AIProviderConfig
+
+    # 1) 查机台型号
+    model_id = None
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if machine and machine.model:
+        model_id = machine.model.strip().upper()
+    else:
+        mid = str(machine_id or "").strip().upper()
+        if "-" in mid:
+            model_id = mid.split("-")[0]
+        elif mid:
+            model_id = mid
+
+    machine_dify = None
+    if model_id:
+        row = db.query(MachineDifyConfig).filter(
+            MachineDifyConfig.model_id == model_id,
+            MachineDifyConfig.is_active == 1,
+        ).first()
+        if not row:
+            row = db.query(MachineDifyConfig).filter(
+                MachineDifyConfig.model_id.like(f"{model_id}%"),
+                MachineDifyConfig.is_active == 1,
+            ).first()
+        if row:
+            machine_dify = {
+                "id": row.id,
+                "config_name": row.config_name,
+                "model_id": row.model_id,
+                "dify_base_url": row.dify_base_url,
+                "dify_api_key_preview": (row.dify_api_key[:8] + "****") if row.dify_api_key else "",
+                "is_active": row.is_active,
+                "updated_at": row.updated_at,
+            }
+
+    if machine_dify:
+        return {
+            "source": "machine_dify",
+            "source_label": f"机台专属 Dify · {machine_dify['config_name']}",
+            "provider": "dify",
+            "provider_name": machine_dify["config_name"],
+            "model": f"dify-{machine_dify['config_name']}",
+            "config_id": None,
+            "machine_dify": machine_dify,
+            "global_dify": None,
+            "llm_config": None,
+            "machine_model_id": model_id,
+        }
+
+    # 2) 全局 Dify
+    global_cfg = ai_middleware.get_config()
+    global_dify_summary = {
+        "enabled": global_cfg.get("dify_enabled", False),
+        "base_url": global_cfg.get("dify_base_url", ""),
+        "has_api_key": global_cfg.get("dify_has_api_key", False),
+        "api_key_preview": global_cfg.get("dify_api_key_preview", ""),
+        "app_id": global_cfg.get("dify_app_id", ""),
+    }
+    if (ai_middleware.provider == "dify"
+            and global_dify_summary["enabled"]
+            and global_dify_summary["has_api_key"]
+            and global_dify_summary["base_url"]):
+        return {
+            "source": "global_dify",
+            "source_label": "全局 Dify",
+            "provider": "dify",
+            "provider_name": global_cfg.get("provider_name") or "Dify",
+            "model": "dify-global",
+            "config_id": None,
+            "machine_dify": None,
+            "global_dify": global_dify_summary,
+            "llm_config": None,
+            "machine_model_id": model_id,
+        }
+
+    # 3) 默认 LLM 配置
+    llm_cfg = (db.query(AIProviderConfig).filter(
+        AIProviderConfig.is_default == True,
+        AIProviderConfig.is_enabled == True,
+    ).first()
+        or db.query(AIProviderConfig).filter(
+        AIProviderConfig.is_enabled == True,
+    ).order_by(AIProviderConfig.sort_order, AIProviderConfig.id).first())
+    if llm_cfg:
+        return {
+            "source": "llm",
+            "source_label": f"LLM · {llm_cfg.name}",
+            "provider": llm_cfg.provider,
+            "provider_name": llm_cfg.name,
+            "model": llm_cfg.model,
+            "config_id": llm_cfg.id,
+            "machine_dify": None,
+            "global_dify": global_dify_summary,
+            "llm_config": {
+                "id": llm_cfg.id,
+                "name": llm_cfg.name,
+                "provider": llm_cfg.provider,
+                "model": llm_cfg.model,
+                "base_url_masked": ai_middleware._mask_url(llm_cfg.base_url),
+                "has_api_key": bool(llm_cfg.api_key),
+                "is_default": llm_cfg.is_default,
+            },
+            "machine_model_id": model_id,
+        }
+
+    # 4) 本地规则
+    return {
+        "source": "local",
+        "source_label": "本地规则引擎（兜底）",
+        "provider": "local",
+        "provider_name": "本地规则引擎",
+        "model": "",
+        "config_id": None,
+        "machine_dify": None,
+        "global_dify": global_dify_summary,
+        "llm_config": None,
+        "machine_model_id": model_id,
+    }
+
+
+# ========== 切换全局 AI Provider（含切换到"全局Dify"） ==========
+
+@router.post("/switch-global")
+def switch_global_ai(body: dict):
+    """切换全局AI路由（用于浮动球/AI配置面板的"切换到Dify全局/切回LLM"按钮）
+
+    body.target: 'dify' | 'llm_default'
+      - 'dify': 使用全局 Dify（要求 dify_enabled + dify_base_url + dify_api_key）
+      - 'llm_default': 使用当前默认 LLM 配置
+    """
+    target = (body or {}).get("target", "")
+    if target == "dify":
+        cfg = ai_middleware.get_config()
+        if not cfg.get("dify_enabled") or not cfg.get("dify_base_url") or not cfg.get("dify_has_api_key"):
+            raise HTTPException(status_code=400,
+                                detail="请先在 AI 配置页面启用并填写 Dify URL + API Key")
+        # 用 update_config 持久化 provider=dify（下次重启仍生效）
+        ok = ai_middleware.update_config({"provider": "dify", "dify_enabled": True})
+        if not ok:
+            raise HTTPException(status_code=500, detail="切换失败，配置写入错误")
+        return {
+            "success": True,
+            "message": "已切换到 全局Dify",
+            "provider": ai_middleware.provider,
+            "provider_name": "全局 Dify",
+            "model": "dify-global",
+            "config_id": None,
+        }
+    if target == "llm_default":
+        ai_middleware._load_llm_config()
+        # 同步落库 provider 字段（与当前实际一致，避免持久化是 dify 重启仍然走 dify）
+        ai_middleware._save_to_db("provider", ai_middleware.provider)
+        return {
+            "success": True,
+            "message": f"已切回默认 LLM: {ai_middleware.provider_name or ai_middleware.provider}/{ai_middleware.model}",
+            "provider": ai_middleware.provider,
+            "provider_name": ai_middleware.provider_name or ai_middleware.provider,
+            "model": ai_middleware.model,
+            "config_id": ai_middleware.current_config_id,
+        }
+    raise HTTPException(status_code=400, detail="target 仅支持：dify | llm_default")

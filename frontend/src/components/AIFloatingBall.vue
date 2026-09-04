@@ -44,9 +44,11 @@ const isRecording = ref(false)
 const interimText = ref('')
 
 // 当前AI配置与模型切换
-const currentConfig = ref({ name: '本地规则引擎', provider_name: '本地规则引擎', model: '', config_id: null })
+const currentConfig = ref({ name: '本地规则引擎', provider_name: '本地规则引擎', model: '', config_id: null, special: null })
 const showModelSelector = ref(false)
 const availableConfigs = ref([])
+// 全局Dify状态：切换下拉时用（是否已配置启用）
+const globalDifyStatus = ref({ enabled: false, base_url: '', has_api_key: false, api_key_preview: '' })
 
 // 拖拽
 const isDragging = ref(false)
@@ -114,12 +116,37 @@ onUnmounted(() => {
 
 async function loadCurrentConfig() {
   try {
-    const res = await api.aiGetProviders()
-    currentConfig.value = {
-      name: res.current_name || '本地规则引擎',
-      provider_name: res.current_name || '本地规则引擎',
-      model: res.current || '',
-      config_id: res.current_config_id || null,
+    const [provRes, cfgRes] = await Promise.all([
+      api.aiGetProviders(),
+      api.aiGetConfig().catch(() => null),
+    ])
+    // 判断当前是否处于 全局Dify 模式
+    const isGlobalDify = (provRes && provRes.current === 'dify')
+    // 保存全局Dify状态（用于下拉显示是否可选）
+    if (cfgRes) {
+      globalDifyStatus.value = {
+        enabled: !!cfgRes.dify_enabled,
+        base_url: cfgRes.dify_base_url || '',
+        has_api_key: !!cfgRes.dify_has_api_key,
+        api_key_preview: cfgRes.dify_api_key_preview || '',
+      }
+    }
+    if (isGlobalDify) {
+      currentConfig.value = {
+        name: '全局 Dify',
+        provider_name: '全局 Dify',
+        model: 'dify-global',
+        config_id: null,
+        special: 'global_dify',
+      }
+    } else {
+      currentConfig.value = {
+        name: provRes.current_name || '本地规则引擎',
+        provider_name: provRes.current_name || '本地规则引擎',
+        model: provRes.current || '',
+        config_id: provRes.current_config_id || null,
+        special: null,
+      }
     }
   } catch (e) {
     console.error('加载当前AI配置失败', e)
@@ -142,8 +169,56 @@ async function selectConfig(configId) {
     await loadAvailableConfigs()
     showModelSelector.value = false
   } catch (e) {
+    alert('切换失败：' + (e.message || e))
     console.error('切换配置失败', e)
   }
+}
+
+// 切换到「全局 Dify」（后端要求已配置URL+Key且启用）
+async function selectGlobalDify() {
+  if (!globalDifyStatus.value.enabled || !globalDifyStatus.value.base_url || !globalDifyStatus.value.has_api_key) {
+    alert('请先到「AI 配置管理」页面启用并填写 Dify URL 和 API Key，再切换到全局 Dify')
+    return
+  }
+  try {
+    const res = await api.aiSwitchGlobalAI('dify')
+    currentConfig.value = {
+      name: '全局 Dify',
+      provider_name: '全局 Dify',
+      model: res.model || 'dify-global',
+      config_id: null,
+      special: 'global_dify',
+    }
+    showModelSelector.value = false
+  } catch (e) {
+    alert('切换到全局 Dify 失败：' + (e.message || e))
+    console.error('切换全局 Dify 失败', e)
+  }
+}
+
+// 切回默认 LLM 配置
+async function selectLLMDefault() {
+  try {
+    const res = await api.aiSwitchGlobalAI('llm_default')
+    currentConfig.value = {
+      name: res.provider_name || (res.provider === 'local' ? '本地规则引擎' : res.provider),
+      provider_name: res.provider_name || res.provider,
+      model: res.model || '',
+      config_id: res.config_id || null,
+      special: null,
+    }
+    await loadAvailableConfigs()
+    showModelSelector.value = false
+  } catch (e) {
+    alert('切回默认 LLM 失败：' + (e.message || e))
+    console.error('切回默认 LLM 失败', e)
+  }
+}
+
+// 判断某 LLM 配置是否为当前选中（含 special=global_dify 的独立判断）
+function isActiveConfig(cfg) {
+  if (currentConfig.value.special === 'global_dify') return false
+  return cfg.id === currentConfig.value.config_id
 }
 
 function toggleModelSelector() {
@@ -384,17 +459,38 @@ function jumpToTime(payload, machineOnline = null) {
           </span>
           <!-- 模型选择下拉 -->
           <div v-if="showModelSelector" class="model-dropdown">
+            <!-- 全局路由选项组 -->
+            <div class="model-group-label">全局模式</div>
+            <div
+              class="model-option"
+              :class="{ active: currentConfig.special === 'global_dify', disabled: !(globalDifyStatus.enabled && globalDifyStatus.base_url && globalDifyStatus.has_api_key) }"
+              :title="globalDifyStatus.enabled && globalDifyStatus.api_key_preview
+                ? ('Dify Key: ' + globalDifyStatus.api_key_preview)
+                : '请先在 AI 配置管理中启用 Dify 并填写 URL + API Key'"
+              @click.stop="selectGlobalDify()"
+            >
+              🤖 全局 Dify <span class="model-tag">通用 Dify 应用</span>
+            </div>
+            <div
+              class="model-option"
+              :class="{ active: currentConfig.special !== 'global_dify' && !currentConfig.config_id }"
+              @click.stop="selectLLMDefault()"
+            >
+              📌 默认 LLM <span class="model-tag">系统默认配置</span>
+            </div>
+            <!-- LLM 配置列表 -->
+            <div v-if="availableConfigs.filter(c => c.is_enabled).length > 0" class="model-group-label">LLM 配置</div>
             <div
               v-for="cfg in availableConfigs.filter(c => c.is_enabled)"
               :key="cfg.id"
               class="model-option"
-              :class="{ active: cfg.id === currentConfig.config_id }"
+              :class="{ active: isActiveConfig(cfg) }"
               @click.stop="selectConfig(cfg.id)"
             >
               {{ cfg.name }} <span class="model-tag">{{ cfg.model }}</span>
             </div>
             <div v-if="availableConfigs.filter(c => c.is_enabled).length === 0" class="model-option disabled">
-              暂无可用配置
+              暂无 LLM 配置（请到 AI 配置管理中添加）
             </div>
           </div>
         </span>
@@ -1072,14 +1168,25 @@ function jumpToTime(payload, machineOnline = null) {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 220px;
+  min-width: 260px;
   background: #1a1f2e;
   border: 1px solid #2a3142;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   z-index: 100;
   padding: 6px 0;
+  max-height: 480px;
+  overflow-y: auto;
 }
+.model-group-label {
+  padding: 6px 14px 4px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #64748b;
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.model-group-label:first-child { border-top: none; }
 .model-option {
   padding: 8px 14px;
   font-size: 12px;
@@ -1089,7 +1196,7 @@ function jumpToTime(payload, machineOnline = null) {
   align-items: center;
   justify-content: space-between;
 }
-.model-option:hover {
+.model-option:hover:not(.disabled) {
   background: rgba(0, 212, 255, 0.08);
 }
 .model-option.active {
@@ -1098,7 +1205,8 @@ function jumpToTime(payload, machineOnline = null) {
 }
 .model-option.disabled {
   color: #555;
-  cursor: default;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 .model-tag {
   font-size: 10px;

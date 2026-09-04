@@ -93,6 +93,19 @@ export const api = {
   aiCreateMachineDifyConfig: (data) => request('POST', '/ai/machine-dify', data),
   aiUpdateMachineDifyConfig: (id, data) => request('PUT', `/ai/machine-dify/${id}`, data),
   aiDeleteMachineDifyConfig: (id) => request('DELETE', `/ai/machine-dify/${id}`),
+  // 机台级AI路由诊断（前端显示AI来源用）
+  aiGetMachineAiRouting: (machineId) => request('GET', `/ai/machine-routing/${encodeURIComponent(machineId)}`),
+  // 切换全局AI（'dify' | 'llm_default'）—— 浮动球模型切换Dify全局入口
+  aiSwitchGlobalAI: (target) => request('POST', '/ai/switch-global', { target }),
+  // 机台专属Dify连接测试
+  aiTestMachineDify: (config) => request('POST', '/ai/config/test', {
+    provider_type: 'dify',
+    config: {
+      dify_enabled: true,
+      dify_base_url: config.dify_base_url,
+      dify_api_key: config.dify_api_key,
+    },
+  }),
   // AI 使用量统计
   aiGetUsageStats: (days = 30) => request('GET', `/ai/usage/stats?days=${days}`),
   aiGetUsageLogs: (params = {}) => {

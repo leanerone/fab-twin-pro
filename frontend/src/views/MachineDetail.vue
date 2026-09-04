@@ -36,6 +36,208 @@ const props = defineProps({
   id: { type: String, default: '' },
 })
 
+// ============ 机台详情 AI Tab：专用Dify配置管理面板 ============
+const machineDifyForm = ref({
+  id: null,              // 已有记录的主键（null表示新建）
+  config_name: '',
+  model_id: '',          // 机台型号ID（匹配 MACHINE_DIFY_CONFIGS.model_id），如 OXE / PODOPENER
+  dify_base_url: '',
+  dify_api_key: '',      // 新输入时用真实值；加载后若 DB 已保存但用户没改，会显示为掩码预览，保存时判断是否仍含 **** 以决定不覆盖原有 key
+  is_active: 1,
+})
+const machineDifyTestState = ref({ loading: false, message: '', level: '' })
+const machineDifySaveState = ref({ loading: false, message: '', level: '' })
+const machineDifyModelIdHint = ref('')   // 辅助提示（从machine.model推导）
+const showMachineDifyPanel = ref(true)  // 折叠：默认展开
+
+// AiAssistant ref -> 修改完配置后调用它的 reloadRouting()
+const aiAssistantVueRef = ref(null)
+
+function inferModelIdFromMachine(m) {
+  // 与后端保持一致：优先 machine.model，否则取机台ID第一个 - 前缀
+  if (m && m.model && String(m.model).trim()) return String(m.model).trim().toUpperCase()
+  const mid = String(m ? (m.id || machineId.value) : (machineId.value || '')).trim().toUpperCase()
+  if (!mid) return ''
+  if (mid.includes('-')) return mid.split('-')[0]
+  return mid
+}
+
+// 加载/刷新机台Dify配置（通过 /machine-routing），同时填充表单
+async function loadMachineDifyConfig() {
+  try {
+    // 用新增的 machine-routing API 获取当前是否已有机台专属Dify
+    const r = await api.aiGetMachineAiRouting(machineId.value)
+    const modelIdHint = inferModelIdFromMachine(machine.value)
+    machineDifyModelIdHint.value = modelIdHint
+    // 初始化表单
+    if (r.machine_dify) {
+      // 有配置：回填（dify_api_key 填掩码预览）
+      machineDifyForm.value = {
+        id: r.machine_dify.id,
+        config_name: r.machine_dify.config_name || `Dify · ${r.machine_dify.model_id || ''}`,
+        model_id: r.machine_dify.model_id || modelIdHint,
+        dify_base_url: r.machine_dify.dify_base_url || '',
+        dify_api_key: r.machine_dify.dify_api_key_preview || '',   // 掩码预览
+        is_active: r.machine_dify.is_active == 0 ? 0 : 1,
+      }
+    } else {
+      machineDifyForm.value = {
+        id: null,
+        config_name: `Dify · ${modelIdHint || machineId.value}`,
+        model_id: modelIdHint || machineId.value,
+        dify_base_url: '',
+        dify_api_key: '',
+        is_active: 1,
+      }
+    }
+    machineDifySaveState.value = { loading: false, message: '', level: '' }
+    machineDifyTestState.value = { loading: false, message: '', level: '' }
+  } catch (e) {
+    console.warn('[MachineDetail] 加载机台Dify配置失败:', e)
+  }
+}
+
+// 判断输入框当前的 api_key 值是否为掩码预览（不是用户实际新输入）
+function isMaskedPreview(str) {
+  return typeof str === 'string' && /\*{4,}/.test(str)
+}
+
+async function testMachineDify() {
+  const form = machineDifyForm.value
+  if (!form.dify_base_url) {
+    machineDifyTestState.value = { loading: false, message: '请先填写 Dify API 地址', level: 'error' }
+    return
+  }
+  let apiKey = form.dify_api_key
+  // 若是掩码预览 → 说明 UI 上没改 key，这时候测试要用 DB 里的真实key。
+  // 直接让后端调用 /ai/config/test 传入 "****" 这种掩码无法通过 dify 实际校验。
+  // 因此前端这里提供明确提示：若已保存，请先保存或改用 aiTestConnection + 复用 saved DB key 逻辑
+  if (isMaskedPreview(apiKey)) {
+    // 如果已有id（=在DB里有记录），调用后端配置测试接口（后端 test_connection 逻辑会走 DB saved fallback）
+    if (!form.id) {
+      machineDifyTestState.value = { loading: false, message: '已保存的 API Key 显示为掩码；请先点"保存配置"再测试，或手动重新输入真实 API Key', level: 'warn' }
+      return
+    }
+    machineDifyTestState.value = { loading: true, message: '使用已保存凭据测试中...', level: '' }
+    try {
+      // 用 masked 形式走 /ai/config/test → 后端 test_connection 中 Dify 分支已兼容 masked_preview 用 DB值
+      const res = await api.aiTestConnection('dify', {
+        dify_enabled: true,
+        dify_base_url: form.dify_base_url,
+        dify_api_key: apiKey,  // 掩码预览，后端会走 DB fallback
+      })
+      machineDifyTestState.value = {
+        loading: false,
+        message: res.success ? (res.message || '连接成功') : (res.message || '连接失败'),
+        level: res.success ? 'success' : 'error',
+      }
+    } catch (e) {
+      machineDifyTestState.value = { loading: false, message: '测试失败：' + (e.message || String(e)), level: 'error' }
+    }
+    return
+  }
+  // 用户输入了真实 key → 直接测试
+  if (!apiKey) {
+    machineDifyTestState.value = { loading: false, message: '请先输入 Dify API Key', level: 'error' }
+    return
+  }
+  machineDifyTestState.value = { loading: true, message: '测试连接中...', level: '' }
+  try {
+    const res = await api.aiTestMachineDify({ dify_base_url: form.dify_base_url, dify_api_key: apiKey })
+    machineDifyTestState.value = {
+      loading: false,
+      message: res.success ? (res.message || '连接成功') : (res.message || '连接失败'),
+      level: res.success ? 'success' : 'error',
+    }
+  } catch (e) {
+    machineDifyTestState.value = { loading: false, message: '测试失败：' + (e.message || String(e)), level: 'error' }
+  }
+}
+
+async function saveMachineDify() {
+  const form = machineDifyForm.value
+  if (!form.model_id) {
+    machineDifySaveState.value = { loading: false, message: '请填写 机台型号（model_id，如 OXE）', level: 'error' }
+    return
+  }
+  if (!form.dify_base_url) {
+    machineDifySaveState.value = { loading: false, message: '请填写 Dify API 地址', level: 'error' }
+    return
+  }
+  // 如果是更新（已有 id）且 api_key 框仍是掩码预览，说明用户没改 key → 不传 dify_api_key，后端 update 会忽略这个字段，保留原值
+  const payload = {
+    config_name: form.config_name || `Dify · ${form.model_id}`,
+    model_id: String(form.model_id).trim().toUpperCase(),
+    dify_base_url: String(form.dify_base_url).trim().replace(/\/$/, ''),
+    is_active: form.is_active ? 1 : 0,
+  }
+  const masked = isMaskedPreview(form.dify_api_key)
+  if (form.id && masked) {
+    // 更新但不改 key，不传 dify_api_key
+  } else if (!form.dify_api_key || masked) {
+    machineDifySaveState.value = { loading: false, message: '新建配置需要填写真实的 Dify API Key', level: 'error' }
+    return
+  } else {
+    payload.dify_api_key = form.dify_api_key
+  }
+
+  machineDifySaveState.value = { loading: true, message: form.id ? '保存中...' : '创建中...', level: '' }
+  try {
+    if (form.id) {
+      await api.aiUpdateMachineDifyConfig(form.id, payload)
+      machineDifySaveState.value = { loading: false, message: '机台专属 Dify 已更新', level: 'success' }
+    } else {
+      const created = await api.aiCreateMachineDifyConfig(payload)
+      machineDifyForm.value.id = created.id || null
+      machineDifySaveState.value = { loading: false, message: '机台专属 Dify 已创建并生效', level: 'success' }
+    }
+    // 刷新 AiAssistant 的 Routing Bar（应变成 machine_dify）
+    if (aiAssistantVueRef.value && typeof aiAssistantVueRef.value.reloadRouting === 'function') {
+      await aiAssistantVueRef.value.reloadRouting()
+    }
+  } catch (e) {
+    machineDifySaveState.value = { loading: false, message: '保存失败：' + (e.message || String(e)), level: 'error' }
+  }
+}
+
+async function disableOrDeleteMachineDify() {
+  const form = machineDifyForm.value
+  if (!form.id) return
+  // 先尝试「禁用」（is_active=0），若用户再点才删除
+  if (form.is_active) {
+    try {
+      await api.aiUpdateMachineDifyConfig(form.id, { is_active: 0 })
+      machineDifyForm.value.is_active = 0
+      machineDifySaveState.value = { loading: false, message: '已禁用该机台型号的 Dify 配置（仍保留，可再次启用）', level: 'warn' }
+      if (aiAssistantVueRef.value && typeof aiAssistantVueRef.value.reloadRouting === 'function') {
+        await aiAssistantVueRef.value.reloadRouting()
+      }
+      return
+    } catch (e) {
+      machineDifySaveState.value = { loading: false, message: '禁用失败：' + (e.message || String(e)), level: 'error' }
+      return
+    }
+  }
+  if (!confirm(`确定要永久删除 型号 ${form.model_id} 的 Dify 专用配置吗？（删除后该型号会走 全局Dify/LLM/本地规则）`)) return
+  try {
+    await api.aiDeleteMachineDifyConfig(form.id)
+    machineDifyForm.value.id = null
+    machineDifyForm.value.is_active = 0
+    machineDifySaveState.value = { loading: false, message: '已删除该机台型号 Dify 专用配置', level: 'success' }
+    await loadMachineDifyConfig()
+    if (aiAssistantVueRef.value && typeof aiAssistantVueRef.value.reloadRouting === 'function') {
+      await aiAssistantVueRef.value.reloadRouting()
+    }
+  } catch (e) {
+    machineDifySaveState.value = { loading: false, message: '删除失败：' + (e.message || String(e)), level: 'error' }
+  }
+}
+
+// 加载机台基本信息 + 数据完成后，再加载机台Dify配置
+watch(() => machine.value, (m) => {
+  if (m) loadMachineDifyConfig()
+}, { immediate: false })
+
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
@@ -1273,8 +1475,77 @@ onMounted(() => {
       </div>
 
       <!-- AI Tab -->
-      <div v-show="rightTab === 'ai'" class="dr-section">
-        <AiAssistant ref="aiAssistantRef" :machine-id="machineId" :prefill-question="aiPrefillQuestion" @jump="jumpToTime" />
+      <div v-show="rightTab === 'ai'" class="dr-section ai-tab-wrap">
+        <!-- 机台专属 Dify 配置面板 -->
+        <div class="machine-dify-panel">
+          <div class="mdp-header" @click="showMachineDifyPanel = !showMachineDifyPanel">
+            <span class="mdp-title">⚙️ 机台专属 Dify 配置</span>
+            <span class="mdp-toggle">{{ showMachineDifyPanel ? '▲ 收起' : '▼ 展开' }}</span>
+          </div>
+          <div v-show="showMachineDifyPanel" class="mdp-body">
+            <div class="mdp-form-grid">
+              <label>
+                <span>配置名称</span>
+                <input v-model="machineDifyForm.config_name" placeholder="如：OXE专用刻蚀Dify" />
+              </label>
+              <label>
+                <span>机台型号 model_id <em>(决定哪些机台命中此配置，匹配machine.model)</em></span>
+                <input
+                  v-model="machineDifyForm.model_id"
+                  :placeholder="'例：OXE （当前识别到: ' + (machineDifyModelIdHint || '未知') + '）'"
+                />
+              </label>
+              <label>
+                <span>Dify API 地址</span>
+                <input v-model="machineDifyForm.dify_base_url" placeholder="例：http://192.168.1.100/v1" />
+              </label>
+              <label>
+                <span>Dify API Key <em>(app-xxxxxxx)</em></span>
+                <input
+                  v-model="machineDifyForm.dify_api_key"
+                  type="password"
+                  :placeholder="machineDifyForm.id ? '（已保存，输入新值才会覆盖）' : '请输入 app- 开头的 Dify API Key'"
+                />
+              </label>
+              <label class="inline-label">
+                <input type="checkbox" v-model="machineDifyForm.is_active" :true-value="1" :false-value="0" />
+                <span>启用此配置（未启用时，该型号机台回退到全局Dify/LLM/本地规则）</span>
+              </label>
+            </div>
+            <div class="mdp-actions">
+              <button class="mdp-btn test" :disabled="machineDifyTestState.loading" @click="testMachineDify()">
+                {{ machineDifyTestState.loading ? '测试中...' : '🧪 测试连接' }}
+              </button>
+              <button class="mdp-btn save" :disabled="machineDifySaveState.loading" @click="saveMachineDify()">
+                {{ machineDifySaveState.loading ? '保存中...' : (machineDifyForm.id ? '💾 保存配置' : '➕ 创建配置') }}
+              </button>
+              <button
+                v-if="machineDifyForm.id"
+                class="mdp-btn danger"
+                :disabled="machineDifySaveState.loading"
+                @click="disableOrDeleteMachineDify()"
+              >
+                {{ machineDifyForm.is_active ? '⛔ 禁用' : '🗑️ 删除' }}
+              </button>
+            </div>
+            <!-- 测试/保存消息 -->
+            <div v-if="machineDifyTestState.message" class="mdp-msg" :class="'msg-' + machineDifyTestState.level">
+              [测试] {{ machineDifyTestState.message }}
+            </div>
+            <div v-if="machineDifySaveState.message" class="mdp-msg" :class="'msg-' + machineDifySaveState.level">
+              [配置] {{ machineDifySaveState.message }}
+            </div>
+            <div class="mdp-hint">
+              💡 说明：同型号（model_id）的机台共用一个 Dify 配置。优先级「机台专属 Dify > 全局Dify/LLM」。
+            </div>
+          </div>
+        </div>
+        <AiAssistant
+          ref="aiAssistantVueRef"
+          :machine-id="machineId"
+          :prefill-question="aiPrefillQuestion"
+          @jump="jumpToTime"
+        />
       </div>
 
 
@@ -1638,5 +1909,115 @@ onMounted(() => {
 .dr-loading-text {
   font-size: 12px;
   color: #94a3b8;
+}
+
+/* ===== AI Tab：机台专属 Dify 配置面板 ===== */
+.ai-tab-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-tab-wrap .dr-section { min-height: 0; }
+.machine-dify-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.18);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mdp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(0, 212, 255, 0.05);
+  border-bottom: 1px solid var(--border);
+}
+.mdp-title { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; color: var(--accent); }
+.mdp-toggle { font-size: 10.5px; color: var(--text-dim); }
+.mdp-body { padding: 10px 12px 12px; }
+.mdp-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.mdp-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.mdp-form-grid label em {
+  font-style: normal;
+  color: #64748b;
+  font-weight: 400;
+  margin-left: 4px;
+}
+.mdp-form-grid label.inline-label {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+.mdp-form-grid input[type="text"],
+.mdp-form-grid input[type="password"],
+.mdp-form-grid input:not([type]) {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+  width: 100%;
+}
+.mdp-form-grid input:focus { border-color: var(--accent); }
+.mdp-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mdp-btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mdp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.mdp-btn.test { border-color: rgba(250, 204, 21, 0.35); color: #facc15; background: rgba(250, 204, 21, 0.06); }
+.mdp-btn.test:hover:not(:disabled) { background: rgba(250, 204, 21, 0.12); }
+.mdp-btn.save { border-color: rgba(0, 212, 255, 0.4); color: #00d4ff; background: rgba(0,212,255,0.08); }
+.mdp-btn.save:hover:not(:disabled) { background: rgba(0,212,255,0.15); }
+.mdp-btn.danger { border-color: rgba(255, 71, 87, 0.4); color: #ff4757; background: rgba(255,71,87,0.06); }
+.mdp-btn.danger:hover:not(:disabled) { background: rgba(255,71,87,0.12); }
+.mdp-msg {
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  border-radius: 5px;
+  line-height: 1.5;
+}
+.mdp-msg.msg-success { color: #10b981; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); }
+.mdp-msg.msg-error   { color: #ff4757; background: rgba(255,71,87,0.08); border: 1px solid rgba(255,71,87,0.25); }
+.mdp-msg.msg-warn    { color: #f59e0b; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); }
+.mdp-hint {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.5;
+}
+@media (max-width: 520px) {
+  .mdp-form-grid { grid-template-columns: 1fr; }
 }
 </style>
