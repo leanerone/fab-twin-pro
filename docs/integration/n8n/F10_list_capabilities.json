@@ -1,0 +1,124 @@
+{
+  "name": "F10. 功能清单（FabTwin 工具 list_capabilities）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "list_capabilities",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "list_capabilities-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst machineId = clean(body.machine_id);\nreturn {\n  json: {\n    machine_id: machineId,\n    machine_id_like: machineId ? (machineId + '%') : '',\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: {} };"
+      },
+      "name": "功能清单（无 DB 操作，直通 Format）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst answer = '我作为 FabTwin Pro AI 助手，可以帮您查询与处理以下 10 类事项：\\n① 机台实时状态（运行模式/当前加工 Lot/全厂概览）\\n② Lot 批次位置/进度追踪（单 Lot 或机台 Lot 列表）\\n③ 报警统计与异常定位（按严重等级/时间范围）\\n④ 温度趋势与事件时间线（事件分布/回放线索）\\n⑤ 产量与完成率统计（Lot/晶圆/计划对比）\\n⑥ 工艺配方查询（Recipe ID/版本/关键参数）\\n⑦ MES Lot 详情【管理员】（良率/路线/工序站）\\n⑧ 导出报警报表 Excel【管理员】\\n⑨ 生成故障工单【管理员】\\n⑩ 功能清单（就是本回复）。\\n请告诉我您想查哪一类，并附上机台 ID（如 OXE-1）或 Lot ID，我就能精确查询。';\nreturn { json: { ok: true, answer, table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'list_capabilities', execution_id: $execution.id }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "功能清单（无 DB 操作，直通 Format）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "功能清单（无 DB 操作，直通 Format）": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "tags": [
+    "FabTwin",
+    "Phase0"
+  ]
+}

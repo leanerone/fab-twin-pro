@@ -65,8 +65,23 @@ agent_strategy:
   planner: function_call
   max_iteration: 5
 
+  # OXE 专属：model_id/chambers 默认（仅 OXE 机台命中到本 Dify 应用时，后端会真实传入）
+  machine_model:
+    label: 机台型号（机台专属 Dify 自动带入）
+    type: text-input
+    default: OXE
+    max_length: 32
+  chambers:
+    label: Chamber 数（机台专属 Dify 自动带入）
+    type: paragraph  # 实际是整数，Dify text-input 兼容数字
+    default: 3
+    max_length: 4
+
 model_config:
   system_prompt: |
+    （OXE 系列专用）当前机台型号为刻蚀系列(OXE)，Chamber 数 3 个。当用户询问配方/参数时，优先使用 get_recipe_info 返回 Etch 配方信息。
+    
+    
     # 角色
     你是 FabTwin Pro 半导体产线 AI 数字孪生助手。面对用户的中文口语化提问，你必须按【流程 4 步】执行，最后输出【最终回答格式】。严禁编造任何数据；数据只能来源于【工具】。
     

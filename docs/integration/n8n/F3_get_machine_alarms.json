@@ -1,0 +1,132 @@
+{
+  "name": "F3. 报警统计（FabTwin 工具 get_machine_alarms）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_machine_alarms",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_machine_alarms-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst numClean = (s) => { const x = parseInt(s, 10); return Number.isFinite(x) && x > 0 ? x : 7; };\nreturn {\n  json: {\n    machine_id: clean(body.machine_id),\n    machine_id_like: clean(body.machine_id) ? (clean(body.machine_id) + '%') : '',\n    severity: clean(body.severity).toLowerCase(),\n    days: numClean(body.days),\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, machine_id, severity, description, ts\nFROM (\n  SELECT a.id, a.machine_id, a.severity, a.description, a.ts\n  FROM dt_alarms a\n  WHERE a.ts >= TRUNC(SYSDATE) - ({{ $json.days }} - 0)\n    AND (LENGTH('{{ $json.machine_id }}')=0 OR a.machine_id LIKE '{{ $json.machine_id_like }}')\n    AND (LENGTH('{{ $json.severity }}')=0 OR LOWER(a.severity) LIKE '%{{ $json.severity }}%')\n  ORDER BY a.ts DESC\n) WHERE ROWNUM <= 200",
+        "options": {}
+      },
+      "name": "Query Oracle",
+      "type": "n8n-nodes-base.oracle",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "oracleApi": {
+          "id": "",
+          "name": "FabTwin Oracle"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst rs = rows.filter(r => r && r.id);\nconst total = rs.length;\nconst critical = rs.filter(r => String(r.severity||'').toLowerCase().includes('crit')).length;\nconst warning  = rs.filter(r => String(r.severity||'').toLowerCase().includes('warn')).length;\nconst info     = total - critical - warning;\nlet answer = `合计 ${total} 条报警：严重 ${critical} 条、警告 ${warning} 条、提示 ${info} 条。`;\nif (critical > 0) answer += ' 严重报警请优先现场排查。';\nconst headers = ['报警ID','机台ID','严重等级','描述','时间'];\nconst vals = rs.slice(0, 80).map(r => [String(r.id||''), String(r.machine_id||''), String(r.severity||''), String(r.description||''), String(r.ts||'')]);\nconst latest = rs[0];\nreturn { json: { ok: true, answer, table_data: total>0 ? { headers, rows: vals } : null, jump_timestamp: latest ? String(latest.ts) : null, jump_machine_id: latest && latest.machine_id ? String(latest.machine_id) : null, sources: [{ type: 'n8n', workflow: 'get_machine_alarms', execution_id: $execution.id }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Query Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Oracle": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "tags": [
+    "FabTwin",
+    "Phase0"
+  ]
+}

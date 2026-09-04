@@ -295,6 +295,41 @@ class AIMiddleware:
             print(f"[AI] 查机台专属 Dify 配置失败: {e}")
             return None
 
+    def _get_machine_metadata(self, machine_id):
+        """按机台ID查元数据：型号 model、chamber 数 chambers。
+        返回 {"machine_model": str|None, "chambers": int|None, "machine_obj": Machine|None}
+        机台 ID 空/查不到 → 对应字段返回 None，永远不抛。
+        """
+        if not machine_id:
+            return {"machine_model": None, "chambers": None, "machine_obj": None}
+        try:
+            db = _get_db()
+            try:
+                from models import Machine
+                m = db.query(Machine).filter(Machine.id == machine_id).first()
+                if not m:
+                    return {"machine_model": None, "chambers": None, "machine_obj": None}
+                model_id = (m.model or "").strip().upper() or None
+                # chambers 推断：优先读 Machine.chamber_count（若有字段），否则用正则从详情/名称猜测 3 作为刻蚀类默认
+                chambers = getattr(m, "chamber_count", None) or getattr(m, "chambers", None)
+                if chambers is None:
+                    # 粗略兜底：刻蚀类 3 个 chamber；其他先留空
+                    if model_id and ("OXE" in model_id or "ETCH" in model_id):
+                        chambers = 3
+                try:
+                    chambers = int(chambers) if chambers is not None else None
+                except (TypeError, ValueError):
+                    chambers = None
+                return {"machine_model": model_id, "chambers": chambers, "machine_obj": m}
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[AI] 查机台元数据失败（忽略，继续）: {e}")
+            return {"machine_model": None, "chambers": None, "machine_obj": None}
+
     def _load_default_config(self):
         """加载默认 LLM 配置（无 config_id 时）"""
         self._load_llm_config()
@@ -1142,11 +1177,20 @@ Lot ID 格式说明：
             # 4) inputs: 若用户 Dify 应用未定义 machine_id/user_role 变量，传进去也会 400，
             #    这里用 "宽松策略"：先按有 inputs 发送；若返回 400 且错误信息包含 "inputs"，
             #    再自动重试 inputs={}（下方 HTTPError 处理块做回退）
+            # 5) inputs.machine_model / inputs.chambers：机台元数据（Q2 要求的"自带机台内容"）
+            #    让 Dify Start 节点就看到 "当前型号=OXE / Chambers=3" 这种上下文，
+            #    机台专属 Dify 可依此走专用 Prompt/工具；全局 Dify 也能更精确分类。
+            meta = self._get_machine_metadata(machine_id)
+            inputs = {
+                "machine_id": machine_id or "",
+                "user_role": user_role or "user",
+            }
+            if meta.get("machine_model"):
+                inputs["machine_model"] = meta["machine_model"]
+            if meta.get("chambers"):
+                inputs["chambers"] = int(meta["chambers"])
             payload = {
-                "inputs": {
-                    "machine_id": machine_id or "",
-                    "user_role": user_role or "user",
-                },
+                "inputs": inputs,
                 "query": question,
                 "response_mode": "blocking",
                 "user": f"fabtwin_{user_role}" if user_role else "fabtwin_user",
@@ -1156,6 +1200,7 @@ Lot ID 格式说明：
 
             # 诊断日志（避免打印 API Key）
             print(f"[Dify] → POST {url}, payload keys={list(payload.keys())}, "
+                  f"inputs keys={list(payload['inputs'].keys())}, "
                   f"query_len={len(question)}, user={payload['user']}")
             resp = requests.post(url, json=payload, headers=headers, timeout=90)
             # ---------- 4xx 自动回退重试（兼容 Dify 不同应用类型） ----------
@@ -1285,25 +1330,83 @@ Lot ID 格式说明：
                                 "elapsed": s.get("elapsed_time") or s.get("execution_time"),
                             })
 
-            # 从 Dify answer 中提取跳转标记（与 OpenAI 兼容模式格式一致）
+            # ============ 提取 <FABTWIN> 结构化块（Dify+n8n 新链路的约定）============
+            # 新约定：Dify 最终 answer 末尾必包 <FABTWIN>{table_data,jump_timestamp,jump_machine_id,sources}</FABTWIN>
+            # 若未找到该块，再回退旧的 [JUMP]/[MACHINE] 标记（保证过渡期兼容）
+            import json as _json_fab
             jump_ts = None
             jump_mid = None
-            jump_match = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
-            if jump_match:
-                jump_ts = jump_match.group(1).strip()
-                answer = re.sub(r'\[JUMP:\s*[^\]]+\]', '', answer).strip()
-            mid_match = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
-            if mid_match:
-                jump_mid = mid_match.group(1).strip()
-                answer = re.sub(r'\[MACHINE:\s*[^\]]+\]', '', answer).strip()
+            table_data = None
+            extra_sources = None
+            fab_found = False
+            fab_match = re.search(r'<FABTWIN>\s*(\{.*?\})\s*</FABTWIN>', answer, re.DOTALL)
+            if fab_match:
+                fab_found = True
+                try:
+                    block = _json_fab.loads(fab_match.group(1))
+                    if isinstance(block, dict):
+                        if "table_data" in block:
+                            td = block["table_data"]
+                            # 合法性校验：table_data 必须是 null 或 {headers:list, rows:list}
+                            if td is None:
+                                table_data = None
+                            elif isinstance(td, dict) and isinstance(td.get("headers"), list) and isinstance(td.get("rows"), list):
+                                table_data = td
+                            else:
+                                if tool_calls_recorder is not None:
+                                    tool_calls_recorder.append({
+                                        "tool": "fabtwin_structured_parse", "status": "warn",
+                                        "warn": f"table_data 格式不合法，丢弃: {str(td)[:200]}",
+                                    })
+                        if block.get("jump_timestamp"):
+                            jump_ts = str(block["jump_timestamp"]).strip() or None
+                        if block.get("jump_machine_id"):
+                            jump_mid = str(block["jump_machine_id"]).strip() or None
+                        extra_sources = block.get("sources")
+                except Exception as parse_e:
+                    if tool_calls_recorder is not None:
+                        tool_calls_recorder.append({
+                            "tool": "fabtwin_structured_parse", "status": "error",
+                            "error": f"<FABTWIN> JSON 解析失败: {str(parse_e)[:200]}",
+                            "raw": fab_match.group(1)[:300],
+                        })
+                # 无论解析成功与否，都从 answer 中移除 <FABTWIN> 整段（用户不应看到结构化数据）
+                answer = (answer[:fab_match.start()] + answer[fab_match.end():]).strip()
+
+            # 兼容：若没找到 FABTWIN，再尝试旧版 [JUMP]/[MACHINE] 标记（过渡期兜底）
+            if not fab_found:
+                jump_match = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
+                if jump_match:
+                    jump_ts = jump_match.group(1).strip()
+                    answer = re.sub(r'\[JUMP:\s*[^\]]+\]', '', answer).strip()
+                mid_match = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
+                if mid_match:
+                    jump_mid = mid_match.group(1).strip()
+                    answer = re.sub(r'\[MACHINE:\s*[^\]]+\]', '', answer).strip()
+
+            # sources 合并：FABTWIN 里的工具来源 + 原本 RAG/知识库引用来源
+            final_sources = list(sources)
+            if isinstance(extra_sources, list) and extra_sources:
+                final_sources.extend([s for s in extra_sources if isinstance(s, dict)])
+
+            # jump_machine_id 兜底：若 block 没写、JUMP 标记也没写，就用调用时传的 machine_id
+            final_jump_mid = jump_mid or machine_id
+
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "fabtwin_structured_parse",
+                    "status": "ok" if fab_found else "fallback_jump_mark",
+                    "has_table": table_data is not None,
+                    "has_jump_ts": jump_ts is not None,
+                })
 
             return {
                 "answer": answer,
-                "sql": "",
+                "sql": "",   # 按用户要求：网页永远不执行 SQL、永远不展示 SQL
                 "jump_timestamp": jump_ts,
-                "jump_machine_id": jump_mid or machine_id,
-                "table_data": None,
-                "sources": sources,
+                "jump_machine_id": final_jump_mid,
+                "table_data": table_data,
+                "sources": final_sources,
                 "conversation_id": conversation_id,
             }
         except requests.HTTPError as e:

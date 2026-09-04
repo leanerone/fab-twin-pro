@@ -1,0 +1,132 @@
+{
+  "name": "F2. 查询 Lot 信息（FabTwin 工具 get_lot_info）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_lot_info",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_lot_info-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst numClean = (s) => { const x = parseInt(s, 10); return Number.isFinite(x) ? x : null; };\nconst mid = clean(body.machine_id);\nconst lid = clean(body.lot_id).toUpperCase();\nreturn {\n  json: {\n    machine_id: mid,\n    machine_id_like: mid ? (mid + '%') : '',\n    lot_id: lid,\n    lot_id_like: lid ? (lid + '%') : '',\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT lot_id, machine_id, chamber, step, start_ts\nFROM (\n  SELECT d.lot_id, d.machine_id, d.chamber, d.step, d.start_ts\n  FROM dt_lots d\n  WHERE (LENGTH('{{ $json.lot_id }}')>0 AND d.lot_id LIKE '{{ $json.lot_id_like }}')\n     OR (LENGTH('{{ $json.lot_id }}')=0 AND LENGTH('{{ $json.machine_id }}')>0 AND d.machine_id LIKE '{{ $json.machine_id_like }}')\n  ORDER BY d.start_ts DESC\n) WHERE ROWNUM <= 100",
+        "options": {}
+      },
+      "name": "Query Oracle",
+      "type": "n8n-nodes-base.oracle",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "oracleApi": {
+          "id": "",
+          "name": "FabTwin Oracle"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst rs = rows.filter(r => r && r.lot_id);\nif (!rs.length) {\n  return { json: { ok: false, answer: '没有查询到相关 Lot 记录（请确认 Lot ID/机台正确）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'get_lot_info', execution_id: $execution.id }] } };\n}\nconst headers = ['Lot ID','关联机台','Chamber','工艺步骤','开始时间'];\nconst vals = rs.slice(0, 100).map(r => [String(r.lot_id||''), String(r.machine_id||''), String(r.chamber||''), String(r.step||''), String(r.start_ts||'')]);\nconst latest = rs[0];\nlet answer = `共 ${rs.length} 条 Lot 记录。最新 ${latest.lot_id}：机台 ${latest.machine_id||''}，步骤 ${latest.step||''}`;\nif (latest.start_ts) answer += `，开始时间 ${latest.start_ts}`;\nreturn { json: { ok: true, answer, table_data: { headers, rows: vals }, jump_timestamp: (latest && latest.start_ts) ? String(latest.start_ts) : null, jump_machine_id: latest && latest.machine_id ? String(latest.machine_id) : null, sources: [{ type: 'n8n', workflow: 'get_lot_info', execution_id: $execution.id }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Query Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Oracle": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "tags": [
+    "FabTwin",
+    "Phase0"
+  ]
+}
