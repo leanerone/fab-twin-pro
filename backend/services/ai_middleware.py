@@ -166,6 +166,11 @@ class AIMiddleware:
 
         # 会话存储（内存中）
         self.sessions = {}
+        # 前端 session_id (sess_xxx) → Dify conversation_id (UUID) 映射
+        # 原因: Dify conversation_id 必须是 UUID, 且首次对话不能传, 由 Dify 返回。
+        # 若传前端自己生成的 sess_xxx（非 UUID），Dify 会报:
+        #   "conversation_id must be a valid UUID"
+        self._dify_conv_map: Dict[str, str] = {}
 
         # 启动时加载配置
         self._load_dify_n8n_from_db()  # 加载Dify/N8N
@@ -1195,11 +1200,33 @@ Lot ID 格式说明：
                 "response_mode": "blocking",
                 "user": f"fabtwin_{user_role}" if user_role else "fabtwin_user",
             }
-            if session_id and str(session_id).strip():
-                payload["conversation_id"] = str(session_id).strip()
+            # ========== conversation_id 正确规则 ==========
+            # Dify 对 conversation_id 要求:
+            #   1. 必须是 UUID 格式（不能是前端的 sess_xxx）
+            #   2. 首次请求不能传（由 Dify 返回）
+            #   3. 后续请求必须传 Dify 返回的 UUID
+            # 因此维护一个映射: session_id → dify_conv_id (UUID)
+            sid_key = str(session_id).strip() if session_id else ""
+            dify_cid = self._dify_conv_map.get(sid_key) if sid_key else None
+            if dify_cid:
+                payload["conversation_id"] = dify_cid  # 非首次 → 传 Dify 返回的 UUID
+            # 注意: 首次请求不传 conversation_id（若传了 sess_xxx 这种非 UUID 会 400）
 
             # 诊断日志（避免打印 API Key）
-            print(f"[Dify] → POST {url}, payload keys={list(payload.keys())}, "
+            conv_info = f"session={sid_key or '(none)'}" + (
+                f" → dify_cid={dify_cid}" if dify_cid else " → 首次请求(无conversation_id)"
+            )
+            # 额外安全提示: 若 base_url 明显指向 n8n（端口 5678 或含 n8n 字样），打印警告
+            base_host = ""
+            try:
+                from urllib.parse import urlparse
+                base_host = urlparse(base).netloc or ""
+            except Exception:
+                pass
+            if ":5678" in base_host or "n8n" in base.lower():
+                print(f"[Dify] ⚠ 警告: dify_base_url={base!r} 看起来是 n8n 地址（不是 Dify 地址）！"
+                      f"请修正为 Dify API 地址（如 http://10.30.116.68）")
+            print(f"[Dify] → POST {url}, {conv_info}, payload keys={list(payload.keys())}, "
                   f"inputs keys={list(payload['inputs'].keys())}, "
                   f"query_len={len(question)}, user={payload['user']}")
             resp = requests.post(url, json=payload, headers=headers, timeout=90)
@@ -1259,7 +1286,12 @@ Lot ID 格式说明：
             data = resp.json()
 
             answer = data.get("answer", "")
-            conversation_id = data.get("conversation_id") or session_id
+            dify_returned_cid = data.get("conversation_id")
+            # 保存 session_id → dify_conv_id 映射（若 Dify 返回了 UUID，后续请求用它）
+            if sid_key and dify_returned_cid:
+                self._dify_conv_map[sid_key] = str(dify_returned_cid)
+                print(f"[Dify] ✓ 会话映射已保存: {sid_key} → {dify_returned_cid}")
+            conversation_id = dify_returned_cid or session_id
 
             # 解析 usage token（Dify 返回字段通常在 metadata.usage）
             prompt_tokens = 0
