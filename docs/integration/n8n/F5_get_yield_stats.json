@@ -1,5 +1,5 @@
 {
-  "name": "F5. 产量统计（FabTwin 工具 get_yield_stats）",
+  "name": "F5 产量统计",
   "nodes": [
     {
       "parameters": {
@@ -15,51 +15,37 @@
         240,
         300
       ],
-      "webhookId": "get_yield_stats-webhook-id"
+      "webhookId": "get_yield_stats-wh-id"
     },
     {
       "parameters": {
-        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst mid = clean(body.machine_id);\nreturn {\n  json: {\n    machine_id: mid,\n    machine_id_like: mid ? (mid + '%') : '',\n    time_range: clean(body.time_range) || 'today',\n  }\n};\n",
-        "options": {}
-      },
-      "name": "Parse",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        460,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT TRUNC(ts) AS dt, machine_id, COUNT(DISTINCT lot_id) AS lot_count,\n       COUNT(DISTINCT wafer_id) AS wafer_count,\n       0 AS plan_lots, MAX(ts) AS last_lot_ts\nFROM dt_event_raw e\nWHERE e.ts >= TRUNC(SYSDATE)\n  AND e.machine_id = '{{ $json.machine_id }}'\n  AND e.event_type IN ('UNLOAD','WAFERLOADED')\nGROUP BY TRUNC(ts), machine_id\nORDER BY dt DESC",
-        "options": {}
-      },
-      "name": "Query Oracle",
-      "type": "n8n-nodes-base.oracle",
-      "typeVersion": 1,
-      "position": [
-        680,
-        300
-      ],
-      "credentials": {
-        "oracleApi": {
-          "id": "",
-          "name": "FabTwin Oracle"
+        "method": "POST",
+        "url": "http://10.30.116.150:8001/query/yield_stats",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "fabtwin-proxy-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ machine_id: $json.body.machine_id || \"\", time_range: $json.body.time_range || \"today\" }) }}",
+        "options": {
+          "timeout": 30000
         }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst rs = rows.filter(r => r && r.lot_count != null);\nconst totalLots = rs.reduce((s,r)=>s+(parseInt(r.lot_count,10)||0),0);\nconst totalWafers = rs.reduce((s,r)=>s+(parseInt(r.wafer_count,10)||0),0);\nlet answer = `今日加工 ${totalLots} 个 Lot 批次，${totalWafers} 片晶圆。`;\nif (rs.length && rs[0].plan_lots) {\n  const plan = parseInt(rs[0].plan_lots,10)||0;\n  const rate = plan > 0 ? Math.round(totalLots/plan*100) : 0;\n  answer += `；计划 ${plan} Lot，完成率 ${rate}%。`;\n}\nconst headers = ['日期','机台ID','Lot数量','晶圆数量','计划Lot','完成率'];\nconst vals = rs.slice(0, 60).map(r => {\n  const plan = parseInt(r.plan_lots,10)||0;\n  const lotc = parseInt(r.lot_count,10)||0;\n  const rate = plan>0 ? Math.round(lotc/plan*100) : '';\n  return [String(r.dt||''), String(r.machine_id||''), String(r.lot_count||0), String(r.wafer_count||0), String(r.plan_lots||''), String(rate)+(rate? '%':'')];\n});\nconst latest = rs[0];\nreturn { json: { ok: true, answer, table_data: totalLots>0 ? { headers, rows: vals } : null, jump_timestamp: (latest && latest.last_lot_ts) ? String(latest.last_lot_ts) : null, jump_machine_id: (latest && latest.machine_id) ? String(latest.machine_id) : null, sources: [{ type: 'n8n', workflow: 'get_yield_stats', execution_id: $execution.id }] } };\n",
-        "options": {}
       },
-      "name": "Format",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Query DB Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
       "position": [
-        900,
+        480,
         300
       ]
     },
@@ -73,7 +59,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1120,
+        720,
         300
       ]
     }
@@ -84,36 +70,14 @@
       "main": [
         [
           {
-            "node": "Parse",
+            "node": "Query DB Proxy",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse": {
-      "main": [
-        [
-          {
-            "node": "Query Oracle",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Query Oracle": {
-      "main": [
-        [
-          {
-            "node": "Format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format": {
+    "Query DB Proxy": {
       "main": [
         [
           {
@@ -129,11 +93,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "fa1d6c9a-5419-4659-9862-9c7feca3556a",
+  "versionId": "e0651b40-3ddf-44d6-92b0-2c01c220883f",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fabtwin-local"
   },
-  "id": "bd10f572-eee2-4101-9d2f-cf7b90c2796e",
+  "id": "26b629a3-ca52-4b03-ab32-c1788d826c94",
   "tags": []
 }

@@ -1,0 +1,132 @@
+{
+  "name": "F9. 生成故障工单（FabTwin 工具 generate_work_order）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate_work_order",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "generate_work_order-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst numClean = (s) => {\n  const x = clean(s).toLowerCase();\n  if (['high','medium','low'].includes(x)) return x;\n  return 'medium';\n};\nreturn {\n  json: {\n    machine_id: clean(body.machine_id),\n    fault_type: clean(body.fault_type) || '未说明故障现象',\n    severity: numClean(body.severity || 'medium'),\n    days: parseInt(body.days, 10) || 7,\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b = $input.first().json;\nconst ts = Date.now().toString().slice(-6);\nreturn { json: {\n  ok: true,\n  machine_id: b.machine_id || '',\n  wo_id: '20260904-' + ts,\n  wo_link: 'http://rcm.example.com/wo/WO-20260904-' + ts,\n  owner: '维护组',\n} };\n",
+        "options": {}
+      },
+      "name": "工单系统（请替换真实工单接口/RCM）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst first = rows[0] || {};\nif (first.ok === false) {\n  return { json: { ok: false, answer: first.error || '创建工单失败（请检查工单系统/权限）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'generate_work_order', execution_id: $execution.id }] } };\n}\nconst wo_id = first.wo_id || '';\nconst link = first.wo_link || '';\nlet answer = `🤖 [n8n 自动化] 故障工单 ${wo_id ? ('WO-' + wo_id) : ''} 已创建`;\nif (first.owner) answer += `，指派给 ${first.owner} 组`;\nif (link) answer += `；工单链接：${link}`;\nanswer += `（执行 ID：${$execution.id}）`;\nreturn { json: { ok: true, answer, table_data: null, jump_timestamp: null, jump_machine_id: first.machine_id ? String(first.machine_id) : null, sources: [{ type: 'n8n', workflow: 'generate_work_order', execution_id: $execution.id, wo_id, wo_link: link, owner: first.owner }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "工单系统（请替换真实工单接口/RCM）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "工单系统（请替换真实工单接口/RCM）": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5c2ab85b-c592-4a1a-8ea0-24cffeed4b26",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "c93275a2-51eb-4735-b52d-91cd935eccae",
+  "tags": []
+}

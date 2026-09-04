@@ -1,5 +1,5 @@
 {
-  "name": "F3. 报警统计（FabTwin 工具 get_machine_alarms）",
+  "name": "F3 报警统计",
   "nodes": [
     {
       "parameters": {
@@ -15,51 +15,37 @@
         240,
         300
       ],
-      "webhookId": "get_machine_alarms-webhook-id"
+      "webhookId": "get_machine_alarms-wh-id"
     },
     {
       "parameters": {
-        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst numClean = (s) => { const x = parseInt(s, 10); return Number.isFinite(x) && x > 0 ? x : 7; };\nreturn {\n  json: {\n    machine_id: clean(body.machine_id),\n    machine_id_like: clean(body.machine_id) ? (clean(body.machine_id) + '%') : '',\n    severity: clean(body.severity).toLowerCase(),\n    days: numClean(body.days),\n  }\n};\n",
-        "options": {}
-      },
-      "name": "Parse",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        460,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id, machine_id, severity, description, ts\nFROM (\n  SELECT a.id, a.machine_id, a.severity, a.description, a.ts\n  FROM dt_alarms a\n  WHERE a.ts >= TRUNC(SYSDATE) - ({{ $json.days }} - 0)\n    AND (LENGTH('{{ $json.machine_id }}')=0 OR a.machine_id LIKE '{{ $json.machine_id_like }}')\n    AND (LENGTH('{{ $json.severity }}')=0 OR LOWER(a.severity) LIKE '%{{ $json.severity }}%')\n  ORDER BY a.ts DESC\n) WHERE ROWNUM <= 200",
-        "options": {}
-      },
-      "name": "Query Oracle",
-      "type": "n8n-nodes-base.oracle",
-      "typeVersion": 1,
-      "position": [
-        680,
-        300
-      ],
-      "credentials": {
-        "oracleApi": {
-          "id": "",
-          "name": "FabTwin Oracle"
+        "method": "POST",
+        "url": "http://10.30.116.150:8001/query/machine_alarms",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "fabtwin-proxy-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ machine_id: $json.body.machine_id || \"\", severity: $json.body.severity || \"\", days: $json.body.days || 7 }) }}",
+        "options": {
+          "timeout": 30000
         }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst rs = rows.filter(r => r && r.id);\nconst total = rs.length;\nconst critical = rs.filter(r => String(r.severity||'').toLowerCase().includes('crit')).length;\nconst warning  = rs.filter(r => String(r.severity||'').toLowerCase().includes('warn')).length;\nconst info     = total - critical - warning;\nlet answer = `合计 ${total} 条报警：严重 ${critical} 条、警告 ${warning} 条、提示 ${info} 条。`;\nif (critical > 0) answer += ' 严重报警请优先现场排查。';\nconst headers = ['报警ID','机台ID','严重等级','描述','时间'];\nconst vals = rs.slice(0, 80).map(r => [String(r.id||''), String(r.machine_id||''), String(r.severity||''), String(r.description||''), String(r.ts||'')]);\nconst latest = rs[0];\nreturn { json: { ok: true, answer, table_data: total>0 ? { headers, rows: vals } : null, jump_timestamp: latest ? String(latest.ts) : null, jump_machine_id: latest && latest.machine_id ? String(latest.machine_id) : null, sources: [{ type: 'n8n', workflow: 'get_machine_alarms', execution_id: $execution.id }] } };\n",
-        "options": {}
       },
-      "name": "Format",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Query DB Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
       "position": [
-        900,
+        480,
         300
       ]
     },
@@ -73,7 +59,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1120,
+        720,
         300
       ]
     }
@@ -84,36 +70,14 @@
       "main": [
         [
           {
-            "node": "Parse",
+            "node": "Query DB Proxy",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse": {
-      "main": [
-        [
-          {
-            "node": "Query Oracle",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Query Oracle": {
-      "main": [
-        [
-          {
-            "node": "Format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format": {
+    "Query DB Proxy": {
       "main": [
         [
           {
@@ -129,11 +93,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "2ea44bfc-c3ae-4069-8ef0-48888720f16b",
+  "versionId": "6d458e64-ec8c-4358-8f65-7b541a43bba1",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fabtwin-local"
   },
-  "id": "475b37ec-b358-47cc-84b9-5da5804a9340",
+  "id": "50625973-1b5b-48cc-be5b-595f3a834a4f",
   "tags": []
 }

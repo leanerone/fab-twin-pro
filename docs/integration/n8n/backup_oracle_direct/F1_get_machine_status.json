@@ -1,0 +1,139 @@
+{
+  "name": "F1. 查询机台状态（FabTwin 工具 get_machine_status）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_machine_status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_machine_status-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst machineId = clean(body.machine_id);\nreturn {\n  json: {\n    machine_id: machineId,\n    machine_id_like: machineId ? (machineId + '%') : '',\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, model, status, current_lot_id, last_event_ts\nFROM (\n  SELECT id, model, status, current_lot_id, last_event_ts\n  FROM machines\n  WHERE id = '{{ $json.machine_id }}' AND LENGTH('{{ $json.machine_id }}') > 0\n  UNION ALL\n  SELECT id, model, status, current_lot_id, last_event_ts\n  FROM machines\n  WHERE LENGTH('{{ $json.machine_id }}') = 0\n  ORDER BY status DESC, id\n) WHERE ROWNUM <= 1",
+        "options": {}
+      },
+      "name": "Query Oracle",
+      "type": "n8n-nodes-base.oracle",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "oracleApi": {
+          "id": "",
+          "name": "FabTwin Oracle"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst m = rows && rows[0];\nif (!m || !m.id) {\n  return { json: { ok: false, answer: '未找到该机器（请确认机台ID正确）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'get_machine_status', execution_id: $execution.id }] } };\n}\nconst headers = ['机台ID','型号','状态','当前Lot','最近事件时间'];\nconst vals = [[String(m.id||''), String(m.model||''), String(m.status||''), String(m.current_lot_id||''), String(m.last_event_ts||'')]];\nlet answer = `机台 ${m.id}：状态 ${m.status || '未知'}；型号 ${m.model || '未知'}；当前Lot ${m.current_lot_id || '无'}`;\nif (m.last_event_ts) answer += `；最近事件 ${m.last_event_ts}`;\nreturn { json: { ok: true, answer, table_data: { headers, rows: vals }, jump_timestamp: m.last_event_ts ? String(m.last_event_ts) : null, jump_machine_id: String(m.id), sources: [{ type: 'n8n', workflow: 'get_machine_status', execution_id: $execution.id }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Query Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Oracle": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "088e118c-8568-4d1e-8e3d-38452602a7af",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "3b6dbcc3-9ba8-4176-ad01-ea0415f1c756",
+  "tags": []
+}

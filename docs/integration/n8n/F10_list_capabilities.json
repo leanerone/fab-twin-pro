@@ -1,5 +1,5 @@
 {
-  "name": "F10. 功能清单（FabTwin 工具 list_capabilities）",
+  "name": "F10 功能清单",
   "nodes": [
     {
       "parameters": {
@@ -15,43 +15,37 @@
         240,
         300
       ],
-      "webhookId": "list_capabilities-webhook-id"
+      "webhookId": "list_capabilities-wh-id"
     },
     {
       "parameters": {
-        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst machineId = clean(body.machine_id);\nreturn {\n  json: {\n    machine_id: machineId,\n    machine_id_like: machineId ? (machineId + '%') : '',\n  }\n};\n",
-        "options": {}
+        "method": "POST",
+        "url": "http://10.30.116.150:8001/query/list_capabilities",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "fabtwin-proxy-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {
+          "timeout": 30000
+        }
       },
-      "name": "Parse",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Query DB Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
       "position": [
-        460,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "return { json: {} };"
-      },
-      "name": "功能清单（无 DB 操作，直通 Format）",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        680,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "\nconst answer = '我作为 FabTwin Pro AI 助手，可以帮您查询与处理以下 10 类事项：\\n① 机台实时状态（运行模式/当前加工 Lot/全厂概览）\\n② Lot 批次位置/进度追踪（单 Lot 或机台 Lot 列表）\\n③ 报警统计与异常定位（按严重等级/时间范围）\\n④ 温度趋势与事件时间线（事件分布/回放线索）\\n⑤ 产量与完成率统计（Lot/晶圆/计划对比）\\n⑥ 工艺配方查询（Recipe ID/版本/关键参数）\\n⑦ MES Lot 详情【管理员】（良率/路线/工序站）\\n⑧ 导出报警报表 Excel【管理员】\\n⑨ 生成故障工单【管理员】\\n⑩ 功能清单（就是本回复）。\\n请告诉我您想查哪一类，并附上机台 ID（如 OXE-1）或 Lot ID，我就能精确查询。';\nreturn { json: { ok: true, answer, table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'list_capabilities', execution_id: $execution.id }] } };\n",
-        "options": {}
-      },
-      "name": "Format",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        900,
+        480,
         300
       ]
     },
@@ -65,7 +59,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1120,
+        720,
         300
       ]
     }
@@ -76,36 +70,14 @@
       "main": [
         [
           {
-            "node": "Parse",
+            "node": "Query DB Proxy",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse": {
-      "main": [
-        [
-          {
-            "node": "功能清单（无 DB 操作，直通 Format）",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "功能清单（无 DB 操作，直通 Format）": {
-      "main": [
-        [
-          {
-            "node": "Format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format": {
+    "Query DB Proxy": {
       "main": [
         [
           {
@@ -121,11 +93,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "ea95ad4d-629d-429b-a907-85f6d12e1857",
+  "versionId": "0abb502a-697e-4216-ae45-c28c65896a3a",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fabtwin-local"
   },
-  "id": "e32c1abf-a2b7-46a9-b640-9f02e1551816",
+  "id": "ceb0aae9-2e8c-4e26-be33-2c6c9f6761ee",
   "tags": []
 }

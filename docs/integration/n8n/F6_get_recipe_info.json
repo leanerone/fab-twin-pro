@@ -1,5 +1,5 @@
 {
-  "name": "F6. 工艺配方查询（FabTwin 工具 get_recipe_info）",
+  "name": "F6 工艺配方",
   "nodes": [
     {
       "parameters": {
@@ -15,51 +15,37 @@
         240,
         300
       ],
-      "webhookId": "get_recipe_info-webhook-id"
+      "webhookId": "get_recipe_info-wh-id"
     },
     {
       "parameters": {
-        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst machineId = clean(body.machine_id);\nreturn {\n  json: {\n    machine_id: machineId,\n    machine_id_like: machineId ? (machineId + '%') : '',\n  }\n};\n",
-        "options": {}
-      },
-      "name": "Parse",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        460,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT r.id AS recipe_id, r.version AS recipe_ver, r.updated_at, r.machine_id,\n       r.rf_power, r.pressure, r.gas_flow_cf4, r.gas_flow_sf6, r.etch_time, r.temperature\nFROM machine_recipes r\nWHERE r.machine_id = '{{ $json.machine_id }}'\nORDER BY r.updated_at DESC\nFETCH FIRST 10 ROWS ONLY",
-        "options": {}
-      },
-      "name": "Query Oracle",
-      "type": "n8n-nodes-base.oracle",
-      "typeVersion": 1,
-      "position": [
-        680,
-        300
-      ],
-      "credentials": {
-        "oracleApi": {
-          "id": "",
-          "name": "FabTwin Oracle"
+        "method": "POST",
+        "url": "http://10.30.116.150:8001/query/recipe_info",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "fabtwin-proxy-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ machine_id: $json.body.machine_id || \"\" }) }}",
+        "options": {
+          "timeout": 30000
         }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst rs = rows.filter(r => r && r.recipe_id);\nif (!rs.length) {\n  return { json: { ok: false, answer: '没有该机器的配方记录（请确认机台是否绑定配方）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'get_recipe_info', execution_id: $execution.id }] } };\n}\nconst latest = rs[0];\nlet answer = `当前 Recipe：${latest.recipe_id||''}（版本 ${latest.recipe_ver||'未知'}，更新 ${latest.updated_at||'未知'}）。`;\nconst kvs = [];\n['rf_power','pressure','gas_flow_cf4','gas_flow_sf6','etch_time','temperature'].forEach(k => { if (latest[k] != null) kvs.push(`${k}=${latest[k]}`); });\nif (kvs.length) answer += ' 关键参数：' + kvs.join('、');\nconst headers = ['Recipe ID','版本','更新时间','RF Power(W)','Pressure(mTorr)','Gas CF4(sccm)','Etch Time(s)'];\nconst vals = rs.slice(0, 10).map(r => [String(r.recipe_id||''), String(r.recipe_ver||''), String(r.updated_at||''), String(r.rf_power||''), String(r.pressure||''), String(r.gas_flow_cf4||''), String(r.etch_time||'')]);\nreturn { json: { ok: true, answer, table_data: { headers, rows: vals }, jump_timestamp: latest.updated_at ? String(latest.updated_at) : null, jump_machine_id: latest.machine_id ? String(latest.machine_id) : null, sources: [{ type: 'n8n', workflow: 'get_recipe_info', execution_id: $execution.id }] } };\n",
-        "options": {}
       },
-      "name": "Format",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Query DB Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
       "position": [
-        900,
+        480,
         300
       ]
     },
@@ -73,7 +59,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1120,
+        720,
         300
       ]
     }
@@ -84,36 +70,14 @@
       "main": [
         [
           {
-            "node": "Parse",
+            "node": "Query DB Proxy",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse": {
-      "main": [
-        [
-          {
-            "node": "Query Oracle",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Query Oracle": {
-      "main": [
-        [
-          {
-            "node": "Format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format": {
+    "Query DB Proxy": {
       "main": [
         [
           {
@@ -129,11 +93,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "6ea24a35-4615-401e-b005-2a4bb9607c89",
+  "versionId": "8374d8da-9b97-4693-a1b8-3538ab5ad9d9",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fabtwin-local"
   },
-  "id": "f9e9020d-151e-45ed-8308-8284db5d8bd1",
+  "id": "4f8d6998-f62e-41e7-ab77-0b0e813ce281",
   "tags": []
 }

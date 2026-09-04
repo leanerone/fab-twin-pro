@@ -1,0 +1,132 @@
+{
+  "name": "F7. MES Lot 信息（FabTwin 工具 get_mes_lot_info）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_mes_lot_info",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_mes_lot_info-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nreturn {\n  json: {\n    lot_id: clean(body.lot_id).toUpperCase(),\n    lot_id_like: clean(body.lot_id) ? (clean(body.lot_id).toUpperCase() + '%') : '',\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json;\nreturn { json: {\n  lot_id: body.lot_id || '',\n  product_id: 'PCHIP-V2（示例，需替换真实 MES 查询）',\n  route_id: 'ROUTE-A07',\n  yield_rate_pct: '98.3',\n  good_qty: 59, input_qty: 60,\n  step_no: 12, total_steps: 25,\n  operator_name: '张三',\n  planned_finish_ts: '2026-09-04 16:30:00',\n  machine_id: ''\n} };\n",
+        "options": {}
+      },
+      "name": "MES 占位（请替换为您真实 MES DB/MCP 节点）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst m = rows[0];\nif (!m || !m.lot_id) {\n  return { json: { ok: false, answer: 'MES 中未找到该 Lot（请确认 Lot ID 正确）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'get_mes_lot_info', execution_id: $execution.id }] } };\n}\nlet answer = `【MES 数据】Lot ${m.lot_id}：产品 ${m.product_id||'未知'}，路线 ${m.route_id||'未知'}，良率 ${m.yield_rate_pct||'未知'}（${m.good_qty||0}/${m.input_qty||0}），工序站 ${m.step_no||'未知'} / ${m.total_steps||'?'}，操作员 ${m.operator_name||'未知'}，预计完工 ${m.planned_finish_ts||'未知'}`;\nconst headers = ['Lot ID','产品ID','工艺路线','良率(%)','合格/投入','当前工序/总步骤','操作员','预计完工'];\nconst vals = [[String(m.lot_id), String(m.product_id||''), String(m.route_id||''), String(m.yield_rate_pct||''), `${m.good_qty||0}/${m.input_qty||0}`, `${m.step_no||''}/${m.total_steps||''}`, String(m.operator_name||''), String(m.planned_finish_ts||'')]];\nreturn { json: { ok: true, answer, table_data: { headers, rows: vals }, jump_timestamp: null, jump_machine_id: String(m.machine_id||''), sources: [{ type: 'n8n', workflow: 'get_mes_lot_info', execution_id: $execution.id }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "MES 占位（请替换为您真实 MES DB/MCP 节点）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MES 占位（请替换为您真实 MES DB/MCP 节点）": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fc70281f-ea87-413f-9ecb-c9bde271c2bc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "0d8c8747-fd6c-43db-a065-ce4c1b46c26c",
+  "tags": []
+}
