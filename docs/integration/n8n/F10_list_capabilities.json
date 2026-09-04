@@ -10,7 +10,7 @@
       },
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2,
       "position": [
         240,
         300
@@ -24,7 +24,7 @@
       },
       "name": "Parse",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         460,
         300
@@ -36,7 +36,7 @@
       },
       "name": "功能清单（无 DB 操作，直通 Format）",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         680,
         300
@@ -49,7 +49,7 @@
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         900,
         300
@@ -70,6 +70,7 @@
       ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -116,9 +117,15 @@
       ]
     }
   },
-  "settings": {},
-  "tags": [
-    "FabTwin",
-    "Phase0"
-  ]
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ea95ad4d-629d-429b-a907-85f6d12e1857",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "e32c1abf-a2b7-46a9-b640-9f02e1551816",
+  "tags": []
 }

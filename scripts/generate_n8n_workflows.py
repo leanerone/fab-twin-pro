@@ -24,6 +24,7 @@
 """
 import json
 import os
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.normpath(os.path.join(HERE, "..", "docs", "integration", "n8n"))
@@ -55,7 +56,7 @@ def webhook_node(webhook_path):
             "responseMode": "responseNode",
             "options": {},
         },
-        1.1, (240, 300),
+        2, (240, 300),
         extra={"webhookId": webhook_path + "-webhook-id"},
     )
 
@@ -65,7 +66,7 @@ def parse_node(js_code):
     return _node(
         "n8n-nodes-base.code", "Parse",
         {"jsCode": js_code, "options": {}},
-        1, (460, 300),
+        2, (460, 300),
     )
 
 
@@ -84,7 +85,7 @@ def format_node(js_code):
     return _node(
         "n8n-nodes-base.code", "Format",
         {"jsCode": js_code, "options": {}},
-        1, (900, 300),
+        2, (900, 300),
     )
 
 
@@ -109,10 +110,14 @@ def save(name, title, nodes, conns):
     payload = {
         "name": title,
         "nodes": nodes,
+        "pinData": {},
         "connections": conns,
-        # 与现有 JSON 一致的元数据（避免导入失败）
-        "settings": {},
-        "tags": ["FabTwin", "Phase0"],
+        "active": False,
+        "settings": {"executionOrder": "v1"},
+        "versionId": str(uuid.uuid4()),
+        "meta": {"templateCredsSetupCompleted": True, "instanceId": "fabtwin-local"},
+        "id": str(uuid.uuid4()),
+        "tags": [],
     }
     path = os.path.join(OUT_DIR, name + ".json")
     with open(path, "w", encoding="utf-8") as f:
@@ -496,7 +501,7 @@ return { json: {
   planned_finish_ts: '2026-09-04 16:30:00',
   machine_id: ''
 } };
-""", "options": {}}, 1, (680, 300))),
+""", "options": {}}, 2, (680, 300))),
         ],
     },
     # F8
@@ -522,7 +527,7 @@ return { json: {
   size_kb: 236,
   row_count: 58
 } };
-""", "options": {}}, 1, (680, 300))),
+""", "options": {}}, 2, (680, 300))),
         ],
     },
     # F9
@@ -546,7 +551,7 @@ return { json: {
   wo_link: 'http://rcm.example.com/wo/WO-20260904-' + ts,
   owner: '维护组',
 } };
-""", "options": {}}, 1, (680, 300))),
+""", "options": {}}, 2, (680, 300))),
         ],
     },
     # F10
@@ -561,7 +566,7 @@ return { json: {
             ("Query Oracle",
              _node("n8n-nodes-base.code", "功能清单（无 DB 操作，直通 Format）",
                    {"jsCode": "return { json: {} };"},
-                   1, (680, 300))),
+                   2, (680, 300))),
         ],
     },
 ]

@@ -10,7 +10,7 @@
       },
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2,
       "position": [
         240,
         300
@@ -24,7 +24,7 @@
       },
       "name": "Parse",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         460,
         300
@@ -57,7 +57,7 @@
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         900,
         300
@@ -78,6 +78,7 @@
       ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -124,9 +125,15 @@
       ]
     }
   },
-  "settings": {},
-  "tags": [
-    "FabTwin",
-    "Phase0"
-  ]
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "088e118c-8568-4d1e-8e3d-38452602a7af",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "3b6dbcc3-9ba8-4176-ad01-ea0415f1c756",
+  "tags": []
 }

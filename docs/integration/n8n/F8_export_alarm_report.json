@@ -10,7 +10,7 @@
       },
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2,
       "position": [
         240,
         300
@@ -24,7 +24,7 @@
       },
       "name": "Parse",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         460,
         300
@@ -37,7 +37,7 @@
       },
       "name": "报表生成（请替换真实报表节点）",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         680,
         300
@@ -50,7 +50,7 @@
       },
       "name": "Format",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         900,
         300
@@ -71,6 +71,7 @@
       ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -117,9 +118,15 @@
       ]
     }
   },
-  "settings": {},
-  "tags": [
-    "FabTwin",
-    "Phase0"
-  ]
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "791ba771-06bd-4fab-8000-ceccd531a39f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "97bf05e9-10c0-4e5f-8a4a-2e97a56a3ad8",
+  "tags": []
 }
