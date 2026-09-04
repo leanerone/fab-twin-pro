@@ -1,23 +1,34 @@
 # -*- coding: utf-8 -*-
 """
-FabTwin + Dify 诊断脚本 v1.0
+FabTwin + Dify 诊断脚本 v2.0
 ================================================================
-运行位置：和 main.py 一样，放在 fab-twin-pro/backend/ 目录下
+v2.0 升级（针对上一次输出暴露的3个根因）:
+  ① 脚本自己连 Oracle ORA-12541  → 改为先调活后端 GET /api/ai/config
+     （后端进程本来就连着 DB/Dify 且已读 ai_configs）
+  ② 公司 HJTC Proxy 劫持 127.0.0.1 → 所有 httpx 统一 trust_env=False
+  ③ 只在后端接口不通时才 fallback 到 .env / DB 直连
 
-运行：
+运行位置: fab-twin-pro/backend/
+运行:
     cd backend
-    python diagnose_dify.py
+    python diagnose_dify.py  [--host 127.0.0.1] [--port 8002]
 
-然后把所有输出复制给我（不用打码，脚本里不会打印完整 API Key，只打前后 4 位）。
+把所有输出复制给我（脚本只打印掩码，可直接粘贴）。
 """
-import os, sys, json
+import os, sys, json, argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-# 加载 .env（如果有）
+ap = argparse.ArgumentParser()
+ap.add_argument("--host", default=os.getenv("FABTWIN_HOST", "127.0.0.1"))
+ap.add_argument("--port", type=int, default=int(os.getenv("FABTWIN_PORT", "8002")))
+arg = ap.parse_args()
+
+BACKEND = f"http://{arg.host}:{arg.port}"
+
+# 加载 .env (若有)
 if os.path.exists(os.path.join(HERE, ".env")):
-    print("[INFO] 检测到后端 .env，加载环境变量...")
     try:
         with open(os.path.join(HERE, ".env"), "r", encoding="utf-8") as f:
             for line in f:
@@ -25,50 +36,16 @@ if os.path.exists(os.path.join(HERE, ".env")):
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                k = k.strip()
-                v = v.strip().strip('"').strip("'")
+                k = k.strip(); v = v.strip().strip('"').strip("'")
                 if k not in os.environ:
                     os.environ[k] = v
+        print("[INFO] 已加载 .env 环境变量")
     except Exception as e:
-        print(f"[WARN] 加载 .env 失败: {e}")
+        print(f"[WARN] .env 读取失败: {e}")
 
-
-print("=" * 80)
-print("  Step 1/5: 从 DB (ai_configs 表) 读取当前Dify配置")
-print("=" * 80)
-
-try:
-    from database import SessionLocal
-    from models import AIConfig
-    db = SessionLocal()
-    rows = db.query(AIConfig).order_by(AIConfig.config_key).all()
-    db.close()
-except Exception as e:
-    print(f"[ERROR] 无法连接 DB 读 ai_configs: {e}")
-    print("  提示: Oracle DB 地址不通或 Oracle Client 未初始化，将只使用 .env 默认值")
-    rows = []
-
-KEYS = ["dify_enabled", "dify_base_url", "dify_api_key", "dify_app_id",
-        "n8n_enabled", "n8n_base_url", "n8n_secret"]
-
-cfg = {}
-for r in rows:
-    if r.config_key in KEYS:
-        cfg[r.config_key] = r.config_value or ""
-    print(f"  {r.config_key:20s} = {r.config_value!r}")
-
-if not cfg:
-    # DB 没数据 → 用 .env / 默认
-    cfg["dify_enabled"] = os.getenv("DIFY_ENABLED", "True")
-    cfg["dify_base_url"] = os.getenv("DIFY_BASE_URL", "")
-    cfg["dify_api_key"] = os.getenv("DIFY_API_KEY", "")
-    cfg["dify_app_id"] = os.getenv("DIFY_APP_ID", "")
-    cfg["n8n_enabled"] = os.getenv("N8N_ENABLED", "False")
-    cfg["n8n_base_url"] = os.getenv("N8N_BASE_URL", "")
-    cfg["n8n_secret"] = os.getenv("N8N_SECRET", "")
-    print("[INFO] DB 无记录，使用 .env / 默认值:")
-    for k in KEYS:
-        print(f"  {k:20s} = {cfg.get(k, '')!r}")
+import httpx
+client = httpx.Client(timeout=30, trust_env=False)
+#  trust_env=False  ← 关键: 不读取 HTTP_PROXY/HTTPS_PROXY，避开公司 HJTC Proxy 劫持
 
 
 def mask(s, keep=4):
@@ -79,188 +56,341 @@ def mask(s, keep=4):
     return s[:keep] + "*" * (len(s) - keep * 2) + s[-keep:]
 
 
-print()
-print("=" * 80)
-print("  Step 2/5: 配置自检")
-print("=" * 80)
+print("=" * 90)
+print("  Step 1/6: 调活后端 GET /api/ai/config — 拿到真实 Dify/N8N 配置")
+print("  （跳过脚本自己连 Oracle，避免 ORA-12541: TNS:no listener）")
+print("=" * 90)
 
-base = cfg.get("dify_base_url") or ""
-key = cfg.get("dify_api_key") or ""
+live_cfg = None
+try:
+    r = client.get(BACKEND + "/api/ai/config")
+    print(f"  GET {BACKEND}/api/ai/config  → HTTP {r.status_code}")
+except Exception as e:
+    print(f"  [EXCEPTION] httpx 抛错: {type(e).__name__}: {e}")
+    r = None
+
+if r and r.status_code == 200:
+    try:
+        live_cfg = r.json()
+    except Exception:
+        live_cfg = None
+        print(f"  [ERROR] 响应不是 JSON: {r.text[:400]}")
+else:
+    if r and r.status_code == 403 and "HJTC Proxy" in r.text[:2000]:
+        print("  [CRITICAL] 403 = HJTC 代理仍在劫持！请在当前 PowerShell 先执行下面两行，再重跑脚本:")
+        print('     $env:HTTP_PROXY=$null')
+        print('     $env:HTTPS_PROXY=$null')
+        print("  （或改用 127.0.0.1:port 的 netsh/绑定，确保不走公司出口）")
+    if r and r.status_code == 404:
+        print("  [ERROR] 404: 后端不是预期的 fabtwin 接口？请确认端口号正确。")
+        print("  用法: python diagnose_dify.py --host <IP> --port <后端端口>")
+    elif r:
+        print(f"  [ERROR] 返回非200: {r.text[:500]}")
+
+
+# Fallback: 后端没起来 / 接口不通 → 读 ai_configs 表 → 再不行用 .env
+if not live_cfg:
+    print("\n[INFO] 后端接口没拿到数据 → Fallback: 尝试直连 Oracle 读 ai_configs...")
+    KEYS = ["dify_enabled","dify_base_url","dify_api_key","dify_app_id",
+            "n8n_enabled","n8n_base_url","n8n_secret"]
+    try:
+        from database import SessionLocal
+        from models import AIConfig
+        db = SessionLocal()
+        rows = db.query(AIConfig).order_by(AIConfig.config_key).all()
+        db.close()
+        db_map = {r.config_key: r.config_value or "" for r in rows}
+    except Exception as e:
+        print(f"  [ERROR] Oracle 仍不通: {str(e).split(chr(10))[0]}")
+        db_map = {}
+
+    cfg_via_env = {k: (db_map.get(k, None) or os.getenv(k.upper(), "") or "") for k in KEYS}
+
+    # 用 fallback 字段构造一个等价结构（字段名与 live_cfg 一致）
+    live_cfg = {
+        "provider": "dify" if str(cfg_via_env["dify_enabled"]).lower() in ("1","true","yes") else os.getenv("AI_PROVIDER","dify"),
+        "provider_name": cfg_via_env.get("provider_name") or os.getenv("AI_PROVIDER","dify"),
+        "model": os.getenv("AI_MODEL",""),
+        "base_url_masked": mask(cfg_via_env.get("dify_base_url") or os.getenv("DIFY_BASE_URL","")),
+        "has_api_key": bool(cfg_via_env.get("dify_api_key") or os.getenv("DIFY_API_KEY","")),
+        "temperature": float(os.getenv("AI_TEMPERATURE","0.7")),
+        "max_tokens": int(os.getenv("AI_MAX_TOKENS","0")),
+        "dify_enabled":    str(cfg_via_env["dify_enabled"]).lower() in ("1","true","yes"),
+        "dify_base_url":   cfg_via_env["dify_base_url"] or os.getenv("DIFY_BASE_URL",""),
+        "dify_base_url_masked": mask(cfg_via_env["dify_base_url"] or os.getenv("DIFY_BASE_URL","")),
+        "dify_has_api_key": bool(cfg_via_env["dify_api_key"] or os.getenv("DIFY_API_KEY","")),
+        "dify_api_key_preview": mask(cfg_via_env["dify_api_key"] or os.getenv("DIFY_API_KEY",""), keep=8),
+        "dify_app_id":     cfg_via_env["dify_app_id"] or os.getenv("DIFY_APP_ID",""),
+        "dify_app_id_masked": mask(cfg_via_env["dify_app_id"] or os.getenv("DIFY_APP_ID","")),
+        "n8n_enabled":     str(cfg_via_env["n8n_enabled"]).lower() in ("1","true","yes"),
+        "n8n_base_url":    cfg_via_env["n8n_base_url"] or os.getenv("N8N_BASE_URL",""),
+        "n8n_base_url_masked": mask(cfg_via_env["n8n_base_url"] or os.getenv("N8N_BASE_URL","")),
+        "n8n_has_webhook_secret": bool(cfg_via_env["n8n_secret"] or os.getenv("N8N_SECRET","")),
+        "n8n_webhook_secret_preview": mask(cfg_via_env["n8n_secret"] or os.getenv("N8N_SECRET",""), keep=5),
+    }
+    print("  [INFO] Fallback 结果:")
+else:
+    print("  [OK] 成功从后端接口读取配置！")
+
+# 打印所有字段
+for k, v in live_cfg.items():
+    if isinstance(v, bool) or k.endswith("_masked") or k.endswith("_preview") \
+            or k in ("provider","provider_name","model","temperature","max_tokens",
+                     "dify_enabled","n8n_enabled","has_api_key",
+                     "dify_has_api_key","n8n_has_webhook_secret",
+                     "dify_base_url","n8n_base_url","dify_app_id"):
+        if k in ("dify_base_url", "n8n_base_url") and v:
+            v = v  # URL 本身可以直接看，不含密钥
+        print(f"  {k:32s} = {v!r}")
+
+
+print()
+print("=" * 90)
+print("  Step 2/6: 配置自检（URL / API Key / 是否写成 n8n）")
+print("=" * 90)
+
+base = (live_cfg.get("dify_base_url") or "").strip()
+has_key = bool(live_cfg.get("dify_has_api_key"))
+enabled = bool(live_cfg.get("dify_enabled"))
 errors = []
 warnings = []
 
-# 2.1 base_url 是否看起来像 n8n
-if ":5678" in base or "n8n" in base.lower() or "10.30.116.151" in base:
-    errors.append(f"❌ DIFY_BASE_URL={base!r} 看起来是 n8n 地址（端口5678/含n8n/IP=10.30.116.151都是n8n，不是Dify）")
+# 2.1 启用状态
+if not enabled:
+    errors.append("❌ dify_enabled = False，Dify 未启用")
+# 2.2 URL 是否像 n8n（端口 5678、路径写 10.30.116.151 = n8n）
 if not base:
-    errors.append("❌ DIFY_BASE_URL 为空")
-elif not base.startswith("http"):
-    errors.append(f"❌ DIFY_BASE_URL={base!r} 缺少 http:// 或 https://")
-if not key:
-    errors.append("❌ DIFY_API_KEY 为空")
-elif not key.startswith("app-"):
-    warnings.append(f"⚠  DIFY_API_KEY={mask(key)} 不以 'app-' 开头（Dify的API Key 通常以 app- 开头）")
-if str(cfg.get("dify_enabled", "True")).lower() not in ("1", "true", "yes", "on"):
-    errors.append(f"❌ dify_enabled={cfg.get('dify_enabled')!r} = 未启用")
+    errors.append("❌ dify_base_url 为空 → 去网站 AI 配置页面填 Dify 地址并点保存")
+else:
+    if not base.startswith("http"):
+        errors.append(f"❌ dify_base_url={base!r} 缺少 http:// 或 https:// 前缀")
+    if ":5678" in base or "n8n" in base.lower() or "10.30.116.151" in base:
+        errors.append(f"❌ dify_base_url={base!r} 看起来是 n8n 地址（端口5678 / 含n8n / = 10.30.116.151 都是 n8n，不是 Dify）")
+# 2.3 API Key
+if not has_key:
+    errors.append("❌ Dify API Key 未保存（dify_has_api_key = False）"
+                  "\n     去 Dify 应用 → 发布 → 访问 API → 复制 API Secret → 粘到 AI 配置页面的 Dify API Key 框里 → 点保存")
 
-for e in errors:
-    print(e)
-for w in warnings:
-    print(w)
+for e in errors: print(e)
+for w in warnings: print(w)
 if not errors and not warnings:
-    print("✅ 配置字段看起来没问题。")
+    print("✅ 配置字段自检通过。")
 
 
 print()
-print("=" * 80)
-print("  Step 3/5: 直接调 Dify API — 模拟后端代码的两轮请求")
-print("  这一步会用后端 ai_middleware.py 的逻辑来调，直接复现你网站端的报错。")
-print("=" * 80)
+print("=" * 90)
+print("  Step 3/6: 直接调 Dify API — 验证 Round1/Round2（UUID续话）/Round3（sess_xxx复现报错）")
+print("=" * 90)
 
-import httpx
+# 尝试从 live_cfg 再补一个完整 API Key（只走 fallback 可能拿得到掩码前半段）
+# 注意: GET /api/ai/config 是脱敏输出，不会给完整 key；
+#       若后端接口没给，就提示用户必须用 POST /api/ai/config/test 去测真实连接，或者手动填。
 from urllib.parse import urlparse
-
 base_clean = base.rstrip("/")
 if base_clean.endswith("/v1"):
     base_clean = base_clean[:-3]
-chat_url = base_clean + "/v1/chat-messages"
-headers = {
-    "Authorization": f"Bearer {key}",
-    "Content-Type": "application/json",
-}
+chat_url = base_clean + "/v1/chat-messages" if base_clean else ""
 
 
-def run_round(test_name, payload_json, session_label):
-    print()
-    print(f"---- {test_name} ({session_label}) ----")
-    print(f"POST {chat_url}")
-    if "conversation_id" in payload_json:
-        print(f"  conversation_id = {payload_json['conversation_id']!r}")
-    else:
-        print(f"  conversation_id = (未传)")
-    print(f"  query = {payload_json['query']!r}")
+def probe_key():
+    """拿真实 key: 优先环境变量 / 其次 DB / 再次 None"""
+    k = os.getenv("DIFY_API_KEY","") or ""
+    if k: return k.strip()
     try:
-        r = httpx.post(chat_url, json=payload_json, headers=headers, timeout=30)
+        from database import SessionLocal
+        from models import AIConfig
+        db = SessionLocal()
+        row = db.query(AIConfig).filter(AIConfig.config_key=="dify_api_key").first()
+        db.close()
+        if row: return row.config_value or ""
+    except Exception:
+        pass
+    return ""
+
+probe_k = probe_key()
+# 如果已经有 key 可用 → 用它调 Dify 3 轮；否则给提示手动填
+if not probe_k and not chat_url:
+    print("[SKIP] 没有可用来调 Dify 的 URL/KEY，跳过本轮。要执行 Step 5/5（走后端代调）也可以。")
+else:
+    if probe_k:
+        hdrs = {"Authorization": f"Bearer {probe_k}", "Content-Type": "application/json"}
+
+        def run_round(test_name, payload_json, sid):
+            print()
+            print(f"---- {test_name} ({sid}) ----")
+            print(f"POST {chat_url}")
+            cid_show = payload_json.get("conversation_id")
+            print(f"  conversation_id = {(cid_show!r) if cid_show is not None else '(未传)'}")
+            print(f"  query = {payload_json['query']!r}")
+            try:
+                r = client.post(chat_url, json=payload_json, headers=hdrs)
+            except Exception as e:
+                print(f"  [EXCEPTION] {type(e).__name__}: {e}")
+                return None, str(e)
+            print(f"  HTTP {r.status_code}")
+            try:
+                data = r.json()
+            except Exception:
+                print(f"  [ERROR] 响应不是JSON: {r.text[:500]}")
+                return None, r.text[:500]
+            if r.status_code != 200:
+                msg = data.get("message") or data.get("detail") or json.dumps(data, ensure_ascii=False)
+                print(f"  [ERROR] {msg[:600]}")
+                return None, msg
+            answer = (data.get("answer") or "")[:200]
+            cid = data.get("conversation_id")
+            print(f"  [OK] answer(前200字): {answer}")
+            print(f"  [OK] Dify conversation_id = {cid}")
+            return data, None
+
+        sess = "sess_v2_" + os.urandom(8).hex()
+        p1 = {"inputs":{"machine_id":"","user_role":"user"},"query":"你能帮我干什么",
+              "response_mode":"blocking","user":"fabtwin_user"}
+        # Round1: 不传 cid（正确首次）
+        res1, _ = run_round("Round 1 正确首次: 不传 conversation_id", p1, sess)
+        dify_cid = (res1 or {}).get("conversation_id")
+
+        # Round2: 传 Dify 返回的 UUID（正确续话）
+        p2 = {**p1, "query":"详细说说机台状态怎么查"}
+        if dify_cid: p2["conversation_id"] = dify_cid
+        run_round("Round 2 正确续话: 传 Dify 的 UUID", p2, sess)
+
+        # Round3: 故意传 sess_xxx（复现网站端老报错）
+        p3 = {**p1, "query":"复现报错：用前端sess_xxx当cid", "conversation_id": sess}
+        res3, err3 = run_round("Round 3 复现: 传前端 sess_xxx", p3, sess)
+        if err3 and "must be a valid UUID" in err3:
+            print()
+            print("  💥 Round 3 命中了 'conversation_id must be a valid UUID' → 这就是你网站端第二次发送的报错根因!")
+            print("     → 你网站端的后端进程跑的是 OLD 代码（没有 _dify_conv_map 映射）。")
+            print("     → 解决: git pull origin test1 + 重启后端服务（IIS/FastAPI/uvicorn进程），不要只复制文件。")
+    else:
+        print("[INFO] 没有拿到完整 Dify API Key（后端 GET /api/ai/config 只返回掩码，符合安全设计）。")
+        print("  直接调 Dify 的 3 轮对比将跳过，改用下面 2 个间接方法：")
+        print("    a) 让后端 POST /api/ai/config/test 帮你测 Dify 连通性（带真实 Key）")
+        print("    b) 直接 POST /api/ai/chat 端到端测（本脚本 Step 5/5 自动做）")
+
+        # a) 测试连接（让后端自己用真实 Key 调 Dify）
+        print()
+        print("---- (a) POST /api/ai/config/test —— 让后端代测 Dify 连通性 ----")
+        try:
+            payload_test = {
+                "provider_type": "dify",
+                "config": {
+                    "base_url": base,
+                    # 不传 key → 后端会用 DB 里已保存的真实 key
+                }
+            }
+            r = client.post(BACKEND + "/api/ai/config/test", json=payload_test)
+            print(f"  POST {BACKEND}/api/ai/config/test → HTTP {r.status_code}")
+            try:
+                print(f"  响应: {json.dumps(r.json(), ensure_ascii=False)[:600]}")
+            except Exception:
+                print(f"  响应(非JSON): {r.text[:500]}")
+            if r.status_code == 200 and (r.json().get("success") or r.json().get("ok")):
+                print("  ✅ Dify 本身连通没问题 → 你的第二个报错（conversation_id=sess_xxx）一定是后端代码没更新/没重启。")
+            else:
+                print("  ❌ 后端用真实 Key 测 Dify 仍失败 → 先解决配置问题（回到 Step 2/6 改正项）。")
+        except Exception as e:
+            print(f"  [EXCEPTION] {type(e).__name__}: {e}")
+
+
+print()
+print("=" * 90)
+print("  Step 4/6: 检查部署服务器上的 ai_middleware.py 是否带修复（真实文件，非本地仓库）")
+print("=" * 90)
+
+AM_PATH = os.path.join(HERE, "services", "ai_middleware.py")
+try:
+    with open(AM_PATH, encoding="utf-8") as f:
+        am = f.read()
+    has_conv_map = "_dify_conv_map" in am
+    has_n8n_warn = "看起来是 n8n 地址" in am
+except FileNotFoundError:
+    print(f"[WARN] {AM_PATH} 不存在")
+    has_conv_map = has_n8n_warn = None
+except Exception as e:
+    print(f"[WARN] 读文件失败: {e}")
+    has_conv_map = has_n8n_warn = None
+
+if has_conv_map is True:
+    print("✅ services/ai_middleware.py 已带 conversation_id 修复 (_dify_conv_map)")
+elif has_conv_map is False:
+    print("❌ services/ai_middleware.py STILL 没有 _dify_conv_map（还是老版本）")
+    print("   即使本地仓库代码是对的，部署服务器上这份文件也是 OLD。")
+    print("   → 必须重新复制/拉取最新版代码到此路径，然后重启后端进程。")
+else:
+    print("[UNKNOWN] 无法判断代码版本。")
+
+if has_n8n_warn is True:
+    print("✅ services/ai_middleware.py 已带 n8n 地址误用告警")
+
+
+print()
+print("=" * 90)
+print("  Step 5/6: 端到端 POST /api/ai/chat —— 模拟网页浮动球真实请求")
+print("=" * 90)
+sid_e2e = "sess_e2e_v2_" + os.urandom(8).hex()
+for i, q in enumerate(["你能帮我干什么", "机台状态怎么查", "今天产量"], start=1):
+    print()
+    print(f"---- E2E Round {i}: {q!r} (session_id={sid_e2e}) ----")
+    try:
+        r = client.post(BACKEND + "/api/ai/chat", json={
+            "question": q, "machine_id": "", "session_id": sid_e2e,
+        })
     except Exception as e:
-        print(f"  [EXCEPTION] httpx 抛错: {type(e).__name__}: {e}")
-        return None, str(e)
+        print(f"  [EXCEPTION] {type(e).__name__}: {e}")
+        continue
     print(f"  HTTP {r.status_code}")
+    if r.status_code == 403 and "HJTC Proxy" in r.text[:3000]:
+        print("  [CRITICAL] 403 仍被 HJTC Proxy 拦截，解决方法：")
+        print('     执行 PowerShell:  $env:HTTP_PROXY=$null; $env:HTTPS_PROXY=$null; NO_PROXY=127.0.0.1,localhost')
+        print("     然后重跑脚本。若仍然被拦，改用 FQDN/内网IP + 端口，不走 127.0.0.1。")
+        break
     try:
         data = r.json()
     except Exception:
-        print(f"  响应不是JSON: {r.text[:500]}")
-        return None, r.text[:500]
+        print(f"  响应(前800字): {r.text[:800]}")
+        continue
     if r.status_code != 200:
-        detail = data.get("message") or data.get("detail") or json.dumps(data, ensure_ascii=False)
-        print(f"  [ERROR] Dify 返回错误: {detail[:600]}")
-        return None, detail
-    answer = (data.get("answer") or "")[:200]
-    cid = data.get("conversation_id")
-    print(f"  [OK] 回答(前200字): {answer}")
-    print(f"  [OK] Dify 返回的 conversation_id = {cid}")
-    return data, None
-
-
-test_session_id = "sess_diag_" + os.urandom(8).hex()
-print(f"本次诊断使用的前端会话ID(会传给后端作为session_id) = {test_session_id}")
-
-# ---- 第 1 轮 ----
-payload1 = {
-    "inputs": {"machine_id": "", "user_role": "user"},
-    "query": "你能帮我干什么",
-    "response_mode": "blocking",
-    "user": "fabtwin_user",
-}
-# 注意: 第一轮故意不传 conversation_id (正确做法)
-res1, err1 = run_round("Round 1 (正确做法：不传 conversation_id)", payload1, test_session_id)
-
-# ---- 第 2 轮 ----
-dify_cid_from_1 = res1.get("conversation_id") if res1 else None
-payload2 = {
-    "inputs": {"machine_id": "", "user_role": "user"},
-    "query": "详细说说机台状态怎么查",
-    "response_mode": "blocking",
-    "user": "fabtwin_user",
-    "conversation_id": dify_cid_from_1 or "PLACEHOLDER_DIFY_NOT_RETURNED",
-}
-_ = run_round("Round 2 (用Dify返回的UUID)", payload2, test_session_id)
-
-# ---- 第 3 轮 ----
-# 这是你网站端现在出错的情况(老代码的做法)：把前端sess_xxx直接当成 conversation_id 传
-payload3 = {
-    "inputs": {"machine_id": "", "user_role": "user"},
-    "query": "复现网站端的报错",
-    "response_mode": "blocking",
-    "user": "fabtwin_user",
-    "conversation_id": test_session_id,  # 传 sess_xxx 这种非UUID
-}
-_ = run_round("Round 3 (复现报错：传前端 sess_xxx)", payload3, test_session_id)
+        msg = data.get("detail") or data.get("message") or json.dumps(data, ensure_ascii=False)
+        print(f"  [ERROR] {msg[:800]}")
+        if "must be a valid UUID" in msg:
+            print()
+            print("  💥 端到端 STILL 报 'must be a valid UUID' → 后端进程跑的还是 OLD 代码！")
+            print("     解决方案(按顺序做):")
+            print("       1) 确认部署目录 fab-twin-pro/backend/services/ai_middleware.py 包含了 _dify_conv_map（已用Step4/6打印）")
+            print("       2) 重启后端进程（IIS 应用池 → 回收，或 uvicorn/FastAPI 服务 → 重启）")
+            print("       3) 再跑一次本脚本 Step 5/6")
+        continue
+    ans = (data.get("answer") or "")[:300]
+    ok = data.get("ok") or data.get("answer") and "查询失败" not in (data.get("answer") or "")
+    print(f"  [OK] answer(前300字): {ans}")
+    if data.get("conversation_id"):
+        print(f"  [OK] conversation_id = {data.get('conversation_id')!r}")
 
 
 print()
-print("=" * 80)
-print("  Step 4/5: 诊断结论")
-print("=" * 80)
-
-# 读当前 ai_middleware.py 是否带修复（用文件判断关键字更稳）
-try:
-    am_path = os.path.join(HERE, "services", "ai_middleware.py")
-    am_txt = open(am_path, encoding="utf-8").read()
-    has_conv_fix = "_dify_conv_map" in am_txt
-    has_n8n_warn = "看起来是 n8n 地址" in am_txt
-except Exception:
-    has_conv_fix = has_n8n_warn = None
-
-if has_conv_fix is True:
-    print("✅ 后端 ai_middleware.py 已包含 conversation_id 修复（_dify_conv_map）")
-else:
-    print("❌ 后端 ai_middleware.py 还没拉到 conversation_id 修复代码！网站端会一直报错 sess_xxx 非UUID！"
-          "\n   解法: 把 fab-twin-pro 整个目录替换成 test1 分支最新版 (git pull origin test1) 然后重启后端服务。")
-if has_n8n_warn is True:
-    print("✅ 后端 ai_middleware.py 已包含 n8n 地址错用的自动告警")
-elif has_n8n_warn is False:
-    print("⚠  后端 ai_middleware.py 未带 n8n 地址错用告警（功能非必须，但建议拉最新代码）")
-
-if err1 and ("401" in str(err1) or "Unauthorized" in str(err1)):
-    print("❌ Dify API Key 错误（401 Unauthorized）")
-    print("   → 去 Dify 应用 → 发布 → 访问 API → 重新复制 API Secret，粘到AI配置页面的Dify API Key框里")
-if err1 and "connection" in str(err1).lower():
-    print("❌ 根本连不上 Dify 服务器（连接拒绝/超时/找不到主机）")
-    print(f"   → 你填的地址是 {base!r}，在 fabtwin 后端机器上打开浏览器访问这个地址，看能不能打开 Dify 网页")
-
-if res1 and dify_cid_from_1 and (not errors):
-    print()
-    print("🎉 直接调 Dify API 全通过了！你网站端的 conversation_id 报错根源只有 2 种可能:")
-    print()
-    print("  可能 A（概率90%）：你的后端服务还没重启 —— 即使我本地代码修了，只要后端进程没重启，仍然跑旧代码。")
-    print("    确认方法: 看后端控制台有没有出现下面这两行日志:")
-    print("      '会话映射已保存: sess_xxx → 550e8400-...-UUID'")
-    print("      '_dify_conv_map' 字样（搜索后端启动日志）")
-    print("    没看到就代表：后端进程还在跑旧版代码。")
-    print()
-    print("  可能 B（概率10%）：后端代码不是最新版（_dify_conv_map 不存在）。")
-    print("    确认方法: 执行 Step 4/5 里写的 '❌ 后端 ai_middleware.py 还没拉到修复' 那一条。")
-
-
-print()
-print("=" * 80)
-print("  Step 5/5: FabTwin 后端接口调用（可选）")
-print("=" * 80)
+print("=" * 90)
+print("  Step 6/6: 诊断总结")
+print("=" * 90)
 print("""
+你本次输出里最典型的 2 个现象，对应结论：
 
-如果你想进一步模拟网页端真实请求（通过 FabTwin 后端转发而非直接调 Dify），
-在 FabTwin 后端正常运行的情况下，另外新开一个 PowerShell 运行：
+现象 A: ORA-12541: TNS:no listener
+  → 不是 DB 崩了，是诊断脚本自己在独立进程里没加载 Oracle Client。
+  → 脚本 v2 已改为：先调活后端 GET /api/ai/config，不自己连 DB。
 
-  python -c "
-import httpx, json
-r = httpx.post('http://127.0.0.1:8002/api/ai/chat', json={
-    'question': '你能帮我干什么',
-    'machine_id': '',
-    'session_id': 'sess_diag_END2END'
-}, timeout=30)
-print('HTTP', r.status_code)
-print(r.text[:1500])
-"
+现象 B: 调 127.0.0.1:8002 返回 HJTC Proxy 403
+  → 公司 McAfee Web Gateway 把 127.0.0.1:8002 当成"Internet请求"拦了。
+  → 解法（永久写进 PowerShell）：
+        $env:HTTP_PROXY  = $null
+        $env:HTTPS_PROXY = $null
+        $env:NO_PROXY    = "127.0.0.1,localhost,10.30.0.0/16"
+     或改用 --host 指定内网网卡 IP（不要用 127.0.0.1）。
 
-把输出也一起发给我，我就能直接看到后端在"实际返回给前端"时到底传了什么 conversation_id、以及 ai_middleware.py 的修复代码有没有真正生效。
+如果 Step 2/6 显示 Dify URL/Key 都对，但 E2E Step 5/6 仍然报 "must be a valid UUID":
+  → 100% 是"代码更新了但后端进程没重启"。
+  → 最小验证命令:
+        Select-String -Path services\\ai_middleware.py -Pattern "_dify_conv_map"
+        没找到输出 → 直接把新文件覆盖过去；找到了输出 → 去 IIS/服务面板 点重启。
 """)
