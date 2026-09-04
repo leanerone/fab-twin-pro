@@ -12,20 +12,33 @@ const emit = defineEmits(['select-machine'])
 const authStore = useAuthStore()
 
 // === 缩放/平移 ===
-const zoom = ref(1)          // 缩放倍率，1=原始大小
+const zoom = ref(0.75)       // 缩放倍率，默认 75%（=0.75）
 const canvasInnerRef = ref(null)  // 内层画布 ref（用于坐标计算）
+const fpCanvasRef = ref(null) // 外层 .fp-canvas ref（用于控制滚动条）
 function zoomIn() { zoom.value = Math.min(5, +(zoom.value + 0.25).toFixed(2)) }
 function zoomOut() { zoom.value = Math.max(0.5, +(zoom.value - 0.25).toFixed(2)) }
-function zoomReset() { zoom.value = 1 }
+function zoomReset() { zoom.value = 0.75 }   // 默认 75%
 function onWheel(e) {
-  e.preventDefault()
-  if (e.deltaY < 0) zoomIn()
-  else zoomOut()
+  // 改滚轮行为：从"缩放 zoom" → "滚动条垂直滚动"（deltaY 直接驱动 scrollTop）
+  // 若用户按住 Ctrl/Shift 才做缩放（留给需要精确缩放的场景）
+  if (e.ctrlKey || e.metaKey || e.shiftKey) {
+    e.preventDefault()
+    if (e.deltaY < 0) zoomIn()
+    else zoomOut()
+    return
+  }
+  // 默认：滚轮只移动垂直滚动条，不缩放
+  const target = fpCanvasRef.value || e.currentTarget
+  if (target) {
+    target.scrollTop += e.deltaY
+    target.scrollLeft += (e.deltaX || 0)
+    e.preventDefault()
+  }
 }
 
 // === 画布扩展 ===
-const canvasScaleW = ref(1)   // 画布宽度倍率 1=原始 2=双倍
-const canvasScaleH = ref(1)   // 画布高度倍率
+const canvasScaleW = ref(2)   // 画布宽度倍率，默认 2（2×2 大画布）
+const canvasScaleH = ref(2)   // 画布高度倍率，默认 2
 const canvasMaxX = computed(() => 100 * canvasScaleW.value)  // 逻辑坐标最大X
 const canvasMaxY = computed(() => 100 * canvasScaleH.value)  // 逻辑坐标最大Y
 function expandCanvas() {
@@ -1502,6 +1515,7 @@ onUnmounted(() => {
     </div>
     
     <div
+      ref="fpCanvasRef"
       class="fp-canvas"
       @mousedown="handleMouseDown"
       @wheel="onWheel"
