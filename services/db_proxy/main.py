@@ -324,14 +324,18 @@ async def f2_lot_info(request: Request):
                     FROM lots WHERE id = :lid"""
             cols, rows = exec_query(sql, {"lid": lot_id})
         elif machine_id:
-            sql = """SELECT id, machine_id, product, wafer_count, status,
-                           start_time, end_time, recipe_id
-                    FROM lots WHERE machine_id = :mid ORDER BY start_time DESC FETCH FIRST 20 ROWS ONLY"""
+            sql = """SELECT * FROM (
+                       SELECT id, machine_id, product, wafer_count, status,
+                              start_time, end_time, recipe_id
+                       FROM lots WHERE machine_id = :mid ORDER BY start_time DESC
+                     ) WHERE ROWNUM <= 20"""
             cols, rows = exec_query(sql, {"mid": machine_id})
         else:
-            sql = """SELECT id, machine_id, product, wafer_count, status,
-                           start_time, end_time, recipe_id
-                    FROM lots ORDER BY start_time DESC FETCH FIRST 20 ROWS ONLY"""
+            sql = """SELECT * FROM (
+                       SELECT id, machine_id, product, wafer_count, status,
+                              start_time, end_time, recipe_id
+                       FROM lots ORDER BY start_time DESC
+                     ) WHERE ROWNUM <= 20"""
             cols, rows = exec_query(sql)
         data = rows_to_list(cols, rows)
         if not data:
@@ -361,11 +365,13 @@ async def f3_alarms(request: Request):
     try:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
         # 取时间范围内的事件，在 Python 里过滤 event_name='EC_ALARM_REPORT'
-        sql = """SELECT tool_id, event_ts_utc, payload_json
-                 FROM dt_event_raw
-                 WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
-                 ORDER BY event_ts_utc DESC
-                 FETCH FIRST 500 ROWS ONLY"""
+        # Oracle 11g 不支持 FETCH FIRST n ROWS ONLY（12c+语法），用 ROWNUM 替代
+        sql = """SELECT * FROM (
+                   SELECT tool_id, event_ts_utc, payload_json
+                   FROM dt_event_raw
+                   WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
+                   ORDER BY event_ts_utc DESC
+                 ) WHERE ROWNUM <= 500"""
         cols, rows = exec_query(sql, {"since": since, "mid": machine_id or ""})
         data = rows_to_list(cols, rows)
 
@@ -431,11 +437,12 @@ async def f4_events(request: Request):
         }
         since = ranges.get(time_range, ranges["today"])
         # dt_event_raw.event_ts_utc 是字符串（ISO 格式），按字符串比较即可过滤时间窗口
-        sql = """SELECT tool_id, event_ts_utc, received_ts_utc, payload_json
-                 FROM dt_event_raw
-                 WHERE tool_id = :mid AND event_ts_utc >= :since
-                 ORDER BY event_ts_utc DESC
-                 FETCH FIRST 200 ROWS ONLY"""
+        sql = """SELECT * FROM (
+                   SELECT tool_id, event_ts_utc, received_ts_utc, payload_json
+                   FROM dt_event_raw
+                   WHERE tool_id = :mid AND event_ts_utc >= :since
+                   ORDER BY event_ts_utc DESC
+                 ) WHERE ROWNUM <= 200"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
         data = rows_to_list(cols, rows)
         if not data:
@@ -626,11 +633,12 @@ async def f8_export(request: Request):
     days = int(body.get("days", 7))
     try:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-        sql = """SELECT tool_id, event_ts_utc, payload_json
-                 FROM dt_event_raw
-                 WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
-                 ORDER BY event_ts_utc DESC
-                 FETCH FIRST 1000 ROWS ONLY"""
+        sql = """SELECT * FROM (
+                   SELECT tool_id, event_ts_utc, payload_json
+                   FROM dt_event_raw
+                   WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
+                   ORDER BY event_ts_utc DESC
+                 ) WHERE ROWNUM <= 1000"""
         cols, rows = exec_query(sql, {"since": since, "mid": machine_id or ""})
         data = rows_to_list(cols, rows)
 
