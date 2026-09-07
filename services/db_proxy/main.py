@@ -136,55 +136,137 @@ def health():
     except Exception as e:
         return JSONResponse(status_code=503, content={"status": "error", "detail": str(e)})
 
-# ─── F1: 机台状态（实时) ───
-# 【修复】不再读静态 machines 表（该表 state/updated_at 不随新消息更新，会查到很久以前的旧快照）。
-# 改为从 dt_state_snapshot（每台机台最新状态快照，主系统实时写入）取最新一条。
+# ─── F1: 机台状态（实时，从事件流 dt_event_raw_cur 派生） ───
+# 【根因】静态 machines 表不随新消息更新 → 状态停留在旧快照（如 9.2、7.17）。
+# 【方案】从 dt_event_raw_cur（每台机台最新一条 RV 消息，持续更新）解析 payload_json 派生实时状态：
+#   - 告警：event_name == 'EC_ALARM_REPORT' → 状态=告警中，alarm_id/alarm_text 显示
+#   - 直接用 payload.machine_state（Running/Idle，OXE 类事件自带）
+#   - 否则按 event_name 映射：Start/WaferLoaded/PS → 运行中；POD_PLACED/MVIN → 装料中；
+#     LotEnd/JobEnd/POD_REMOVED → 空闲；...
+#   - 取 lot_id/recipe/run_mode/快照时间 event_ts_utc
 @app.post("/query/machine_status")
 async def f1_machine_status(request: Request):
     verify_key(request)
     body = await request.json()
     machine_id = body.get("machine_id", "").strip()
+
+    def _derive_status(payload: dict) -> dict:
+        """从事件 payload 派生机台实时状态字典"""
+        event_name = str(payload.get("event_name") or payload.get("event_type") or "").upper()
+        machine_state = str(payload.get("machine_state") or "").strip()
+        lot_id = payload.get("lot_id") or payload.get("batch_id") or ""
+        recipe = payload.get("recipe") or ""
+        run_mode = payload.get("run_mode") or ""
+        alarm_id = payload.get("alarm_id") or ""
+        alarm_text = payload.get("alarm_text") or ""
+
+        # 优先级1：告警事件
+        if event_name == "EC_ALARM_REPORT":
+            return {
+                "status": "告警中",
+                "status_detail": f"告警码 {alarm_id}: {alarm_text}",
+                "lot_id": lot_id,
+                "recipe": recipe,
+                "event_name": event_name,
+                "alarm_code": alarm_id,
+            }
+        # 优先级2：payload 自带 machine_state
+        if machine_state:
+            ms = machine_state.upper()
+            if ms in ("RUNNING", "RUN"):
+                status = "运行中"
+            elif ms in ("IDLE", "IDL"):
+                status = "空闲"
+            elif ms in ("ALARM", "ERROR", "ERR"):
+                status = "告警中"
+            elif ms in ("DOWN", "MAINT", "MAINTENANCE"):
+                status = "维护中"
+            else:
+                status = machine_state
+            return {
+                "status": status,
+                "status_detail": f"最近事件: {event_name}",
+                "lot_id": lot_id,
+                "recipe": recipe,
+                "event_name": event_name,
+                "alarm_code": alarm_id,
+            }
+        # 优先级3：按 event_name 映射
+        running_set = {"START", "PS", "PE", "WAFERLOADED", "WAFERUNLOADED",
+                       "STARTMAPPING_LEFT", "ENDMAPPING", "LOAD_CYCLE_STARTED",
+                       "LOAD_CYCLE_COMPLETED", "DOOR_OPEN", "DOOR_CLOSE"}
+        loading_set = {"POD_PLACED", "LOCK_PORT_COMPLETED", "MVIN", "DETACH_POD_PLACE"}
+        unloading_set = {"MVOU", "UNLOCK_PORT_COMPLETED", "POD_REMOVED",
+                         "LOTEND", "JOBEND", "READYTOUNLOAD", "UNLOAD_CYCLE_COMPLETED"}
+        if event_name in running_set:
+            status = "运行中"
+        elif event_name in loading_set:
+            status = "装料中"
+        elif event_name in unloading_set:
+            status = "空闲"
+        else:
+            status = event_name or "未知"
+        return {
+            "status": status,
+            "status_detail": f"最近事件: {event_name}" + (f"（run_mode={run_mode}）" if run_mode else ""),
+            "lot_id": lot_id,
+            "recipe": recipe,
+            "event_name": event_name,
+            "alarm_code": alarm_id,
+        }
+
     try:
-        sql = """SELECT tool_id, machine_state, machine_mode, current_lot_id,
-                        current_alarm_code, pod_position, snapshot_ts_utc
-                 FROM (
-                   SELECT tool_id, machine_state, machine_mode, current_lot_id,
-                          current_alarm_code, pod_position, snapshot_ts_utc,
-                          ROW_NUMBER() OVER (PARTITION BY tool_id ORDER BY snapshot_ts_utc DESC) AS rn
-                   FROM dt_state_snapshot
-                 )
-                 WHERE rn = 1 AND (:mid = '' OR tool_id = :mid)
+        # dt_event_raw_cur：每台机台最新一条消息（持续更新），直接拿即可
+        sql = """SELECT tool_id, raw_id, event_ts_utc, received_ts_utc, payload_json
+                 FROM dt_event_raw_cur
+                 WHERE (:mid = '' OR tool_id = :mid)
                  ORDER BY tool_id"""
         cols, rows = exec_query(sql, {"mid": machine_id})
         data = rows_to_list(cols, rows)
-        latest = data[0] if data else None
-        if not latest:
+        if not data:
             if machine_id:
-                return ok(f"未找到机台 {machine_id} 的实时状态快照（dt_state_snapshot 无记录）",
+                return ok(f"未找到机台 {machine_id} 的最新事件（dt_event_raw_cur 无记录）",
                           jump_machine_id=machine_id)
-            return ok("暂无任何机台的实时状态快照（dt_state_snapshot 无记录）")
+            return ok("暂无任何机台的最新事件（dt_event_raw_cur 无记录）")
+
+        results = []
+        for d in data:
+            payload = {}
+            pj = d.get("payload_json")
+            if pj:
+                try:
+                    payload = json.loads(pj) if isinstance(pj, str) else pj
+                except Exception:
+                    payload = {}
+            derived = _derive_status(payload)
+            derived["tool_id"] = d.get("tool_id", "")
+            derived["event_ts"] = d.get("event_ts_utc") or d.get("received_ts_utc") or ""
+            results.append(derived)
+
         def status_rows():
-            return [[d.get('tool_id',''), d.get('machine_state',''), d.get('machine_mode',''),
-                     d.get('current_lot_id',''), d.get('current_alarm_code',''),
-                     d.get('snapshot_ts_utc','')] for d in data]
+            return [[r["tool_id"], r["status"], r.get("status_detail", ""),
+                     r.get("lot_id") or "无", r.get("alarm_code") or "无",
+                     r.get("event_ts", "")] for r in results]
+
         if machine_id:
-            d = latest
-            answer = (f"机台 {d.get('tool_id','')} 当前状态: {d.get('machine_state') or '未知'}"
-                      f"（模式 {d.get('machine_mode') or 'N/A'}），"
-                      f"当前Lot {d.get('current_lot_id') or '无'}，"
-                      f"当前告警 {d.get('current_alarm_code') or '无'}，"
-                      f"快照时间 {d.get('snapshot_ts_utc') or 'N/A'}。")
+            r = results[0]
+            answer = (f"机台 {r['tool_id']} 当前状态: {r['status']}。"
+                      f"{r.get('status_detail', '')}，"
+                      f"当前Lot {r.get('lot_id') or '无'}"
+                      f"{('，Recipe ' + r['recipe']) if r.get('recipe') else ''}，"
+                      f"最近事件时间 {r.get('event_ts') or 'N/A'}。")
             return ok(answer,
-                      table(["机台","状态","模式","当前Lot","告警码","快照时间"], status_rows()),
-                      jump_timestamp=d.get('snapshot_ts_utc') or None,
-                      jump_machine_id=d.get('tool_id'))
-        running = sum(1 for d in data
-                      if str(d.get('machine_state','')).upper() in ('RUNNING','RUN','RUN','运行','加工中','忙'))
-        answer = f"全厂共 {len(data)} 台机台有实时状态快照，其中运行 {running} 台。"
+                      table(["机台", "状态", "状态说明", "当前Lot", "告警码", "最近事件时间"], status_rows()),
+                      jump_timestamp=r.get("event_ts") or None,
+                      jump_machine_id=r["tool_id"])
+
+        running = sum(1 for r in results if r["status"] == "运行中")
+        alarming = sum(1 for r in results if r["status"] == "告警中")
+        answer = f"全厂共 {len(results)} 台机台：运行中 {running} 台，告警中 {alarming} 台，其余空闲/其它。"
         return ok(answer,
-                  table(["机台","状态","模式","当前Lot","告警码","快照时间"], status_rows()),
-                  jump_timestamp=latest.get('snapshot_ts_utc') or None,
-                  jump_machine_id=latest.get('tool_id'))
+                  table(["机台", "状态", "状态说明", "当前Lot", "告警码", "最近事件时间"], status_rows()),
+                  jump_timestamp=results[0].get("event_ts") or None,
+                  jump_machine_id=results[0]["tool_id"])
     except Exception as e:
         logger.error(f"F1 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
@@ -228,7 +310,8 @@ async def f2_lot_info(request: Request):
         logger.error(f"F2 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
 
-# ─── F3: 报警统计 ───
+# ─── F3: 报警统计（实时，从 dt_event_raw 的 EC_ALARM_REPORT 事件取） ───
+# 【修复】原读静态 alarms 表（不随新消息更新）。改为 dt_event_raw 解析 payload_json 的告警事件。
 @app.post("/query/machine_alarms")
 async def f3_alarms(request: Request):
     verify_key(request)
@@ -238,34 +321,63 @@ async def f3_alarms(request: Request):
     days = int(body.get("days", 7))
     try:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-        params = {"since": since}
-        where = "timestamp >= :since"
-        if machine_id:
-            where += " AND machine_id = :mid"
-            params["mid"] = machine_id
-        if severity:
-            where += ' AND "LEVEL" = :sev'
-            params["sev"] = severity
-        sql = f"""SELECT id, machine_id, timestamp, alarm_code, description, "LEVEL", resolved, lot_id
-                 FROM alarms WHERE {where} ORDER BY timestamp DESC FETCH FIRST 200 ROWS ONLY"""
-        cols, rows = exec_query(sql, params)
+        # 取时间范围内的事件，在 Python 里过滤 event_name='EC_ALARM_REPORT'
+        sql = """SELECT tool_id, event_ts_utc, payload_json
+                 FROM dt_event_raw
+                 WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
+                 ORDER BY event_ts_utc DESC
+                 FETCH FIRST 500 ROWS ONLY"""
+        cols, rows = exec_query(sql, {"since": since, "mid": machine_id or ""})
         data = rows_to_list(cols, rows)
-        if not data:
+
+        alarm_rows = []
+        for d in data:
+            payload = {}
+            pj = d.get("payload_json")
+            if pj:
+                try:
+                    payload = json.loads(pj) if isinstance(pj, str) else pj
+                except Exception:
+                    payload = {}
+            if str(payload.get("event_name") or "").upper() != "EC_ALARM_REPORT":
+                continue
+            aid = payload.get("alarm_id") or ""
+            # severity 推断：payload 可能带 severity；否则按告警码映射（与前端一致）
+            sev = payload.get("severity") or ""
+            if not sev:
+                if str(aid) in ("9004", "0201"):
+                    sev = "crit"
+                elif str(aid) in ("9003", "20011"):
+                    sev = "warn"
+                elif str(aid) == "0411":
+                    sev = "info"
+                else:
+                    sev = "warn"
+            if severity and str(sev).lower() != str(severity).lower():
+                continue
+            alarm_rows.append([
+                d.get("tool_id", ""),
+                d.get("event_ts_utc") or "",
+                aid,
+                payload.get("alarm_text") or "",
+                sev,
+                payload.get("lot_id") or payload.get("batch_id") or "",
+            ])
+
+        if not alarm_rows:
             return ok(f"近 {days} 天无报警记录（machine_id={machine_id}, severity={severity}）")
-        crit_count = sum(1 for d in data if d.get('level') == 'crit')
-        answer = f"近 {days} 天共 {len(data)} 条报警（严重 {crit_count} 条）。"
+        crit_count = sum(1 for r in alarm_rows if str(r[4]).lower() == "crit")
+        answer = f"近 {days} 天共 {len(alarm_rows)} 条报警（严重 {crit_count} 条）。"
         return ok(answer,
-                  table(["ID","机台","时间","报警码","描述","等级","已解决","Lot"],
-                        [[d.get('id',''), d.get('machine_id',''), d.get('timestamp',''),
-                          d.get('alarm_code',''), d.get('description',''),
-                          d.get('level',''), d.get('resolved',''), d.get('lot_id','')] for d in data]),
-                  jump_timestamp=data[0].get('timestamp'),
-                  jump_machine_id=machine_id or data[0].get('machine_id'))
+                  table(["机台", "时间", "告警码", "描述", "等级", "Lot"], alarm_rows),
+                  jump_timestamp=alarm_rows[0][1] or None,
+                  jump_machine_id=machine_id or alarm_rows[0][0])
     except Exception as e:
         logger.error(f"F3 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
 
-# ─── F4: 事件时间线 ───
+# ─── F4: 事件时间线（实时，从 dt_event_raw 取） ───
+# 【修复】原读静态 machine_events 表（不随新消息更新）。改为 dt_event_raw 解析 payload_json。
 @app.post("/query/event_timeline")
 async def f4_events(request: Request):
     verify_key(request)
@@ -285,28 +397,46 @@ async def f4_events(request: Request):
             "last_30d": (now - timedelta(days=30)).strftime("%Y-%m-%d 00:00:00"),
         }
         since = ranges.get(time_range, ranges["today"])
-        sql = """SELECT id, machine_id, timestamp, event_type, event_code, description, "LEVEL", metric, value, lot_id
-                 FROM machine_events
-                 WHERE machine_id = :mid AND timestamp >= :since
-                 ORDER BY timestamp DESC FETCH FIRST 200 ROWS ONLY"""
+        # dt_event_raw.event_ts_utc 是字符串（ISO 格式），按字符串比较即可过滤时间窗口
+        sql = """SELECT tool_id, event_ts_utc, received_ts_utc, payload_json
+                 FROM dt_event_raw
+                 WHERE tool_id = :mid AND event_ts_utc >= :since
+                 ORDER BY event_ts_utc DESC
+                 FETCH FIRST 200 ROWS ONLY"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
         data = rows_to_list(cols, rows)
         if not data:
             return ok(f"机台 {machine_id} 在 {time_range} 范围内无事件记录。")
-        answer = f"机台 {machine_id} 共 {len(data)} 条事件。"
+        event_rows = []
+        for d in data:
+            payload = {}
+            pj = d.get("payload_json")
+            if pj:
+                try:
+                    payload = json.loads(pj) if isinstance(pj, str) else pj
+                except Exception:
+                    payload = {}
+            event_rows.append([
+                d.get("tool_id", ""),
+                d.get("event_ts_utc") or d.get("received_ts_utc", ""),
+                payload.get("event_name") or payload.get("event_type") or "",
+                payload.get("alarm_id") or "",
+                payload.get("alarm_text") or "",
+                payload.get("lot_id") or payload.get("batch_id") or "",
+                payload.get("recipe") or "",
+                payload.get("chamber_id") or "",
+            ])
+        answer = f"机台 {machine_id} 在 {time_range} 共 {len(event_rows)} 条事件（最新 {event_rows[0][1]}）。"
         return ok(answer,
-                  table(["ID","机台","时间","类型","代码","描述","等级","指标","值","Lot"],
-                        [[d.get('id',''), d.get('machine_id',''), d.get('timestamp',''),
-                          d.get('event_type',''), d.get('event_code',''),
-                          d.get('description',''), d.get('level',''),
-                          d.get('metric',''), d.get('value',''), d.get('lot_id','')] for d in data]),
-                  jump_timestamp=data[0].get('timestamp'),
+                  table(["机台", "事件时间", "事件名", "告警码", "告警描述", "Lot", "Recipe", "Chamber"], event_rows),
+                  jump_timestamp=event_rows[0][1] or None,
                   jump_machine_id=machine_id)
     except Exception as e:
         logger.error(f"F4 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
 
-# ─── F5: 产量统计 ───
+# ─── F5: 产量统计（实时，从 dt_event_raw 的 LotEnd 事件统计） ───
+# 【修复】原读静态 lots 表（不随新消息更新）。改为统计 dt_event_raw 中 event_name='LotEnd' 的 QTY 之和。
 @app.post("/query/yield_stats")
 async def f5_yield(request: Request):
     verify_key(request)
@@ -317,25 +447,55 @@ async def f5_yield(request: Request):
     time_range = body.get("time_range", "today")
     try:
         now = datetime.now()
-        since = now.strftime("%Y-%m-%d 00:00:00") if time_range == "today" else (now - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
-        sql = """SELECT COUNT(*) as lot_count,
-                       COALESCE(SUM(wafer_count), 0) as total_wafers,
-                       SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done_count,
-                       SUM(CASE WHEN status = 'run' THEN 1 ELSE 0 END) as running_count,
-                       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count
-                FROM lots
-                WHERE machine_id = :mid AND (start_time >= :since OR :since IS NULL)"""
+        ranges = {
+            "today": now.strftime("%Y-%m-%d 00:00:00"),
+            "last_7d": (now - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00"),
+            "last_30d": (now - timedelta(days=30)).strftime("%Y-%m-%d 00:00:00"),
+            "this_week": (now - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00"),
+        }
+        since = ranges.get(time_range, ranges["today"])
+        # 取该机台时间范围内的所有事件，在 Python 里过滤 event_name='LotEnd' 并统计
+        # （Oracle 11g 无 JSON_VALUE，且 payload_json 是 TEXT，故拉取后在 Python 解析）
+        sql = """SELECT tool_id, event_ts_utc, payload_json
+                 FROM dt_event_raw
+                 WHERE tool_id = :mid AND event_ts_utc >= :since
+                 ORDER BY event_ts_utc DESC"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
-        d = rows_to_list(cols, rows)[0]
-        total = d.get('lot_count', 0)
-        wafers = d.get('total_wafers', 0)
-        done = d.get('done_count', 0)
-        running = d.get('running_count', 0)
-        rate = round(done / total * 100, 1) if total > 0 else 0
-        answer = f"机台 {machine_id} 今日共 {total} 个 Lot，{wafers} 片晶圆；完成 {done}（{rate}%），进行中 {running}。"
+        data = rows_to_list(cols, rows)
+
+        lot_end_count = 0
+        total_wafers = 0
+        lot_ids = set()
+        for d in data:
+            payload = {}
+            pj = d.get("payload_json")
+            if pj:
+                try:
+                    payload = json.loads(pj) if isinstance(pj, str) else pj
+                except Exception:
+                    payload = {}
+            en = str(payload.get("event_name") or "").upper()
+            if en == "LOTEND":
+                lot_end_count += 1
+                qty = payload.get("QTY") or payload.get("qty")
+                try:
+                    total_wafers += int(qty) if qty not in (None, "", "NULL") else 0
+                except Exception:
+                    pass
+                lid = payload.get("lot_id") or payload.get("batch_id")
+                if lid and lid != "NULL":
+                    lot_ids.add(lid)
+
+        distinct_lots = len(lot_ids)
+        if lot_end_count == 0:
+            return ok(f"机台 {machine_id} 在 {time_range} 内无 LotEnd 事件（产量 0）。",
+                      jump_timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
+                      jump_machine_id=machine_id)
+        answer = (f"机台 {machine_id} 在 {time_range} 内共完成 {lot_end_count} 次 Lot加工"
+                  f"（涉及 {distinct_lots} 个 Lot），累计加工晶圆 {total_wafers} 片。")
         return ok(answer,
-                  table(["Lot总数","晶圆总数","已完成","进行中","待处理","完成率"],
-                        [[total, wafers, done, running, d.get('pending_count',0), f"{rate}%"]]),
+                  table(["时间范围", "LotEnd次数", "涉及Lot数", "累计晶圆数"],
+                        [[time_range, lot_end_count, distinct_lots, total_wafers]]),
                   jump_timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
                   jump_machine_id=machine_id)
     except Exception as e:
@@ -372,7 +532,8 @@ async def f6_recipe(request: Request):
         logger.error(f"F6 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
 
-# ─── F7: MES Lot 详情（管理员） ───
+# ─── F7: MES Lot 详情（管理员，从 dt_event_raw 派生） ───
+# 【修复】原读静态 lots/machine_events 表。改为从 dt_event_raw 解析该 Lot 的所有事件派生信息。
 @app.post("/query/mes_lot_info")
 async def f7_mes_lot(request: Request):
     verify_key(request)
@@ -381,35 +542,67 @@ async def f7_mes_lot(request: Request):
     if not lot_id:
         return fail("lot_id 必填")
     try:
-        # 复用 lots 表 + 关联事件
-        sql = """SELECT l.id, l.machine_id, l.product, l.wafer_count, l.status,
-                       l.start_time, l.end_time, l.recipe_id
-                FROM lots l WHERE l.id = :lid"""
-        cols, rows = exec_query(sql, {"lid": lot_id})
+        # 查该 Lot 相关事件（payload_json 里 lot_id/batch_id 匹配）
+        sql = """SELECT tool_id, event_ts_utc, payload_json
+                 FROM dt_event_raw
+                 WHERE payload_json LIKE :lid
+                 ORDER BY event_ts_utc ASC"""
+        cols, rows = exec_query(sql, {"lid": f"%\"lot_id\": \"{lot_id}\"%"})
         data = rows_to_list(cols, rows)
+        # 兜底：也匹配 batch_id
         if not data:
-            return ok(f"未找到 Lot {lot_id}。")
-        d = data[0]
-        # 查该 Lot 相关事件
-        sql2 = """SELECT timestamp, event_code, description, "LEVEL"
-                  FROM machine_events WHERE lot_id = :lid ORDER BY timestamp DESC FETCH FIRST 10 ROWS ONLY"""
-        cols2, rows2 = exec_query(sql2, {"lid": lot_id})
-        events = rows_to_list(cols2, rows2)
-        answer = f"Lot {lot_id}: 产品 {d.get('product','')}，{d.get('wafer_count',0)} 片，" \
-                 f"状态 {d.get('status','')}，机台 {d.get('machine_id','')}，" \
-                 f"配方 {d.get('recipe_id','')}，关联事件 {len(events)} 条。"
+            cols, rows = exec_query(sql, {"lid": f"%\"batch_id\": \"{lot_id}\"%"})
+            data = rows_to_list(cols, rows)
+        if not data:
+            return ok(f"未找到 Lot {lot_id} 的事件记录。")
+
+        events = []
+        machine_id = ""
+        recipe = ""
+        start_time = ""
+        end_time = ""
+        wafer_count = 0
+        lot_done = False
+        for d in data:
+            payload = {}
+            pj = d.get("payload_json")
+            if pj:
+                try:
+                    payload = json.loads(pj) if isinstance(pj, str) else pj
+                except Exception:
+                    payload = {}
+            en = payload.get("event_name") or ""
+            ts = d.get("event_ts_utc") or ""
+            if not machine_id:
+                machine_id = d.get("tool_id", "")
+            if not recipe and payload.get("recipe"):
+                recipe = payload.get("recipe")
+            if not start_time:
+                start_time = ts
+            end_time = ts
+            if str(en).upper() == "LOTEND":
+                lot_done = True
+                qty = payload.get("QTY") or payload.get("qty")
+                try:
+                    wafer_count = int(qty) if qty not in (None, "", "NULL") else 0
+                except Exception:
+                    pass
+            events.append([ts, en, payload.get("alarm_id") or "", d.get("tool_id", "")])
+
+        status = "done" if lot_done else "run"
+        answer = (f"Lot {lot_id}: 机台 {machine_id}，Recipe {recipe or 'N/A'}，"
+                  f"晶圆数 {wafer_count}，状态 {status}，"
+                  f"开始 {start_time}，结束 {end_time}，关联事件 {len(events)} 条。")
         return ok(answer,
-                  table(["Lot ID","机台","产品","晶圆数","状态","开始时间","结束时间","配方"],
-                        [[d.get('id',''), d.get('machine_id',''), d.get('product',''),
-                          d.get('wafer_count',0), d.get('status',''),
-                          d.get('start_time',''), d.get('end_time',''), d.get('recipe_id','')]]),
-                  jump_timestamp=d.get('start_time'),
-                  jump_machine_id=d.get('machine_id'))
+                  table(["Lot ID", "机台", "Recipe", "晶圆数", "状态", "开始时间", "结束时间"],
+                        [[lot_id, machine_id, recipe or "", wafer_count, status, start_time, end_time]]),
+                  jump_timestamp=end_time or start_time,
+                  jump_machine_id=machine_id)
     except Exception as e:
         logger.error(f"F7 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
 
-# ─── F8: 导出报警报表（管理员） ───
+# ─── F8: 导出报警报表（管理员，从 dt_event_raw 告警事件） ───
 @app.post("/query/export_alarm_report")
 async def f8_export(request: Request):
     verify_key(request)
@@ -418,29 +611,44 @@ async def f8_export(request: Request):
     days = int(body.get("days", 7))
     try:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-        params = {"since": since}
-        where = "timestamp >= :since"
-        if machine_id:
-            where += " AND machine_id = :mid"
-            params["mid"] = machine_id
-        sql = f"""SELECT id, machine_id, timestamp, alarm_code, description, "LEVEL", resolved, lot_id
-                 FROM alarms WHERE {where} ORDER BY timestamp DESC"""
-        cols, rows = exec_query(sql, params)
+        sql = """SELECT tool_id, event_ts_utc, payload_json
+                 FROM dt_event_raw
+                 WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
+                 ORDER BY event_ts_utc DESC
+                 FETCH FIRST 1000 ROWS ONLY"""
+        cols, rows = exec_query(sql, {"since": since, "mid": machine_id or ""})
         data = rows_to_list(cols, rows)
-        total = len(data)
-        answer = f"已生成报警报表：近 {days} 天共 {total} 条记录" + \
-                 (f"（机台 {machine_id}）" if machine_id else "（全厂）") + \
-                 f"，可下载 CSV 格式。"
-        # 生成 CSV 下载 URL（前端可直接用 sources[0].download_url）
+
+        report_rows = []
+        for d in data:
+            payload = {}
+            pj = d.get("payload_json")
+            if pj:
+                try:
+                    payload = json.loads(pj) if isinstance(pj, str) else pj
+                except Exception:
+                    payload = {}
+            if str(payload.get("event_name") or "").upper() != "EC_ALARM_REPORT":
+                continue
+            aid = payload.get("alarm_id") or ""
+            sev = payload.get("severity") or ""
+            if not sev:
+                sev = "crit" if str(aid) in ("9004", "0201") else ("warn" if str(aid) in ("9003", "20011") else "info")
+            report_rows.append([
+                d.get("tool_id", ""), d.get("event_ts_utc") or "",
+                aid, payload.get("alarm_text") or "", sev,
+                payload.get("lot_id") or payload.get("batch_id") or "",
+            ])
+
+        total = len(report_rows)
+        answer = (f"已生成报警报表：近 {days} 天共 {total} 条记录"
+                  + (f"（机台 {machine_id}）" if machine_id else "（全厂）") + "，可下载 CSV 格式。")
         download_url = f"/download/alarms?machine_id={machine_id}&days={days}"
         return ok(answer,
-                  table(["ID","机台","时间","报警码","描述","等级","已解决","Lot"],
-                        [[d.get('id',''), d.get('machine_id',''), d.get('timestamp',''),
-                          d.get('alarm_code',''), d.get('description',''),
-                          d.get('level',''), d.get('resolved',''), d.get('lot_id','')] for d in data[:50]]),
+                  table(["机台", "时间", "告警码", "描述", "等级", "Lot"], report_rows[:50]),
                   jump_machine_id=machine_id,
-                  sources=[{"type":"db_proxy","workflow":"export_alarm_report",
-                            "row_count":total,"download_url":download_url}])
+                  sources=[{"type": "db_proxy", "workflow": "export_alarm_report",
+                            "row_count": total, "download_url": download_url}])
     except Exception as e:
         logger.error(f"F8 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
