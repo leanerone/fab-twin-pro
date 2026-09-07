@@ -1146,6 +1146,90 @@ Lot ID 格式说明：
 
     # ==================== Provider: Dify ====================
 
+    def _consume_dify_stream(self, resp) -> Dict[str, Any]:
+        """把 Dify streaming(SSE) 响应聚合成与 blocking 相同结构的 dict。
+
+        因为在【Agent 智能体应用】下 Dify 只支持 streaming，后端统一改用 streaming；
+        此方法在本地把 SSE 的分片 answer 拼接完整，并提取 conversation_id / usage / RAG引用。
+
+        Dify streaming 事件摘要：
+          - message / agent_message : {event, answer(分片), conversation_id, ...}  ← 聚合 answer
+          - message_end             : {event, metadata:{usage:{...}}, conversation_id} ← 用 token 用量
+          - retriever_resources     : {event, records:[...]}                         ← RAG 引用
+          - workflow_finished       : 工作流类应用结果放在 data.outputs
+          每个事件以 'data: ' 开头，最后一行是 'data: [DONE]'。
+        返回值字段与旧 blocking 的 resp.json() 一致：answer / conversation_id / metadata / retriever_resources，
+        以便 _call_dify() 后续处理逻辑（usage 计费 / RAG sources / <FABTWIN> 提取）原样复用。
+        """
+        import json as _j
+        answer_chunks = []
+        conv_id = None
+        usage = None
+        rag_records = []
+        workflow_outputs = None
+        try:
+            for raw in resp.iter_lines():
+                line = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+                line = (line or "").strip()
+                if not line or line.startswith(":"):
+                    continue
+                if line.startswith("data:"):
+                    data_str = line[len("data:"):].strip()
+                    if data_str == "[DONE]":
+                        break
+                else:
+                    data_str = line
+                try:
+                    evt = _j.loads(data_str)
+                except Exception:
+                    continue
+                if not isinstance(evt, dict):
+                    continue
+                event = evt.get("event")
+                # chat/chatflow/agent 类应用：answer 分片来自 message / agent_message / message_replace
+                if event in ("message", "agent_message", "message_replace"):
+                    chunk = evt.get("answer")
+                    if isinstance(chunk, str):
+                        answer_chunks.append(chunk)
+                    if not conv_id:
+                        conv_id = evt.get("conversation_id")
+                elif event == "message_end":
+                    meta = evt.get("metadata") or {}
+                    if isinstance(meta.get("usage"), dict):
+                        usage = meta.get("usage")
+                    if not conv_id:
+                        conv_id = evt.get("conversation_id")
+                elif event == "retriever_resources":
+                    records = evt.get("records") or []
+                    for r in records:
+                        if isinstance(r, dict):
+                            rag_records.append(r)
+                elif event == "workflow_finished":
+                    wdata = evt.get("data") or {}
+                    wouts = wdata.get("outputs")
+                    if isinstance(wouts, dict):
+                        workflow_outputs = wouts
+        except Exception as e:
+            print(f"[Dify] SSE 解析异常: {type(e).__name__}: {e}")
+
+        answer = "".join(answer_chunks)
+        # 兜底：若为工作流类应用，流里没有 message/agent_message 事件 → 尝试从 workflow_finished.outputs 取文本
+        if not answer and isinstance(workflow_outputs, dict):
+            for key in ("text", "answer", "output", "result"):
+                if key in workflow_outputs and isinstance(workflow_outputs[key], str):
+                    answer = workflow_outputs[key]
+                    break
+
+        metadata = {}
+        if usage is not None:
+            metadata["usage"] = usage
+        return {
+            "answer": answer,
+            "conversation_id": conv_id,
+            "metadata": metadata,
+            "retriever_resources": rag_records,
+        }
+
     def _call_dify(self, question: str, session_id: str, machine_id: str = None,
                    user_role: str = "user",
                    usage_tracker: Dict = None,
@@ -1153,7 +1237,8 @@ Lot ID 格式说明：
         """调用Dify应用
         - 解析 Dify 返回的 metadata.usage 写回 usage_tracker（用于日志计费）
         - 解析 retriever_resources（RAG 知识库引用片段）放入 sources 字段
-        - 支持 workflow 模式和 chatbot 模式
+        - 支持 workflow 模式、chatbot 模式、agent 智能体模式
+        - 统一使用 streaming(SSE) 模式（Agent 应用不支持 blocking）
         """
         if not self.dify_enabled or not self.dify_base_url or not self.dify_api_key:
             # 纯 Dify 模式：不做本地规则兜底，直接抛错以便调试真实 Dify 链路
@@ -1194,10 +1279,15 @@ Lot ID 格式说明：
                 inputs["machine_model"] = meta["machine_model"]
             if meta.get("chambers"):
                 inputs["chambers"] = int(meta["chambers"])
+            # ⚠️ 为什么用 streaming 而不是 blocking？
+            # Dify 的【Agent 智能体应用】只支持 streaming（流式）模式，不支持 blocking（一次性返回）。
+            # 若用 blocking，agent 类型 Dify 会返回 400：“Agent Chat App does not support blocking mode”。
+            # streaming 同时兼容：Agent / Chatbot / Chatflow / Workflow 全部应用类型，
+            # 因此这里统一走 streaming，由 _consume_dify_stream() 在本地把 SSE 分片聚合成完整 answer。
             payload = {
                 "inputs": inputs,
                 "query": question,
-                "response_mode": "blocking",
+                "response_mode": "streaming",
                 "user": f"fabtwin_{user_role}" if user_role else "fabtwin_user",
             }
             # ========== conversation_id 正确规则 ==========
@@ -1229,7 +1319,7 @@ Lot ID 格式说明：
             print(f"[Dify] → POST {url}, {conv_info}, payload keys={list(payload.keys())}, "
                   f"inputs keys={list(payload['inputs'].keys())}, "
                   f"query_len={len(question)}, user={payload['user']}")
-            resp = requests.post(url, json=payload, headers=headers, timeout=90)
+            resp = requests.post(url, json=payload, headers=headers, timeout=120, stream=True)
             # ---------- 4xx 自动回退重试（兼容 Dify 不同应用类型） ----------
             if resp.status_code >= 400 and resp.status_code < 500:
                 body_txt = ""
@@ -1248,7 +1338,7 @@ Lot ID 格式说明：
                     payload2 = dict(payload)
                     payload2["inputs"] = {}
                     print(f"[Dify] ↻ 回退重试：清空 inputs，keys={list(payload2.keys())}")
-                    resp2 = requests.post(url, json=payload2, headers=headers, timeout=90)
+                    resp2 = requests.post(url, json=payload2, headers=headers, timeout=120, stream=True)
                     if resp2.status_code < 400:
                         resp = resp2  # 用回退成功的响应继续处理
                         print(f"[Dify] ✓ 回退重试成功 HTTP {resp.status_code}")
@@ -1283,7 +1373,8 @@ Lot ID 格式说明：
                         f"{extra}"
                     )
             resp.raise_for_status()
-            data = resp.json()
+            # streaming 模式：把 SSE 流聚合成与 blocking 相同结构的 dict（answer/conversation_id/metadata/...）
+            data = self._consume_dify_stream(resp)
 
             answer = data.get("answer", "")
             dify_returned_cid = data.get("conversation_id")
@@ -1787,17 +1878,21 @@ Lot ID 格式说明：
                     ping_headers = dict(headers)
                     ping_headers["Content-Type"] = "application/json"
                     resp = requests.post(
-                        chat_url, headers=ping_headers, timeout=15,
+                        chat_url, headers=ping_headers, timeout=30, stream=True,
                         json={
                             "query": "ping",
-                            "response_mode": "blocking",
+                            "response_mode": "streaming",
                             "user": "fabtwin_conn_test",
                             "inputs": {},
                         },
                     )
                     if resp.status_code == 200:
-                        d = resp.json()
-                        a = (d.get("answer") or "")[:60]
+                        # Agent 应用只支持 streaming，这里也走 SSE 聚合（与 _call_dify 一致）
+                        try:
+                            d = self._consume_dify_stream(resp)
+                            a = (d.get("answer") or "")[:60]
+                        except Exception:
+                            a = ""
                         return {"success": True, "message": f"Dify 连接成功（对话验证）{using_msg}，回复：{a}"}
                     return {"success": False, "message": f"Dify连接失败: HTTP {resp.status_code} - {resp.text[:200]}"}
                 except Exception as e2:
