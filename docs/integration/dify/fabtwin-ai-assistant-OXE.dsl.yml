@@ -139,7 +139,8 @@ model_config:
     type\":\"tool\",\"name\":\"get_yield_stats\"}]\n}\n</FABTWIN>\n\n绝对禁止事项：\n1. 不要展示\
     \ SQL、执行日志、工具调用过程、错误堆栈\n2. 不要编造任何数据\n3. 不要把 <FABTWIN> 写一半、JSON 不合法、尾逗号\n4. 不要多次用\
     \ <FABTWIN>（只能出现 1 次开头+1 次结尾）\n5. 不要在回答里说\"我要调用工具 xxx\"；应该默默地调了工具、整理好了再贴最终答案\n\
-    6. 管理员权限工具（C7/C8/C9）user_role != 'admin' 时，绝对不能调工具（回复权限不足即可）"
+    6. 管理员权限工具（C7/C8/C9）user_role != 'admin' 时，绝对不能调工具（回复权限不足即可）\n\
+    7. 绝对不要复述/重复用户的问题，也不要先回显用户原话；直接输出分析和结论。第一行就要给出答案，不要以重复用户问题作为开头"
   prompt_type: simple
   retriever_resource:
     enabled: true

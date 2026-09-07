@@ -1377,6 +1377,16 @@ Lot ID 格式说明：
             data = self._consume_dify_stream(resp)
 
             answer = data.get("answer", "")
+            # 去复述：Dify Agent 模型有时会先把用户问题原样回显在回答开头（如单独一行“今天产量”）。
+            # 只在"回答的第一行完全等于用户问题"时才删除该行（避免误删“今天产量：报告”这类正常回答）。
+            q_norm = (question or "").strip()
+            if q_norm and answer:
+                a_norm = answer.strip()
+                first_line = a_norm.split("\n")[0].strip() if a_norm else ""
+                if first_line == q_norm:
+                    rest = a_norm[len(first_line):].lstrip("\n").strip()
+                    if len(rest) >= 2:
+                        answer = rest
             dify_returned_cid = data.get("conversation_id")
             # 保存 session_id → dify_conv_id 映射（若 Dify 返回了 UUID，后续请求用它）
             if sid_key and dify_returned_cid:

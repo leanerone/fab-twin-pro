@@ -213,12 +213,22 @@ function scrollToBottom() {
     chatLogRef.value.scrollTop = chatLogRef.value.scrollHeight
   }
 }
+
+// 清空当前机台的聊天记录（含本地存储），用于清理空/多余会话资料
+function clearChat() {
+  if (messages.value.length > 0 && !window.confirm('确定清空当前对话记录吗？')) return
+  messages.value = []
+  sessionId.value = null
+  // 清掉本地持久化的会话（messages + sessionId）
+  localStorage.removeItem(STORAGE_KEY + '_' + (props.machineId || 'global'))
+}
 </script>
 
 <template>
   <div class="ai-assistant">
     <div class="section-title-row">
       <div class="section-title">AI 助手</div>
+      <button class="clear-chat-btn" title="清空当前对话记录" @click="clearChat">清空</button>
     </div>
     <div ref="chatLogRef" class="chat-log">
       <div class="chat-msg ai welcome">
@@ -319,6 +329,21 @@ function scrollToBottom() {
   background: none;
   font-size: 13px;
   font-weight: 700;
+}
+.clear-chat-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.clear-chat-btn:hover {
+  border-color: #ff4757;
+  color: #ff4757;
 }
 .chat-log {
   flex: 1;
