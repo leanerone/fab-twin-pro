@@ -89,12 +89,23 @@ def exec_query(sql, params=None):
         return cols, rows
 
 def rows_to_list(cols, rows):
-    """将 rows 转为 list[dict]"""
+    """将 rows 转为 list[dict]（自动处理 Oracle LOB/CLOB → str）"""
     result = []
     for r in rows:
         item = {}
         for i, c in enumerate(cols):
             val = r[i]
+            # Oracle LOB/CLOB → 读成字符串
+            if hasattr(val, "read"):
+                try:
+                    val = val.read()
+                except Exception:
+                    pass
+            if isinstance(val, (bytes, bytearray)):
+                try:
+                    val = val.decode("utf-8")
+                except Exception:
+                    val = str(val)
             if isinstance(val, datetime):
                 val = val.strftime("%Y-%m-%d %H:%M:%S")
             item[c] = val
