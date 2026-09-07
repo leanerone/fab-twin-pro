@@ -22,6 +22,12 @@ import uvicorn
 # ─── Oracle ───
 import oracledb
 
+# 让 oracledb 直接返回字符串而非 LOB 对象（避免 payload_json 是 LOB 时无法 json.loads）
+try:
+    oracledb.defaults.fetch_lobs = False
+except Exception:
+    pass
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("db_proxy")
 
@@ -126,6 +132,34 @@ def ok(answer, table_data=None, jump_timestamp=None, jump_machine_id=None, sourc
 def fail(msg):
     return {"ok": False, "answer": f"查询失败: {msg}", "table_data": None,
             "jump_timestamp": None, "jump_machine_id": None, "sources": []}
+
+def _parse_payload(pj):
+    """安全解析 payload_json：处理 LOB/CLOB/bytes/str 各种类型，返回 dict"""
+    if not pj:
+        return {}
+    # LOB 对象 → 先 .read()
+    if hasattr(pj, "read"):
+        try:
+            pj = pj.read()
+        except Exception:
+            return {}
+    # bytes → decode
+    if isinstance(pj, (bytes, bytearray)):
+        try:
+            pj = pj.decode("utf-8")
+        except Exception:
+            return {}
+    # str → json.loads
+    if isinstance(pj, str):
+        try:
+            result = json.loads(pj)
+            return result if isinstance(result, dict) else {}
+        except Exception:
+            return {}
+    # 已经是 dict
+    if isinstance(pj, dict):
+        return pj
+    return {}
 
 def table(headers, rows):
     return {"headers": headers, "rows": [[str(c) if c is not None else "" for c in r] for r in rows]}
@@ -242,13 +276,7 @@ async def f1_machine_status(request: Request):
 
         results = []
         for d in data:
-            payload = {}
-            pj = d.get("payload_json")
-            if pj:
-                try:
-                    payload = json.loads(pj) if isinstance(pj, str) else pj
-                except Exception:
-                    payload = {}
+            payload = _parse_payload(d.get("payload_json"))
             derived = _derive_status(payload)
             derived["tool_id"] = d.get("tool_id", "")
             derived["event_ts"] = d.get("event_ts_utc") or d.get("received_ts_utc") or ""
@@ -343,13 +371,7 @@ async def f3_alarms(request: Request):
 
         alarm_rows = []
         for d in data:
-            payload = {}
-            pj = d.get("payload_json")
-            if pj:
-                try:
-                    payload = json.loads(pj) if isinstance(pj, str) else pj
-                except Exception:
-                    payload = {}
+            payload = _parse_payload(d.get("payload_json"))
             if str(payload.get("event_name") or "").upper() != "EC_ALARM_REPORT":
                 continue
             aid = payload.get("alarm_id") or ""
@@ -420,13 +442,7 @@ async def f4_events(request: Request):
             return ok(f"机台 {machine_id} 在 {time_range} 范围内无事件记录。")
         event_rows = []
         for d in data:
-            payload = {}
-            pj = d.get("payload_json")
-            if pj:
-                try:
-                    payload = json.loads(pj) if isinstance(pj, str) else pj
-                except Exception:
-                    payload = {}
+            payload = _parse_payload(d.get("payload_json"))
             event_rows.append([
                 d.get("tool_id", ""),
                 d.get("event_ts_utc") or d.get("received_ts_utc", ""),
@@ -478,13 +494,7 @@ async def f5_yield(request: Request):
         total_wafers = 0
         lot_ids = set()
         for d in data:
-            payload = {}
-            pj = d.get("payload_json")
-            if pj:
-                try:
-                    payload = json.loads(pj) if isinstance(pj, str) else pj
-                except Exception:
-                    payload = {}
+            payload = _parse_payload(d.get("payload_json"))
             en = str(payload.get("event_name") or "").upper()
             if en == "LOTEND":
                 lot_end_count += 1
@@ -575,13 +585,7 @@ async def f7_mes_lot(request: Request):
         wafer_count = 0
         lot_done = False
         for d in data:
-            payload = {}
-            pj = d.get("payload_json")
-            if pj:
-                try:
-                    payload = json.loads(pj) if isinstance(pj, str) else pj
-                except Exception:
-                    payload = {}
+            payload = _parse_payload(d.get("payload_json"))
             en = payload.get("event_name") or ""
             ts = d.get("event_ts_utc") or ""
             if not machine_id:
@@ -632,13 +636,7 @@ async def f8_export(request: Request):
 
         report_rows = []
         for d in data:
-            payload = {}
-            pj = d.get("payload_json")
-            if pj:
-                try:
-                    payload = json.loads(pj) if isinstance(pj, str) else pj
-                except Exception:
-                    payload = {}
+            payload = _parse_payload(d.get("payload_json"))
             if str(payload.get("event_name") or "").upper() != "EC_ALARM_REPORT":
                 continue
             aid = payload.get("alarm_id") or ""
