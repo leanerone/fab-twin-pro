@@ -33,7 +33,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, model, status, current_lot_id, last_event_ts\nFROM (\n  SELECT id, model, status, current_lot_id, last_event_ts\n  FROM machines\n  WHERE id = '{{ $json.machine_id }}' AND LENGTH('{{ $json.machine_id }}') > 0\n  UNION ALL\n  SELECT id, model, status, current_lot_id, last_event_ts\n  FROM machines\n  WHERE LENGTH('{{ $json.machine_id }}') = 0\n  ORDER BY status DESC, id\n) WHERE ROWNUM <= 1",
+        "query": "SELECT tool_id, machine_state, machine_mode, current_lot_id, current_alarm_code, snapshot_ts_utc\nFROM (\n  SELECT tool_id, machine_state, machine_mode, current_lot_id, current_alarm_code, snapshot_ts_utc,\n         ROW_NUMBER() OVER (PARTITION BY tool_id ORDER BY snapshot_ts_utc DESC) AS rn\n  FROM dt_state_snapshot\n)\nWHERE rn = 1 AND (LENGTH('{{ $json.machine_id }}') = 0 OR tool_id = '{{ $json.machine_id }}')\nORDER BY tool_id",
         "options": {}
       },
       "name": "Query Oracle",
@@ -52,7 +52,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst m = rows && rows[0];\nif (!m || !m.id) {\n  return { json: { ok: false, answer: '未找到该机器（请确认机台ID正确）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'get_machine_status', execution_id: $execution.id }] } };\n}\nconst headers = ['机台ID','型号','状态','当前Lot','最近事件时间'];\nconst vals = [[String(m.id||''), String(m.model||''), String(m.status||''), String(m.current_lot_id||''), String(m.last_event_ts||'')]];\nlet answer = `机台 ${m.id}：状态 ${m.status || '未知'}；型号 ${m.model || '未知'}；当前Lot ${m.current_lot_id || '无'}`;\nif (m.last_event_ts) answer += `；最近事件 ${m.last_event_ts}`;\nreturn { json: { ok: true, answer, table_data: { headers, rows: vals }, jump_timestamp: m.last_event_ts ? String(m.last_event_ts) : null, jump_machine_id: String(m.id), sources: [{ type: 'n8n', workflow: 'get_machine_status', execution_id: $execution.id }] } };\n",
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst m = rows && rows[0];\nif (!m || !m.tool_id) {\n  return { json: { ok: false, answer: '未找到该机台的实时状态快照（dt_state_snapshot 无记录，请确认机台ID正确）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'get_machine_status', execution_id: $execution.id }] } };\n}\nconst headers = ['机台','状态','模式','当前Lot','告警码','快照时间'];\nconst vals = rows.map(r => [String(r.tool_id||''), String(r.machine_state||''), String(r.machine_mode||''), String(r.current_lot_id||''), String(r.current_alarm_code||''), String(r.snapshot_ts_utc||'')]);\nlet answer = `机台 ${m.tool_id}：状态 ${m.machine_state || '未知'}；模式 ${m.machine_mode || 'N/A'}；当前Lot ${m.current_lot_id || '无'}`;\nif (m.current_alarm_code) answer += `；当前告警 ${m.current_alarm_code}`;\nif (m.snapshot_ts_utc) answer += `；快照时间 ${m.snapshot_ts_utc}`;\nreturn { json: { ok: true, answer, table_data: { headers, rows: vals }, jump_timestamp: m.snapshot_ts_utc ? String(m.snapshot_ts_utc) : null, jump_machine_id: String(m.tool_id), sources: [{ type: 'n8n', workflow: 'get_machine_status', execution_id: $execution.id }] } };\n",
         "options": {}
       },
       "name": "Format",

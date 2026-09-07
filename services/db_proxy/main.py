@@ -136,44 +136,55 @@ def health():
     except Exception as e:
         return JSONResponse(status_code=503, content={"status": "error", "detail": str(e)})
 
-# ─── F1: 机台状态 ───
+# ─── F1: 机台状态（实时) ───
+# 【修复】不再读静态 machines 表（该表 state/updated_at 不随新消息更新，会查到很久以前的旧快照）。
+# 改为从 dt_state_snapshot（每台机台最新状态快照，主系统实时写入）取最新一条。
 @app.post("/query/machine_status")
 async def f1_machine_status(request: Request):
     verify_key(request)
     body = await request.json()
-    machine_id = body.get("machine_id", "")
+    machine_id = body.get("machine_id", "").strip()
     try:
+        sql = """SELECT tool_id, machine_state, machine_mode, current_lot_id,
+                        current_alarm_code, pod_position, snapshot_ts_utc
+                 FROM (
+                   SELECT tool_id, machine_state, machine_mode, current_lot_id,
+                          current_alarm_code, pod_position, snapshot_ts_utc,
+                          ROW_NUMBER() OVER (PARTITION BY tool_id ORDER BY snapshot_ts_utc DESC) AS rn
+                   FROM dt_state_snapshot
+                 )
+                 WHERE rn = 1 AND (:mid = '' OR tool_id = :mid)
+                 ORDER BY tool_id"""
+        cols, rows = exec_query(sql, {"mid": machine_id})
+        data = rows_to_list(cols, rows)
+        latest = data[0] if data else None
+        if not latest:
+            if machine_id:
+                return ok(f"未找到机台 {machine_id} 的实时状态快照（dt_state_snapshot 无记录）",
+                          jump_machine_id=machine_id)
+            return ok("暂无任何机台的实时状态快照（dt_state_snapshot 无记录）")
+        def status_rows():
+            return [[d.get('tool_id',''), d.get('machine_state',''), d.get('machine_mode',''),
+                     d.get('current_lot_id',''), d.get('current_alarm_code',''),
+                     d.get('snapshot_ts_utc','')] for d in data]
         if machine_id:
-            sql = """SELECT id, name, model, state, process_type, chamber_count,
-                           wafer_count, alarm_count, updated_at
-                    FROM machines WHERE id = :mid"""
-            cols, rows = exec_query(sql, {"mid": machine_id})
-            if not rows:
-                return ok(f"未找到机台 {machine_id}")
-            d = rows_to_list(cols, rows)[0]
-            answer = f"机台 {d['id']}（{d.get('name','')}）当前状态: {d.get('state','')}，" \
-                     f"型号 {d.get('model','')}，{d.get('chamber_count','')} Chamber，" \
-                     f"累计加工 {d.get('wafer_count',0)} 片晶圆，告警 {d.get('alarm_count',0)} 次。"
+            d = latest
+            answer = (f"机台 {d.get('tool_id','')} 当前状态: {d.get('machine_state') or '未知'}"
+                      f"（模式 {d.get('machine_mode') or 'N/A'}），"
+                      f"当前Lot {d.get('current_lot_id') or '无'}，"
+                      f"当前告警 {d.get('current_alarm_code') or '无'}，"
+                      f"快照时间 {d.get('snapshot_ts_utc') or 'N/A'}。")
             return ok(answer,
-                      table(["机台ID","名称","状态","型号","Chamber数","晶圆数","告警数"],
-                            [[d.get('id',''), d.get('name',''), d.get('state',''),
-                              d.get('model',''), d.get('chamber_count',''),
-                              d.get('wafer_count',0), d.get('alarm_count',0)]]),
-                      jump_timestamp=d.get('updated_at'),
-                      jump_machine_id=d.get('id'))
-        else:
-            sql = """SELECT id, name, model, state, process_type, chamber_count,
-                           wafer_count, alarm_count, updated_at
-                    FROM machines ORDER BY id"""
-            cols, rows = exec_query(sql)
-            data = rows_to_list(cols, rows)
-            answer = f"全厂共 {len(data)} 台机台。" + \
-                     "; ".join([f"{d['id']}={d.get('state','')}" for d in data[:5]])
-            return ok(answer,
-                      table(["机台ID","名称","状态","型号","Chamber数","晶圆数","告警数"],
-                            [[d.get('id',''), d.get('name',''), d.get('state',''),
-                              d.get('model',''), d.get('chamber_count',''),
-                              d.get('wafer_count',0), d.get('alarm_count',0)] for d in data]))
+                      table(["机台","状态","模式","当前Lot","告警码","快照时间"], status_rows()),
+                      jump_timestamp=d.get('snapshot_ts_utc') or None,
+                      jump_machine_id=d.get('tool_id'))
+        running = sum(1 for d in data
+                      if str(d.get('machine_state','')).upper() in ('RUNNING','RUN','RUN','运行','加工中','忙'))
+        answer = f"全厂共 {len(data)} 台机台有实时状态快照，其中运行 {running} 台。"
+        return ok(answer,
+                  table(["机台","状态","模式","当前Lot","告警码","快照时间"], status_rows()),
+                  jump_timestamp=latest.get('snapshot_ts_utc') or None,
+                  jump_machine_id=latest.get('tool_id'))
     except Exception as e:
         logger.error(f"F1 error: {e}\n{traceback.format_exc()}")
         return fail(str(e))
