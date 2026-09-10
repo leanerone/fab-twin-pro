@@ -43,6 +43,42 @@ except ImportError:
 
 
 # ================================================================
+#  初始化 Thick 模式（Oracle 11g 必需）
+# ================================================================
+def init_thick_mode(env: dict):
+    """初始化 python-oracledb Thick 模式，连接 Oracle 11g 及更早版本必需。
+
+    优先从 env.bat 读 ORACLE_CLIENT_DIR；
+    也支持环境变量 ORACLE_CLIENT_DIR 覆盖。
+    """
+    client_dir = os.getenv("ORACLE_CLIENT_DIR", env.get("ORACLE_CLIENT_DIR", ""))
+    if not client_dir:
+        # 常见默认路径
+        for candidate in (
+            r"C:\app\client\c11463\product\19.0.0\client_1",
+            r"C:\app\client\product\19.0.0\client_1",
+            r"C:\oracle\product\19.0.0\client_1",
+        ):
+            if os.path.exists(candidate):
+                client_dir = candidate
+                break
+    try:
+        if client_dir and os.path.exists(client_dir):
+            oracledb.init_oracle_client(lib_dir=client_dir)
+            print(f"[INFO] oracledb Thick 模式已启用，Oracle Client: {client_dir}")
+        else:
+            oracledb.init_oracle_client()
+            print(f"[INFO] oracledb Thick 模式已启用（自动检测 Oracle Client）")
+    except Exception as e:
+        # 已经初始化过会抛错，忽略
+        if "has already been initialized" not in str(e):
+            print(f"[WARN] 启用 Thick 模式失败: {e}")
+            print(f"       Oracle 11g 连接需要 Thick 模式。")
+            print(f"       请设置 ORACLE_CLIENT_DIR 环境变量指向 Oracle Client 目录。")
+        # else: 已经初始化，正常
+
+
+# ================================================================
 #  要导出的表清单（顺序 = 导入顺序，外键依赖在前）
 # ================================================================
 EXPORT_TABLES = [
@@ -117,11 +153,16 @@ def connect(label, host, port, service, user, password, dsn_type="sid"):
         dsn = oracledb.makedsn(host, port, sid=service)
     print(f"[{label}] 连接 {user}@{host}:{port}/{service} ({dsn_type})")
     try:
+        # Thick 模式下使用 oracledb.connect（默认即可）
         conn = oracledb.connect(user=user, password=password, dsn=dsn)
         print(f"[{label}] 连接成功，DB 版本: {conn.version}")
         return conn
     except Exception as e:
         print(f"[{label}] 连接失败: {e}")
+        if "DPY-3010" in str(e):
+            print(f"\n[HINT] Oracle 11g 需要 Thick 模式。")
+            print(f"  请确认本机已安装 Oracle Client (19c+)，并设置 ORACLE_CLIENT_DIR 环境变量。")
+            print(f"  或在 env.bat 里配置 ORACLE_CLIENT_DIR=C:\\app\\client\\...\\client_1")
         return None
 
 
@@ -253,6 +294,10 @@ def main():
     env_bat = os.path.normpath(os.path.join(script_dir, "..", "deploy", "env.bat"))
 
     env = parse_env_bat(env_bat)
+
+    # 初始化 Thick 模式（Oracle 11g 必需）
+    init_thick_mode(env)
+
     host = os.getenv("ORACLE_HOST", env.get("ORACLE_HOST", ""))
     port = int(os.getenv("ORACLE_PORT", env.get("ORACLE_PORT", "1521")))
     service = os.getenv("ORACLE_SERVICE", env.get("ORACLE_SERVICE", ""))
