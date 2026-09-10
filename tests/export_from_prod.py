@@ -218,13 +218,13 @@ def export_table(conn, table, out_dir, days_filter=None):
 
     if days_filter and table in PARTIAL_TABLES:
         tcol = TIME_FILTER_COL.get(table, "EVENT_TS_UTC")
-        # 兼容字符列和时间戳列：尝试 TO_TIMESTAMP
-        # 用近 N 天
+        # EVENT_TS_UTC 是 TIMESTAMP(6) 类型，必须用 TO_TIMESTAMP 显式转换，
+        # 隐式字符串转换会触发 ORA-01843: not a valid month（NLS_DATE_FORMAT 不匹配）
         since = (datetime.utcnow() - timedelta(days=days_filter)).strftime("%Y-%m-%d")
-        # 先尝试字符比较（EVENT_TS_UTC 是 VARCHAR2）
-        where = f"WHERE {tcol} >= :since"
+        # 用 TO_TIMESTAMP 显式转换参数，避免 NLS 相关错误
+        where = f"WHERE {tcol} >= TO_TIMESTAMP(:since, 'YYYY-MM-DD HH24:MI:SS')"
         params = {"since": since + " 00:00:00"}
-        print(f"  [INFO] {table}: 过滤 {tcol} >= {since} (最近 {days_filter} 天)")
+        print(f"  [INFO] {table}: 过滤 {tcol} >= TO_TIMESTAMP('{since}', 'YYYY-MM-DD HH24:MI:SS') (最近 {days_filter} 天)")
 
     # 用 ROWNUM 限制 DT_EVENT_RAW（数据量大）
     sql = f"SELECT {col_list} FROM {table} {where}"
@@ -232,9 +232,10 @@ def export_table(conn, table, out_dir, days_filter=None):
     try:
         cur.execute(sql, params)
     except oracledb.DatabaseError as e:
-        # 如果时间过滤列类型不匹配，回退到全量
-        if days_filter and ("ORA-00932" in str(e) or "ORA-01861" in str(e)):
-            print(f"  [WARN] {table}: 时间过滤失败 ({e.args[0].message if hasattr(e,'args') and e.args else e})，回退全量")
+        # 时间过滤失败时回退到全量：覆盖 ORA-00932/01861/01843/01858 等日期/类型错误
+        err_msg = str(e)
+        if days_filter and any(c in err_msg for c in ("ORA-00932", "ORA-01861", "ORA-01843", "ORA-01858")):
+            print(f"  [WARN] {table}: 时间过滤失败 ({err_msg})，回退全量")
             where = ""
             params = {}
             sql = f"SELECT {col_list} FROM {table}"
