@@ -211,7 +211,8 @@ def export_table(conn, table, out_dir, days_filter=None):
         return 0
 
     col_names = [c[0] for c in cols]
-    col_list = ", ".join(col_names)
+    # 用双引号包裹列名，避免 Oracle 保留字（NUMBER/DATE/SIZE 等）报 ORA-00936
+    col_list = ", ".join(f'"{n}"' for n in col_names)
     where = ""
     params = {}
 
@@ -232,7 +233,7 @@ def export_table(conn, table, out_dir, days_filter=None):
         cur.execute(sql, params)
     except oracledb.DatabaseError as e:
         # 如果时间过滤列类型不匹配，回退到全量
-        if days_filter and "ORA-00932" in str(e) or "ORA-01861" in str(e):
+        if days_filter and ("ORA-00932" in str(e) or "ORA-01861" in str(e)):
             print(f"  [WARN] {table}: 时间过滤失败 ({e.args[0].message if hasattr(e,'args') and e.args else e})，回退全量")
             where = ""
             params = {}
@@ -337,8 +338,13 @@ def main():
     summary = {"export_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                "days_filter": args.days, "tables": {}}
     for t in tables:
-        cnt = export_table(conn, t, out_dir, days_filter=args.days)
-        summary["tables"][t] = {"rows": cnt, "file": f"{t}.jsonl"}
+        try:
+            cnt = export_table(conn, t, out_dir, days_filter=args.days)
+            summary["tables"][t] = {"rows": cnt, "file": f"{t}.jsonl"}
+        except Exception as e:
+            err = str(e).split("\n")[0][:200]
+            print(f"  [ERROR] {t}: 导出失败 - {err}")
+            summary["tables"][t] = {"rows": 0, "file": f"{t}.jsonl", "error": err}
 
     # 3. 摘要
     with open(os.path.join(out_dir, "export_summary.json"), "w", encoding="utf-8") as f:

@@ -83,7 +83,8 @@ def import_table(conn, table, jsonl_path, dry_run=False):
 
     # 列名
     cols = list(rows[0].keys())
-    col_list = ", ".join(cols)
+    # 用双引号包裹列名，避免 Oracle 保留字（NUMBER/DATE/SIZE 等）
+    col_list = ", ".join(f'"{c}"' for c in cols)
     bind_list = ", ".join(f":{i+1}" for i in range(len(cols)))
     sql = f"INSERT INTO {table} ({col_list}) VALUES ({bind_list})"
 
