@@ -257,22 +257,22 @@ def export_table(conn, table, out_dir, days_filter=None):
     return cnt
 
 
-def export_schema_snapshot(conn, out_dir):
-    """导出表结构快照"""
+def export_schema_snapshot(conn, out_dir, tables):
+    """导出表结构快照（只导目标表，跳过其他用户表）"""
     cur = conn.cursor()
-    cur.execute("""
-        SELECT table_name, column_name, data_type, data_length, nullable
-        FROM user_tab_columns
-        ORDER BY table_name, column_id
-    """)
     schema = {}
-    for r in cur.fetchall():
-        t = r[0]
-        if t not in schema:
-            schema[t] = []
-        schema[t].append({
-            "column": r[1], "type": r[2], "length": r[3], "nullable": r[4]
-        })
+    for t in tables:
+        cur.execute("""
+            SELECT column_name, data_type, data_length, nullable
+            FROM user_tab_columns
+            WHERE table_name = UPPER(:t)
+            ORDER BY column_id
+        """, t=t)
+        cols = cur.fetchall()
+        if cols:
+            schema[t] = [{
+                "column": r[0], "type": r[1], "length": r[2], "nullable": r[3]
+            } for r in cols]
     cur.close()
     with open(os.path.join(out_dir, "tables_schema.json"), "w", encoding="utf-8") as f:
         json.dump(schema, f, ensure_ascii=False, indent=2)
@@ -329,9 +329,9 @@ def main():
     if args.tables:
         tables = [t.strip().upper() for t in args.tables.split(",") if t.strip()]
 
-    # 1. 表结构快照
+    # 1. 表结构快照（只导目标表）
     print("===== 导出表结构 =====")
-    export_schema_snapshot(conn, out_dir)
+    export_schema_snapshot(conn, out_dir, tables)
 
     # 2. 逐表导出
     print(f"\n===== 导出数据（{len(tables)} 张表）=====")
