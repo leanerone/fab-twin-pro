@@ -48,34 +48,36 @@ except ImportError:
 def init_thick_mode(env: dict):
     """初始化 python-oracledb Thick 模式，连接 Oracle 11g 及更早版本必需。
 
-    优先从 env.bat 读 ORACLE_CLIENT_DIR；
-    也支持环境变量 ORACLE_CLIENT_DIR 覆盖。
+    逻辑和 db_proxy/main.py 完全一致：
+    - 从 env.bat 读 ORACLE_CLIENT_DIR
+    - 检测 lib_dir/bin/oci.dll 或 lib_dir/oci.dll
+    - 找不到则传空让 oracledb 自动检测
     """
     client_dir = os.getenv("ORACLE_CLIENT_DIR", env.get("ORACLE_CLIENT_DIR", ""))
     if not client_dir:
-        # 常见默认路径
-        for candidate in (
-            r"C:\app\client\c11463\product\19.0.0\client_1",
-            r"C:\app\client\product\19.0.0\client_1",
-            r"C:\oracle\product\19.0.0\client_1",
-        ):
-            if os.path.exists(candidate):
-                client_dir = candidate
-                break
+        print("[WARN] ORACLE_CLIENT_DIR 未设置，尝试自动检测...")
+    lib_dir = client_dir
+    # 尝试 bin 子目录（和 db_proxy 一致）
+    if lib_dir:
+        bin_dir = os.path.join(lib_dir, "bin")
+        if os.path.exists(os.path.join(bin_dir, "oci.dll")):
+            lib_dir = bin_dir
+        elif not os.path.exists(os.path.join(lib_dir, "oci.dll")):
+            lib_dir = ""
     try:
-        if client_dir and os.path.exists(client_dir):
-            oracledb.init_oracle_client(lib_dir=client_dir)
-            print(f"[INFO] oracledb Thick 模式已启用，Oracle Client: {client_dir}")
+        if lib_dir:
+            oracledb.init_oracle_client(lib_dir=lib_dir)
+            print(f"[INFO] oracledb Thick 模式已启用 (lib_dir={lib_dir})")
         else:
             oracledb.init_oracle_client()
-            print(f"[INFO] oracledb Thick 模式已启用（自动检测 Oracle Client）")
+            print(f"[INFO] oracledb Thick 模式已启用（自动检测）")
     except Exception as e:
-        # 已经初始化过会抛错，忽略
-        if "has already been initialized" not in str(e):
-            print(f"[WARN] 启用 Thick 模式失败: {e}")
-            print(f"       Oracle 11g 连接需要 Thick 模式。")
-            print(f"       请设置 ORACLE_CLIENT_DIR 环境变量指向 Oracle Client 目录。")
-        # else: 已经初始化，正常
+        if "DPI-1072" in str(e):
+            print(f"[INFO] oracledb Thick 模式已启用（之前已初始化）")
+        else:
+            print(f"[ERROR] oracledb Thick 模式初始化失败: {e}")
+            print(f"        请安装 Oracle Client 并设置 ORACLE_CLIENT_DIR")
+            print(f"        pip install oracledb==2.4.0（4.x 有 DPI-1047 bug）")
 
 
 # ================================================================
