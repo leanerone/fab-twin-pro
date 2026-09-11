@@ -1,20 +1,28 @@
 """历史数据回放API：基于DT_EVENT_RAW表实现事件时间轴回放
 
-生产环境关键说明：
-- 量产Oracle中 event_ts_utc 多为 None，真实时间戳在 received_ts_utc
-- received_ts_utc 是 VARCHAR2 类型，存储格式可能为：
-  1. ISO T 分隔: "2026-07-23T08:00:00" (本地seed数据)
-  2. 空格分隔:   "2026-07-23 08:00:00"
-  3. NLS 中文:   "2026-7-23 下午12:01:14" (量产Oracle，月日不补零+12小时制)
-- 由于格式不统一，不在SQL层做时间过滤，全部在Python层用 parse_ts 解析过滤
+时间列类型（本地与量产不一致，务必按实际类型选过滤写法）：
+- 量产 Oracle : RECEIVED_TS_UTC / EVENT_TS_UTC 均为 TIMESTAMP(6)，EVENT_TS_UTC 多为 NULL，
+                真实时间戳在 RECEIVED_TS_UTC
+- 本地建表    : 两者均为 VARCHAR2(255)，存 "2026-09-09 08:00:00" 这类字符串
+
+为什么不能一律用 LIKE：
+  LIKE 打在 TIMESTAMP 列上时，Oracle 会按 NLS_TIMESTAMP_FORMAT（默认 DD-MON-RR
+  HH.MI.SSXFF AM）把时间隐式转成字符串再比，'2026-09-09%' 永远匹配不上，而且
+  **不抛错**。于是「查某一天」会静默退化成「取最新 N 条」，历史日期永远返回空。
+  反之，TO_DATE/区间比较打在 VARCHAR2 列上会因 NLS 不匹配直接 ORA-01861。
+  两种写法互不通用，因此这里探测一次真实列类型（见 _ts_columns_are_temporal）。
 """
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
-from typing import Optional
-from datetime import datetime
 import json
+import logging
 import re
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import DateTime, and_, func, inspect, or_
+from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 
 def _decrement_raw_id(raw_id):
@@ -41,6 +49,70 @@ from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 from services.ai_tools import ALARM_EVENT_NAMES
 
 router = APIRouter(prefix="/api/history", tags=["history"])
+
+
+# 缓存 DT_EVENT_RAW 时间列的类型判定结果（每进程只探测一次）
+_TS_COL_TEMPORAL = {}
+
+
+def _ts_columns_are_temporal(db) -> bool:
+    """DT_EVENT_RAW 的时间列是 DATE/TIMESTAMP 时返回 True，是字符列时返回 False。
+
+    用 SQLAlchemy 反射读真实表结构，不受 models.py 里 String(255) 声明的影响
+    （本地建表脚本确实按 String 建的，量产却是 TIMESTAMP(6)）。
+    探测失败时按字符列处理，保证不至于把查询打死。
+    """
+    if "dt_event_raw" in _TS_COL_TEMPORAL:
+        return _TS_COL_TEMPORAL["dt_event_raw"]
+
+    temporal = False
+    try:
+        cols = inspect(db.get_bind()).get_columns(DT_EVENT_RAW.__tablename__)
+        col = next(
+            (c for c in cols if str(c.get("name", "")).lower() == "received_ts_utc"),
+            None,
+        )
+        temporal = isinstance(col.get("type"), DateTime) if col else False
+    except Exception as e:
+        logger.warning("[history] 探测 DT_EVENT_RAW 时间列类型失败，按字符列处理: %s", e)
+
+    logger.info(
+        "[history] DT_EVENT_RAW 时间列类型判定: %s",
+        "TIMESTAMP/DATE（量产形态）" if temporal else "VARCHAR2（本地形态）",
+    )
+    _TS_COL_TEMPORAL["dt_event_raw"] = temporal
+    return temporal
+
+
+def _date_scope_clause(db, date_str: str):
+    """生成「限定在 date_str 这一天」的 SQL 条件，按时间列真实类型选写法。
+
+    - TIMESTAMP 列：半开区间 [当日00:00, 次日00:00)，两个时间列都可能是真实时间源
+    - VARCHAR2 列 ：前缀 LIKE，兼容 ISO T分隔/空格分隔/NLS 月日不补零等写法
+
+    返回 None 表示 date_str 非法，调用方应跳过 SQL 层日期过滤。
+    """
+    if _ts_columns_are_temporal(db):
+        try:
+            day = datetime.strptime(date_str, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+        nxt = day + timedelta(days=1)
+        return or_(
+            and_(DT_EVENT_RAW.received_ts_utc >= day,
+                 DT_EVENT_RAW.received_ts_utc < nxt),
+            and_(DT_EVENT_RAW.event_ts_utc >= day,
+                 DT_EVENT_RAW.event_ts_utc < nxt),
+        )
+
+    patterns = build_date_like_patterns(date_str)
+    if not patterns:
+        return None
+    conds = []
+    for p in patterns:
+        conds.append(DT_EVENT_RAW.received_ts_utc.like(p))
+        conds.append(DT_EVENT_RAW.event_ts_utc.like(p))
+    return or_(*conds)
 
 
 def _resolve_tool_ids(db, machine_id: str) -> set:
@@ -180,26 +252,25 @@ def get_history(
 
     fetch_limit = min(limit + offset, 5000)
 
-    # SQL层日期过滤：当 start_time/end_time 是同一天时，用 LIKE 大幅缩小范围
-    # 同时检查 event_ts_utc 和 received_ts_utc 两个字段（生产环境 event_ts_utc 可能有值）
-    # 如果LIKE过滤结果为空，回退到无LIKE查询保证不丢数据
+    # SQL层日期过滤：当 start_time/end_time 是同一天时，把扫描范围压到这一天
     rows = []
+    clause = None
     if start_dt and end_dt and start_dt.date() == end_dt.date():
-        date_str = start_dt.strftime("%Y-%m-%d")
-        like_patterns = build_date_like_patterns(date_str)
-        if like_patterns:
-            like_conditions = []
-            for p in like_patterns:
-                like_conditions.append(DT_EVENT_RAW.received_ts_utc.like(p))
-                like_conditions.append(DT_EVENT_RAW.event_ts_utc.like(p))
-            rows = (
-                base_query.filter(or_(*like_conditions))
-                .order_by(DT_EVENT_RAW.raw_id.desc())
-                .limit(fetch_limit)
-                .all()
-            )
-    # 回退：无日期LIKE或LIKE未匹配到数据
-    if not rows:
+        clause = _date_scope_clause(db, start_dt.strftime("%Y-%m-%d"))
+
+    if clause is not None:
+        # SQL 层已精确限定到这一天：取不到就说明这天真的没数据。
+        # 注意这里不能回退成「取最新 N 条」——那会把过滤失效伪装成有数据，
+        # 再被 Python 层按日期过滤后归零，最终表现为「只有当天查得到，历史日期全空」。
+        rows = (
+            base_query.filter(clause)
+            .order_by(DT_EVENT_RAW.raw_id.desc())
+            .limit(fetch_limit)
+            .all()
+        )
+    else:
+        # 跨天区间、或未传时间（实时模式取最新 N 条）：SQL 层无法只靠日期前缀表达，
+        # 退化为按 raw_id 倒序扫一批，再由下面的 Python 层用 start_dt/end_dt 精确过滤
         rows = (
             base_query.order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(fetch_limit)
@@ -314,23 +385,18 @@ def get_timeline(
 
     tool_ids = _resolve_tool_ids(db, tool_id)
 
-    # SQL层日期过滤：用 LIKE 缩小到指定日期范围（同时检查两个字段）
-    # 如果LIKE过滤结果为空，回退到无LIKE查询
+    # SQL层日期过滤：把扫描范围压到指定日期（按时间列真实类型选写法）
     base_query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-    like_patterns = build_date_like_patterns(date)
+    clause = _date_scope_clause(db, date)
     rows = []
-    if like_patterns:
-        like_conditions = []
-        for p in like_patterns:
-            like_conditions.append(DT_EVENT_RAW.received_ts_utc.like(p))
-            like_conditions.append(DT_EVENT_RAW.event_ts_utc.like(p))
+    if clause is not None:
         rows = (
-            base_query.filter(or_(*like_conditions))
+            base_query.filter(clause)
             .order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(5000)
             .all()
         )
-    if not rows:
+    else:
         rows = (
             base_query.order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(5000)
