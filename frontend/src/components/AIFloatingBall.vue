@@ -411,6 +411,72 @@ function clearChat() {
   }
 }
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function linkTag(url, label) {
+  const safe = escapeHtml(url)
+  return `<a class="dl-link" href="${safe}" target="_blank" rel="noopener noreferrer" title="点击下载 / 打开">${label}</a>`
+}
+
+// 行内渲染：把 markdown 链接与裸 URL 统一收成图标链接，不展示冗长地址
+function renderInline(text) {
+  const tokens = []
+  let src = String(text ?? '')
+  src = src.replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => {
+    const l = String(label || '').trim()
+    tokens.push(linkTag(url, l && l.length <= 4 ? l : '⬇️'))
+    return `\u0000${tokens.length - 1}\u0000`
+  })
+  src = src.replace(/https?:\/\/[^\s<>()|]+/g, (url) => {
+    tokens.push(linkTag(url, '⬇️'))
+    return `\u0000${tokens.length - 1}\u0000`
+  })
+  let html = escapeHtml(src).replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+  return html.replace(/\u0000(\d+)\u0000/g, (m, i) => tokens[Number(i)] || '')
+}
+
+function splitMdRow(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(s => s.trim())
+}
+
+function mdTableHtml(headers, rows) {
+  const th = headers.map(h => `<th>${renderInline(h)}</th>`).join('')
+  const tb = rows.map(r => `<tr>${r.map(c => `<td>${renderInline(c)}</td>`).join('')}</tr>`).join('')
+  return `<div class="md-table"><table><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table></div>`
+}
+
+// 块级渲染：支持 markdown 表格 + 行内链接，其余按纯文本逐行输出
+function renderRich(text) {
+  const lines = String(text ?? '').split('\n')
+  const out = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const isRow = /^\s*\|.*\|\s*$/.test(line)
+    const isSep = /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')
+    if (isRow && isSep) {
+      const headers = splitMdRow(line)
+      const rows = []
+      i += 2
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+        rows.push(splitMdRow(lines[i]))
+        i++
+      }
+      out.push(mdTableHtml(headers, rows))
+      continue
+    }
+    out.push(line.trim() ? `<div class="md-line">${renderInline(line)}</div>` : '<div class="md-blank"></div>')
+    i++
+  }
+  return out.join('')
+}
+
 function jumpToTime(payload, machineOnline = null) {
   // payload: { machine_id, timestamp } 或 兼容纯字符串时间戳
   if (!payload) return
@@ -525,7 +591,7 @@ function jumpToTime(payload, machineOnline = null) {
           <!-- AI消息 -->
           <div v-else class="chat-msg ai">
             <div class="msg-content">
-              <div class="msg-text">{{ msg.content }}</div>
+              <div class="msg-text" v-html="renderRich(msg.content)"></div>
               <!-- SQL展示 -->
               <div v-if="msg.sql" class="msg-sql">{{ msg.sql }}</div>
               <!-- 表格数据 -->
@@ -540,7 +606,7 @@ function jumpToTime(payload, machineOnline = null) {
                   <tbody>
                     <tr v-for="(row, ri) in msg.table_data.rows" :key="ri"
                         :class="{ 'row-clickable': msg.jump_machine_id }">
-                      <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+                      <td v-for="(cell, ci) in row" :key="ci" v-html="renderInline(cell)"></td>
                       <td v-if="msg.jump_machine_id" class="col-action">
                         <button
                           v-if="msg.table_data.headers.includes('机台') || ri === 0"
@@ -834,8 +900,74 @@ function jumpToTime(payload, machineOnline = null) {
 }
 
 .msg-text {
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.msg-text :deep(.md-line) {
+  white-space: pre-wrap;
+}
+
+.msg-text :deep(.md-blank) {
+  height: 6px;
+}
+
+.msg-text :deep(.dl-link) {
+  display: inline-block;
+  padding: 0 4px;
+  color: var(--accent, #00d4ff);
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.msg-text :deep(.dl-link:hover) {
+  transform: scale(1.15);
+}
+
+.msg-text :deep(.md-table) {
+  margin: 8px 0;
+  overflow-x: auto;
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 6px;
+}
+
+.msg-text :deep(.md-table table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.msg-text :deep(.md-table th) {
+  background: rgba(0, 212, 255, 0.1);
+  color: var(--accent, #00d4ff);
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border, #2a3142);
+  white-space: nowrap;
+}
+
+.msg-text :deep(.md-table td) {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border, #2a3142);
+  color: var(--text-dim, #8a94a6);
+}
+
+.msg-text :deep(.md-table tr:last-child td) {
+  border-bottom: none;
+}
+
+.msg-table :deep(.dl-link) {
+  display: inline-block;
+  color: var(--accent, #00d4ff);
+  text-decoration: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.msg-table :deep(.dl-link:hover) {
+  transform: scale(1.15);
 }
 
 .msg-sql {

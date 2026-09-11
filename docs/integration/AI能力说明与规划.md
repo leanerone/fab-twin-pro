@@ -205,7 +205,7 @@ Dify 里的大模型只会做两件事：① 读懂你的问题 ② 决定「该
         POST http://10.30.116.151:5678/webhook/fab_query
         │
    ③    ▼  n8n 收到（纯转发，不含业务逻辑）
-        整体透传 body，转发到 POST http://10.30.116.150:8001/query/fab_query
+        整体透传 body，转发到 POST http://10.30.5.216:8001/query/fab_query
         带上 X-API-Key: fabtwin-proxy-2026
         │
    ④    ▼  db_proxy（Python FastAPI）
@@ -242,7 +242,7 @@ Dify 里的大模型只会做两件事：① 读懂你的问题 ② 决定「该
 | 方案 | Dify 里 servers.url 填 | 优点 | 缺点 |
 |---|---|---|---|
 | A. 经 n8n（当前） | `http://10.30.116.151:5678/webhook` | 有可视化执行日志，排障快 | 多一跳，多一个故障点 |
-| B. Dify 直连 db_proxy | `http://10.30.116.150:8001` + path 改 `/query/xxx` + Header 加 `X-API-Key` | 少一跳，更稳 | 出问题只能看服务端日志 |
+| B. Dify 直连 db_proxy | `http://10.30.5.216:8001` + path 改 `/query/xxx` + Header 加 `X-API-Key` | 少一跳，更稳 | 出问题只能看服务端日志 |
 
 **建议先 A 后 B**：现阶段联调频繁，n8n 的执行日志能省大量排查时间；
 等 F1~F11 全部稳定跑通，再切 B 去掉这一跳。

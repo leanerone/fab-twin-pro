@@ -382,7 +382,14 @@ def summary(all_results):
     return failed == 0
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="n8n 对接端到端测试脚本")
+    raw = sys.argv[1:] if argv is None else list(argv)
+    for flag in ("--merged", "--layer", "--proxy", "--n8n", "--api-key"):
+        if flag in raw or any(a.startswith(flag + "=") for a in raw):
+            print(color(f"检测到参数 {flag}，该参数属于 F1~F10 分层自测脚本，本脚本不支持。", "yellow"))
+            print(color("请改用：python tests\\test_n8n_f1_f10.py --merged --proxy http://10.30.5.216:8001", "cyan"))
+            sys.exit(2)
+
+    ap = argparse.ArgumentParser(description="n8n 对接端到端测试脚本（5 个业务工作流；F1~F10 分层自测请用 test_n8n_f1_f10.py）")
     ap.add_argument("--base-url", default="", help="n8n 服务地址, 如 http://10.30.116.137:5678")
     ap.add_argument("--user", default="admin", help="n8n 账号")
     ap.add_argument("--password", default="", help="n8n 密码")

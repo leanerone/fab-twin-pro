@@ -20,7 +20,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://10.30.116.150:8001/query/mes_lot_info",
+        "url": "http://10.30.5.216:8001/query/mes_lot_info",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

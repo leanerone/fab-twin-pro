@@ -17,7 +17,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://10.30.116.150:8001/query/fab_admin",
+        "url": "http://10.30.5.216:8001/query/fab_admin",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

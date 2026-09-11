@@ -50,7 +50,7 @@ pip install -r requirements.txt
 # Oracle 11g 连接（和 FabTwin 后端用同一套）
 ORACLE_USER=fabtwin
 ORACLE_PASSWORD=你的密码
-ORACLE_HOST=10.30.116.150
+ORACLE_HOST=10.30.5.216
 ORACLE_PORT=1521
 ORACLE_SERVICE=ORCL
 ORACLE_DSN_TYPE=sid
@@ -76,7 +76,7 @@ python main.py
 
 - 控制台显示 `FabTwin DB Proxy 启动: port=8001`
 
-- 浏览器访问 `http://10.30.116.150:8001/health`，返回 `{"status":"ok","db":"connected"}`
+- 浏览器访问 `http://10.30.5.216:8001/health`，返回 `{"status":"ok","db":"connected"}`
 
 ### 1.5 设为后台服务（可选）
 
@@ -94,9 +94,9 @@ python main.py
 
 ### 2.2 修改 DB Proxy 地址
 
-每个工作流里的 **Query DB Proxy** 节点，URL 默认是 `http://10.30.116.150:8001/query/xxx`：
+每个工作流里的 **Query DB Proxy** 节点，URL 默认是 `http://10.30.5.216:8001/query/xxx`：
 
-1. 如果 DB Proxy 就在 10.30.116.150:8001 → 不用改
+1. 如果 DB Proxy 就在 10.30.5.216:8001 → 不用改
 2. 如果不在 → 双击 Query DB Proxy 节点，修改 URL 里的 IP 和端口
 3. 同时检查 `X-API-Key` 头是否和 .env 里的 `DB_PROXY_API_KEY` 一致
 

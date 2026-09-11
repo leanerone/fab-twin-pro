@@ -41,7 +41,8 @@ function handleAIJump(payload) {
     ts = payload.timestamp || ''
     machineOnline = payload.machine_online
   }
-  if (!ts) return
+  // 时间戳与机台ID至少要有一个，否则无从跳起
+  if (!ts && !mid) return
 
   // 机台未上线检查
   if (mid && machineOnline === false) {
@@ -61,9 +62,15 @@ function handleAIJump(payload) {
   // 当前路由对应的机台ID
   const currentId = route.params && (route.params.id || route.params.machineId)
 
-  // 如果跳转目标与当前机台不同，导航到目标机台，并通过query把时间戳带过去
+  // 如果跳转目标与当前机台不同，导航到目标机台；有时间戳时通过query带过去
   if (mid && currentId !== mid) {
-    router.push({ path: `/machine/${mid}`, query: { ts: ts } })
+    router.push(ts ? { path: `/machine/${mid}`, query: { ts } } : { path: `/machine/${mid}` })
+    return
+  }
+
+  // 只给了机台、且已经在该机台页面：无需路由跳转
+  if (!ts) {
+    if (mid) showToast(`已在机台 ${mid} 详情页`, 'info')
     return
   }
 

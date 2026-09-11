@@ -4,7 +4,7 @@ n8n F1~F10 分层自测脚本
 目的：一条命令测完 10 个工具，输出一张可直接粘贴回传的结果表。
 
 分层设计（关键）：
-    L1 = 直连 db_proxy   http://10.30.116.150:8001/query/xxx
+    L1 = 直连 db_proxy   http://10.30.5.216:8001/query/xxx
     L2 = 经过 n8n Webhook http://10.30.116.151:5678/webhook/xxx
   同一个工具两层都测。对比两层结果即可定位故障层：
     L1 PASS + L2 PASS  -> 全链路正常
@@ -25,7 +25,7 @@ n8n F1~F10 分层自测脚本
     # 地址/密钥不同时覆盖
     python tests\\test_n8n_f1_f10.py ^
         --n8n http://10.30.116.151:5678 ^
-        --proxy http://10.30.116.150:8001 ^
+        --proxy http://10.30.5.216:8001 ^
         --api-key fabtwin-proxy-2026 ^
         --secret ""
 
@@ -75,7 +75,7 @@ except ImportError:
 
 
 DEFAULT_N8N = "http://10.30.116.151:5678"
-DEFAULT_PROXY = "http://10.30.116.150:8001"
+DEFAULT_PROXY = "http://10.30.5.216:8001"
 DEFAULT_API_KEY = "fabtwin-proxy-2026"
 
 
