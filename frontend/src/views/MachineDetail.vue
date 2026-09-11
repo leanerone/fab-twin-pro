@@ -863,10 +863,48 @@ function bisectLeft(arr, target, getKey) {
   return low
 }
 
-// 日期变化：切换日期后按当前时间区段重新加载
+// 探测指定日期的数据时间跨度（返回该日升序事件的首尾时间戳）
+// 用途：默认区段是「当前时刻往前 1 小时」，切到历史日期后该区段通常与
+// 当日数据没有交集，会表现为「只有当天能查到数据，前几天都查不到」
+async function probeDayRange(dateStr) {
+  try {
+    const resp = await api.getHistory(machineId.value, {
+      start_time: `${dateStr}T00:00:00`,
+      end_time: `${dateStr}T23:59:59`,
+      limit: PLAYBACK_EVENT_LIMIT,
+    })
+    const list = mapEventList(resp)
+    if (!list.length) return null
+    return { start: list[0]._ts, end: list[list.length - 1]._ts }
+  } catch {
+    return null
+  }
+}
+
+// 把时间区段设为覆盖给定数据跨度（首尾各留 1 分钟余量，并限制在所选日期内）。
+// 超过 12h 上限时保留结束端、向前收，与 normalizeRange 的处理保持一致
+function applyRangeToSpan(span) {
+  const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
+  const dayEnd = dayStart + 86400000 - 1
+  let s = Math.max(dayStart, span.start - 60000)
+  let e = Math.min(dayEnd, span.end + 60000)
+  if (e - s > MAX_RANGE_MS) s = e - MAX_RANGE_MS
+  if (s < dayStart) s = dayStart
+  playbackStartHM.value = msToHM(s - dayStart)
+  playbackEndHM.value = msToHM(e - dayStart)
+}
+
+// 日期变化：切换日期后重新加载。
+// 换到别的日期时先探测该日数据跨度并自动适配时间区段，避免沿用
+// 「最近 1 小时」区段导致查不到历史数据；同日期刷新（刷新按钮）则保持区段不变
 async function onDateChange(newDate) {
   if (!newDate) return
+  const dateChanged = newDate !== playbackDate.value
   playbackDate.value = newDate
+  if (dateChanged) {
+    const span = await probeDayRange(newDate)
+    if (span) applyRangeToSpan(span)
+  }
   await switchToPlayback()
 }
 
