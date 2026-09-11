@@ -58,6 +58,7 @@ const playbackStart = ref(0)
 const playbackEnd = ref(0)
 const rightTab = ref('replay')
 const aiAssistantRef = ref(null)
+const oxeViewRef = ref(null)  // OXE 看板：回放跳转时需重置其只增不减的已播游标
 const aiPrefillQuestion = ref('')  // 从回放 Tab 传递过来的预填问题
 const currentState = ref('idle')
 const processStep = ref('待机')
@@ -828,6 +829,10 @@ function seek(pct) {
     const idx = bisectLeft(historyData, targetTime, (e) => e._ts)
     playbackIdx = idx >= 0 ? idx : historyData.length
 
+    // OXE 看板按「只增不减」的已播游标过滤事件，往回跳时新事件全被滤掉、画面会卡在
+    // 上一批 Lot 的状态；重建事件前先让它重置游标并清空状态，保证跟得上跳转
+    oxeViewRef.value?.resetReplayCursor?.()
+
     events.value = []
 
     const batchSize = 50
@@ -1106,6 +1111,7 @@ onMounted(() => {
       <!-- OXE Canvas 看板（Vue 组件，支持回放驱动） -->
       <MachineOxeView
         v-else-if="viewMode === 'oxe'"
+        ref="oxeViewRef"
         :machine="machine"
         :model-config="currentModelConfig"
         :current-state="currentState"

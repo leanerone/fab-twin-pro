@@ -1513,6 +1513,19 @@ watch(() => props.mode, (newMode) => {
   }
 })
 
+// 供父组件在回放跳转时调用（尤其往回跳）。
+// lastEventTsMs 是「已播到哪」的游标，只增不减，且仅在 mode 切换时重置；
+// 回放中往回跳时新事件的时间都小于游标，会被全部过滤掉并提前 return，
+// 画面就停在上一批 Lot 的状态上不再变化（表现为「卡住」）。
+// 这里清空游标并重置 activeState，让新时间窗的事件从头完整重建一遍。
+function resetReplayCursor() {
+  lastEventTs = ''
+  lastEventTsMs = 0
+  resetView()
+}
+
+defineExpose({ resetReplayCursor })
+
 // ==================== 实时模式（1秒轮询 /api/oxe/latest-event）====================
 let livePollTimer = null
 
