@@ -11,7 +11,7 @@
 ```
 integration/
 ├── README.md                              ← 你在这里
-├── DEPLOY_SOP.md                           ← ★ 手把手 SOP（7步）
+├── DEPLOY_SOP.md                           ← ★ 手把手 SOP（8步，照着做即可）
 ├── dify_n8n_format_reference.md            ← Dify/n8n 真实导出格式参考
 │
 ├── n8n/
@@ -78,14 +78,15 @@ tests/
 
 **只需阅读一个文件**：[DEPLOY_SOP.md](DEPLOY_SOP.md)
 
-7 大步骤：
-1. 部署 DB Proxy（Python，10 分钟）
-2. 导入 n8n 工作流（合并版 2 个，改地址+激活，3 分钟）
-3. 导入 Dify 应用模板（2 分钟）
-4. 配置 Dify OpenAPI 工具（10 分钟）
-5. Dify 测试对话（5 分钟）
-6. 配置 FabTwin 后端 .env（3 分钟）
-7. 端到端测试（5 分钟）
+8 大步骤：
+1. 部署 / **重启** DB Proxy（Python，10 分钟）
+2. 导入 n8n 合并工作流（2 个，改地址 + 激活，旧 10 个只停用不删，3 分钟）
+3. 跑分层自测脚本 `python tests\test_n8n_f1_f10.py --merged`（3 分钟）
+4. 重新导入 Dify 应用模板 .yml（提示词已改，必须重导，2 分钟）
+5. 配置 Dify OpenAPI 工具（2 个，注意替换 `servers.url` 占位符，10 分钟）
+6. Dify 测试对话（确认 AI 会传 `action`，5 分钟）
+7. 配置 FabTwin 后端 .env（3 分钟）
+8. 重新构建前端 + 端到端测试（10 分钟）
 
 ---
 
