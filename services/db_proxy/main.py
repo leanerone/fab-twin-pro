@@ -164,6 +164,69 @@ def _parse_payload(pj):
 def table(headers, rows):
     return {"headers": headers, "rows": [[str(c) if c is not None else "" for c in r] for r in rows]}
 
+# ========== 时间列处理（量产与本地类型不同，必须分支） ==========
+# 量产 Oracle 的 DT_EVENT_RAW 时间列是 TIMESTAMP(6)，本地建表脚本是 VARCHAR2(255)。
+# 两种类型必须用不同的比较写法，写错就直接 ORA-01843: 无效的月份（实测）：
+#     字符串字面量 >= TIMESTAMP 列        -> ORA-01843
+#     TO_TIMESTAMP(...) >= VARCHAR2 列    -> ORA-01843
+# 另外量产 EVENT_TS_UTC 绝大多数为 NULL（真实时间在 RECEIVED_TS_UTC），
+# 直接拿 event_ts_utc 过滤会一行都取不到 —— 这是「alarm/lot/产量都查不到」的另一半原因。
+
+# 哪些事件名算告警。与 backend/services/ai_tools.py 的 ALARM_EVENT_NAMES 保持一致：
+# 量产 OXE 上报的是 ALARM_REPORT，旧版只认 EC_ALARM_REPORT，真实告警会被整批漏掉。
+ALARM_EVENT_NAMES = {"ALARM_REPORT", "EC_ALARM_REPORT"}
+
+# 批次完成（一个 Lot 跑完）事件名口径 —— 依据量产配置表 DT_RTLOT_EVENT_RULE：
+#   MIC / POD_PLACED 为 OPEN（开批），POD_REMOVED / MOC 为 CLEAR（清批，即批次结束）。
+#   LotEnd 是同语义的 EAP 类上报，一并纳入。
+# 注意：实测三台机台的批次完成事件分别是 POD_REMOVED / MOC，**没有一台报 LotEnd**，
+# 旧版只认 LotEnd，导致「产能统计 / Lot 状态」恒为 0 或永远停留在 run。
+LOT_DONE_EVENT_NAMES = {"LOTEND", "POD_REMOVED", "MOC"}
+
+# 晶圆数：事件 payload 通常不带 QTY，按「卸片事件次数」累加才是真实产量
+# （OXE 一个批次多片晶圆，见 WaferUnloaded 数远大于批次完成数）
+WAFER_DONE_EVENT_NAMES = {"WAFERUNLOADED"}
+
+_TABLE_COL_TYPES = {}
+
+
+def _col_types(table_name):
+    """读取表各列的真实类型（USER_TAB_COLUMNS），按表缓存只查一次"""
+    if table_name not in _TABLE_COL_TYPES:
+        types = {}
+        try:
+            cols, rows = exec_query(
+                "SELECT COLUMN_NAME, DATA_TYPE FROM USER_TAB_COLUMNS "
+                "WHERE TABLE_NAME = UPPER(:t)", {"t": table_name})
+            types = {str(r[0]).upper(): str(r[1]).upper() for r in rows}
+        except Exception as e:
+            logger.warning(f"[coltype] 读取 {table_name} 列类型失败，按字符列处理: {e}")
+        _TABLE_COL_TYPES[table_name] = types
+    return _TABLE_COL_TYPES[table_name]
+
+
+def _is_temporal(table_name, column_name):
+    """列属于 DATE/TIMESTAMP 家族时返回 True"""
+    dt = _col_types(table_name).get(column_name.upper(), "")
+    return "TIMESTAMP" in dt or dt == "DATE"
+
+
+def _event_ts_expr(table_name="dt_event_raw"):
+    """「真实事件时间」的统一表达式。
+
+    量产 EVENT_TS_UTC 多为 NULL、真实时间在 RECEIVED_TS_UTC，故用 NVL 兜底。
+    两列在任一环境下都同类型（同为 TIMESTAMP 或同为 VARCHAR2），NVL 合法。
+    """
+    t = table_name.upper()
+    return f"NVL({t}.EVENT_TS_UTC, {t}.RECEIVED_TS_UTC)"
+
+
+def _since_expr(param=":since", table_name="dt_event_raw", column_name="RECEIVED_TS_UTC"):
+    """把绑定参数转成与该时间列可比较的形式（按列的真实类型）"""
+    if _is_temporal(table_name, column_name):
+        return f"TO_TIMESTAMP({param}, 'YYYY-MM-DD HH24:MI:SS')"
+    return param
+
 # ========== FastAPI ==========
 app = FastAPI(title="FabTwin DB Proxy", version="1.0.0")
 
@@ -205,8 +268,8 @@ async def f1_machine_status(request: Request):
         alarm_id = payload.get("alarm_id") or ""
         alarm_text = payload.get("alarm_text") or ""
 
-        # 优先级1：告警事件
-        if event_name == "EC_ALARM_REPORT":
+        # 优先级1：告警事件（量产 OXE 上报 ALARM_REPORT，清单与 F3/F8 共用）
+        if event_name in ALARM_EVENT_NAMES:
             return {
                 "status": "告警中",
                 "status_detail": f"告警码 {alarm_id}: {alarm_text}",
@@ -262,11 +325,18 @@ async def f1_machine_status(request: Request):
 
     try:
         # dt_event_raw_cur：每台机台最新一条消息（持续更新），直接拿即可
-        sql = """SELECT tool_id, raw_id, event_ts_utc, received_ts_utc, payload_json
+        # 注意不要用 (:mid = '' OR tool_id = :mid) 这种「可选参数」写法：
+        # Oracle 把空字符串当 NULL，:mid 传空时整个条件恒为 UNKNOWN → 全厂查询会一行都取不到
+        where = ""
+        params = {}
+        if machine_id:
+            where = "WHERE tool_id = :mid"
+            params["mid"] = machine_id
+        sql = f"""SELECT tool_id, raw_id, event_ts_utc, received_ts_utc, payload_json
                  FROM dt_event_raw_cur
-                 WHERE (:mid = '' OR tool_id = :mid)
+                 {where}
                  ORDER BY tool_id"""
-        cols, rows = exec_query(sql, {"mid": machine_id})
+        cols, rows = exec_query(sql, params)
         data = rows_to_list(cols, rows)
         if not data:
             if machine_id:
@@ -364,21 +434,30 @@ async def f3_alarms(request: Request):
     days = int(body.get("days", 7))
     try:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-        # 取时间范围内的事件，在 Python 里过滤 event_name='EC_ALARM_REPORT'
+        # 取时间范围内的事件，在 Python 里过滤告警事件
+        # 时间列用 NVL(event_ts, received_ts)：量产 EVENT_TS_UTC 多为 NULL，直接用它会一行都取不到
+        # 排序用 raw_id（随时间递增）而非 event_ts_utc：后者量产全 NULL，排序无意义
         # Oracle 11g 不支持 FETCH FIRST n ROWS ONLY（12c+语法），用 ROWNUM 替代
-        sql = """SELECT * FROM (
-                   SELECT tool_id, event_ts_utc, payload_json
+        ts_expr = _event_ts_expr()
+        # 不要用 (:mid = '' OR tool_id = :mid)：Oracle 里空字符串 = NULL，传空时条件恒不成立
+        where = [f"{ts_expr} >= {_since_expr()}"]
+        params = {"since": since}
+        if machine_id:
+            where.append("tool_id = :mid")
+            params["mid"] = machine_id
+        sql = f"""SELECT * FROM (
+                   SELECT tool_id, {ts_expr} AS event_ts, payload_json
                    FROM dt_event_raw
-                   WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
-                   ORDER BY event_ts_utc DESC
+                   WHERE {' AND '.join(where)}
+                   ORDER BY raw_id DESC
                  ) WHERE ROWNUM <= 500"""
-        cols, rows = exec_query(sql, {"since": since, "mid": machine_id or ""})
+        cols, rows = exec_query(sql, params)
         data = rows_to_list(cols, rows)
 
         alarm_rows = []
         for d in data:
             payload = _parse_payload(d.get("payload_json"))
-            if str(payload.get("event_name") or "").upper() != "EC_ALARM_REPORT":
+            if str(payload.get("event_name") or "").upper() not in ALARM_EVENT_NAMES:
                 continue
             aid = payload.get("alarm_id") or ""
             # severity 推断：payload 可能带 severity；否则按告警码映射（与前端一致）
@@ -396,7 +475,7 @@ async def f3_alarms(request: Request):
                 continue
             alarm_rows.append([
                 d.get("tool_id", ""),
-                d.get("event_ts_utc") or "",
+                d.get("event_ts") or "",
                 aid,
                 payload.get("alarm_text") or "",
                 sev,
@@ -436,12 +515,14 @@ async def f4_events(request: Request):
             "last_30d": (now - timedelta(days=30)).strftime("%Y-%m-%d 00:00:00"),
         }
         since = ranges.get(time_range, ranges["today"])
-        # dt_event_raw.event_ts_utc 是字符串（ISO 格式），按字符串比较即可过滤时间窗口
-        sql = """SELECT * FROM (
-                   SELECT tool_id, event_ts_utc, received_ts_utc, payload_json
+        # 时间列按真实类型比较（量产是 TIMESTAMP，直接比字符串会 ORA-01843: 无效的月份）
+        # 并用 NVL(event_ts, received_ts) 兜底：量产 EVENT_TS_UTC 多为 NULL
+        ts_expr = _event_ts_expr()
+        sql = f"""SELECT * FROM (
+                   SELECT tool_id, {ts_expr} AS event_ts, payload_json
                    FROM dt_event_raw
-                   WHERE tool_id = :mid AND event_ts_utc >= :since
-                   ORDER BY event_ts_utc DESC
+                   WHERE tool_id = :mid AND {ts_expr} >= {_since_expr()}
+                   ORDER BY raw_id DESC
                  ) WHERE ROWNUM <= 200"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
         data = rows_to_list(cols, rows)
@@ -452,7 +533,7 @@ async def f4_events(request: Request):
             payload = _parse_payload(d.get("payload_json"))
             event_rows.append([
                 d.get("tool_id", ""),
-                d.get("event_ts_utc") or d.get("received_ts_utc", ""),
+                d.get("event_ts") or "",
                 payload.get("event_name") or payload.get("event_type") or "",
                 payload.get("alarm_id") or "",
                 payload.get("alarm_text") or "",
@@ -489,11 +570,13 @@ async def f5_yield(request: Request):
         }
         since = ranges.get(time_range, ranges["today"])
         # 取该机台时间范围内的所有事件，在 Python 里过滤 event_name='LotEnd' 并统计
-        # （Oracle 11g 无 JSON_VALUE，且 payload_json 是 TEXT，故拉取后在 Python 解析）
-        sql = """SELECT tool_id, event_ts_utc, payload_json
+        # （Oracle 11g 无 JSON_VALUE，且 payload_json 是 CLOB/TEXT，故拉取后在 Python 解析）
+        # 时间列按真实类型比较，并用 NVL(event_ts, received_ts) 兜底：量产 EVENT_TS_UTC 多为 NULL
+        ts_expr = _event_ts_expr()
+        sql = f"""SELECT tool_id, payload_json
                  FROM dt_event_raw
-                 WHERE tool_id = :mid AND event_ts_utc >= :since
-                 ORDER BY event_ts_utc DESC"""
+                 WHERE tool_id = :mid AND {ts_expr} >= {_since_expr()}
+                 ORDER BY raw_id DESC"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
         data = rows_to_list(cols, rows)
 
@@ -503,26 +586,30 @@ async def f5_yield(request: Request):
         for d in data:
             payload = _parse_payload(d.get("payload_json"))
             en = str(payload.get("event_name") or "").upper()
-            if en == "LOTEND":
+            if en in LOT_DONE_EVENT_NAMES:
                 lot_end_count += 1
-                qty = payload.get("QTY") or payload.get("qty")
-                try:
-                    total_wafers += int(qty) if qty not in (None, "", "NULL") else 0
-                except Exception:
-                    pass
                 lid = payload.get("lot_id") or payload.get("batch_id")
                 if lid and lid != "NULL":
                     lot_ids.add(lid)
+            # 晶圆数：优先用事件自带的 QTY；没有 QTY 的老机台（如 OXE）按卸片次数累加
+            qty = payload.get("QTY") or payload.get("qty")
+            try:
+                if qty not in (None, "", "NULL"):
+                    total_wafers += int(qty)
+                elif en in WAFER_DONE_EVENT_NAMES:
+                    total_wafers += 1
+            except Exception:
+                pass
 
         distinct_lots = len(lot_ids)
         if lot_end_count == 0:
-            return ok(f"机台 {machine_id} 在 {time_range} 内无 LotEnd 事件（产量 0）。",
+            return ok(f"机台 {machine_id} 在 {time_range} 内无批次完成事件（产量 0）。",
                       jump_timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
                       jump_machine_id=machine_id)
-        answer = (f"机台 {machine_id} 在 {time_range} 内共完成 {lot_end_count} 次 Lot加工"
-                  f"（涉及 {distinct_lots} 个 Lot），累计加工晶圆 {total_wafers} 片。")
+        answer = (f"机台 {machine_id} 在 {time_range} 内共完成 {lot_end_count} 个批次"
+                  f"（涉及 {distinct_lots} 个 Lot），累计下料晶圆 {total_wafers} 片。")
         return ok(answer,
-                  table(["时间范围", "LotEnd次数", "涉及Lot数", "累计晶圆数"],
+                  table(["时间范围", "完成批次数", "涉及Lot数", "累计晶圆数"],
                         [[time_range, lot_end_count, distinct_lots, total_wafers]]),
                   jump_timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
                   jump_machine_id=machine_id)
@@ -571,10 +658,13 @@ async def f7_mes_lot(request: Request):
         return fail("lot_id 必填")
     try:
         # 查该 Lot 相关事件（payload_json 里 lot_id/batch_id 匹配）
-        sql = """SELECT tool_id, event_ts_utc, payload_json
+        # 时间列用 NVL(event_ts, received_ts)：量产 EVENT_TS_UTC 多为 NULL，直接取会拿到空时间
+        # 排序用 raw_id ASC（随时间递增）：按 event_ts_utc 排在全 NULL 时顺序随机
+        ts_expr = _event_ts_expr()
+        sql = f"""SELECT tool_id, {ts_expr} AS event_ts, payload_json
                  FROM dt_event_raw
                  WHERE payload_json LIKE :lid
-                 ORDER BY event_ts_utc ASC"""
+                 ORDER BY raw_id ASC"""
         cols, rows = exec_query(sql, {"lid": f"%\"lot_id\": \"{lot_id}\"%"})
         data = rows_to_list(cols, rows)
         # 兜底：也匹配 batch_id
@@ -594,7 +684,7 @@ async def f7_mes_lot(request: Request):
         for d in data:
             payload = _parse_payload(d.get("payload_json"))
             en = payload.get("event_name") or ""
-            ts = d.get("event_ts_utc") or ""
+            ts = d.get("event_ts") or ""
             if not machine_id:
                 machine_id = d.get("tool_id", "")
             if not recipe and payload.get("recipe"):
@@ -602,13 +692,18 @@ async def f7_mes_lot(request: Request):
             if not start_time:
                 start_time = ts
             end_time = ts
-            if str(en).upper() == "LOTEND":
+            en_u = str(en).upper()
+            if en_u in LOT_DONE_EVENT_NAMES:
                 lot_done = True
-                qty = payload.get("QTY") or payload.get("qty")
-                try:
-                    wafer_count = int(qty) if qty not in (None, "", "NULL") else 0
-                except Exception:
-                    pass
+            # 晶圆数：优先 QTY，没有则按卸片事件次数累加（OXE 走后者）
+            qty = payload.get("QTY") or payload.get("qty")
+            try:
+                if qty not in (None, "", "NULL"):
+                    wafer_count += int(qty)
+                elif en_u in WAFER_DONE_EVENT_NAMES:
+                    wafer_count += 1
+            except Exception:
+                pass
             events.append([ts, en, payload.get("alarm_id") or "", d.get("tool_id", "")])
 
         status = "done" if lot_done else "run"
@@ -633,26 +728,34 @@ async def f8_export(request: Request):
     days = int(body.get("days", 7))
     try:
         since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-        sql = """SELECT * FROM (
-                   SELECT tool_id, event_ts_utc, payload_json
+        # 时间列按真实类型比较 + NVL(event_ts, received_ts) 兜底（量产 EVENT_TS_UTC 多为 NULL）
+        ts_expr = _event_ts_expr()
+        # 不要用 (:mid = '' OR tool_id = :mid)：Oracle 里空字符串 = NULL，传空时条件恒不成立
+        where = [f"{ts_expr} >= {_since_expr()}"]
+        params = {"since": since}
+        if machine_id:
+            where.append("tool_id = :mid")
+            params["mid"] = machine_id
+        sql = f"""SELECT * FROM (
+                   SELECT tool_id, {ts_expr} AS event_ts, payload_json
                    FROM dt_event_raw
-                   WHERE event_ts_utc >= :since AND (:mid = '' OR tool_id = :mid)
-                   ORDER BY event_ts_utc DESC
+                   WHERE {' AND '.join(where)}
+                   ORDER BY raw_id DESC
                  ) WHERE ROWNUM <= 1000"""
-        cols, rows = exec_query(sql, {"since": since, "mid": machine_id or ""})
+        cols, rows = exec_query(sql, params)
         data = rows_to_list(cols, rows)
 
         report_rows = []
         for d in data:
             payload = _parse_payload(d.get("payload_json"))
-            if str(payload.get("event_name") or "").upper() != "EC_ALARM_REPORT":
+            if str(payload.get("event_name") or "").upper() not in ALARM_EVENT_NAMES:
                 continue
             aid = payload.get("alarm_id") or ""
             sev = payload.get("severity") or ""
             if not sev:
                 sev = "crit" if str(aid) in ("9004", "0201") else ("warn" if str(aid) in ("9003", "20011") else "info")
             report_rows.append([
-                d.get("tool_id", ""), d.get("event_ts_utc") or "",
+                d.get("tool_id", ""), d.get("event_ts") or "",
                 aid, payload.get("alarm_text") or "", sev,
                 payload.get("lot_id") or payload.get("batch_id") or "",
             ])
@@ -684,12 +787,14 @@ async def f9_work_order(request: Request):
         wo_id = f"WO-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 插入工单记录（复用 alarms 表，alarm_code = WORK_ORDER）
-        sql = """INSERT INTO alarms (machine_id, timestamp, alarm_code, description, "LEVEL", resolved, lot_id)
-                VALUES (:mid, :ts, 'WORK_ORDER', :desc, :sev, 0, NULL)"""
+        # 注意绑定名不能叫 :desc —— desc 是 Oracle 保留字，会 ORA-01745: 无效的主机/绑定变量名
+        # timestamp 列按真实类型转：若量产是 DATE/TIMESTAMP，直接绑字符串会 ORA-01861
+        sql = f"""INSERT INTO alarms (machine_id, timestamp, alarm_code, description, "LEVEL", resolved, lot_id)
+                VALUES (:mid, {_since_expr(':ts', 'alarms', 'timestamp')}, 'WORK_ORDER', :descr, :sev, 0, NULL)"""
         with get_conn() as conn:
             cur = conn.cursor()
             cur.execute(sql, {"mid": machine_id, "ts": now_str,
-                              "desc": f"[{wo_id}] {fault_type}", "sev": severity})
+                              "descr": f"[{wo_id}] {fault_type}", "sev": severity})
             conn.commit()
             cur.close()
         answer = f"已生成故障工单 {wo_id}：机台 {machine_id}，故障 '{fault_type}'，" \
