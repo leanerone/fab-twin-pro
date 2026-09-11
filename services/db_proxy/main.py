@@ -188,8 +188,9 @@ LOT_DONE_EVENT_NAMES = {"LOTEND", "POD_REMOVED", "MOC"}
 WAFER_DONE_EVENT_NAMES = {"WAFERUNLOADED"}
 
 # F7 单次最多取回的事件行数。payload_json 是 CLOB，按 lot_id 匹配只能靠扫描，
-# 不设上限在大表上会一直扫到读超时（实测 60s）。
-F7_EVENT_LIMIT = 5000
+# 不设上限在大表上会一直扫到读超时（实测 60s）。上限同时也是 stopkey 的停止条件，
+# 设得越小返回越快，所以取值要在「覆盖一个 Lot 的完整事件」和「响应速度」之间权衡。
+F7_EVENT_LIMIT = 2000
 # F7 默认只回溯多少天（可用 days 参数覆盖）
 F7_DEFAULT_WINDOW_DAYS = 30
 
@@ -242,6 +243,14 @@ def _is_numeric(table_name, column_name):
     """列是数值类型时返回 True"""
     dt = _col_types(table_name).get(column_name.upper(), "")
     return "NUMBER" in dt or "FLOAT" in dt or "INTEGER" in dt
+
+
+def _raw_id_num(value):
+    """raw_id 转成可比较的数值（量产是 NUMBER，本地建表是 VARCHAR2 数字串）"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _since_expr(param=":since", table_name="dt_event_raw", column_name="RECEIVED_TS_UTC"):
@@ -682,18 +691,22 @@ async def f7_mes_lot(request: Request):
         return fail("lot_id 必填")
     try:
         # 查该 Lot 相关事件（payload_json 里 lot_id/batch_id 匹配）
-        # payload_json 是 CLOB，按 lot_id 匹配只能扫描；因此必须加「时间窗口 + 行数上限」
-        # 两道闸，否则在大表上会一直扫到读超时（实测 60s 超时）
-        # 排序用 raw_id ASC（随时间递增）：按 event_ts_utc 排在全 NULL 时顺序随机
+        # payload_json 是 CLOB，按 lot_id 匹配只能扫描，因此靠「窗口 + 行数上限 + 排序方向」三件套压住耗时：
+        #   - 窗口：默认只回溯 F7_DEFAULT_WINDOW_DAYS 天
+        #   - 上限：ROWNUM <= F7_EVENT_LIMIT，同时也是 stopkey 的停止条件
+        #   - 排序方向：必须用 RAW_ID **降序**。升序时 Oracle 得扫完整个范围才知道哪些是最小
+        #     raw_id，无法提前停止（实测读超时 60s）；降序时可用 RAW_ID 主键索引倒序扫描 +
+        #     stopkey，凑够 N 行立刻返回，通常秒级。
+        # 取回后在 Python 侧按 raw_id 升序排回来，保证时间线顺序正确。
         window_days = int(body.get("days") or F7_DEFAULT_WINDOW_DAYS)
         since = (datetime.now() - timedelta(days=window_days)).strftime("%Y-%m-%d %H:%M:%S")
         ts_expr = _event_ts_expr()
         sql = f"""SELECT * FROM (
-                   SELECT tool_id, {ts_expr} AS event_ts, payload_json
+                   SELECT tool_id, raw_id, {ts_expr} AS event_ts, payload_json
                    FROM dt_event_raw
                    WHERE {_time_filter_expr()} >= {_since_expr()}
                      AND payload_json LIKE :lid
-                   ORDER BY raw_id ASC
+                   ORDER BY raw_id DESC
                  ) WHERE ROWNUM <= {F7_EVENT_LIMIT}"""
         params = {"since": since, "lid": f"%\"lot_id\": \"{lot_id}\"%"}
         cols, rows = exec_query(sql, params)
@@ -705,6 +718,9 @@ async def f7_mes_lot(request: Request):
             data = rows_to_list(cols, rows)
         if not data:
             return ok(f"未找到 Lot {lot_id} 的事件记录（已回溯最近 {window_days} 天）。")
+        # 降序取回后按 raw_id 升序还原时间线顺序
+        data.sort(key=lambda d: _raw_id_num(d.get("raw_id")))
+        truncated = len(data) >= F7_EVENT_LIMIT
 
         events = []
         machine_id = ""
@@ -742,6 +758,8 @@ async def f7_mes_lot(request: Request):
         answer = (f"Lot {lot_id}: 机台 {machine_id}，Recipe {recipe or 'N/A'}，"
                   f"晶圆数 {wafer_count}，状态 {status}，"
                   f"开始 {start_time}，结束 {end_time}，关联事件 {len(events)} 条。")
+        if truncated:
+            answer += f"（事件数已达单次上限 {F7_EVENT_LIMIT} 条，仅覆盖最近部分；如需更早记录请缩小 days 范围后分段查询）"
         return ok(answer,
                   table(["Lot ID", "机台", "Recipe", "晶圆数", "状态", "开始时间", "结束时间"],
                         [[lot_id, machine_id, recipe or "", wafer_count, status, start_time, end_time]]),
