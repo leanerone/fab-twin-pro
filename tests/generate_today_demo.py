@@ -224,6 +224,13 @@ def podopener_cycle(tool_id, start_dt, mode, lot, cassette, msg_seq, cut_at=None
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=None, help="生成日期 YYYY-MM-DD，默认今天")
+    ap.add_argument("--raw-base", type=int, default=RAW_ID_BASE,
+                    help="raw_id 起始值，默认 %d。补历史日期时必须换一段不冲突的区间，"
+                         "且应小于已有数据的最小 raw_id，以保持「raw_id 随时间递增」这一约定"
+                         % RAW_ID_BASE)
+    ap.add_argument("--history-only", action="store_true",
+                    help="只写 DT_EVENT_RAW（补历史日期用）：不碰 DT_EVENT_RAW_CUR、"
+                         "DT_EVENT_REALTIMELOT、DT_STATE_SNAPSHOT，也不改 machines 状态")
     args = ap.parse_args()
 
     now = datetime.now().replace(microsecond=0)
@@ -255,6 +262,8 @@ def main():
             "and (received_ts_utc like :day or event_ts_utc like :day)",
             {"tid": t, "day": day_like})
         print("  清理 DT_EVENT_RAW %-12s %d 行" % (t, cur.rowcount))
+        if args.history_only:
+            continue
         cur.execute("delete from DT_EVENT_RAW_CUR where tool_id = :tid", {"tid": t})
         cur.execute("delete from DT_EVENT_REALTIMELOT where tool_id = :tid", {"tid": t})
         cur.execute(
@@ -341,7 +350,7 @@ def main():
 
     # ---------- 按时间排序后重新编号 raw_id，保证 raw_id 与时间同序 ----------
     all_rows.sort(key=lambda r: (r[3], r[0]))
-    _seq = RAW_ID_BASE
+    _seq = args.raw_base
     final_rows = []
     for _, tool, msg, d, p in all_rows:
         _seq += 1
@@ -358,50 +367,55 @@ def main():
           "pj": json.dumps(p, ensure_ascii=False)}
          for rid, tool, msg, d, p in final_rows])
 
-    # ---------- 写 DT_EVENT_RAW_CUR ----------
-    for tool, (d, p, msg, rid) in last_of_tool.items():
-        cur.execute(
-            "insert into DT_EVENT_RAW_CUR "
-            "(tool_id, raw_id, source_system, source_message_id, received_ts_utc, "
-            " event_ts_utc, payload_json, parse_status) "
-            "values (:tid, :rid, 'RV', :msg, :ts, :ts, :pj, 'PARSED')",
-            {"tid": tool, "rid": rid, "msg": msg, "ts": ts_str(d),
-             "pj": json.dumps(p, ensure_ascii=False)})
+    # 以下 4 段都是「实时画面」的数据源，补历史日期时绝对不能碰，
+    # 否则实时看板会变成历史那天的状态。--history-only 时全部跳过。
+    if args.history_only:
+        print("\n[history-only] 跳过 DT_EVENT_RAW_CUR / REALTIMELOT / SNAPSHOT / machines 更新")
+    else:
+        # ---------- 写 DT_EVENT_RAW_CUR ----------
+        for tool, (d, p, msg, rid) in last_of_tool.items():
+            cur.execute(
+                "insert into DT_EVENT_RAW_CUR "
+                "(tool_id, raw_id, source_system, source_message_id, received_ts_utc, "
+                " event_ts_utc, payload_json, parse_status) "
+                "values (:tid, :rid, 'RV', :msg, :ts, :ts, :pj, 'PARSED')",
+                {"tid": tool, "rid": rid, "msg": msg, "ts": ts_str(d),
+                 "pj": json.dumps(p, ensure_ascii=False)})
 
-    # ---------- 写 DT_EVENT_REALTIMELOT ----------
-    cur.execute("select nvl(max(rt_id), 0) from DT_EVENT_REALTIMELOT")
-    rt_id = cur.fetchone()[0]
-    for r in rtlot_rows:
-        rt_id += 1
-        cur.execute(
-            "insert into DT_EVENT_REALTIMELOT "
-            "(rt_id, tool_id, port_id, lot_key_mode, lot_biz_key, lot_id, batch_id, "
-            " cassette_id, smif_id, wafer_mapping, last_event_name, last_event_ts_utc, "
-            " start_ts_utc, updated_ts_utc, source_system, source_message_id, active_flag) "
-            "values (:1, :2, :3, 'SINGLE_LOT_PER_PORT', :4, :5, :6, :7, :8, :9, :10, "
-            "        :11, :12, :13, 'RV', :14, 'Y')",
-            [rt_id, r["tool_id"], r["port_id"],
-             "SINGLE::%s::%s" % (r["tool_id"], r["port_id"]),
-             r["lot_id"], r["batch_id"], r["cassette_id"], r["smif_id"],
-             r["wafer_mapping"], r["last_event_name"], r["last_ts"],
-             r["start_ts"], r["last_ts"], r["msg"]])
+        # ---------- 写 DT_EVENT_REALTIMELOT ----------
+        cur.execute("select nvl(max(rt_id), 0) from DT_EVENT_REALTIMELOT")
+        rt_id = cur.fetchone()[0]
+        for r in rtlot_rows:
+            rt_id += 1
+            cur.execute(
+                "insert into DT_EVENT_REALTIMELOT "
+                "(rt_id, tool_id, port_id, lot_key_mode, lot_biz_key, lot_id, batch_id, "
+                " cassette_id, smif_id, wafer_mapping, last_event_name, last_event_ts_utc, "
+                " start_ts_utc, updated_ts_utc, source_system, source_message_id, active_flag) "
+                "values (:1, :2, :3, 'SINGLE_LOT_PER_PORT', :4, :5, :6, :7, :8, :9, :10, "
+                "        :11, :12, :13, 'RV', :14, 'Y')",
+                [rt_id, r["tool_id"], r["port_id"],
+                 "SINGLE::%s::%s" % (r["tool_id"], r["port_id"]),
+                 r["lot_id"], r["batch_id"], r["cassette_id"], r["smif_id"],
+                 r["wafer_mapping"], r["last_event_name"], r["last_ts"],
+                 r["start_ts"], r["last_ts"], r["msg"]])
 
-    # ---------- 写 DT_STATE_SNAPSHOT（SNAPSHOT_ID 为 IDENTITY，不指定）----------
-    for tool, (d, p, msg, rid) in last_of_tool.items():
-        cur.execute(
-            "insert into DT_STATE_SNAPSHOT "
-            "(tool_id, snapshot_ts_utc, machine_state, machine_mode, "
-            " current_alarm_code, current_lot_id, pod_position, snapshot_json) "
-            "values (:1, :2, :3, :4, null, :5, :6, :7)",
-            [tool, ts_str(d), p.get("machine_state"), p.get("machine_mode"),
-             None if p.get("lot_id") == "NULL" else p.get("lot_id"),
-             p.get("port_id"), json.dumps(p, ensure_ascii=False)])
+        # ---------- 写 DT_STATE_SNAPSHOT（SNAPSHOT_ID 为 IDENTITY，不指定）----------
+        for tool, (d, p, msg, rid) in last_of_tool.items():
+            cur.execute(
+                "insert into DT_STATE_SNAPSHOT "
+                "(tool_id, snapshot_ts_utc, machine_state, machine_mode, "
+                " current_alarm_code, current_lot_id, pod_position, snapshot_json) "
+                "values (:1, :2, :3, :4, null, :5, :6, :7)",
+                [tool, ts_str(d), p.get("machine_state"), p.get("machine_mode"),
+                 None if p.get("lot_id") == "NULL" else p.get("lot_id"),
+                 p.get("port_id"), json.dumps(p, ensure_ascii=False)])
 
-    # ---------- 同步 MACHINES 状态 ----------
-    for tool in tools:
-        cur.execute(
-            "update machines set state = 'run', updated_at = :1 where id = :2",
-            [ts_str(now), tool])
+        # ---------- 同步 MACHINES 状态 ----------
+        for tool in tools:
+            cur.execute(
+                "update machines set state = 'run', updated_at = :1 where id = :2",
+                [ts_str(now), tool])
 
     conn.commit()
 
