@@ -24,6 +24,25 @@ const selectedEventId = ref(null)
 const showLots = ref(false)
 const selectedLotId = ref('')
 
+// 事件列表一次渲染多少条：量产数据量下一个区段可能上千条事件，
+// 全量渲染会生成上万个 DOM 节点，首屏直接卡住
+const PAGE_SIZE = 200
+const visibleCount = ref(PAGE_SIZE)
+
+// 倒序（最新在前）：打开即看到最新事件，限额也只需截取开头一段
+const orderedEvents = computed(() => props.events.slice().reverse())
+const visibleEvents = computed(() => orderedEvents.value.slice(0, visibleCount.value))
+const hasMore = computed(() => orderedEvents.value.length > visibleCount.value)
+
+function loadMore() {
+  visibleCount.value += PAGE_SIZE
+}
+
+// 换区段/换机台后事件列表整体变化，重置回第一页
+watch(() => props.events, () => {
+  visibleCount.value = PAGE_SIZE
+})
+
 // 从所选区段事件推导 LOT 列表（语义与后端 /lots 一致）：
 // 最新事件决定 status/product/QTY（默认25），start_time 取该 Lot 最早事件，过滤 NULL
 const lots = computed(() => {
@@ -129,14 +148,19 @@ watch(() => props.jumpTimestamp, (ts) => {
   const ev = props.events[bestIdx]
   if (ev) {
     selectedEventId.value = ev.raw_id
+    // 列表已倒序且只渲染前 visibleCount 条，索引必须换算成可见序号；
+    // 沿用全量索引会滚到无关的事件上（甚至越界不滚动）
+    const visIdx = orderedEvents.value.findIndex(e => e.raw_id === ev.raw_id)
+    if (visIdx < 0) return
+    if (visIdx >= visibleCount.value) visibleCount.value = visIdx + 1
     // 滚动到对应元素
     nextTick(() => {
       if (showLots.value) return
       const list = document.querySelector('.hr-list')
       if (!list) return
       const items = list.querySelectorAll('.hr-item')
-      if (items[bestIdx]) {
-        items[bestIdx].scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (items[visIdx]) {
+        items[visIdx].scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
     })
   }
@@ -166,7 +190,7 @@ watch(() => props.jumpTimestamp, (ts) => {
         <div class="hr-empty-hint">请调整顶部日期与时间区段后刷新</div>
       </div>
       <div
-        v-for="ev in events"
+        v-for="ev in visibleEvents"
         :key="ev.raw_id"
         class="hr-item"
         :class="{ selected: selectedEventId === ev.raw_id, [ev.event_category]: true }"
@@ -192,6 +216,13 @@ watch(() => props.jumpTimestamp, (ts) => {
           <div v-else class="hr-item-desc">{{ ev.event_type }}</div>
         </div>
         <div class="hr-item-arrow">▶</div>
+      </div>
+
+      <!-- 分页加载：避免一次渲染上千条事件 -->
+      <div v-if="hasMore" class="hr-more">
+        <button type="button" class="hr-more-btn" @click="loadMore">
+          加载更早的 {{ orderedEvents.length - visibleCount }} 条
+        </button>
       </div>
     </div>
     <!-- AI 快捷分析栏：点击后切换到 AI Tab 并预填问题 -->
@@ -294,6 +325,29 @@ watch(() => props.jumpTimestamp, (ts) => {
 .hr-item.alarm.selected { border-left-color: #ef4444; }
 .hr-item.pod.selected { border-left-color: #f59e0b; }
 .hr-item.process.selected { border-left-color: #3b82f6; }
+
+/* 分页加载 */
+.hr-more {
+  padding: 8px 12px 12px;
+  text-align: center;
+}
+.hr-more-btn {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #2a4060;
+  background: #0a1628;
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.hr-more-btn:hover {
+  background: #0a2030;
+  border-color: #06b6d4;
+  color: #06b6d4;
+}
 
 .hr-item-left {
   display: flex;

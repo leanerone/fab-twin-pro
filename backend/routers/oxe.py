@@ -11,6 +11,7 @@
 """
 import json
 import logging
+import time
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from database import get_db
@@ -19,6 +20,14 @@ from services.ai_tools import clean_alarm_event
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/oxe", tags=["oxe"])
+
+# 量产 payload 中表示"无值"的占位串（注意是字符串，不是 None，因此 `v or '-'` 拦不住）
+_INVALID_LOT_VALUES = {"", "NULL", "NONE", "NAN", "UNDEFINED"}
+
+
+def _is_valid_lot(v) -> bool:
+    """判断 lot_id 是否为有效批次号"""
+    return bool(v) and str(v).strip().upper() not in _INVALID_LOT_VALUES
 
 
 def _parse_payload(payload_json) -> dict:
@@ -60,11 +69,51 @@ def _convert_event(row, table_name: str) -> dict:
     return payload
 
 
+# 最近有效 lot_id 缓存：{tool_id: (lot_id, 过期时间戳)}
+# 该接口被前端 1 秒轮询，若当前事件一直无 lot_id，没有缓存会每秒扫一次历史表
+_LOT_CACHE: dict = {}
+_LOT_CACHE_TTL = 30
+_LOT_LOOKBACK = 60
+
+
+def _resolve_recent_lot(db: Session, tool_id: str) -> str:
+    """回溯最近的 PARSED 事件，找出该机台最近一个有效 lot_id
+
+    为什么需要：DT_EVENT_RAW_CUR 只保留最新一条事件，而最新事件常常是
+    SENSOR / 状态类（无 lot_id，payload 里是字符串 "NULL"），此时画面上的
+    LOT 就会一直显示 NULL。这里回溯取最近一次带真实 lot_id 的事件补上。
+    """
+    now = time.time()
+    cached = _LOT_CACHE.get(tool_id)
+    if cached and cached[1] > now:
+        return cached[0]
+
+    lot = ""
+    rows = (
+        db.query(DT_EVENT_RAW)
+        .filter(DT_EVENT_RAW.tool_id == tool_id)
+        .filter(DT_EVENT_RAW.parse_status == "PARSED")
+        .order_by(DT_EVENT_RAW.raw_id.desc())
+        .limit(_LOT_LOOKBACK)
+        .all()
+    )
+    for r in rows:
+        candidate = _parse_payload(r.payload_json).get("lot_id")
+        if _is_valid_lot(candidate):
+            lot = str(candidate).strip()
+            break
+
+    # 查不到也缓存，避免轮询时反复扫表
+    _LOT_CACHE[tool_id] = (lot, now + _LOT_CACHE_TTL)
+    return lot
+
+
 @router.get("/latest-event")
 def get_latest_event(tool_id: str = Query(..., description="机台 tool_id，如 OXE-51"), db: Session = Depends(get_db)):
     """获取机台最新一条事件（用于 1 秒轮询实时画面）
 
     数据源：DT_EVENT_RAW_CUR（每机台保留最新一条）
+    lot_id 兜底：当前事件无有效 lot_id 时，回溯历史补最近一个有效批次号
     """
     row = (
         db.query(DT_EVENT_RAW_CUR)
@@ -73,7 +122,13 @@ def get_latest_event(tool_id: str = Query(..., description="机台 tool_id，如
     )
     if not row:
         return {"error": "not_found", "tool_id": tool_id, "message": "该机台无当前事件"}
-    return _convert_event(row, "DT_EVENT_RAW_CUR")
+
+    data = _convert_event(row, "DT_EVENT_RAW_CUR")
+    if not _is_valid_lot(data.get("lot_id")):
+        fallback = _resolve_recent_lot(db, tool_id)
+        if fallback:
+            data["lot_id"] = fallback
+    return data
 
 
 @router.get("/history-events")

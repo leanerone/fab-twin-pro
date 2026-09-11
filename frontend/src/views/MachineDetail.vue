@@ -661,11 +661,14 @@ function applyEventData(ev) {
   }
 }
 
-// 拉取当前日期+时间区段的事件（升序）
-async function fetchRangeEvents() {
-  const start = `${playbackDate.value}T${playbackStartHM.value}:00`
-  const end = `${playbackDate.value}T${playbackEndHM.value}:59.999`
-  const resp = await api.getHistory(machineId.value, { start_time: start, end_time: end, limit: 5000 })
+// 回放区段一次最多拉多少条：量产数据量大，一次 5000 条会让后端逐条解析 CLOB、
+// 前端再排序，首屏明显变慢
+const PLAYBACK_EVENT_LIMIT = 2000
+// 实时模式只拉最新多少条（实时画面不需要区段全量历史）
+const REALTIME_EVENT_LIMIT = 200
+
+// 把 /history 返回的原始事件映射成回放面板期望的结构（升序）
+function mapEventList(resp) {
   const list = (resp?.events || []).map(e => ({
     ...e,
     machine_id: e.tool_id || machineId.value,
@@ -675,6 +678,24 @@ async function fetchRangeEvents() {
   }))
   list.sort((a, b) => a._ts - b._ts)
   return list
+}
+
+// 拉取当前日期+时间区段的事件（升序）
+async function fetchRangeEvents() {
+  const start = `${playbackDate.value}T${playbackStartHM.value}:00`
+  const end = `${playbackDate.value}T${playbackEndHM.value}:59.999`
+  const resp = await api.getHistory(machineId.value, {
+    start_time: start,
+    end_time: end,
+    limit: PLAYBACK_EVENT_LIMIT,
+  })
+  return mapEventList(resp)
+}
+
+// 拉取最新 N 条事件（实时模式用，不带时间区段）
+async function fetchLatestEvents() {
+  const resp = await api.getHistory(machineId.value, { limit: REALTIME_EVENT_LIMIT })
+  return mapEventList(resp)
 }
 
 // === 回放模式 ===
@@ -731,9 +752,10 @@ function switchToRealtime() {
   // 重置实时事件初始化标记
   realtimeEventsInitialized = false
   lastProcessedRealtimeTs = ''
-  // 实时模式下回放面板仍展示当前区段事件（不驱动模型）
+  // 实时模式下回放面板展示最新事件（不驱动模型）
+  // 只取最新 N 条：实时画面不需要区段全量历史，量产数据量下这是首屏快慢的关键
   loading.value = true
-  fetchRangeEvents()
+  fetchLatestEvents()
     .then(list => { replayEvents.value = list })
     .finally(() => { loading.value = false })
 }
@@ -926,10 +948,10 @@ function goBack() {
   router.push('/')
 }
 
-// 监听机台 ID 变化
+// 监听机台 ID 变化（与首次进入一致，默认实时）
 watch(() => props.id, () => {
   pendingJumpTs.value = ''
-  loadMachine().then(() => switchToPlayback())
+  loadMachine().then(() => switchToRealtime())
 })
 
 // 监听 URL query 参数变化（date、mode）—— SPA 中切换 URL 不会重新挂载组件
@@ -979,12 +1001,13 @@ onMounted(() => {
   if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
     playbackDate.value = queryDate
   }
-  // 只加载一次机台数据，随后按默认模式（回放=最近1小时区间）加载数据
+  // 只加载一次机台数据，默认进入实时画面
+  // 只有显式指定 mode=playback 才走回放（AI 跳转会在 jumpToTime 内自行切到回放）
   loadMachine().then(async () => {
-    if (queryMode === 'realtime') {
-      switchToRealtime()
-    } else {
+    if (queryMode === 'playback') {
       await switchToPlayback()
+    } else {
+      switchToRealtime()
     }
     // 处理 AI 跳转（ts 参数）
     await applyAIJump()

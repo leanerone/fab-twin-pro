@@ -30,6 +30,9 @@ let ctx = null
 let rafId = null
 
 // ==================== HTML 浮层响应式状态（替代 oxe.html 的 document.getElementById 操作）====================
+// 量产 payload 中表示"无值"的占位串（是字符串，不是 null）
+const INVALID_LOT_VALUES = ['NULL', 'NONE', 'NAN', 'UNDEFINED', '']
+
 const machineStateText = ref('Idle')
 const kpiLot = ref('-')
 const kpiRecipe = ref('-')
@@ -1073,7 +1076,12 @@ function applyEvent(ev) {
   const eventPort = resolveEventPortId(ev, activeState.lastEventPortId)
   activeState.lastEventPortId = eventPort
   activeState.activeUnitId = getPortHomeUnitId(eventPort)
-  kpiLot.value = ev.lot_id || '-'
+  // lot_id 在量产 payload 里可能是字符串 "NULL"，直接写 `|| '-'` 拦不住（"NULL" 是 truthy）
+  // 且无 lot_id 的事件不能把上一个有效 LOT 冲掉：实时画面上 LOT 应保持到换批为止
+  const lotVal = ev.lot_id
+  if (lotVal != null && !INVALID_LOT_VALUES.includes(String(lotVal).trim().toUpperCase())) {
+    kpiLot.value = String(lotVal).trim()
+  }
   kpiRecipe.value = ev.recipe || '-'
   kpiEvent.value = eventName || ev.event_type
   setStateText(activeState.machineState)
@@ -1650,35 +1658,42 @@ onUnmounted(() => {
   <div ref="containerRef" class="oxe-viewer">
     <canvas ref="canvasRef" class="oxe-canvas" />
 
-    <!-- 顶部居中 KPI / 状态浮层 -->
+    <!-- 机台详情浮层（左下）：关键状态一屏可读 -->
     <div class="oxe-kpi-panel">
-      <div class="kpi-row kpi-machine-row">
-        <span class="kpi-label">机台</span>
-        <strong class="kpi-val kpi-machine-name">{{ props.machine?.id || '-' }}</strong>
+      <div class="kpi-head">
+        <span class="kpi-head-title">机台详情</span>
       </div>
-      <div class="kpi-row">
-        <span class="kpi-label">LOT</span>
-        <strong class="kpi-val">{{ kpiLot }}</strong>
-      </div>
-      <div class="kpi-row">
-        <span class="kpi-label">Recipe</span>
-        <strong class="kpi-val">{{ kpiRecipe }}</strong>
-      </div>
-      <div class="kpi-row">
-        <span class="kpi-label">当前 Event</span>
-        <strong class="kpi-val">{{ kpiEvent }}</strong>
-      </div>
-      <div class="kpi-row">
-        <span class="kpi-label">状态</span>
-        <strong class="kpi-val" :class="kpiStateClass">{{ kpiStateText }}</strong>
+      <div class="kpi-machine">{{ props.machine?.id || '-' }}</div>
+      <div class="kpi-rows">
+        <div class="kpi-row">
+          <span class="kpi-label">LOT</span>
+          <strong class="kpi-val kpi-lot">{{ kpiLot }}</strong>
+        </div>
+        <div class="kpi-row">
+          <span class="kpi-label">Recipe</span>
+          <strong class="kpi-val">{{ kpiRecipe }}</strong>
+        </div>
+        <div class="kpi-row">
+          <span class="kpi-label">当前 Event</span>
+          <strong class="kpi-val">{{ kpiEvent }}</strong>
+        </div>
+        <div class="kpi-row">
+          <span class="kpi-label">状态</span>
+          <strong class="kpi-val" :class="kpiStateClass">{{ kpiStateText }}</strong>
+        </div>
       </div>
     </div>
 
-    <!-- 事件时间轴浮层 -->
+    <!-- 事件进程浮层（右下） -->
     <div class="oxe-timeline-panel">
-      <div class="timeline-head">事件进程</div>
+      <div class="timeline-head">
+        <span class="th-title">事件进程</span>
+        <span class="th-count">{{ timelineEntries.length }}</span>
+      </div>
       <div class="timeline-body">
+        <div v-if="!timelineEntries.length" class="tl-empty">暂无事件</div>
         <div v-for="(row, idx) in timelineEntries.slice().reverse()" :key="idx" class="event-row">
+          <span class="event-dot"></span>
           <span class="event-time">{{ row.time }}</span>
           <span class="event-name"><strong>{{ row.name }}</strong><em>{{ row.extra }}</em></span>
         </div>
@@ -1712,19 +1727,42 @@ onUnmounted(() => {
 }
 .oxe-kpi-panel {
   position: absolute;
-  left: 10px;
-  bottom: 10px;
-  width: 155px;
-  padding: 8px 10px;
-  border: 1px solid #c7d3e0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(4px);
+  left: 12px;
+  bottom: 12px;
+  width: 196px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14), 0 1px 2px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(8px);
   z-index: 3;
-  display: grid;
-  gap: 4px;
+  overflow: hidden;
   font-size: 12px;
+}
+.kpi-head {
+  display: flex;
+  align-items: center;
+  padding: 7px 11px;
+  background: linear-gradient(90deg, #0e7490 0%, #0891b2 100%);
+}
+.kpi-head-title {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.kpi-machine {
+  padding: 8px 11px 6px;
+  border-bottom: 1px dashed #e2e8f0;
+  color: #0e7490;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 16px;
+  font-weight: 800;
+}
+.kpi-rows {
+  display: grid;
+  gap: 5px;
+  padding: 8px 11px 10px;
 }
 .kpi-row {
   display: flex;
@@ -1733,21 +1771,22 @@ onUnmounted(() => {
   gap: 8px;
 }
 .kpi-label {
-  color: #607089;
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 11px;
 }
 .kpi-val {
+  overflow: hidden;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.kpi-machine-row {
-  padding-bottom: 4px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid #e2e8f0;
-}
-.kpi-machine-name {
-  font-size: 15px;
-  font-weight: 800;
-  color: #0e7490;
+.kpi-lot {
+  color: #0369a1;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
 }
 .status-running-text { color: #16a34a; }
 .status-alarm-text { color: #dc2626; }
@@ -1755,48 +1794,97 @@ onUnmounted(() => {
 .status-info-text { color: #0e7490; }
 .oxe-timeline-panel {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
-  width: 155px;
-  max-height: 140px;
-  border: 1px solid #c7d3e0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(4px);
+  right: 12px;
+  bottom: 12px;
+  width: 232px;
+  max-height: 190px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14), 0 1px 2px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(8px);
   z-index: 3;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .timeline-head {
-  padding: 6px 10px;
-  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 11px;
+  background: linear-gradient(90deg, #0e7490 0%, #0891b2 100%);
+}
+.th-title {
+  color: #fff;
   font-size: 12px;
-  font-weight: 600;
-  color: #0f172a;
-  background: rgba(246, 249, 252, 0.9);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.th-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
 }
 .timeline-body {
-  padding: 4px 10px;
-  overflow: auto;
+  padding: 6px 11px 8px;
+  overflow-y: auto;
   font-size: 11px;
+  scrollbar-width: thin;
+}
+.timeline-body::-webkit-scrollbar {
+  width: 6px;
+}
+.timeline-body::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.5);
+}
+.tl-empty {
+  padding: 12px 0;
+  color: #94a3b8;
+  font-size: 11px;
+  text-align: center;
 }
 .event-row {
   display: grid;
-  grid-template-columns: 56px 1fr;
-  gap: 6px;
-  padding: 3px 0;
-  border-bottom: 1px solid #edf2f7;
+  grid-template-columns: 8px 52px 1fr;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.event-row:last-child {
+  border-bottom: none;
+}
+.event-dot {
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0891b2;
 }
 .event-time {
-  color: #607089;
+  color: #64748b;
   font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 10.5px;
+}
+.event-name {
+  overflow: hidden;
+  color: #0f172a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.event-name strong {
+  font-weight: 600;
 }
 .event-name em {
   display: inline;
   margin-left: 4px;
-  color: #607089;
+  color: #94a3b8;
+  font-size: 10px;
   font-style: normal;
 }
 .oxe-legend {
