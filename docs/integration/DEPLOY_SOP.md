@@ -297,22 +297,23 @@ python tests\test_n8n_f1_f10.py --merged --json-out result.json
 1. Dify → **工具** → **创建自定义工具**
 2. 名称填 `FabTwin n8n Tools`
 3. 把 `docs/integration/dify/fabtwin-tools-openapi.yaml` 的**全部内容**粘贴进 Schema 框
-4. **关键一步**：文件里 `servers.url` 写的是占位符
+4. **唯一要改的地方**：把 `servers.url` 换成你自己的 n8n 地址
+
+   文件里现在已经是可用的真实地址（不再是占位符）：
 
    ```yaml
    servers:
-     - url: "{{n8n_base_url}}/webhook"
+     - url: http://10.30.116.151:5678/webhook
    ```
 
-   **必须手工改成你的真实 n8n 地址**，否则 Dify 解析不了：
+   如果你的 n8n 不在这个地址，改这一行即可，其余不要动。
+   注意末尾的 `/webhook` 必须保留，且不要写成 `/webhook-test`。
 
-   ```yaml
-   servers:
-     - url: "http://10.30.116.151:5678/webhook"
-   ```
-
-5. 鉴权方式选 **None**（本版 secret 走 query 参数，没配就不用填）
+5. 鉴权方式：n8n 的 HTTP 节点里已经带了 `X-API-Key`，Dify 这层选 **None** 即可
 6. 保存
+
+> 该文件已用 `openapi-spec-validator` 通过 OpenAPI 3.0.3 正式校验，
+> 可直接粘贴，不会出现「Schema 解析失败」。
 
 ### 5.3 挂到应用并启用
 

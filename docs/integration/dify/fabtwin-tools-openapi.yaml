@@ -1,74 +1,103 @@
 openapi: 3.0.3
+
+# ============================================================================
+#  Dify 导入说明（只有一处需要你改）
+# ----------------------------------------------------------------------------
+#  下面 servers.url 里的 http://10.30.116.151:5678 换成你自己的 n8n 地址，
+#  其余整份原样复制粘贴到 Dify 即可。
+#
+#  Dify 路径：工具 → 自定义 → 创建自定义工具 → Schema 粘贴全文
+#  鉴权：Header 方式，Key = X-API-Key，Value = fabtwin-proxy-2026
+#
+#  导入成功的判据：右侧「可用工具」列表出现且仅出现 2 条 —— fab_query、fab_admin
+# ============================================================================
+
 info:
-  title: FabTwin Pro AI 助手 - 厂务数据工具（合并版，2 工具）
+  title: FabTwin Pro - 厂务数据工具（合并版 2 工具）
   description: |
-    【本版变更】原 F1~F10 各占一个 path，Dify 会按 path 数量注册工具，
-    10 个 path 一次性占满 Agent 工具位，导致 LOG 捞取等其他工具无法挂载。
-    本版收敛为 2 个 path，用 action 参数分发，腾出 8 个工具位：
+    晶圆厂数字孪生数据查询工具。共 2 个工具，通过 action 参数分发到 10 个具体功能。
 
-      fab_query  读类   ← F1 F2 F3 F4 F5 F6 F10
-      fab_admin  管理类 ← F7 F8 F9（需管理员权限，含写操作与报表导出）
+    调用链：Dify → n8n webhook → db_proxy → Oracle 11g
 
-    所有接口均由 n8n workflow 转发到 db_proxy。
-    公共约定：
-      - 所有请求都是 POST + application/json
-      - 都支持 Query 参数 ?secret=YOUR_N8N_WEBHOOK_SECRET
-      - action 为必填；参数袋里只需填该 action 用得到的字段，其余留空即可
-    统一响应结构（application/json）：
-      - ok: boolean（true=成功，false=失败）
-      - answer: string（自然语言中文摘要，直接给用户看）
-      - table_data: object|null（{headers:string[], rows:any[][]}）
-      - jump_timestamp: string|null（格式 YYYY-MM-DD HH:mm:ss，供 FabTwin 跳转回放）
-      - jump_machine_id: string|null（跳转到该机器详情页）
-      - sources: [{type, workflow, execution_id, ...其他字段}]
-    失败时（含 action 填错）不会抛 HTTP 错误，而是返回 ok=false + 可读的 answer，
-    其中会列出该工具支持的全部 action，可据此纠正后重试。
-  version: "2.0.0"
+    【重要】每次调用都必须在 body 里传 action，否则会失败。
+    参数袋里只填该 action 用得到的字段，其余不传即可（不要传空字符串占位）。
+
+    统一返回结构：
+      - ok              boolean  true=成功
+      - answer          string   中文自然语言摘要，可直接呈现给用户
+      - table_data      object   {headers:[], rows:[[]]}，无表格时为 null
+      - jump_timestamp  string   YYYY-MM-DD HH:mm:ss，供前端跳转回放，无则 null
+      - jump_machine_id string   跳转目标机台，无则 null
+      - sources         array    数据来源与附加信息（下载链接、工单号等）
+
+    容错：action 填错或缺失不会抛 HTTP 错误，而是返回 200 + ok=false，
+    并在 answer 里列出该工具支持的全部 action，据此纠正后重试即可。
+  version: "2.1.0"
+
 servers:
-  - url: "{{n8n_base_url}}/webhook"
-    description: n8n webhook 根（由 Dify Start 节点变量传入）
+  - url: http://10.30.116.151:5678/webhook
+    description: n8n webhook 根地址（改成你的 n8n 实际地址）
 
 paths:
+
+  # ==========================================================================
+  #  工具 1：读类查询（覆盖原 F1 F2 F3 F4 F5 F6 F10）
+  # ==========================================================================
   /fab_query:
     post:
-      summary: 厂务数据查询（机台状态/Lot/报警/事件/产量/配方/功能清单）
-      description: |
-        查询晶圆厂实时与历史数据。必须通过 action 指定要查哪一类：
-
-          machine_status    机台实时状态、运行模式、当前 Lot、全厂概览
-                            → machine_id 可空；留空表示查全厂所有机台
-          lot_info          Lot 位置与进度追踪
-                            → lot_id 与 machine_id 至少给一个
-          machine_alarms    报警/告警/异常统计与定位
-                            → machine_id 可空（空=全厂）；可加 severity、days
-          event_timeline    事件时间线、温度趋势、动作序列
-                            → machine_id 必填；可加 time_range
-          yield_stats       产量、晶圆片数统计
-                            → machine_id 必填；可加 time_range
-          recipe_info       工艺参数、配方 Recipe
-                            → machine_id 必填
-          list_capabilities 功能清单，回答"你能帮我干什么"
-                            → 无需任何参数
-
-        用户问"XX机台现在怎么样"用 machine_status；问"为什么停了/有什么报警"
-        用 machine_alarms；问"做了多少片"用 yield_stats；问"跑的什么配方"用
-        recipe_info；问"这段时间发生了什么/温度变化"用 event_timeline。
       operationId: fab_query
+      summary: 查询厂务数据（机台状态、Lot、报警、事件、产量、配方、功能清单）
+      description: |
+        查询晶圆厂实时与历史数据，必须用 action 指定查哪一类。
+
+        action 选择指引：
+
+          machine_status     机台实时状态、运行模式、当前 Lot、全厂概览
+                             machine_id 可不传（不传=查全厂所有机台）
+                             用户问「XX机台现在怎么样」「全厂什么情况」用这个
+
+          lot_info           Lot 位置与生产进度追踪
+                             lot_id 与 machine_id 至少传一个
+                             用户问「V47Q6 这批货在哪」用这个
+
+          machine_alarms     报警/告警/异常的统计与定位
+                             machine_id 可不传（不传=全厂）；可加 severity、days
+                             用户问「为什么停了」「有什么报警」用这个
+
+          event_timeline     事件时间线、温度趋势、动作序列
+                             machine_id 必传；可加 time_range
+                             用户问「这段时间发生了什么」「温度怎么变的」用这个
+
+          yield_stats        产量、晶圆片数统计
+                             machine_id 必传；可加 time_range
+                             用户问「做了多少片」「产量多少」用这个
+
+          recipe_info        工艺参数、配方 Recipe
+                             machine_id 必传
+                             用户问「跑的什么配方」「工艺参数是多少」用这个
+
+          list_capabilities  功能清单
+                             不需要任何其他参数
+                             用户问「你能帮我干什么」「你会什么」用这个
       parameters:
         - name: secret
           in: query
-          schema: { type: string }
+          required: false
+          description: n8n webhook 校验串，未启用校验时不传
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [action]
+              required:
+                - action
               properties:
                 action:
                   type: string
-                  description: "要执行的查询类型，必填"
+                  description: 必填。要执行的查询类型。
                   enum:
                     - machine_status
                     - lot_info
@@ -80,130 +109,191 @@ paths:
                 machine_id:
                   type: string
                   description: >-
-                    机台ID（如 OXE-1、PODOPENER-1）。
-                    event_timeline / yield_stats / recipe_info 必填；
-                    machine_status / machine_alarms 可空（空=全厂）。
+                    机台ID，例如 OXE-1、OXE-51、PODOPENER-1。
+                    event_timeline / yield_stats / recipe_info 必传；
+                    machine_status / machine_alarms 不传表示查全厂。
                 lot_id:
                   type: string
-                  description: "Lot ID（5~15位字母数字，例如 V47Q6）。仅 lot_info 使用。"
+                  description: Lot 批次号，5~15 位字母数字，例如 V47Q6。仅 lot_info 使用。
                 severity:
                   type: string
-                  description: "报警严重等级过滤，仅 machine_alarms 使用；空=不过滤"
-                  enum: ["critical", "warning", "info", ""]
+                  description: 报警等级过滤，仅 machine_alarms 使用。不传=不过滤。
+                  enum:
+                    - critical
+                    - warning
+                    - info
                 days:
                   type: integer
-                  description: "近 X 天，仅 machine_alarms 使用，默认 7"
+                  description: 查询最近 X 天，仅 machine_alarms 使用。
                   default: 7
                 time_range:
                   type: string
                   description: >-
-                    时间范围。event_timeline 支持 today/yesterday/this_week/last_2h/last_7d/last_30d；
-                    yield_stats 支持 today/yesterday/this_week/this_month。
+                    时间范围，仅 event_timeline 和 yield_stats 使用，不传默认 today。
+                    event_timeline 支持全部 6 个取值；
+                    yield_stats 只支持 today / this_week / last_7d / last_30d，
+                    传 yesterday 或 last_2h 会被当作 today 处理。
                   enum:
                     - today
                     - yesterday
                     - this_week
-                    - this_month
                     - last_2h
                     - last_7d
                     - last_30d
+              example:
+                action: machine_status
+                machine_id: OXE-51
       responses:
-        '200': { $ref: '#/components/responses/Standard' }
+        '200':
+          $ref: '#/components/responses/Standard'
 
+  # ==========================================================================
+  #  工具 2：管理类操作（覆盖原 F7 F8 F9）
+  # ==========================================================================
   /fab_admin:
     post:
-      summary: 管理员操作（MES Lot 查询/导出报警报表/生成故障工单）【管理员权限】
-      description: |
-        需要管理员权限的操作。必须通过 action 指定：
-
-          mes_lot_info        查询 MES 系统的 Lot 详细信息
-                              → lot_id 必填
-          export_alarm_report 导出报警报表 CSV，返回下载链接
-                              → machine_id 可空（空=全厂）；可加 days
-          generate_work_order 生成故障工单（写操作，会真实创建工单）
-                              → machine_id 和 fault_type 必填；可加 severity
-
-        注意 generate_work_order 会真实创建工单，调用前应先向用户确认机台与故障描述。
-        普通的报警查询请用 fab_query 的 machine_alarms，只有用户明确要求
-        "导出/下载报表"时才用 export_alarm_report。
       operationId: fab_admin
+      summary: 管理员操作（MES Lot 查询、导出报警报表、生成故障工单）
+      description: |
+        需要管理员权限的操作，必须用 action 指定。
+
+          mes_lot_info         查询 MES 系统里的 Lot 详细信息
+                               lot_id 必传
+
+          export_alarm_report  导出报警报表 CSV 并返回下载链接
+                               machine_id 可不传（不传=全厂）；可加 days
+                               只有用户明确说「导出」「下载报表」时才用这个，
+                               普通的报警查询请改用 fab_query 的 machine_alarms
+
+          generate_work_order  生成故障工单
+                               machine_id 和 fault_type 必传；可加 severity
+
+        【写操作警告】generate_work_order 会在系统里真实创建一张工单，
+        调用前必须先向用户确认机台号和故障描述，不要自行臆测参数直接调用。
       parameters:
         - name: secret
           in: query
-          schema: { type: string }
+          required: false
+          description: n8n webhook 校验串，未启用校验时不传
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [action]
+              required:
+                - action
               properties:
                 action:
                   type: string
-                  description: "要执行的管理操作，必填"
+                  description: 必填。要执行的管理操作。
                   enum:
                     - mes_lot_info
                     - export_alarm_report
                     - generate_work_order
                 lot_id:
                   type: string
-                  description: "Lot ID。mes_lot_info 必填。"
+                  description: Lot 批次号。mes_lot_info 必传。
                 machine_id:
                   type: string
                   description: >-
-                    机台ID。generate_work_order 必填；
-                    export_alarm_report 可空（空=全厂）。
+                    机台ID。generate_work_order 必传；
+                    export_alarm_report 不传表示全厂。
                 days:
                   type: integer
-                  description: "近 X 天，仅 export_alarm_report 使用，默认 7"
+                  description: 查询最近 X 天，仅 export_alarm_report 使用。
                   default: 7
                 fault_type:
                   type: string
-                  description: "故障描述（例如 Chamber B RF 功率异常）。generate_work_order 必填。"
+                  description: >-
+                    故障描述，例如「Chamber B RF 功率异常」。
+                    generate_work_order 必传，应取自用户原话，不要自行编造。
                 severity:
                   type: string
-                  description: "工单严重等级，仅 generate_work_order 使用"
-                  enum: [low, medium, high]
+                  description: 工单严重等级，仅 generate_work_order 使用。
+                  enum:
+                    - low
+                    - medium
+                    - high
                   default: medium
+              example:
+                action: export_alarm_report
+                machine_id: OXE-51
+                days: 7
       responses:
-        '200': { $ref: '#/components/responses/Standard' }
+        '200':
+          $ref: '#/components/responses/Standard'
 
 components:
   responses:
     Standard:
-      description: 标准响应
+      description: 统一响应结构，业务失败也返回 200，靠 ok 字段区分
       content:
         application/json:
           schema:
             type: object
-            required: [ok, answer, table_data, jump_timestamp, jump_machine_id, sources]
+            required:
+              - ok
+              - answer
             properties:
-              ok: { type: boolean }
-              answer: { type: string, description: "中文自然语言摘要，直接呈现给用户" }
+              ok:
+                type: boolean
+                description: true=成功，false=失败（失败原因见 answer）
+              answer:
+                type: string
+                description: 中文自然语言摘要，可直接呈现给用户
               table_data:
-                oneOf:
-                  - type: 'null'
-                  - type: object
-                    required: [headers, rows]
-                    properties:
-                      headers: { type: array, items: { type: string } }
-                      rows: { type: array, items: { type: array, items: {} } }
-                    additionalProperties: false
-              jump_timestamp: { type: [string, 'null'], description: "YYYY-MM-DD HH:mm:ss，用于 FabTwin 回放跳转" }
-              jump_machine_id: { type: [string, 'null'], description: "跳转的机台 ID" }
+                type: object
+                nullable: true
+                description: 结构化表格，无表格时为 null
+                properties:
+                  headers:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+              jump_timestamp:
+                type: string
+                nullable: true
+                description: YYYY-MM-DD HH:mm:ss，供前端跳转回放
+              jump_machine_id:
+                type: string
+                nullable: true
+                description: 跳转目标机台 ID
               sources:
                 type: array
+                description: 数据来源与附加信息
                 items:
                   type: object
-                  required: [type]
                   properties:
-                    type: { type: string, enum: [n8n, tool, db_proxy] }
-                    workflow: { type: string }
-                    execution_id: { type: string }
-                    download_url: { type: string }
-                    size_kb: { type: integer }
-                    row_count: { type: integer }
-                    wo_id: { type: string }
-                    wo_link: { type: string }
-                    owner: { type: string }
+                    type:
+                      type: string
+                      enum:
+                        - n8n
+                        - tool
+                        - db_proxy
+                    workflow:
+                      type: string
+                    execution_id:
+                      type: string
+                    download_url:
+                      type: string
+                      description: CSV 下载链接，仅 export_alarm_report 返回
+                    size_kb:
+                      type: integer
+                    row_count:
+                      type: integer
+                    wo_id:
+                      type: string
+                      description: 工单号，仅 generate_work_order 返回
+                    wo_link:
+                      type: string
+                    owner:
+                      type: string
