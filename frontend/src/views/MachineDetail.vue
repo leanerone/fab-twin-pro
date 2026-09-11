@@ -12,9 +12,6 @@ import MachineOxeView from '../components/MachineOxeView.vue'
 import MachineVpoView from '../components/MachineVpoView.vue'
 import MachineVpo3DView from '../components/MachineVpo3DView.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
-import AlarmStats from '../components/AlarmStats.vue'
-import EventList from '../components/EventList.vue'
-import LotList from '../components/LotList.vue'
 import AiAssistant from '../components/AiAssistant.vue'
 import HistoryReplay from '../components/HistoryReplay.vue'
 import { parseEventAction } from '../composables/useEventActionMapping'
@@ -59,21 +56,68 @@ const playbackDate = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).
 const cursor = ref(0)                     // 回放游标时间戳
 const playbackStart = ref(0)
 const playbackEnd = ref(0)
-const rightTab = ref('alarms')
+const rightTab = ref('replay')
 const aiAssistantRef = ref(null)
 const aiPrefillQuestion = ref('')  // 从回放 Tab 传递过来的预填问题
 const currentState = ref('idle')
 const processStep = ref('待机')
 const metrics = reactive({ temp: 22, pressure: 1, gas: 0, rf: 0, waferCount: 0 })
 const events = ref([])
-const alarms = ref([])
-const lots = ref([])
-const alarmStats = ref({ total: 0, crit: 0, warn: 0, temperature: 0, pressure: 0, rf_drift: 0, gas_leak: 0, resolved: 0, unresolved: 0 })
-const selectedLotId = ref('')
+const replayEvents = ref([]) // 回放面板展示的区段事件列表（父级一次性加载）
 const transferTrigger = ref(0)
 const loading = ref(false)
 const currentLotId = ref('')  // 当前正在run的Lot ID
 const pendingJumpTs = ref('') // 等待数据加载完成后执行的跳转时间戳
+
+// 时间区段（HH:MM）：默认最近1小时，最大查询跨度12小时
+const HOUR_MS = 3600 * 1000
+const MAX_RANGE_MS = 12 * HOUR_MS
+const initNow = new Date()
+const playbackStartHM = ref(fmtHM(new Date(initNow.getTime() - HOUR_MS)))
+const playbackEndHM = ref(fmtHM(initNow))
+function fmtHM(d) {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+function hmToMs(hm) {
+  const [h, m] = String(hm || '0:0').split(':').map(Number)
+  return ((h || 0) * 3600 + (m || 0) * 60) * 1000
+}
+function msToHM(ms) {
+  const totalMin = Math.max(0, Math.floor(ms / 60000))
+  return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`
+}
+function fmtDateMs(ms) {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function fmtLocalTs(ms) {
+  const d = new Date(ms)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+// 校正区段：结束<=开始自动补1小时；跨度超12小时从结束时间前收；限制在所选日期内
+function normalizeRange(startHM, endHM) {
+  const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
+  const dayEnd = dayStart + 86400000 - 1
+  let s = dayStart + hmToMs(startHM)
+  let e = dayStart + hmToMs(endHM)
+  if (isNaN(s) || s < dayStart) s = dayStart
+  if (isNaN(e) || e > dayEnd) e = dayEnd
+  if (e <= s) e = s + HOUR_MS
+  if (e - s > MAX_RANGE_MS) s = e - MAX_RANGE_MS
+  if (s < dayStart) s = dayStart
+  playbackStartHM.value = msToHM(s - dayStart)
+  playbackEndHM.value = msToHM(e - dayStart)
+}
+// 将区段调整为覆盖目标时间（前后各1小时，受日期边界约束）
+function setRangeAround(targetMs) {
+  const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
+  const dayEnd = dayStart + 86400000 - 1
+  const s = Math.max(dayStart, targetMs - HOUR_MS)
+  const e = Math.min(dayEnd, targetMs + HOUR_MS)
+  playbackStartHM.value = msToHM(s - dayStart)
+  playbackEndHM.value = msToHM(e - dayStart)
+}
 
 // === 视图模式（根据机台型号自动选择） ===
 const viewMode = ref('loading')           // loading / 3d / 2d / iso / vpo / vpo3d
@@ -549,88 +593,6 @@ async function loadMachine() {
       modelConfigReady.value = !!cfg
     }
   }
-  // 并行加载右侧面板数据
-  loadAlarms()
-  loadLots()
-  loadLatestEvents()
-}
-
-// 加载告警（按选中日期过滤）
-async function loadAlarms() {
-  // 回放模式：从已加载的 historyData 中提取 alarms，避免重复查询
-  if (mode.value === 'playback' && historyData.length) {
-    const alarmList = historyData
-      .filter(e => e.event_category === 'alarm' && e.alarm)
-      .map(e => ({
-        id: e.raw_id,
-        description: e.alarm.alarm_text || e.description,
-        level: e.alarm.severity || 'warn',
-        timestamp: e.timestamp,
-        alarm_code: e.alarm.alarm_id,
-      }))
-    alarms.value = alarmList
-    alarmStats.value = {
-      total: alarmList.length,
-      crit: alarmList.filter(a => a.level === 'crit').length,
-      warn: alarmList.filter(a => a.level === 'warn').length,
-      info: alarmList.filter(a => a.level === 'info').length,
-      resolved: 0,
-      unresolved: alarmList.length,
-    }
-    return
-  }
-  // 实时模式：调用API获取
-  const start = `${playbackDate.value}T00:00:00`
-  const end = `${playbackDate.value}T23:59:59.999`
-  const data = await api.getAlarmHistory(machineId.value, {
-    start_time: start,
-    end_time: end,
-    limit: 100,
-  })
-  const alarmList = data?.alarms || []
-  alarms.value = alarmList.map(a => ({
-    id: a.raw_id,
-    description: a.alarm_text,
-    level: a.severity || 'warn',
-    timestamp: a.timestamp,
-    alarm_code: a.alarm_id,
-  }))
-  // 统计
-  alarmStats.value = {
-    total: alarmList.length,
-    crit: alarmList.filter(a => a.severity === 'crit').length,
-    warn: alarmList.filter(a => a.severity === 'warn').length,
-    info: alarmList.filter(a => a.severity === 'info').length,
-    resolved: 0,
-    unresolved: alarmList.length,
-  }
-}
-
-// 加载 Lot
-async function loadLots() {
-  lots.value = (await api.getLots(machineId.value, playbackDate.value)) || []
-}
-
-// 加载最新事件（从DT_EVENT_RAW表获取）
-async function loadLatestEvents() {
-  const resp = await api.getHistory(machineId.value, { limit: 60 })
-  const data = (resp?.events || []).map(e => ({
-    ...e,
-    machine_id: e.tool_id || machineId.value,
-    event_code: e.event_name,
-    description: e.description || e.event_name,
-  }))
-  if (data.length) {
-    if (mode.value === 'playback') {
-      events.value = data
-    }
-    applyEventData(data[data.length - 1])
-    // 记录初始最新时间戳，用于实时模式下判断新事件
-    const latestTs = data[data.length - 1]?.timestamp || data[data.length - 1]?.event_ts_utc || ''
-    if (latestTs && latestTs > lastProcessedRealtimeTs) {
-      lastProcessedRealtimeTs = latestTs
-    }
-  }
 }
 
 // === 实时模式：从 store 接收事件 ===
@@ -686,19 +648,6 @@ function applyEventData(ev) {
     if (ev.metric === 'pressure') metrics.pressure = ev.value
     if (ev.metric === 'gasflow') metrics.gas = ev.value
     if (ev.metric === 'rf') metrics.rf = ev.value
-  } else if (evtType === 'ALARM' || evtName === 'EC_ALARM_REPORT') {
-    // 加入告警列表
-    const alarmId = ev.alarm_id || ev.event_code || ev.id
-    if (!alarms.value.find(a => a.id === alarmId)) {
-      alarms.value.unshift({
-        id: alarmId,
-        description: ev.alarm_text || ev.description || ev.event_name,
-        level: ev.alarm_severity || ev.level || 'warn',
-        timestamp: ev.timestamp,
-        alarm_code: ev.alarm_id || ev.event_code,
-      })
-      if (alarms.value.length > 30) alarms.value.pop()
-    }
   } else if (evtType === 'TRANSFER') {
     // 触发 3D 门/机械臂动画
     transferTrigger.value++
@@ -712,47 +661,59 @@ function applyEventData(ev) {
   }
 }
 
-// === 回放模式 ===
-async function switchToPlayback() {
-  mode.value = 'playback'
-  stopPlayback()
-  playing.value = false
-  events.value = []
-  alarms.value = []
-  // 根据当前选择的日期加载该日历史事件
-  const start = `${playbackDate.value}T00:00:00`
-  const end = `${playbackDate.value}T23:59:59.999`
+// 拉取当前日期+时间区段的事件（升序）
+async function fetchRangeEvents() {
+  const start = `${playbackDate.value}T${playbackStartHM.value}:00`
+  const end = `${playbackDate.value}T${playbackEndHM.value}:59.999`
   const resp = await api.getHistory(machineId.value, { start_time: start, end_time: end, limit: 5000 })
-  historyData = (resp?.events || []).map(e => ({
+  const list = (resp?.events || []).map(e => ({
     ...e,
     machine_id: e.tool_id || machineId.value,
     event_code: e.event_name,
     description: e.description || e.event_name,
     _ts: parseTs(e.timestamp),
   }))
-  if (!historyData.length) {
-    console.warn('无历史数据')
-    // 即使无事件数据，也要刷新告警和Lot（否则显示的是旧日期数据）
-    loadAlarms()
-    loadLots()
-    return
-  }
-  playbackStart.value = historyData[0]._ts
-  playbackEnd.value = historyData[historyData.length - 1]._ts
-  cursor.value = playbackStart.value
-  playbackIdx = 0
+  list.sort((a, b) => a._ts - b._ts)
+  return list
+}
+
+// === 回放模式 ===
+async function switchToPlayback() {
+  mode.value = 'playback'
+  stopPlayback()
   playing.value = false
-  // 并行加载告警与 Lot（不阻塞跳转）
-  loadAlarms()
-  loadLots()
-  // 修复：加载历史数据后先初始化到起始位置，批量重建初始视觉状态
-  // 避免用户刚切回放时看到空白画面以为没动，同时保证displayEvents正确传入MachineOxeView
-  seek(0)
-  // 如果有等待中的跳转，执行它（覆盖上面seek(0)的位置）
-  if (pendingJumpTs.value) {
-    const ts = pendingJumpTs.value
-    pendingJumpTs.value = ''
-    doJump(ts)
+  events.value = []
+  loading.value = true
+  try {
+    // 按所选日期+时间区段加载该区间历史事件
+    const list = await fetchRangeEvents()
+    historyData = list
+    if (!list.length) {
+      console.warn('所选时间段内无历史数据')
+      playbackStart.value = 0
+      playbackEnd.value = 0
+      cursor.value = 0
+      playbackIdx = 0
+      replayEvents.value = []
+      pendingJumpTs.value = ''
+      return
+    }
+    playbackStart.value = list[0]._ts
+    playbackEnd.value = list[list.length - 1]._ts
+    cursor.value = playbackStart.value
+    playbackIdx = 0
+    // 区段事件列表交给回放面板（LOT 统计/事件列表/回放驱动）
+    replayEvents.value = list
+    // 加载历史数据后先初始化到起始位置，批量重建初始视觉状态
+    seek(0)
+    // 如果有等待中的跳转，执行它（覆盖上面seek(0)的位置）
+    if (pendingJumpTs.value) {
+      const ts = pendingJumpTs.value
+      pendingJumpTs.value = ''
+      doJump(ts)
+    }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -761,7 +722,6 @@ function switchToRealtime() {
   stopPlayback()
   playing.value = false
   events.value = []
-  alarms.value = []
   // 重置回放状态
   cursor.value = 0
   playbackStart.value = 0
@@ -771,8 +731,11 @@ function switchToRealtime() {
   // 重置实时事件初始化标记
   realtimeEventsInitialized = false
   lastProcessedRealtimeTs = ''
-  loadLatestEvents()
-  loadAlarms()
+  // 实时模式下回放面板仍展示当前区段事件（不驱动模型）
+  loading.value = true
+  fetchRangeEvents()
+    .then(list => { replayEvents.value = list })
+    .finally(() => { loading.value = false })
 }
 
 // 模式切换
@@ -844,7 +807,6 @@ function seek(pct) {
     playbackIdx = idx >= 0 ? idx : historyData.length
 
     events.value = []
-    alarms.value = []
 
     const batchSize = 50
     let i = 0
@@ -874,30 +836,23 @@ function bisectLeft(arr, target, getKey) {
   return low
 }
 
-// 日期变化
+// 日期变化：切换日期后按当前时间区段重新加载
 async function onDateChange(newDate) {
   if (!newDate) return
   playbackDate.value = newDate
-  loading.value = true
-  try {
-    // 选日期时自动切换到回放模式
-    if (mode.value !== 'playback') {
-      mode.value = 'playback'
-      await switchToPlayback()
-    } else {
-      // 已在回放模式：重新加载历史事件
-      await switchToPlayback()
-    }
-  } finally {
-    loading.value = false
-  }
+  await switchToPlayback()
 }
 
-// 告警点击跳转
-function onAlarmClick(alarm) {
-  if (alarm && alarm.timestamp) {
-    jumpToTime(alarm.timestamp)
-  }
+// 时间区段变化（开始/结束），最大跨度12小时
+function onStartTimeChange(v) {
+  if (!v) return
+  normalizeRange(v, playbackEndHM.value)
+  switchToPlayback()
+}
+function onEndTimeChange(v) {
+  if (!v) return
+  normalizeRange(playbackStartHM.value, v)
+  switchToPlayback()
 }
 
 // 倍速变化
@@ -905,52 +860,25 @@ function onSpeedChange(s) {
   speed.value = s
 }
 
-// 选择 Lot
-async function selectLot(lot) {
-  selectedLotId.value = lot.id
-  const targetTs = lot.start_time || lot.timestamp
-  if (!targetTs) return
-
-  // 检查目标时间是否在当前回放日期范围内
-  const targetDate = targetTs.slice(0, 10)
-  if (mode.value !== 'playback') {
-    // 需要先切换到回放模式
-    if (targetDate !== playbackDate.value) {
-      playbackDate.value = targetDate
-    }
-    pendingJumpTs.value = targetTs
-    await switchToPlayback()
-  } else if (targetDate !== playbackDate.value) {
-    // 已在回放模式但日期不同，切换日期后跳转
-    playbackDate.value = targetDate
-    pendingJumpTs.value = targetTs
-    await switchToPlayback()
-  } else {
-    // 同日期，直接跳转
-    jumpToTime(targetTs)
-  }
-}
-
-// 跳转到指定时间
+// 跳转到指定时间：在当前区段内直接跳，否则调整区段后重新加载
 async function jumpToTime(ts) {
   if (!ts) return
-  // 检查目标时间是否在当前回放日期范围内
-  const targetDate = String(ts).slice(0, 10)
-  if (mode.value !== 'playback') {
-    // 需要先切换到回放模式
-    if (targetDate && targetDate !== playbackDate.value) {
-      playbackDate.value = targetDate
-    }
-    pendingJumpTs.value = ts
-    await switchToPlayback()
-  } else if (targetDate && targetDate !== playbackDate.value) {
-    // 已在回放模式但日期不同，切换日期后跳转
-    playbackDate.value = targetDate
-    pendingJumpTs.value = ts
-    await switchToPlayback()
-  } else {
+  const target = parseTs(ts)
+  if (!target) return
+  const targetDate = fmtDateMs(target)
+  const inRange = mode.value === 'playback' && targetDate === playbackDate.value &&
+    playbackStart.value > 0 && playbackEnd.value > 0 &&
+    target >= playbackStart.value && target <= playbackEnd.value
+  if (inRange) {
     doJump(ts)
+    return
   }
+  if (targetDate !== playbackDate.value) {
+    playbackDate.value = targetDate
+  }
+  setRangeAround(target)
+  pendingJumpTs.value = String(ts)
+  await switchToPlayback()
 }
 
 function doJump(ts) {
@@ -1000,8 +928,8 @@ function goBack() {
 
 // 监听机台 ID 变化
 watch(() => props.id, () => {
-  if (mode.value === 'playback') switchToRealtime()
-  loadMachine()
+  pendingJumpTs.value = ''
+  loadMachine().then(() => switchToPlayback())
 })
 
 // 监听 URL query 参数变化（date、mode）—— SPA 中切换 URL 不会重新挂载组件
@@ -1044,19 +972,18 @@ async function applyAIJump() {
 }
 
 onMounted(() => {
-  loadMachine()
   updateRunAnimation()
   // 处理 URL 参数：date、mode
   const queryDate = route.query.date ? String(route.query.date) : ''
   const queryMode = route.query.mode ? String(route.query.mode) : ''
-  // 在 loadMachine 完成后处理跳转和 URL 参数（loadMachine 内部异步加载数据）
+  if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+    playbackDate.value = queryDate
+  }
+  // 只加载一次机台数据，随后按默认模式（回放=最近1小时区间）加载数据
   loadMachine().then(async () => {
-    // 优先应用 URL 参数：date 和 mode
-    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
-      playbackDate.value = queryDate
-    }
-    if (queryMode === 'playback' || queryDate) {
-      // 有日期参数或明确指定 playback 模式时，自动切换到回放
+    if (queryMode === 'realtime') {
+      switchToRealtime()
+    } else {
       await switchToPlayback()
     }
     // 处理 AI 跳转（ts 参数）
@@ -1234,23 +1161,28 @@ onMounted(() => {
         <button class="dr-date-refresh" @click="onDateChange(playbackDate)" title="刷新数据">↻</button>
       </div>
 
+      <!-- 时间区段（最大跨度12小时） -->
+      <div class="dr-time-bar">
+        <span class="dr-date-label">时间区段</span>
+        <input
+          type="time"
+          class="dr-time-input"
+          :value="playbackStartHM"
+          @change="onStartTimeChange($event.target.value)"
+        />
+        <span class="dr-time-sep">~</span>
+        <input
+          type="time"
+          class="dr-time-input"
+          :value="playbackEndHM"
+          @change="onEndTimeChange($event.target.value)"
+        />
+        <span class="dr-time-hint">≤12h</span>
+      </div>
+
       <div class="dr-tabs">
-        <button class="dr-tab" :class="{ active: rightTab === 'alarms' }" @click="rightTab = 'alarms'">告警</button>
-        <button class="dr-tab" :class="{ active: rightTab === 'events' }" @click="rightTab = 'events'">事件</button>
         <button class="dr-tab" :class="{ active: rightTab === 'replay' }" @click="rightTab = 'replay'">回放</button>
-        <button class="dr-tab" :class="{ active: rightTab === 'lots' }" @click="rightTab = 'lots'">Lot</button>
         <button class="dr-tab" :class="{ active: rightTab === 'ai' }" @click="rightTab = 'ai'">AI</button>
-
-      </div>
-
-      <!-- 告警 Tab -->
-      <div v-show="rightTab === 'alarms'" class="dr-section">
-        <AlarmStats :stats="alarmStats" :alarms="alarms" @click-alarm="onAlarmClick" />
-      </div>
-
-      <!-- 事件 Tab -->
-      <div v-show="rightTab === 'events'" class="dr-section">
-        <EventList :events="displayEvents" />
       </div>
 
       <!-- 回放 Tab -->
@@ -1258,18 +1190,13 @@ onMounted(() => {
         <HistoryReplay
           :machine-id="machineId"
           :machine-state="machine?.state"
-          :external-date="playbackDate"
-          :jump-timestamp="cursor ? new Date(cursor).toISOString().slice(0, 19) : ''"
+          :events="replayEvents"
+          :loading="loading"
+          :jump-timestamp="cursor ? fmtLocalTs(cursor) : ''"
           @jump="jumpToTime"
           @replay-event="onReplayEvent"
-          @date-change="onDateChange"
           @ai-analyze="onAiAnalyze"
         />
-      </div>
-
-      <!-- Lot Tab -->
-      <div v-show="rightTab === 'lots'" class="dr-section">
-        <LotList :lots="lots" :selected-lot-id="selectedLotId" @select="selectLot" />
       </div>
 
       <!-- AI Tab -->
@@ -1592,6 +1519,40 @@ onMounted(() => {
 .dr-date-refresh:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+.dr-time-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+}
+.dr-time-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: monospace;
+  color-scheme: dark;
+}
+.dr-time-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.dr-time-sep {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.dr-time-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  opacity: 0.8;
 }
 .dr-tab {
   flex: 1;

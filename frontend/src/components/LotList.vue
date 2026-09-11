@@ -80,9 +80,10 @@ function selectLot(lot) {
     </div>
     <div class="section-title lot-list-title">Lot 列表</div>
     <div class="lot-list">
-      <div
+      <button
         v-for="lot in lots"
         :key="lot.id"
+        type="button"
         class="lot-row"
         :class="{ selected: selectedLotId === lot.id }"
         @click="selectLot(lot)"
@@ -95,7 +96,7 @@ function selectLot(lot) {
           <span>{{ lot.product }} · {{ lot.wafer_count }}片</span>
           <span>{{ formatTime(lot.start_time) }}</span>
         </div>
-      </div>
+      </button>
       <div v-if="!lots.length" class="empty-state">暂无 Lot 数据</div>
     </div>
   </div>
@@ -142,7 +143,14 @@ function selectLot(lot) {
   min-height: 0;
 }
 .lot-row {
+  display: block;
+  width: 100%;
   padding: 8px 14px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  border: none;
   border-bottom: 1px solid rgba(26, 40, 68, 0.5);
   font-size: 11.5px;
   cursor: pointer;

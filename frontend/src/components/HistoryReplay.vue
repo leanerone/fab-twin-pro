@@ -1,15 +1,16 @@
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import api from '@/api'
+import { ref, computed, watch, nextTick } from 'vue'
+import LotList from './LotList.vue'
 
 const props = defineProps({
   machineId: { type: String, required: true },
   machineState: { type: String, default: 'idle' },
-  externalDate: { type: String, default: '' },
+  events: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false },
   jumpTimestamp: { type: String, default: '' },
 })
 
-const emit = defineEmits(['jump', 'replay-event', 'date-change', 'ai-analyze'])
+const emit = defineEmits(['jump', 'replay-event', 'ai-analyze'])
 
 // 时间戳解析：统一处理东八区时间，去掉Z后缀按本地时间解析
 function parseTs(ts) {
@@ -19,115 +20,46 @@ function parseTs(ts) {
   return isNaN(d.getTime()) ? 0 : d.getTime()
 }
 
-const selectedDate = ref(props.externalDate || getToday())
-
-// 外部日期变化时同步
-watch(() => props.externalDate, (newDate) => {
-  if (newDate && newDate !== selectedDate.value) {
-    selectedDate.value = newDate
-  }
-})
-
-// 内部日期变化时通知外部
-watch(selectedDate, (newDate) => {
-  emit('date-change', newDate)
-})
-const timeline = ref([])
-const events = ref([])
-const loading = ref(false)
-const loadingMore = ref(false)
-const hasMore = ref(false)
-const nextRawId = ref(null)
-const totalCount = ref(0)
 const selectedEventId = ref(null)
-const filterCategory = ref('') // '' = all, 'alarm', 'pod', 'process'
+const showLots = ref(false)
+const selectedLotId = ref('')
 
-function getToday() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-async function loadTimeline() {
-  if (!props.machineId) return
-  try {
-    const data = await api.getHistoryTimeline(props.machineId, selectedDate.value)
-    timeline.value = data.timeline || []
-  } catch (e) {
-    console.error('[HistoryReplay] 加载时间轴失败:', e)
-    timeline.value = []
-  }
-}
-
-async function loadEvents() {
-  if (!props.machineId) return
-  loading.value = true
-  try {
-    const start = `${selectedDate.value}T00:00:00`
-    const end = `${selectedDate.value}T23:59:59.999`
-    // 使用较大limit以覆盖当天所有事件；后端已支持 start_time 锚点自动定位
-    const params = { start_time: start, end_time: end, limit: 2000 }
-    if (filterCategory.value) {
-      params.event_category = filterCategory.value
-    }
-    const data = await api.getHistory(props.machineId, params)
-    events.value = data.events || []
-    hasMore.value = !!(data.next_raw_id && events.value.length >= 2000)
-    nextRawId.value = data.next_raw_id
-    totalCount.value = data.total || events.value.length
-  } catch (e) {
-    console.error('[HistoryReplay] 加载事件失败:', e)
-    events.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadMore() {
-  if (!props.machineId || !hasMore.value || !nextRawId.value || loading.value) return
-  loadingMore.value = true
-  try {
-    const start = `${selectedDate.value}T00:00:00`
-    const end = `${selectedDate.value}T23:59:59.999`
-    const params = {
-      start_time: start,
-      end_time: end,
-      limit: 2000,
-      before_raw_id: nextRawId.value,
-    }
-    if (filterCategory.value) {
-      params.event_category = filterCategory.value
-    }
-    const data = await api.getHistory(props.machineId, params)
-    const more = data.events || []
-    // 追加，去重
-    const seen = new Set(events.value.map(e => e.raw_id))
-    for (const e of more) {
-      if (!seen.has(e.raw_id)) {
-        events.value.push(e)
+// 从所选区段事件推导 LOT 列表（语义与后端 /lots 一致）：
+// 最新事件决定 status/product/QTY（默认25），start_time 取该 Lot 最早事件，过滤 NULL
+const lots = computed(() => {
+  const map = new Map()
+  for (const ev of props.events) {
+    const lotId = ev.lot_id
+    if (!lotId || String(lotId).toUpperCase() === 'NULL') continue
+    const payload = ev.payload || {}
+    let entry = map.get(lotId)
+    if (!entry) {
+      entry = {
+        id: lotId,
+        lot_id: lotId,
+        start_time: ev.timestamp,
+        end_time: ev.timestamp,
+        status: 'pending',
+        wafer_count: 25,
+        product: '',
       }
+      map.set(lotId, entry)
     }
-    events.value.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1))
-    hasMore.value = !!(data.next_raw_id && more.length >= 2000)
-    nextRawId.value = data.next_raw_id
-  } catch (e) {
-    console.error('[HistoryReplay] 加载更多事件失败:', e)
-  } finally {
-    loadingMore.value = false
+    entry.end_time = ev.timestamp
+    entry.status = payload.run_mode != null && payload.run_mode !== '' ? 'run' : 'done'
+    if (payload.QTY != null && payload.QTY !== '') entry.wafer_count = payload.QTY
+    if (payload.product || payload.PRODUCT) entry.product = payload.product || payload.PRODUCT
   }
-}
+  const list = Array.from(map.values())
+  list.sort((a, b) => parseTs(b.start_time) - parseTs(a.start_time))
+  return list
+})
 
-function refresh() {
-  loadTimeline()
-  loadEvents()
-}
-
-// 滚动到底部自动加载更多
-function onListScroll(e) {
-  if (!hasMore.value || loadingMore.value) return
-  const el = e.target
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
-    loadMore()
-  }
+// 选择 Lot：跳转到该 Lot 的开始时间
+function onLotSelect(lot) {
+  selectedLotId.value = lot.id
+  const targetTs = lot.start_time || lot.timestamp
+  if (targetTs) emit('jump', targetTs)
 }
 
 function selectEvent(ev) {
@@ -135,31 +67,14 @@ function selectEvent(ev) {
   emit('replay-event', ev)
 }
 
-function jumpToHour(hour) {
-  const ts = `${selectedDate.value}T${String(hour).padStart(2, '0')}:00:00.000`
-  emit('jump', ts)
-  // 同步滚动事件列表到对应小时
-  const hourStr = String(hour).padStart(2, '0')
-  const list = document.querySelector('.hr-list')
-  if (!list) return
-  const items = list.querySelectorAll('.hr-item')
-  for (const item of items) {
-    const timeEl = item.querySelector('.hr-item-time')
-    // timeEl.textContent 格式为 "15:00"，匹配小时部分
-    if (timeEl && timeEl.textContent.startsWith(hourStr + ':')) {
-      item.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      break
-    }
-  }
-}
-
 // AI 分析当前回放：携带机台ID和当前回放时间戳，父组件切换到 AI Tab 并预填问题
 function emitAiAnalyze() {
-  const ts = props.jumpTimestamp || `${selectedDate.value}T00:00:00`
+  const last = props.events.length ? props.events[props.events.length - 1].timestamp : ''
+  const ts = props.jumpTimestamp || last
   emit('ai-analyze', {
     machine_id: props.machineId,
     timestamp: ts,
-    date: selectedDate.value,
+    date: ts ? String(ts).slice(0, 10) : '',
   })
 }
 
@@ -196,48 +111,27 @@ function formatTime(ts) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function formatDate(ts) {
-  if (!ts) return ''
-  const d = new Date(ts)
-  if (isNaN(d)) return ts.slice(0, 10)
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-const filteredEvents = computed(() => {
-  if (!filterCategory.value) return events.value
-  return events.value.filter(e => e.event_category === filterCategory.value)
-})
-
-const eventCounts = computed(() => {
-  const c = { alarm: 0, pod: 0, process: 0, other: 0 }
-  events.value.forEach(e => { c[e.event_category] = (c[e.event_category] || 0) + 1 })
-  return c
-})
-
-watch(() => props.machineId, refresh, { immediate: true })
-watch(selectedDate, refresh)
-watch(filterCategory, loadEvents)
-
 // 当 jumpTimestamp 变化时，滚动事件列表到最接近的事件
 watch(() => props.jumpTimestamp, (ts) => {
-  if (!ts || !events.value.length) return
+  if (!ts || !props.events.length) return
   const targetMs = parseTs(ts)
   if (!targetMs) return
   // 找到时间最接近的事件
   let bestIdx = 0
   let bestDiff = Infinity
-  for (let i = 0; i < events.value.length; i++) {
-    const diff = Math.abs(parseTs(events.value[i].timestamp) - targetMs)
+  for (let i = 0; i < props.events.length; i++) {
+    const diff = Math.abs(parseTs(props.events[i].timestamp) - targetMs)
     if (diff < bestDiff) {
       bestDiff = diff
       bestIdx = i
     }
   }
-  const ev = events.value[bestIdx]
+  const ev = props.events[bestIdx]
   if (ev) {
     selectedEventId.value = ev.raw_id
     // 滚动到对应元素
     nextTick(() => {
+      if (showLots.value) return
       const list = document.querySelector('.hr-list')
       if (!list) return
       const items = list.querySelectorAll('.hr-item')
@@ -251,57 +145,28 @@ watch(() => props.jumpTimestamp, (ts) => {
 
 <template>
   <div class="history-replay">
-    <!-- 事件统计 -->
+    <!-- 统计栏：LOT 概览，点击展开/收起 Lot 列表（内容与原 Lot 页签一致） -->
     <div class="hr-stats">
-      <div class="hr-stat" :class="{ active: filterCategory === '' }" @click="filterCategory = ''">
-        <span class="hr-stat-num">{{ events.length }}</span>
-        <span class="hr-stat-label">全部</span>
-      </div>
-      <div class="hr-stat alarm" :class="{ active: filterCategory === 'alarm' }" @click="filterCategory = 'alarm'">
-        <span class="hr-stat-num">{{ eventCounts.alarm }}</span>
-        <span class="hr-stat-label">告警</span>
-      </div>
-      <div class="hr-stat pod" :class="{ active: filterCategory === 'pod' }" @click="filterCategory = 'pod'">
-        <span class="hr-stat-num">{{ eventCounts.pod }}</span>
-        <span class="hr-stat-label">Pod</span>
-      </div>
-      <div class="hr-stat process" :class="{ active: filterCategory === 'process' }" @click="filterCategory = 'process'">
-        <span class="hr-stat-num">{{ eventCounts.process }}</span>
-        <span class="hr-stat-label">工艺</span>
-      </div>
+      <button type="button" class="hr-stat lot" :class="{ active: showLots }" @click="showLots = !showLots">
+        <span class="hr-stat-num">{{ lots.length }}</span>
+        <span class="hr-stat-label">LOT</span>
+      </button>
     </div>
 
-    <!-- 24小时时间轴 -->
-    <div class="hr-timeline">
-      <div class="hr-tl-label">24h</div>
-      <div class="hr-tl-bars">
-        <div
-          v-for="h in timeline"
-          :key="h.hour"
-          class="hr-tl-bar"
-          :class="{ has: h.has_events }"
-          @click="jumpToHour(h.hour)"
-          :title="`${h.hour}:00 事件:${h.total_count}`"
-        >
-          <div v-if="h.alarm_count > 0" class="hr-tl-seg alarm" :style="{ height: Math.min(100, h.alarm_count * 20) + '%' }"></div>
-          <div v-if="h.pod_count > 0" class="hr-tl-seg pod" :style="{ height: Math.min(100, h.pod_count * 20) + '%' }"></div>
-          <div v-if="h.process_count > 0" class="hr-tl-seg process" :style="{ height: Math.min(100, h.process_count * 20) + '%' }"></div>
-        </div>
-      </div>
-      <div class="hr-tl-hours">
-        <span v-for="h in 24" :key="h-1">{{ (h-1) % 6 === 0 ? (h-1) : '' }}</span>
-      </div>
+    <!-- Lot 列表（展开时显示） -->
+    <div v-if="showLots" class="hr-lot-wrap">
+      <LotList :lots="lots" :selected-lot-id="selectedLotId" @select="onLotSelect" />
     </div>
 
     <!-- 事件列表 -->
-    <div class="hr-list" @scroll.passive="onListScroll">
+    <div v-show="!showLots" class="hr-list">
       <div v-if="loading" class="hr-loading">加载中...</div>
-      <div v-else-if="filteredEvents.length === 0" class="hr-empty">
-        {{ selectedDate }} 该日期无事件记录
-        <div class="hr-empty-hint">请尝试选择其他日期（数据可能集中在特定日期）</div>
+      <div v-else-if="events.length === 0" class="hr-empty">
+        所选时间段内无事件记录
+        <div class="hr-empty-hint">请调整顶部日期与时间区段后刷新</div>
       </div>
       <div
-        v-for="ev in filteredEvents"
+        v-for="ev in events"
         :key="ev.raw_id"
         class="hr-item"
         :class="{ selected: selectedEventId === ev.raw_id, [ev.event_category]: true }"
@@ -328,14 +193,9 @@ watch(() => props.jumpTimestamp, (ts) => {
         </div>
         <div class="hr-item-arrow">▶</div>
       </div>
-      <div v-if="hasMore" class="hr-load-more">
-        <button @click="loadMore" :disabled="loadingMore">
-          {{ loadingMore ? '加载中...' : `加载更多 (已显示 ${events.length})` }}
-        </button>
-      </div>
     </div>
     <!-- AI 快捷分析栏：点击后切换到 AI Tab 并预填问题 -->
-    <div v-if="filteredEvents.length > 0" class="hr-ai-bar">
+    <div v-if="!showLots && events.length > 0" class="hr-ai-bar">
       <button class="hr-ai-btn" @click="emitAiAnalyze">
         🤖 AI分析当前回放
       </button>
@@ -349,37 +209,6 @@ watch(() => props.jumpTimestamp, (ts) => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-/* 头部 */
-.hr-header {
-  display: flex;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #1e2d44;
-  align-items: center;
-}
-.hr-date {
-  flex: 1;
-  background: #0a1120;
-  border: 1px solid #1e2d44;
-  border-radius: 4px;
-  color: #e5e7eb;
-  padding: 5px 8px;
-  font-size: 13px;
-}
-.hr-refresh {
-  background: #1e2d44;
-  border: 1px solid #2a4060;
-  border-radius: 4px;
-  color: #94a3b8;
-  padding: 5px 10px;
-  font-size: 14px;
-  cursor: pointer;
-}
-.hr-refresh:hover {
-  background: #2a4060;
-  color: #e5e7eb;
 }
 
 /* 统计 */
@@ -397,6 +226,9 @@ watch(() => props.jumpTimestamp, (ts) => {
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.15s;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
 }
 .hr-stat:hover {
   background: #0a1628;
@@ -405,9 +237,7 @@ watch(() => props.jumpTimestamp, (ts) => {
   background: #0a2030;
   border-color: #2a4060;
 }
-.hr-stat.alarm.active { border-color: #ef4444; }
-.hr-stat.pod.active { border-color: #f59e0b; }
-.hr-stat.process.active { border-color: #3b82f6; }
+.hr-stat.lot.active { border-color: #06b6d4; }
 .hr-stat-num {
   display: block;
   font-size: 15px;
@@ -418,61 +248,14 @@ watch(() => props.jumpTimestamp, (ts) => {
   font-size: 10px;
   color: #64748b;
 }
-.hr-stat.alarm .hr-stat-num { color: #ef4444; }
-.hr-stat.pod .hr-stat-num { color: #f59e0b; }
-.hr-stat.process .hr-stat-num { color: #3b82f6; }
+.hr-stat.lot .hr-stat-num { color: #06b6d4; }
 
-/* 时间轴 */
-.hr-timeline {
-  padding: 8px 12px;
-  border-bottom: 1px solid #1e2d44;
-}
-.hr-tl-label {
-  font-size: 10px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.hr-tl-bars {
-  display: flex;
-  gap: 1px;
-  height: 40px;
-  align-items: flex-end;
-}
-.hr-tl-bar {
+/* Lot 列表容器（展开时占满剩余空间） */
+.hr-lot-wrap {
   flex: 1;
-  min-width: 0;
-  height: 100%;
-  background: #0a1120;
-  border-radius: 2px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  overflow: hidden;
-  transition: background 0.15s;
-}
-.hr-tl-bar:hover {
-  background: #1e2d44;
-}
-.hr-tl-bar.has {
-  background: #0f1a2e;
-}
-.hr-tl-seg {
-  width: 100%;
-  min-height: 2px;
-}
-.hr-tl-seg.alarm { background: #ef4444; }
-.hr-tl-seg.pod { background: #f59e0b; }
-.hr-tl-seg.process { background: #3b82f6; }
-.hr-tl-hours {
-  display: flex;
-  margin-top: 4px;
-  font-size: 9px;
-  color: #475569;
-}
-.hr-tl-hours span {
-  flex: 1;
-  text-align: center;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
 }
 
 /* 事件列表 */
@@ -508,7 +291,6 @@ watch(() => props.jumpTimestamp, (ts) => {
   background: #0a2030;
   border-left-color: #3b82f6;
 }
-.hr-item.alarm { border-left-color: transparent; }
 .hr-item.alarm.selected { border-left-color: #ef4444; }
 .hr-item.pod.selected { border-left-color: #f59e0b; }
 .hr-item.process.selected { border-left-color: #3b82f6; }
@@ -567,29 +349,6 @@ watch(() => props.jumpTimestamp, (ts) => {
   opacity: 1;
 }
 
-.hr-load-more {
-  padding: 8px 12px;
-  text-align: center;
-}
-.hr-load-more button {
-  background: #1e2d44;
-  border: 1px solid #2a4060;
-  border-radius: 4px;
-  color: #94a3b8;
-  padding: 6px 16px;
-  font-size: 12px;
-  cursor: pointer;
-  width: 100%;
-  transition: all 0.15s;
-}
-.hr-load-more button:hover:not(:disabled) {
-  background: #2a4060;
-  color: #e5e7eb;
-}
-.hr-load-more button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 /* AI 快捷分析栏 */
 .hr-ai-bar {
   padding: 8px 12px;
