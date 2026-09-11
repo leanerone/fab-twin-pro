@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import LotList from './LotList.vue'
+import AlarmList from './AlarmList.vue'
 
 const props = defineProps({
   machineId: { type: String, required: true },
@@ -21,8 +22,10 @@ function parseTs(ts) {
 }
 
 const selectedEventId = ref(null)
-const showLots = ref(false)
+// 视图：'events' 事件列表 / 'lots' Lot 列表 / 'alarms' 告警列表
+const activeView = ref('events')
 const selectedLotId = ref('')
+const selectedAlarmId = ref('')
 
 // 事件列表一次渲染多少条：量产数据量下一个区段可能上千条事件，
 // 全量渲染会生成上万个 DOM 节点，首屏直接卡住
@@ -43,8 +46,9 @@ watch(() => props.events, () => {
   visibleCount.value = PAGE_SIZE
 })
 
-// 从所选区段事件推导 LOT 列表（语义与后端 /lots 一致）：
-// 最新事件决定 status/product/QTY（默认25），start_time 取该 Lot 最早事件，过滤 NULL
+// 从所选区段事件推导 LOT 列表：
+// start_time 取该 Lot 最早事件，product/QTY 取最新非空值，过滤 NULL
+// 注：不再推导 status —— run_mode 无法可靠反映 Lot 是否在跑，展示出来是虚假状态
 const lots = computed(() => {
   const map = new Map()
   for (const ev of props.events) {
@@ -58,14 +62,12 @@ const lots = computed(() => {
         lot_id: lotId,
         start_time: ev.timestamp,
         end_time: ev.timestamp,
-        status: 'pending',
         wafer_count: 25,
         product: '',
       }
       map.set(lotId, entry)
     }
     entry.end_time = ev.timestamp
-    entry.status = payload.run_mode != null && payload.run_mode !== '' ? 'run' : 'done'
     if (payload.QTY != null && payload.QTY !== '') entry.wafer_count = payload.QTY
     if (payload.product || payload.PRODUCT) entry.product = payload.product || payload.PRODUCT
   }
@@ -74,11 +76,40 @@ const lots = computed(() => {
   return list
 })
 
+// 从所选区段事件筛选出全部告警，最新在前
+// 注：告警事件里的 chamber_id/port_id 等字段是 bridge 误填的告警描述词
+//（后端 clean_alarm_event 专门清空），故只取 lot_id 作为上下文，不显示腔体
+const alarms = computed(() => {
+  const list = props.events
+    .filter(ev => ev.event_category === 'alarm')
+    .map(ev => ({
+      id: ev.raw_id,
+      time: ev.timestamp,
+      alarm_id: (ev.alarm && ev.alarm.alarm_id) || '',
+      severity: (ev.alarm && ev.alarm.severity) || 'warn',
+      text: (ev.alarm && ev.alarm.alarm_text) || ev.description || ev.event_name || '',
+      context: ev.lot_id ? `Lot: ${ev.lot_id}` : '',
+    }))
+  list.sort((a, b) => parseTs(b.time) - parseTs(a.time))
+  return list
+})
+
+// 切换视图：再次点击当前页签则回到事件列表
+function toggleView(view) {
+  activeView.value = activeView.value === view ? 'events' : view
+}
+
 // 选择 Lot：跳转到该 Lot 的开始时间
 function onLotSelect(lot) {
   selectedLotId.value = lot.id
   const targetTs = lot.start_time || lot.timestamp
   if (targetTs) emit('jump', targetTs)
+}
+
+// 选择告警：跳转到告警发生时间
+function onAlarmSelect(alarm) {
+  selectedAlarmId.value = alarm.id
+  if (alarm.time) emit('jump', alarm.time)
 }
 
 function selectEvent(ev) {
@@ -155,7 +186,7 @@ watch(() => props.jumpTimestamp, (ts) => {
     if (visIdx >= visibleCount.value) visibleCount.value = visIdx + 1
     // 滚动到对应元素
     nextTick(() => {
-      if (showLots.value) return
+      if (activeView.value !== 'events') return
       const list = document.querySelector('.hr-list')
       if (!list) return
       const items = list.querySelectorAll('.hr-item')
@@ -169,21 +200,40 @@ watch(() => props.jumpTimestamp, (ts) => {
 
 <template>
   <div class="history-replay">
-    <!-- 统计栏：LOT 概览，点击展开/收起 Lot 列表（内容与原 Lot 页签一致） -->
+    <!-- 统计栏：LOT / ALARM 概览，点击展开对应列表 -->
     <div class="hr-stats">
-      <button type="button" class="hr-stat lot" :class="{ active: showLots }" @click="showLots = !showLots">
+      <button
+        type="button"
+        class="hr-stat lot"
+        :class="{ active: activeView === 'lots' }"
+        @click="toggleView('lots')"
+      >
         <span class="hr-stat-num">{{ lots.length }}</span>
         <span class="hr-stat-label">LOT</span>
+      </button>
+      <button
+        type="button"
+        class="hr-stat alarm"
+        :class="{ active: activeView === 'alarms' }"
+        @click="toggleView('alarms')"
+      >
+        <span class="hr-stat-num">{{ alarms.length }}</span>
+        <span class="hr-stat-label">ALARM</span>
       </button>
     </div>
 
     <!-- Lot 列表（展开时显示） -->
-    <div v-if="showLots" class="hr-lot-wrap">
+    <div v-if="activeView === 'lots'" class="hr-lot-wrap">
       <LotList :lots="lots" :selected-lot-id="selectedLotId" @select="onLotSelect" />
     </div>
 
+    <!-- Alarm 列表（展开时显示） -->
+    <div v-if="activeView === 'alarms'" class="hr-lot-wrap">
+      <AlarmList :alarms="alarms" :selected-alarm-id="selectedAlarmId" @select="onAlarmSelect" />
+    </div>
+
     <!-- 事件列表 -->
-    <div v-show="!showLots" class="hr-list">
+    <div v-show="activeView === 'events'" class="hr-list">
       <div v-if="loading" class="hr-loading">加载中...</div>
       <div v-else-if="events.length === 0" class="hr-empty">
         所选时间段内无事件记录
@@ -226,7 +276,7 @@ watch(() => props.jumpTimestamp, (ts) => {
       </div>
     </div>
     <!-- AI 快捷分析栏：点击后切换到 AI Tab 并预填问题 -->
-    <div v-if="!showLots && events.length > 0" class="hr-ai-bar">
+    <div v-if="activeView === 'events' && events.length > 0" class="hr-ai-bar">
       <button class="hr-ai-btn" @click="emitAiAnalyze">
         🤖 AI分析当前回放
       </button>
@@ -269,6 +319,7 @@ watch(() => props.jumpTimestamp, (ts) => {
   border-color: #2a4060;
 }
 .hr-stat.lot.active { border-color: #06b6d4; }
+.hr-stat.alarm.active { border-color: #ef4444; }
 .hr-stat-num {
   display: block;
   font-size: 15px;
@@ -280,6 +331,7 @@ watch(() => props.jumpTimestamp, (ts) => {
   color: #64748b;
 }
 .hr-stat.lot .hr-stat-num { color: #06b6d4; }
+.hr-stat.alarm .hr-stat-num { color: #ef4444; }
 
 /* Lot 列表容器（展开时占满剩余空间） */
 .hr-lot-wrap {

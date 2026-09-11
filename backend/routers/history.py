@@ -38,6 +38,7 @@ def _decrement_raw_id(raw_id):
 from database import get_db
 from models import DT_EVENT_RAW, MachineToolMapping
 from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
+from services.ai_tools import ALARM_EVENT_NAMES
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -79,7 +80,9 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
     event_name = payload.get("event_name", "UNKNOWN")
 
     event_category = "other"
-    if event_name == "EC_ALARM_REPORT":
+    # 告警事件名清单与 ai_tools/oxe 共用：量产 OXE 用的是 ALARM_REPORT，
+    # 旧版此处只认 EC_ALARM_REPORT，导致真实告警被归为 other、alarm 字段为 null
+    if str(event_name).upper().strip() in ALARM_EVENT_NAMES:
         event_category = "alarm"
     elif event_name in ("DETACH_POD_PLACE", "ATTACH_POD_PLACE", "POD_PLACED", "POD_REMOVED",
                         "LOCK_PORT_COMPLETED", "UNLOCK_PORT_COMPLETED", "MVIN", "MVOU",

@@ -82,7 +82,8 @@ def _resolve_tool_ids(db: Session, machine_id: str) -> list:
 
 
 # ALARM 类事件名：port_id/chamber_id 等字段被错误填充为告警描述词，需清空
-_ALARM_EVENT_NAMES = {"ALARM_REPORT", "EC_ALARM_REPORT"}
+# 公开给路由层复用，避免各处重复维护「哪些事件算告警」的清单
+ALARM_EVENT_NAMES = {"ALARM_REPORT", "EC_ALARM_REPORT"}
 # ALARM 事件需要清空的字段（这些字段在 ALARM 报文中是错误解析的描述词）
 _ALARM_FIELDS_TO_CLEAR = (
     "port_id", "chamber_id", "cassette_id", "smif_id",
@@ -102,7 +103,7 @@ def clean_alarm_event(payload: dict) -> dict:
     if not payload:
         return payload
     event_name = str(payload.get("event_name", "")).upper().strip()
-    if event_name in _ALARM_EVENT_NAMES:
+    if event_name in ALARM_EVENT_NAMES:
         for field in _ALARM_FIELDS_TO_CLEAR:
             if field in payload:
                 payload[field] = "NULL"
