@@ -11,6 +11,19 @@
   **不抛错**。于是「查某一天」会静默退化成「取最新 N 条」，历史日期永远返回空。
   反之，TO_DATE/区间比较打在 VARCHAR2 列上会因 NLS 不匹配直接 ORA-01861。
   两种写法互不通用，因此这里探测一次真实列类型（见 _ts_columns_are_temporal）。
+
+时区（2026-09-11 在量产库实测确认，勿被列名误导）：
+  量产库执行
+      SELECT TO_CHAR(SYSTIMESTAMP,'YYYY-MM-DD HH24:MI:SS'),
+             TO_CHAR(SYS_EXTRACT_UTC(SYSTIMESTAMP),'YYYY-MM-DD HH24:MI:SS'),
+             (SELECT TO_CHAR(RECEIVED_TS_UTC,'YYYY-MM-DD HH24:MI:SS')
+                FROM (SELECT RECEIVED_TS_UTC, RAW_ID FROM DT_EVENT_RAW ORDER BY RAW_ID DESC)
+               WHERE ROWNUM = 1) FROM DUAL;
+  得到  15:42:33 / 07:42:33 / 15:42:33
+  → 最新事件时间等于数据库本地时间、不等于 UTC，说明写入方用的是本地时间（东八区），
+    列名里的 _UTC 名不副实。因此前端按本地日期查询、按本地时间显示都是正确的，
+    **不要在这里额外做时区换算**（加了反而会整体偏 8 小时、跨零点数据落到错误日期）。
+  注意：这意味着时间语义依赖数据库服务器时区，若服务器时区被改过，历史数据会出现断层。
 """
 import json
 import logging
