@@ -187,6 +187,12 @@ LOT_DONE_EVENT_NAMES = {"LOTEND", "POD_REMOVED", "MOC"}
 # （OXE 一个批次多片晶圆，见 WaferUnloaded 数远大于批次完成数）
 WAFER_DONE_EVENT_NAMES = {"WAFERUNLOADED"}
 
+# F7 单次最多取回的事件行数。payload_json 是 CLOB，按 lot_id 匹配只能靠扫描，
+# 不设上限在大表上会一直扫到读超时（实测 60s）。
+F7_EVENT_LIMIT = 5000
+# F7 默认只回溯多少天（可用 days 参数覆盖）
+F7_DEFAULT_WINDOW_DAYS = 30
+
 _TABLE_COL_TYPES = {}
 
 
@@ -212,13 +218,30 @@ def _is_temporal(table_name, column_name):
 
 
 def _event_ts_expr(table_name="dt_event_raw"):
-    """「真实事件时间」的统一表达式。
+    """「真实事件时间」的取值表达式（用于 SELECT 输出）。
 
     量产 EVENT_TS_UTC 多为 NULL、真实时间在 RECEIVED_TS_UTC，故用 NVL 兜底。
     两列在任一环境下都同类型（同为 TIMESTAMP 或同为 VARCHAR2），NVL 合法。
+    注意：只用于 SELECT 输出，不要拿它做 WHERE 条件（见 _time_filter_expr）。
     """
     t = table_name.upper()
     return f"NVL({t}.EVENT_TS_UTC, {t}.RECEIVED_TS_UTC)"
+
+
+def _time_filter_expr(table_name="dt_event_raw"):
+    """时间过滤用的列表达式 —— 必须是「裸列」。
+
+    不能把列包进 NVL()：函数包装会让该列上的索引失效，大表直接退化成全表扫描
+    （实测 F7 读超时 60s、F8 耗时 43.7s）。量产 EVENT_TS_UTC 绝大多数为 NULL，
+    RECEIVED_TS_UTC 就是真实时间源，过滤只用它即可，与 NVL 版本等价。
+    """
+    return f"{table_name.upper()}.RECEIVED_TS_UTC"
+
+
+def _is_numeric(table_name, column_name):
+    """列是数值类型时返回 True"""
+    dt = _col_types(table_name).get(column_name.upper(), "")
+    return "NUMBER" in dt or "FLOAT" in dt or "INTEGER" in dt
 
 
 def _since_expr(param=":since", table_name="dt_event_raw", column_name="RECEIVED_TS_UTC"):
@@ -440,7 +463,7 @@ async def f3_alarms(request: Request):
         # Oracle 11g 不支持 FETCH FIRST n ROWS ONLY（12c+语法），用 ROWNUM 替代
         ts_expr = _event_ts_expr()
         # 不要用 (:mid = '' OR tool_id = :mid)：Oracle 里空字符串 = NULL，传空时条件恒不成立
-        where = [f"{ts_expr} >= {_since_expr()}"]
+        where = [f"{_time_filter_expr()} >= {_since_expr()}"]
         params = {"since": since}
         if machine_id:
             where.append("tool_id = :mid")
@@ -521,7 +544,7 @@ async def f4_events(request: Request):
         sql = f"""SELECT * FROM (
                    SELECT tool_id, {ts_expr} AS event_ts, payload_json
                    FROM dt_event_raw
-                   WHERE tool_id = :mid AND {ts_expr} >= {_since_expr()}
+                   WHERE tool_id = :mid AND {_time_filter_expr()} >= {_since_expr()}
                    ORDER BY raw_id DESC
                  ) WHERE ROWNUM <= 200"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
@@ -573,9 +596,10 @@ async def f5_yield(request: Request):
         # （Oracle 11g 无 JSON_VALUE，且 payload_json 是 CLOB/TEXT，故拉取后在 Python 解析）
         # 时间列按真实类型比较，并用 NVL(event_ts, received_ts) 兜底：量产 EVENT_TS_UTC 多为 NULL
         ts_expr = _event_ts_expr()
+        # 用「裸列」过滤（不包 NVL），否则列上的索引失效 → 大表全表扫描
         sql = f"""SELECT tool_id, payload_json
                  FROM dt_event_raw
-                 WHERE tool_id = :mid AND {ts_expr} >= {_since_expr()}
+                 WHERE tool_id = :mid AND {_time_filter_expr()} >= {_since_expr()}
                  ORDER BY raw_id DESC"""
         cols, rows = exec_query(sql, {"mid": machine_id, "since": since})
         data = rows_to_list(cols, rows)
@@ -658,21 +682,29 @@ async def f7_mes_lot(request: Request):
         return fail("lot_id 必填")
     try:
         # 查该 Lot 相关事件（payload_json 里 lot_id/batch_id 匹配）
-        # 时间列用 NVL(event_ts, received_ts)：量产 EVENT_TS_UTC 多为 NULL，直接取会拿到空时间
+        # payload_json 是 CLOB，按 lot_id 匹配只能扫描；因此必须加「时间窗口 + 行数上限」
+        # 两道闸，否则在大表上会一直扫到读超时（实测 60s 超时）
         # 排序用 raw_id ASC（随时间递增）：按 event_ts_utc 排在全 NULL 时顺序随机
+        window_days = int(body.get("days") or F7_DEFAULT_WINDOW_DAYS)
+        since = (datetime.now() - timedelta(days=window_days)).strftime("%Y-%m-%d %H:%M:%S")
         ts_expr = _event_ts_expr()
-        sql = f"""SELECT tool_id, {ts_expr} AS event_ts, payload_json
-                 FROM dt_event_raw
-                 WHERE payload_json LIKE :lid
-                 ORDER BY raw_id ASC"""
-        cols, rows = exec_query(sql, {"lid": f"%\"lot_id\": \"{lot_id}\"%"})
+        sql = f"""SELECT * FROM (
+                   SELECT tool_id, {ts_expr} AS event_ts, payload_json
+                   FROM dt_event_raw
+                   WHERE {_time_filter_expr()} >= {_since_expr()}
+                     AND payload_json LIKE :lid
+                   ORDER BY raw_id ASC
+                 ) WHERE ROWNUM <= {F7_EVENT_LIMIT}"""
+        params = {"since": since, "lid": f"%\"lot_id\": \"{lot_id}\"%"}
+        cols, rows = exec_query(sql, params)
         data = rows_to_list(cols, rows)
         # 兜底：也匹配 batch_id
         if not data:
-            cols, rows = exec_query(sql, {"lid": f"%\"batch_id\": \"{lot_id}\"%"})
+            params["lid"] = f"%\"batch_id\": \"{lot_id}\"%"
+            cols, rows = exec_query(sql, params)
             data = rows_to_list(cols, rows)
         if not data:
-            return ok(f"未找到 Lot {lot_id} 的事件记录。")
+            return ok(f"未找到 Lot {lot_id} 的事件记录（已回溯最近 {window_days} 天）。")
 
         events = []
         machine_id = ""
@@ -731,7 +763,7 @@ async def f8_export(request: Request):
         # 时间列按真实类型比较 + NVL(event_ts, received_ts) 兜底（量产 EVENT_TS_UTC 多为 NULL）
         ts_expr = _event_ts_expr()
         # 不要用 (:mid = '' OR tool_id = :mid)：Oracle 里空字符串 = NULL，传空时条件恒不成立
-        where = [f"{ts_expr} >= {_since_expr()}"]
+        where = [f"{_time_filter_expr()} >= {_since_expr()}"]
         params = {"since": since}
         if machine_id:
             where.append("tool_id = :mid")
@@ -788,9 +820,15 @@ async def f9_work_order(request: Request):
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 插入工单记录（复用 alarms 表，alarm_code = WORK_ORDER）
         # 注意绑定名不能叫 :desc —— desc 是 Oracle 保留字，会 ORA-01745: 无效的主机/绑定变量名
+        # alarms.ID 是主键但库里没有自增机制（models.py 里的 Identity 在 Oracle 11g 无效，
+        # 手工建表也没配序列/触发器），不给值就撞 PK_ALARMS（实测 ORA-00001），
+        # 因此按 MAX(ID)+1 显式生成。
         # timestamp 列按真实类型转：若量产是 DATE/TIMESTAMP，直接绑字符串会 ORA-01861
-        sql = f"""INSERT INTO alarms (machine_id, timestamp, alarm_code, description, "LEVEL", resolved, lot_id)
-                VALUES (:mid, {_since_expr(':ts', 'alarms', 'timestamp')}, 'WORK_ORDER', :descr, :sev, 0, NULL)"""
+        id_col, id_val = "", ""
+        if _is_numeric("alarms", "ID"):
+            id_col, id_val = "id, ", "(SELECT NVL(MAX(ID), 0) + 1 FROM alarms), "
+        sql = f"""INSERT INTO alarms ({id_col}machine_id, timestamp, alarm_code, description, "LEVEL", resolved, lot_id)
+                VALUES ({id_val}:mid, {_since_expr(':ts', 'alarms', 'timestamp')}, 'WORK_ORDER', :descr, :sev, 0, NULL)"""
         with get_conn() as conn:
             cur = conn.cursor()
             cur.execute(sql, {"mid": machine_id, "ts": now_str,
