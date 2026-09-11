@@ -1,187 +1,173 @@
 openapi: 3.0.3
 info:
-  title: FabTwin Pro AI 助手 - n8n 10 工具接口（Dify 侧调用）
+  title: FabTwin Pro AI 助手 - 厂务数据工具（合并版，2 工具）
   description: |
-    所有接口均由 n8n workflow 提供。
-    公共参数：
+    【本版变更】原 F1~F10 各占一个 path，Dify 会按 path 数量注册工具，
+    10 个 path 一次性占满 Agent 工具位，导致 LOG 捞取等其他工具无法挂载。
+    本版收敛为 2 个 path，用 action 参数分发，腾出 8 个工具位：
+
+      fab_query  读类   ← F1 F2 F3 F4 F5 F6 F10
+      fab_admin  管理类 ← F7 F8 F9（需管理员权限，含写操作与报表导出）
+
+    所有接口均由 n8n workflow 转发到 db_proxy。
+    公共约定：
       - 所有请求都是 POST + application/json
-      - 所有接口都支持 Query 参数 ?secret=YOUR_N8N_WEBHOOK_SECRET
+      - 都支持 Query 参数 ?secret=YOUR_N8N_WEBHOOK_SECRET
+      - action 为必填；参数袋里只需填该 action 用得到的字段，其余留空即可
     统一响应结构（application/json）：
       - ok: boolean（true=成功，false=失败）
       - answer: string（自然语言中文摘要，直接给用户看）
       - table_data: object|null（{headers:string[], rows:any[][]}）
       - jump_timestamp: string|null（格式 YYYY-MM-DD HH:mm:ss，供 FabTwin 跳转回放）
       - jump_machine_id: string|null（跳转到该机器详情页）
-      - sources: [{type:"n8n", workflow:string, execution_id:string, ...其他字段}]
-  version: "1.0.0"
+      - sources: [{type, workflow, execution_id, ...其他字段}]
+    失败时（含 action 填错）不会抛 HTTP 错误，而是返回 ok=false + 可读的 answer，
+    其中会列出该工具支持的全部 action，可据此纠正后重试。
+  version: "2.0.0"
 servers:
   - url: "{{n8n_base_url}}/webhook"
     description: n8n webhook 根（由 Dify Start 节点变量传入）
 
 paths:
-  /get_machine_status:
+  /fab_query:
     post:
-      summary: F1 - 机台实时状态/运行模式/当前 Lot / 全厂概览
-      operationId: get_machine_status
+      summary: 厂务数据查询（机台状态/Lot/报警/事件/产量/配方/功能清单）
+      description: |
+        查询晶圆厂实时与历史数据。必须通过 action 指定要查哪一类：
+
+          machine_status    机台实时状态、运行模式、当前 Lot、全厂概览
+                            → machine_id 可空；留空表示查全厂所有机台
+          lot_info          Lot 位置与进度追踪
+                            → lot_id 与 machine_id 至少给一个
+          machine_alarms    报警/告警/异常统计与定位
+                            → machine_id 可空（空=全厂）；可加 severity、days
+          event_timeline    事件时间线、温度趋势、动作序列
+                            → machine_id 必填；可加 time_range
+          yield_stats       产量、晶圆片数统计
+                            → machine_id 必填；可加 time_range
+          recipe_info       工艺参数、配方 Recipe
+                            → machine_id 必填
+          list_capabilities 功能清单，回答"你能帮我干什么"
+                            → 无需任何参数
+
+        用户问"XX机台现在怎么样"用 machine_status；问"为什么停了/有什么报警"
+        用 machine_alarms；问"做了多少片"用 yield_stats；问"跑的什么配方"用
+        recipe_info；问"这段时间发生了什么/温度变化"用 event_timeline。
+      operationId: fab_query
       parameters:
         - name: secret
           in: query
           schema: { type: string }
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [action]
               properties:
-                machine_id: { type: string, description: "机台ID（如 OXE-1），可空=全厂" }
+                action:
+                  type: string
+                  description: "要执行的查询类型，必填"
+                  enum:
+                    - machine_status
+                    - lot_info
+                    - machine_alarms
+                    - event_timeline
+                    - yield_stats
+                    - recipe_info
+                    - list_capabilities
+                machine_id:
+                  type: string
+                  description: >-
+                    机台ID（如 OXE-1、PODOPENER-1）。
+                    event_timeline / yield_stats / recipe_info 必填；
+                    machine_status / machine_alarms 可空（空=全厂）。
+                lot_id:
+                  type: string
+                  description: "Lot ID（5~15位字母数字，例如 V47Q6）。仅 lot_info 使用。"
+                severity:
+                  type: string
+                  description: "报警严重等级过滤，仅 machine_alarms 使用；空=不过滤"
+                  enum: ["critical", "warning", "info", ""]
+                days:
+                  type: integer
+                  description: "近 X 天，仅 machine_alarms 使用，默认 7"
+                  default: 7
+                time_range:
+                  type: string
+                  description: >-
+                    时间范围。event_timeline 支持 today/yesterday/this_week/last_2h/last_7d/last_30d；
+                    yield_stats 支持 today/yesterday/this_week/this_month。
+                  enum:
+                    - today
+                    - yesterday
+                    - this_week
+                    - this_month
+                    - last_2h
+                    - last_7d
+                    - last_30d
       responses:
         '200': { $ref: '#/components/responses/Standard' }
 
-  /get_lot_info:
+  /fab_admin:
     post:
-      summary: F2 - Lot 位置/进度追踪（单 Lot 或机台 Lot 列表）
-      operationId: get_lot_info
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                lot_id: { type: string, description: "Lot ID（5~15位字母数字，例如 V47Q6），可空" }
-                machine_id: { type: string, description: "机台ID，可空" }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
+      summary: 管理员操作（MES Lot 查询/导出报警报表/生成故障工单）【管理员权限】
+      description: |
+        需要管理员权限的操作。必须通过 action 指定：
 
-  /get_machine_alarms:
-    post:
-      summary: F3 - 报警统计/异常定位（按严重等级/时间范围）
-      operationId: get_machine_alarms
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                machine_id: { type: string, description: "机台ID，可空=全厂" }
-                severity: { type: string, enum: [critical, warning, info, ""], description: "严重等级，空=全部" }
-                days: { type: integer, description: "近 X 天，默认 7", default: 7 }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
+          mes_lot_info        查询 MES 系统的 Lot 详细信息
+                              → lot_id 必填
+          export_alarm_report 导出报警报表 CSV，返回下载链接
+                              → machine_id 可空（空=全厂）；可加 days
+          generate_work_order 生成故障工单（写操作，会真实创建工单）
+                              → machine_id 和 fault_type 必填；可加 severity
 
-  /get_event_timeline:
-    post:
-      summary: F4 - 温度趋势/事件分布/时间线
-      operationId: get_event_timeline
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
+        注意 generate_work_order 会真实创建工单，调用前应先向用户确认机台与故障描述。
+        普通的报警查询请用 fab_query 的 machine_alarms，只有用户明确要求
+        "导出/下载报表"时才用 export_alarm_report。
+      operationId: fab_admin
+      parameters:
+        - name: secret
+          in: query
+          schema: { type: string }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [machine_id]
+              required: [action]
               properties:
-                machine_id: { type: string, description: "机台ID，必填" }
-                time_range: { type: string, enum: [today, yesterday, this_week, last_2h, last_7d, last_30d], default: today }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
-
-  /get_yield_stats:
-    post:
-      summary: F5 - 产量/Lot/晶圆统计（完成率）
-      operationId: get_yield_stats
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [machine_id]
-              properties:
-                machine_id: { type: string, description: "机台ID，必填" }
-                time_range: { type: string, enum: [today, yesterday, this_week, this_month], default: today }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
-
-  /get_recipe_info:
-    post:
-      summary: F6 - 工艺配方/Recipe 查询（机台必填）
-      operationId: get_recipe_info
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [machine_id]
-              properties:
-                machine_id: { type: string, description: "机台ID，必填" }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
-
-  /get_mes_lot_info:
-    post:
-      summary: F7 - MES Lot 详情【管理员权限】（良率/路线/工序站/操作员...）
-      operationId: get_mes_lot_info
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [lot_id]
-              properties:
-                lot_id: { type: string, description: "Lot ID（必填）" }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
-
-  /export_alarm_report:
-    post:
-      summary: F8 - 导出报警报表 Excel【管理员权限】
-      operationId: export_alarm_report
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                machine_id: { type: string, description: "机台ID，可空=全厂" }
-                days: { type: integer, description: "近 X 天，默认 7", default: 7 }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
-
-  /generate_work_order:
-    post:
-      summary: F9 - 生成故障工单【管理员权限】
-      operationId: generate_work_order
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [machine_id, fault_type]
-              properties:
-                machine_id: { type: string, description: "机台ID，必填" }
-                fault_type: { type: string, description: "故障描述（例如 Chamber B RF 功率异常）" }
-                severity: { type: string, enum: [low, medium, high], default: medium }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
-
-  /list_capabilities:
-    post:
-      summary: F10 - 功能清单（回答"你能帮我干什么"）
-      operationId: list_capabilities
-      parameters: [{ name: secret, in: query, schema: { type: string } }]
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: { type: object }
-      responses: { '200': { $ref: '#/components/responses/Standard' } }
+                action:
+                  type: string
+                  description: "要执行的管理操作，必填"
+                  enum:
+                    - mes_lot_info
+                    - export_alarm_report
+                    - generate_work_order
+                lot_id:
+                  type: string
+                  description: "Lot ID。mes_lot_info 必填。"
+                machine_id:
+                  type: string
+                  description: >-
+                    机台ID。generate_work_order 必填；
+                    export_alarm_report 可空（空=全厂）。
+                days:
+                  type: integer
+                  description: "近 X 天，仅 export_alarm_report 使用，默认 7"
+                  default: 7
+                fault_type:
+                  type: string
+                  description: "故障描述（例如 Chamber B RF 功率异常）。generate_work_order 必填。"
+                severity:
+                  type: string
+                  description: "工单严重等级，仅 generate_work_order 使用"
+                  enum: [low, medium, high]
+                  default: medium
+      responses:
+        '200': { $ref: '#/components/responses/Standard' }
 
 components:
   responses:
@@ -210,9 +196,9 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [type, workflow, execution_id]
+                  required: [type]
                   properties:
-                    type: { type: string, enum: [n8n, tool] }
+                    type: { type: string, enum: [n8n, tool, db_proxy] }
                     workflow: { type: string }
                     execution_id: { type: string }
                     download_url: { type: string }

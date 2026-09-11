@@ -1,0 +1,863 @@
+app:
+  description: EAP Log Query (ext) - 只返回下载链接版，兼容 FabTwin 统一契约
+  icon: 🔍
+  icon_background: '#F0F8FF'
+  mode: workflow
+  name: EAP Log Query
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+        - .JPG
+        - .JPEG
+        - .PNG
+        - .GIF
+        - .WEBP
+        - .SVG
+      allowed_file_types:
+        - image
+      allowed_file_upload_methods:
+        - local_file
+        - remote_url
+      enabled: false
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 100
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+          - local_file
+          - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+      - data: {isInLoop: false, sourceType: start, targetType: code}
+        id: e-1001-1002
+        source: '1001'
+        sourceHandle: source
+        target: '1002'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: code, targetType: if-else}
+        id: e-1002-1020
+        source: '1002'
+        sourceHandle: source
+        target: '1020'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: http-request}
+        id: e-1020-f-1003
+        source: '1020'
+        sourceHandle: 'false'
+        target: '1003'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: http-request}
+        id: e-1020-t-1021
+        source: '1020'
+        sourceHandle: batch_true
+        target: '1021'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: http-request, targetType: code}
+        id: e-1003-1006
+        source: '1003'
+        sourceHandle: source
+        target: '1006'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: code, targetType: if-else}
+        id: e-1006-1004
+        source: '1006'
+        sourceHandle: source
+        target: '1004'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: http-request}
+        id: e-1004-t-1007
+        source: '1004'
+        sourceHandle: 'true'
+        target: '1007'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: end}
+        id: e-1004-f-1005
+        source: '1004'
+        sourceHandle: 'false'
+        target: '1005'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: http-request, targetType: code}
+        id: e-1007-1008
+        source: '1007'
+        sourceHandle: source
+        target: '1008'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: code, targetType: if-else}
+        id: e-1008-1013
+        source: '1008'
+        sourceHandle: source
+        target: '1013'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: code}
+        id: e-1013-t-1014
+        source: '1013'
+        sourceHandle: 'true'
+        target: '1014'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: end}
+        id: e-1013-f-1015
+        source: '1013'
+        sourceHandle: 'false'
+        target: '1015'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: code, targetType: end}
+        id: e-1014-1012
+        source: '1014'
+        sourceHandle: source
+        target: '1012'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: http-request, targetType: code}
+        id: e-1021-1022
+        source: '1021'
+        sourceHandle: source
+        target: '1022'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: code, targetType: if-else}
+        id: e-1022-1023
+        source: '1022'
+        sourceHandle: source
+        target: '1023'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: code}
+        id: e-1023-t-1027
+        source: '1023'
+        sourceHandle: 'true'
+        target: '1027'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: if-else, targetType: end}
+        id: e-1023-f-1030
+        source: '1023'
+        sourceHandle: 'false'
+        target: '1030'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data: {isInLoop: false, sourceType: code, targetType: end}
+        id: e-1027-1026
+        source: '1027'
+        sourceHandle: source
+        target: '1026'
+        targetHandle: target
+        type: custom
+        zIndex: 0
+    nodes:
+      - data:
+          desc: 日志查询入参。date 用于单日；start_date/end_date 不同则走批量打包。
+          selected: false
+          title: 开始
+          type: start
+          variables:
+            - {label: machine, max_length: 40, options: [], required: true, type: text-input, variable: machine}
+            - {label: date, max_length: 20, options: [], required: false, type: text-input, variable: date}
+            - {label: start_date, max_length: 20, options: [], required: false, type: text-input, variable: start_date}
+            - {label: end_date, max_length: 20, options: [], required: false, type: text-input, variable: end_date}
+            - {label: message_type, max_length: 40, options: [], required: false, type: text-input, variable: message_type}
+        height: 193
+        id: '1001'
+        position: {x: 30, y: 310}
+        positionAbsolute: {x: 30, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          code: |
+            def main(machine, date, start_date, end_date, message_type):
+                machine = (machine or '').strip()
+                if not machine:
+                    raise ValueError('missing machine')
+
+                sd = (start_date or date or '').strip()
+                ed = (end_date or sd or '').strip()
+                if not sd:
+                    raise ValueError('date or start_date required')
+                if ed < sd:
+                    sd, ed = ed, sd
+
+                return {
+                    'machine': machine,
+                    'date': str(sd),
+                    'start_date': str(sd),
+                    'end_date': str(ed),
+                    'message_type': (message_type or '').strip(),
+                    'is_batch': 'YES' if sd != ed else 'NO',
+                }
+          code_language: python3
+          desc: 归一化入参并判定单日/批量
+          outputs:
+            date: {children: null, type: string}
+            end_date: {children: null, type: string}
+            is_batch: {children: null, type: string}
+            machine: {children: null, type: string}
+            message_type: {children: null, type: string}
+            start_date: {children: null, type: string}
+          selected: false
+          title: 参数校验
+          type: code
+          variables:
+            - {value_selector: ['1001', machine], variable: machine}
+            - {value_selector: ['1001', date], variable: date}
+            - {value_selector: ['1001', start_date], variable: start_date}
+            - {value_selector: ['1001', end_date], variable: end_date}
+            - {value_selector: ['1001', message_type], variable: message_type}
+        height: 53
+        id: '1002'
+        position: {x: 333, y: 310}
+        positionAbsolute: {x: 333, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          cases:
+            - case_id: batch_true
+              conditions:
+                - comparison_operator: is
+                  id: cond-is-batch
+                  value: 'YES'
+                  varType: string
+                  variable_selector: ['1002', is_batch]
+              id: batch_true
+              logical_operator: and
+          desc: is_batch=YES 走批量打包，否则走单日单文件
+          selected: false
+          title: 单批分流
+          type: if-else
+        height: 125
+        id: '1020'
+        position: {x: 636, y: 310}
+        positionAbsolute: {x: 636, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          authorization: {config: null, type: no-auth}
+          body: {data: [], type: none}
+          desc: 单日文件列表
+          headers: |-
+            X-API-Key: change-ext-token
+            Accept: application/json
+          method: get
+          params: ''
+          retry_config: {max_retries: 2, retry_enabled: true, retry_interval: 200}
+          selected: false
+          timeout: {max_connect_timeout: 10, max_read_timeout: 60, max_write_timeout: 20}
+          title: 查询文件列表
+          type: http-request
+          url: http://10.30.8.243:8080/api/ext/search?machine={{#1002.machine#}}&date={{#1002.start_date#}}&message_type={{#1002.message_type#}}
+          variables: []
+        height: 221
+        id: '1003'
+        position: {x: 939, y: 254}
+        positionAbsolute: {x: 939, y: 254}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          code: |
+            import json
+
+            def main(response_body):
+                try:
+                    data = json.loads(response_body)
+                except Exception:
+                    return {'has_files': 'NO', 'filename': '', 'file_count': '0',
+                            'reason': '文件列表接口返回内容无法解析为 JSON'}
+
+                files = data.get('files') or []
+                if not files:
+                    return {'has_files': 'NO', 'filename': '', 'file_count': '0',
+                            'reason': '该机台/日期下没有匹配的日志文件'}
+
+                name = (files[0].get('name') or '').strip()
+                if not name:
+                    return {'has_files': 'NO', 'filename': '', 'file_count': str(len(files)),
+                            'reason': '文件列表存在但首条记录缺少 name 字段'}
+
+                return {'has_files': 'YES', 'filename': name,
+                        'file_count': str(len(files)), 'reason': ''}
+          code_language: python3
+          desc: 取首个文件并输出失败原因
+          outputs:
+            file_count: {children: null, type: string}
+            filename: {children: null, type: string}
+            has_files: {children: null, type: string}
+            reason: {children: null, type: string}
+          selected: false
+          title: 解析文件列表
+          type: code
+          variables:
+            - {value_selector: ['1003', body], variable: response_body}
+        height: 53
+        id: '1006'
+        position: {x: 1242, y: 310}
+        positionAbsolute: {x: 1242, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          cases:
+            - case_id: 'true'
+              conditions:
+                - comparison_operator: is
+                  id: cond-has-files
+                  value: 'YES'
+                  varType: string
+                  variable_selector: ['1006', has_files]
+              id: 'true'
+              logical_operator: and
+          desc: ''
+          selected: false
+          title: 结果分支
+          type: if-else
+        height: 125
+        id: '1004'
+        position: {x: 1545, y: 310}
+        positionAbsolute: {x: 1545, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          authorization: {config: null, type: no-auth}
+          body:
+            data:
+              - id: kv-1
+                key: ''
+                type: text
+                value: '{"machine": "{{#1002.machine#}}", "date": "{{#1002.date#}}", "filename": "{{#1006.filename#}}"}'
+            type: raw-text
+          desc: 请求生成单文件下载链接
+          headers: |-
+            X-API-Key: change-ext-token
+            Content-Type: application/json
+          method: post
+          params: ''
+          retry_config: {max_retries: 2, retry_enabled: true, retry_interval: 200}
+          selected: false
+          timeout: {max_connect_timeout: 10, max_read_timeout: 120, max_write_timeout: 20}
+          title: 请求抓取
+          type: http-request
+          url: http://10.30.8.243:8080/api/ext/fetch
+          variables: []
+        height: 134
+        id: '1007'
+        position: {x: 1848, y: 299}
+        positionAbsolute: {x: 1848, y: 299}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          code: |
+            import json
+            from urllib.parse import urlparse
+
+            API_KEY = 'change-ext-token'
+
+            def main(response_body):
+                try:
+                    data = json.loads(response_body)
+                except Exception:
+                    return {'download_url': '', 'reason': '抓取接口返回内容无法解析为 JSON'}
+
+                url = (data.get('download_url') or '').strip()
+                if not url:
+                    return {'download_url': '', 'reason': '抓取接口未返回 download_url'}
+
+                # 服务端可能返回绝对地址，剥成相对路径，避免与前缀重复拼接
+                if url.startswith('http://') or url.startswith('https://'):
+                    p = urlparse(url)
+                    url = p.path + (('?' + p.query) if p.query else '')
+
+                if not url.startswith('/api/'):
+                    return {'download_url': '', 'reason': '下载链接格式异常: ' + url[:80]}
+
+                # 兜底补鉴权参数，避免仅依赖 Header
+                if 'api_key=' not in url:
+                    url += ('&' if '?' in url else '?') + 'api_key=' + API_KEY
+
+                return {'download_url': url, 'reason': ''}
+          code_language: python3
+          desc: 归一化下载链接并补 api_key
+          outputs:
+            download_url: {children: null, type: string}
+            reason: {children: null, type: string}
+          selected: false
+          title: 提取下载链接
+          type: code
+          variables:
+            - {value_selector: ['1007', body], variable: response_body}
+        height: 53
+        id: '1008'
+        position: {x: 2151, y: 310}
+        positionAbsolute: {x: 2151, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          cases:
+            - case_id: 'true'
+              conditions:
+                - comparison_operator: contains
+                  id: cond-dl
+                  value: /api/
+                  varType: string
+                  variable_selector: ['1008', download_url]
+              id: 'true'
+              logical_operator: and
+          desc: ''
+          selected: false
+          title: 下载链接存在分支
+          type: if-else
+        height: 125
+        id: '1013'
+        position: {x: 2454, y: 310}
+        positionAbsolute: {x: 2454, y: 310}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          code: |
+            import json
+
+            BASE = 'http://10.30.8.243:8080'
+
+            def main(machine, date, filename, file_count, download_url):
+                full_url = BASE + download_url
+                name = filename or 'download.log'
+
+                # 只呈现图标 + 文件名，不暴露链接文字
+                answer = (
+                    '已找到 ' + machine + ' 在 ' + date + ' 的日志文件'
+                    + '（当日共 ' + str(file_count) + ' 个）。\n\n'
+                    + '| 机台 | 日期 | 文件 | 下载 |\n'
+                    + '| --- | --- | --- | --- |\n'
+                    + '| ' + machine + ' | ' + date + ' | 📄 ' + name
+                    + ' | [⬇️](' + full_url + ') |'
+                )
+
+                block = {
+                    'ok': True,
+                    'answer': answer,
+                    'table_data': {
+                        'headers': ['机台', '日期', '文件名', '下载'],
+                        'rows': [[machine, date, name, full_url]],
+                    },
+                    'sources': [{'type': 'eap', 'workflow': 'EAP Log Query'}],
+                }
+
+                return {
+                    'ok': 'YES',
+                    'answer': answer,
+                    'filename': name,
+                    'download_url': full_url,
+                    'fabtwin_block': '<FABTWIN>' + json.dumps(block, ensure_ascii=False) + '</FABTWIN>',
+                }
+          code_language: python3
+          desc: 生成图标式下载呈现与统一契约块
+          outputs:
+            answer: {children: null, type: string}
+            download_url: {children: null, type: string}
+            fabtwin_block: {children: null, type: string}
+            filename: {children: null, type: string}
+            ok: {children: null, type: string}
+          selected: false
+          title: 组装单文件结果
+          type: code
+          variables:
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', date], variable: date}
+            - {value_selector: ['1006', filename], variable: filename}
+            - {value_selector: ['1006', file_count], variable: file_count}
+            - {value_selector: ['1008', download_url], variable: download_url}
+        height: 53
+        id: '1014'
+        position: {x: 2757, y: 254}
+        positionAbsolute: {x: 2757, y: 254}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          desc: ''
+          outputs:
+            - {value_selector: ['1014', ok], variable: ok}
+            - {value_selector: ['1014', answer], variable: answer}
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', date], variable: date}
+            - {value_selector: ['1014', filename], variable: filename}
+            - {value_selector: ['1014', download_url], variable: download_url}
+            - {value_selector: ['1014', fabtwin_block], variable: fabtwin_block}
+          selected: false
+          title: 成功-单文件下载
+          type: end
+        height: 240
+        id: '1012'
+        position: {x: 3060, y: 254}
+        positionAbsolute: {x: 3060, y: 254}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          desc: ''
+          outputs:
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', date], variable: date}
+            - {value_selector: ['1006', reason], variable: reason}
+          selected: false
+          title: 无匹配-文件列表为空
+          type: end
+        height: 141
+        id: '1005'
+        position: {x: 1848, y: 470}
+        positionAbsolute: {x: 1848, y: 470}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          desc: ''
+          outputs:
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', date], variable: date}
+            - {value_selector: ['1006', filename], variable: filename}
+            - {value_selector: ['1008', reason], variable: reason}
+          selected: false
+          title: 失败-无有效下载链接
+          type: end
+        height: 167
+        id: '1015'
+        position: {x: 2757, y: 440}
+        positionAbsolute: {x: 2757, y: 440}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          authorization: {config: null, type: no-auth}
+          body:
+            data:
+              - id: b1
+                key: ''
+                type: text
+                value: '{"machine": "{{#1002.machine#}}", "start_date": "{{#1002.start_date#}}", "end_date": "{{#1002.end_date#}}", "message_type": "{{#1002.message_type#}}"}'
+            type: raw-text
+          desc: 同步打包，读超时放宽到 180s
+          headers: |-
+            X-API-Key: change-ext-token
+            Content-Type: application/json
+          method: post
+          params: ''
+          retry_config: {max_retries: 1, retry_enabled: true, retry_interval: 1000}
+          selected: false
+          timeout: {max_connect_timeout: 10, max_read_timeout: 180, max_write_timeout: 30}
+          title: 批量查询打包
+          type: http-request
+          url: http://10.30.8.243:8080/api/ext/bundle_batch_sync
+          variables: []
+        height: 109
+        id: '1021'
+        position: {x: 939, y: 776}
+        positionAbsolute: {x: 939, y: 776}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          code: |
+            import json
+            from urllib.parse import urlparse
+
+            API_KEY = 'change-ext-token'
+
+            def main(response_body):
+                try:
+                    data = json.loads(response_body)
+                except Exception:
+                    return {'has_files': 'NO', 'download_url': '', 'file_count': '0',
+                            'reason': '批量打包接口返回内容无法解析为 JSON'}
+
+                status = data.get('status')
+                if status != 'done':
+                    return {'has_files': 'NO', 'download_url': '', 'file_count': '0',
+                            'reason': '批量打包未完成，status=' + str(status)}
+
+                url = (data.get('download_url') or '').strip()
+                if not url:
+                    return {'has_files': 'NO', 'download_url': '', 'file_count': '0',
+                            'reason': '批量打包已完成但未返回 download_url'}
+
+                if url.startswith('http://') or url.startswith('https://'):
+                    p = urlparse(url)
+                    url = p.path + (('?' + p.query) if p.query else '')
+
+                if not url.startswith('/api/'):
+                    return {'has_files': 'NO', 'download_url': '', 'file_count': '0',
+                            'reason': '批量下载链接格式异常: ' + url[:80]}
+
+                # 关键修复：批量链接服务端未带 api_key，此处兜底补上
+                if 'api_key=' not in url:
+                    url += ('&' if '?' in url else '?') + 'api_key=' + API_KEY
+
+                count = data.get('file_count') or data.get('count') or 0
+
+                return {'has_files': 'YES', 'download_url': url,
+                        'file_count': str(count), 'reason': ''}
+          code_language: python3
+          desc: 归一化批量链接并补 api_key
+          outputs:
+            download_url: {children: null, type: string}
+            file_count: {children: null, type: string}
+            has_files: {children: null, type: string}
+            reason: {children: null, type: string}
+          selected: false
+          title: 提取批打包链接
+          type: code
+          variables:
+            - {value_selector: ['1021', body], variable: response_body}
+        height: 53
+        id: '1022'
+        position: {x: 1242, y: 776}
+        positionAbsolute: {x: 1242, y: 776}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          cases:
+            - case_id: 'true'
+              conditions:
+                - comparison_operator: is
+                  id: c1
+                  value: 'YES'
+                  varType: string
+                  variable_selector: ['1022', has_files]
+              id: 'true'
+              logical_operator: and
+          desc: ''
+          selected: false
+          title: 批提取成功分支
+          type: if-else
+        height: 125
+        id: '1023'
+        position: {x: 1545, y: 776}
+        positionAbsolute: {x: 1545, y: 776}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          code: |
+            import json
+            from urllib.parse import urlparse, parse_qs
+
+            BASE = 'http://10.30.8.243:8080'
+
+            def main(machine, start_date, end_date, file_count, download_url):
+                full_url = BASE + download_url
+
+                try:
+                    qs = urlparse(download_url).query
+                    path = parse_qs(qs).get('path', [''])[0]
+                    name = path.split('/')[-1] or 'batch.zip'
+                except Exception:
+                    name = 'batch.zip'
+
+                # 只呈现图标 + 包名，不暴露链接文字
+                answer = (
+                    '已完成 ' + machine + ' ' + start_date + ' ~ ' + end_date
+                    + ' 的日志批量打包（共 ' + str(file_count) + ' 个文件）。\n\n'
+                    + '| 机台 | 区间 | 打包文件 | 下载 |\n'
+                    + '| --- | --- | --- | --- |\n'
+                    + '| ' + machine + ' | ' + start_date + ' ~ ' + end_date
+                    + ' | 📦 ' + name + ' | [⬇️](' + full_url + ') |'
+                )
+
+                block = {
+                    'ok': True,
+                    'answer': answer,
+                    'table_data': {
+                        'headers': ['机台', '开始日期', '结束日期', '打包文件', '下载'],
+                        'rows': [[machine, start_date, end_date, name, full_url]],
+                    },
+                    'sources': [{'type': 'eap', 'workflow': 'EAP Log Query'}],
+                }
+
+                return {
+                    'ok': 'YES',
+                    'answer': answer,
+                    'filename': name,
+                    'download_url': full_url,
+                    'fabtwin_block': '<FABTWIN>' + json.dumps(block, ensure_ascii=False) + '</FABTWIN>',
+                }
+          code_language: python3
+          desc: 生成图标式下载呈现与统一契约块
+          outputs:
+            answer: {children: null, type: string}
+            download_url: {children: null, type: string}
+            fabtwin_block: {children: null, type: string}
+            filename: {children: null, type: string}
+            ok: {children: null, type: string}
+          selected: false
+          title: 组装批量结果
+          type: code
+          variables:
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', start_date], variable: start_date}
+            - {value_selector: ['1002', end_date], variable: end_date}
+            - {value_selector: ['1022', file_count], variable: file_count}
+            - {value_selector: ['1022', download_url], variable: download_url}
+        height: 53
+        id: '1027'
+        position: {x: 1848, y: 776}
+        positionAbsolute: {x: 1848, y: 776}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          desc: ''
+          outputs:
+            - {value_selector: ['1027', ok], variable: ok}
+            - {value_selector: ['1027', answer], variable: answer}
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', start_date], variable: start_date}
+            - {value_selector: ['1002', end_date], variable: end_date}
+            - {value_selector: ['1027', filename], variable: filename}
+            - {value_selector: ['1027', download_url], variable: download_url}
+            - {value_selector: ['1027', fabtwin_block], variable: fabtwin_block}
+          selected: false
+          title: 成功-批量下载
+          type: end
+        height: 266
+        id: '1026'
+        position: {x: 2151, y: 776}
+        positionAbsolute: {x: 2151, y: 776}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+      - data:
+          desc: ''
+          outputs:
+            - {value_selector: ['1002', machine], variable: machine}
+            - {value_selector: ['1002', start_date], variable: start_date}
+            - {value_selector: ['1002', end_date], variable: end_date}
+            - {value_selector: ['1022', reason], variable: reason}
+          selected: false
+          title: 失败-批量打包
+          type: end
+        height: 167
+        id: '1030'
+        position: {x: 1848, y: 960}
+        positionAbsolute: {x: 1848, y: 960}
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 243
+
+    viewport: {x: 100, y: 60, zoom: 0.42}

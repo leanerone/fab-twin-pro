@@ -709,19 +709,76 @@ async def f9_work_order(request: Request):
 async def f10_capabilities(request: Request):
     verify_key(request)
     caps = [
-        ["C1","机台状态/运行模式","get_machine_status"],
-        ["C2","Lot 查询/追踪","get_lot_info"],
-        ["C3","报警/告警/异常","get_machine_alarms"],
-        ["C4","温度/趋势/事件时间线","get_event_timeline"],
-        ["C5","产量/晶圆统计","get_yield_stats"],
-        ["C6","工艺/配方/Recipe","get_recipe_info"],
-        ["C7","MES Lot 信息（管理员）","get_mes_lot_info"],
-        ["C8","导出报警报表（管理员）","export_alarm_report"],
-        ["C9","生成故障工单（管理员）","generate_work_order"],
-        ["C10","功能清单","list_capabilities"],
+        ["C1","机台状态/运行模式","fab_query","machine_status"],
+        ["C2","Lot 查询/追踪","fab_query","lot_info"],
+        ["C3","报警/告警/异常","fab_query","machine_alarms"],
+        ["C4","温度/趋势/事件时间线","fab_query","event_timeline"],
+        ["C5","产量/晶圆统计","fab_query","yield_stats"],
+        ["C6","工艺/配方/Recipe","fab_query","recipe_info"],
+        ["C7","MES Lot 信息（管理员）","fab_admin","mes_lot_info"],
+        ["C8","导出报警报表（管理员）","fab_admin","export_alarm_report"],
+        ["C9","生成故障工单（管理员）","fab_admin","generate_work_order"],
+        ["C10","功能清单","fab_query","list_capabilities"],
     ]
     answer = "我目前支持以下 10 类功能，请附上机台ID或Lot ID即可查询。"
-    return ok(answer, table(["分类","功能描述","对应工具"], caps))
+    return ok(answer, table(["分类","功能描述","对应工具","action"], caps))
+
+# ========== 合并分发端点（收敛 Dify 工具位：10 → 2） ==========
+# 【背景】OpenAPI 里有几个 path，Dify 就注册几个工具。原来 F1~F10 = 10 个 path，
+#         一次性占满 Dify Agent 的工具位，导致 LOG 捞取等其他工具挂不上去。
+# 【方案】原 10 个端点保留不动（n8n 旧工作流、自测脚本的直连层仍可用，便于回退），
+#         另加 2 个分发端点，用 action 参数路由到同一批 handler：
+#             读类   → /query/fab_query  （F1~F6 + F10）
+#             管理类 → /query/fab_admin  （F7 F8 F9，写操作与导出）
+# 【为什么能直接转交 request】FastAPI 的 Request.json() 首次读取后会把内容缓存在
+#         request._body 上，同一个 Request 可被重复读取。所以分发层读一次 body 拿
+#         action，再把原 request 交给下游 handler，handler 里的 await request.json()
+#         命中缓存、不会因为 body 流already-consumed 而拿到空值。
+#         => 业务逻辑零改动，不存在两套实现走偏的风险。
+
+_QUERY_ACTIONS = {
+    "machine_status":    f1_machine_status,
+    "lot_info":          f2_lot_info,
+    "machine_alarms":    f3_alarms,
+    "event_timeline":    f4_events,
+    "yield_stats":       f5_yield,
+    "recipe_info":       f6_recipe,
+    "list_capabilities": f10_capabilities,
+}
+
+_ADMIN_ACTIONS = {
+    "mes_lot_info":        f7_mes_lot,
+    "export_alarm_report": f8_export,
+    "generate_work_order": f9_work_order,
+}
+
+async def _dispatch(request: Request, registry: dict, group: str):
+    """按 action 路由到既有 handler；未知 action 走标准 fail() 而非 500，
+    这样 Dify 侧能拿到可读的 answer 文本，模型可以据此自我纠正重试。"""
+    verify_key(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    action = str(body.get("action") or "").strip()
+    avail = "、".join(registry.keys())
+    if not action:
+        return fail(f"缺少 action 参数。{group} 支持的 action：{avail}")
+    handler = registry.get(action)
+    if handler is None:
+        return fail(f"未知 action「{action}」。{group} 支持的 action：{avail}")
+    logger.info(f"[dispatch] {group} action={action} body={body}")
+    return await handler(request)
+
+@app.post("/query/fab_query")
+async def fab_query(request: Request):
+    """厂务数据查询（读类，合并 F1~F6 + F10）"""
+    return await _dispatch(request, _QUERY_ACTIONS, "fab_query")
+
+@app.post("/query/fab_admin")
+async def fab_admin(request: Request):
+    """管理员操作（合并 F7 MES查询 / F8 导出报表 / F9 生成工单）"""
+    return await _dispatch(request, _ADMIN_ACTIONS, "fab_admin")
 
 # ─── CSV 下载 ───
 @app.get("/download/alarms")

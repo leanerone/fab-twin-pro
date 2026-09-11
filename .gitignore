@@ -88,3 +88,16 @@ frontend/public/*_new.html
 
 # User DB exploration logs
 tests/oxe/*.txt
+
+# ============================================================
+# 敏感数据：禁止提交（远端是公开仓库，提交即泄露）
+# ============================================================
+# AI 配置导出：含 Dify API Key、n8n MCP Bearer Token
+tests/AI_CONFIGS*.jsonl
+tests/AI_CONFIGS*.txt
+# 生产数据库全量备份快照：含 USERS / PERM_DATA 等真实账号与权限数据
+tests/db_backups/
+# 生产导出数据包
+tests/prod_export_*/
+# 原始事件输入数据
+tests/raw_*_input.txt
