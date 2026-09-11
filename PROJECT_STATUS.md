@@ -1,8 +1,77 @@
 # FabTwin Pro 项目进度文档
 
-> 更新日期：2026-07-19
-> 当前版本：ver2
-> 分支：ver2
+> 更新日期：2026-09-11
+> 当前版本：ver2.10.21
+> 分支：test1（开发与测试都走这个分支）
+
+---
+
+## 〇、当前状态速览（2026-09-11）
+
+### 本地起服务（四件）
+
+| 服务 | 端口 | 启动方式 |
+|---|---|---|
+| Oracle | 1521 | 本地库 `fabtwin / fabtwin @ localhost:1521/orclpdb` |
+| db_proxy | 8001 | `cd services\db_proxy` → 先设 `$env:ORACLE_DSN_TYPE="service_name"` → `python main.py` |
+| backend | 8002 | `cd backend` → `python main.py` |
+| frontend | 5173 | `cd frontend` → `npm run dev` |
+
+**坑**：本地连的是 PDB（orclpdb），db_proxy 默认 `ORACLE_DSN_TYPE=sid`，**不设成 `service_name` 会连不上**。backend 的 config 已经默认 `service_name`，不用管。
+
+### 本地测试脚本
+
+```powershell
+# 平台数据工具（fab_query / fab_admin）：只测 proxy 层，先排除 n8n 干扰
+python tests\test_n8n_f1_f10.py --layer proxy --proxy http://localhost:8001 --machine OXE-51 --lot V394K
+
+# 完整两层（n8n + db_proxy）
+python tests\test_n8n_f1_f10.py --merged --proxy http://10.30.5.216:8001 --json-out tests\n8n_result.json
+
+# MES/SPC 那 5 个 MCP 工具
+$env:MCP_URL="http://10.30.116.137/mcp-server/http"; $env:MCP_TOKEN="<token>"
+python tests\test_mcp_connection.py
+
+# Dify 应用连通性
+python tests\test_dify_integration.py --base-url http://<Dify>:8088/v1 --api-key app-xxxx
+```
+
+### 数据库数据不在仓库里
+
+`.gitignore` 把 `tests/prod_export_*/`、`tests/db_backups/`、`tests/AI_CONFIGS*` 都排除了（含真实账号与 API Key，**故意不提交**）。换机器后要重建测试数据，用仓库里的脚本：
+
+```powershell
+# 生成"今天"的完整演示数据（PODOPENER-1 / OXE-1 / OXE-51 三台机台的完整动画流程）
+python tests\generate_today_demo.py
+
+# 补一个历史日期（--history-only 只写 DT_EVENT_RAW，不污染实时画面表）
+python tests\generate_today_demo.py --date 2026-09-09 --raw-base 6000000 --history-only
+
+# OXE-1 的告警演示数据（SPC异常/机台异常/SMIF异常等）
+python tests\generate_oxe_alarms.py --date 2026-09-11
+```
+
+### ver2.10.17 ~ ver2.10.21 解决的问题
+
+| 版本 | 问题 | 根因 |
+|---|---|---|
+| 2.10.17 | 量产查不到历史日期（只有当天能查） | 量产 `DT_EVENT_RAW` 时间列是 `TIMESTAMP(6)`、本地是 `VARCHAR2`，代码里的 `LIKE '2026-09-09%'` 打在 TIMESTAMP 上恒不匹配且不报错；再被「取最新 N 条」的兜底掩盖成「只有当天有数据」 |
+| 2.10.18 | AI 助手 alarm / lot / run 数量全查不到 | ① 同上（db_proxy 四处 `event_ts_utc >= :since`）② `(:mid = '' OR ...)` 在 Oracle 里空串=NULL 恒不成立 ③ 批次完成口径只认 `LotEnd`，实际机台报的是 `POD_REMOVED`/`MOC` ④ 告警清单漏 `ALARM_REPORT` ⑤ F9 绑定名用了保留字 `:desc` |
+| 2.10.19 | F8 43.7s、F7 60s 超时、F9 主键冲突 | ① 上一版用 `NVL()` 包住列做过滤，索引失效 ② F7 无行数上限也无时间窗口 ③ `alarms.ID` 在 Oracle 11g 没有自增机制 |
+| 2.10.20 | — | Dify 助手融合 MES/SPC/EAP日志/文档解析，工具 2 → 10 个，意图 10 → 18 类 |
+| 2.10.21 | F7 仍 60s 超时 | 排序写成 `ORDER BY raw_id ASC`，升序让 Oracle 无法提前停止（stopkey 失效）；改 `DESC` |
+
+### 遗留待办（回家优先处理）
+
+| # | 事项 | 阻塞点 | 下一步 |
+|---|---|---|---|
+| 1 | **量产 n8n 整层不通** | `10.30.116.151:5678` 全部 21s 超时 | `curl -v http://10.30.116.151:5678/healthz` 确认服务/防火墙；不通则 Dify 侧 fab_query/fab_admin/MES 全都调不动 |
+| 2 | **量产 `DT_EVENT_RAW` 缺索引** | F5 14s / F8 43s / F7 可能仍超时 | 让 DBA 执行 `CREATE INDEX IDX_DT_EVENT_RAW_TOOL_RECV ON DT_EVENT_RAW (TOOL_ID, RECEIVED_TS_UTC);` —— 这是慢查询的根本解 |
+| 3 | F7 的 stopkey 是否真生效 | 本机是小库，优化器怎么选都快，**验证不了** | 部署后重测；若仍超时，加 `/*+ INDEX(DT_EVENT_RAW) */` hint 或 raw_id 二分锚点 |
+| 4 | F3 / F8 告警统计被低估 | ROWNUM 上限是「过滤后截断再统计」 | 依赖 #2；有索引后提高上限。现状：同条件同机台 F3 报 243 条、F8 报 591 条 |
+| 5 | MES 工具「admin 也用不了」 | Dify 工作区成员角色 ≠ prompt 里的 `user_role` 变量 | Dify 预览面板把「用户角色」选成 admin；再确认 MCP 是否真调通 |
+| 6 | Dify MCP provider 凭据 | 导出的 YAML 不含 endpoint / token | 目标 Dify 里建同名 provider `liang_n8n_MCPTrigger_TestEnv` |
+| 7 | OXE 机台 tool_id 映射 | `history.py` 缺 OXE 前缀匹配（`ai_tools.py` 有） | 需要确认 `OXE-61` ↔ `OXE-T61` / `OXE-T61A` 的准确对应规则，不能直接用 `OXE` 前缀（会误伤所有 OXE 机台） |
 
 ---
 

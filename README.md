@@ -2,7 +2,9 @@
 
 半导体工厂数字孪生平台，支持机台实时监控、历史数据回放、楼层平面图编辑、OHT天车调度可视化、AI辅助查询、语音识别及统一动画配置管理。
 
-**当前版本**：ver2（2026-07-19）
+**当前版本**：ver2.10.21（2026-09-11）　|　开发/测试分支：`test1`
+
+> 当前进展、遗留待办、本地环境常见坑，见 [PROJECT_STATUS.md](PROJECT_STATUS.md) 的「〇、当前状态速览」。
 
 ## 技术栈
 
@@ -71,15 +73,22 @@ npm install
 # 方式一：使用启动脚本（Windows）
 start-dev.bat
 
-# 方式二：手动启动
-# 后端
+# 方式二：手动启动（AI 相关功能需要 3 个服务，各开一个终端）
+
+# 1) 后端  http://localhost:8002
 cd backend
 venv\Scripts\activate
 python main.py
 
-# 前端（新终端）
+# 2) 前端  http://localhost:5173
 cd frontend
 npm run dev
+
+# 3) db_proxy  http://localhost:8001  ← AI 助手/工具查询的出口，不启动则 AI 查数据全部失败
+cd services\db_proxy
+# PowerShell 下先设这一句：本地 Oracle 连的是 PDB，默认 sid 会连不上
+$env:ORACLE_DSN_TYPE = "service_name"
+python main.py
 ```
 
 ### 访问地址
@@ -87,6 +96,21 @@ npm run dev
 - 后端API：http://localhost:8002/api
 - API文档：http://localhost:8002/docs
 - WebSocket：ws://localhost:8002/ws/realtime
+- db_proxy 健康检查：http://localhost:8001/health
+
+### 本地测试
+
+```powershell
+# AI 工具层：只测 db_proxy（推荐先跑，排除 n8n 干扰）
+python tests\test_n8n_f1_f10.py --layer proxy --proxy http://localhost:8001 --machine OXE-51 --lot V394K
+
+# 完整两层（n8n + db_proxy）
+python tests\test_n8n_f1_f10.py --merged --proxy http://10.30.5.216:8001 --json-out tests\n8n_result.json
+
+# 演示数据生成：数据库内容不在仓库里（含敏感数据被 .gitignore 排除），换机器后需重建
+python tests\generate_today_demo.py                        # 生成"今天"的完整演示数据
+python tests\generate_oxe_alarms.py --date 2026-09-11      # OXE-1 告警演示数据
+```
 
 ### WinForm 模拟器
 
@@ -384,16 +408,26 @@ DB_POLLER_INTERVAL_MS = 1000
 
 ## 文档
 
-- [系统架构说明书](docs/系统架构说明书.md) - 系统架构详细说明
-- [开发进度管控](docs/开发进度管控.md) - 开发里程碑与进度
-- [变更更改版记录](docs/变更更改版记录.md) - 版本变更记录
-- [新机台开发SOP](docs/新机台开发SOP.md) - 新机台开发标准流程
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) - 项目进度与后续开发计划
-- [docs/项目总结.md](docs/项目总结.md) - 详细项目总结
-- [docs/项目统一架构规划.md](docs/项目统一架构规划.md) - 架构设计与规范
-- [docs/项目计划说明书.md](docs/项目计划说明书.md) - 项目计划与里程碑
-- [docs/3D模型集成指南.md](docs/3D模型集成指南.md) - 3D模型接入规范
-- [docs/对接规范文档.md](docs/对接规范文档.md) - 与世庆的协作规范
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) - **当前状态速览、遗留待办、开发里程碑**
+- [变更更改版记录.md](docs/变更更改版记录.md) - 逐版本变更与根因分析（排查问题先看这个）
+- [系统架构说明书.md](docs/系统架构说明书.md) - 系统架构详细说明
+- [新机台开发SOP_v3.md](docs/新机台开发SOP_v3.md) - 新机台开发标准流程
+- [OXE接入指南.md](docs/OXE接入指南.md) - OXE 机台接入说明
+- [对接规范文档.md](docs/对接规范文档.md) - 协作规范
+
+### AI 集成（Dify / n8n）
+
+- [集成总览](docs/integration/README.md) - 文档索引与阅读顺序
+- [AI 集成部署 SOP](docs/integration/DEPLOY_SOP.md) - 8 步手把手部署
+- [AI 能力说明与规划.md](docs/integration/AI能力说明与规划.md)
+- [fabtwin-ai-assistant.dsl.yml](docs/integration/dify/fabtwin-ai-assistant.dsl.yml) - Dify 助手应用模板
+- [fabtwin-tools-openapi.yaml](docs/integration/dify/fabtwin-tools-openapi.yaml) - Dify Custom Tool 的 OpenAPI Schema
+
+### 生产部署
+
+- [deploy-sop.md](docs/deploy-sop.md) - 上线部署标准流程与生产环境变量说明
+- [WIN2022_DEPLOY_SOP.md](docs/WIN2022_DEPLOY_SOP.md)
+- [IIS_WINDOWS_AUTH_GUIDE.md](docs/IIS_WINDOWS_AUTH_GUIDE.md)
 
 ## 开发规范
 
