@@ -15,7 +15,7 @@ REM   Method 2 (DBA team): Run on DB server locally
 REM     init_db.bat
 REM
 REM If local has no sqlplus, ask DBA team to run on DB server,
-REM or use Python remote execution (see deploy-sop.md section 5.2)
+REM or use Python remote execution (see ../docs/DEPLOY_SOP.md section 5)
 REM ================================================================
 
 setlocal

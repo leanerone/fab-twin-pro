@@ -1,0 +1,103 @@
+{
+  "name": "F6 工艺配方",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_recipe_info",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_recipe_info-wh-id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.30.5.216:8001/query/recipe_info",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "fabtwin-proxy-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ machine_id: $json.body.machine_id || \"\" }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Query DB Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Query DB Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query DB Proxy": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8374d8da-9b97-4693-a1b8-3538ab5ad9d9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "4f8d6998-f62e-41e7-ab77-0b0e813ce281",
+  "tags": []
+}

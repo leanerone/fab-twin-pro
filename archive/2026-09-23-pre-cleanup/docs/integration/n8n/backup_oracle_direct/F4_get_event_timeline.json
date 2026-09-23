@@ -1,0 +1,139 @@
+{
+  "name": "F4. 事件时间线（FabTwin 工具 get_event_timeline）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_event_timeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_event_timeline-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst mid = clean(body.machine_id);\nreturn {\n  json: {\n    machine_id: mid,\n    machine_id_like: mid ? (mid + '%') : '',\n    time_range: clean(body.time_range) || 'today',\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, machine_id, event_type, mode, ts\nFROM (\n  SELECT e.id, e.machine_id, e.event_type, e.mode, e.ts\n  FROM dt_event_raw e\n  WHERE (\n    CASE\n      WHEN '{{ $json.time_range }}' = 'last_2h'  THEN 1\n      ELSE 0\n    END = 1 AND e.ts >= SYSDATE - 2/24\n  )\n  OR (\n    CASE WHEN '{{ $json.time_range }}' IN ('today','') THEN 1 ELSE 0 END = 1\n    AND e.ts >= TRUNC(SYSDATE)\n  )\n  AND (LENGTH('{{ $json.machine_id }}')>0 AND e.machine_id = '{{ $json.machine_id }}')\n  ORDER BY e.ts DESC\n) WHERE ROWNUM <= 300",
+        "options": {}
+      },
+      "name": "Query Oracle",
+      "type": "n8n-nodes-base.oracle",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "oracleApi": {
+          "id": "",
+          "name": "FabTwin Oracle"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst rs = rows.filter(r => r && r.id);\nconst groups = {};\nrs.forEach(r => { const t = String(r.event_type||'OTHER'); groups[t] = (groups[t]||0)+1; });\nconst groupText = Object.keys(groups).map(k => `${k}×${groups[k]}`).join(' / ');\nlet answer = `近两小时事件分布：${groupText || '无事件'}。共 ${rs.length} 条。`;\nconst headers = ['事件ID','机台ID','事件类型','模式','时间'];\nconst vals = rs.slice(0, 120).map(r => [String(r.id||''), String(r.machine_id||''), String(r.event_type||''), String(r.mode||''), String(r.ts||'')]);\nconst latest = rs[0];\nreturn { json: { ok: true, answer, table_data: rs.length>0 ? { headers, rows: vals } : null, jump_timestamp: latest ? String(latest.ts) : null, jump_machine_id: latest && latest.machine_id ? String(latest.machine_id) : null, sources: [{ type: 'n8n', workflow: 'get_event_timeline', execution_id: $execution.id }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Query Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Oracle": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d260d876-9a35-43a5-bf2e-cdf2875684af",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "99d15fae-590d-41e0-a6e1-7c2705ce3d49",
+  "tags": []
+}

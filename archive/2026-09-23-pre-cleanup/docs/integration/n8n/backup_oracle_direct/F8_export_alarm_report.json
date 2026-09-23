@@ -1,0 +1,132 @@
+{
+  "name": "F8. 导出报警报表（FabTwin 工具 export_alarm_report）",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "export_alarm_report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "export_alarm_report-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\nconst clean = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_ \\u4e00-\\u9fa5\\-\\.%\\:#\\/]/g, '').trim();\nconst numClean = (s) => { const x = parseInt(s, 10); return Number.isFinite(x) && x > 0 ? x : 7; };\nreturn {\n  json: {\n    machine_id: clean(body.machine_id),\n    machine_id_like: clean(body.machine_id) ? (clean(body.machine_id) + '%') : '',\n    severity: clean(body.severity).toLowerCase(),\n    days: numClean(body.days),\n  }\n};\n",
+        "options": {}
+      },
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b = $input.first().json;\nconst mid = b.machine_id;\nconst days = b.days || 7;\nreturn { json: {\n  ok: true,\n  days,\n  machine_label: mid ? mid : '全产线',\n  download_url: 'http://report-server.example.com/reports/alarm_' + (mid||'all') + '_' + days + 'd.xlsx',\n  size_kb: 236,\n  row_count: 58\n} };\n",
+        "options": {}
+      },
+      "name": "报表生成（请替换真实报表节点）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = Array.isArray($input.first().json) ? $input.first().json : [$input.first().json];\nconst first = rows[0] || {};\nif (first.ok === false) {\n  return { json: { ok: false, answer: first.error || '报表生成失败（请检查报表服务器）', table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'export_alarm_report', execution_id: $execution.id }] } };\n}\nconst dl = String(first.download_url || '');\nconst size = first.size_kb ? `${first.size_kb}KB` : '';\nconst rowCount = first.row_count != null ? `（共 ${first.row_count} 行）` : '';\nlet answer = `🤖 [n8n 自动化] 最近 ${first.days||7} 天 ${first.machine_label||'全产线'} 报警报表已生成。`;\nif (dl) answer += ` 下载链接：${dl}`;\nif (size || rowCount) answer += `（${size}${rowCount}）`;\nanswer += ` 执行 ID：${$execution.id}`;\nreturn { json: { ok: true, answer, table_data: null, jump_timestamp: null, jump_machine_id: null, sources: [{ type: 'n8n', workflow: 'export_alarm_report', execution_id: $execution.id, download_url: dl, size_kb: first.size_kb, row_count: first.row_count }] } };\n",
+        "options": {}
+      },
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "报表生成（请替换真实报表节点）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "报表生成（请替换真实报表节点）": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "791ba771-06bd-4fab-8000-ceccd531a39f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "97bf05e9-10c0-4e5f-8a4a-2e97a56a3ad8",
+  "tags": []
+}

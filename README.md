@@ -42,7 +42,7 @@
 - ✅ 语音识别 - 本地faster-whisper离线识别，MediaRecorder录音，无需联网
 - ✅ 语音播报 - 机台状态/报警语音播报
 - ✅ WinForm模拟器 - tkinter GUI，按钮控制流程事件写入DB
-- ✅ 一键部署 - deploy.bat
+- ✅ 一键部署 - [deploy/](deploy/README.md)（详见 [docs/DEPLOY_SOP.md](docs/DEPLOY_SOP.md)）
 
 ## 快速开始
 
@@ -127,9 +127,11 @@ python winform_simulator.py
 
 ### 一键部署
 
-```bash
-deploy.bat
-```
+> ⚠️ 2026-09-23 起：`deploy.bat` 已废弃（旧脚本与新部署脚本重复，且引用了不存在的文件）。
+>
+> 现在的部署入口统一在 [`deploy/`](deploy/) 目录下，每个脚本的用途见 [`deploy/README.md`](deploy/README.md)。
+>
+> **从在线机器打包 → 离线量产机安装 → 启动**，完整流程见 [`docs/DEPLOY_SOP.md`](docs/DEPLOY_SOP.md)。
 
 ## 项目结构
 
@@ -213,34 +215,48 @@ fab-twin-pro-ver1/
 │       └── api/index.js       # API统一封装
 ├── docs/                       # 归档文档
 │   ├── 系统架构说明书.md       # 系统架构详细说明
-│   ├── 开发进度管控.md         # 开发里程碑与进度
-│   ├── 变更改版记录.md         # 版本变更记录
-│   ├── 新机台开发SOP.md       # 新机台开发标准流程
-│   ├── 项目总结.md            # 详细项目总结
-│   ├── 项目统一架构规划.md     # 架构设计与规范
-│   ├── 项目计划说明书.md       # 项目计划与里程碑
-│   ├── 3D模型集成指南.md       # 3D模型接入规范
-│   ├── GitHub_Copilot_开发方案.md # VS Code Copilot使用指南
-│   ├── 对接规范文档.md         # 与世庆的协作规范
-│   ├── PODOPENER.docx         # PODOPENER业务参考
-│   ├── alarmnew.docx          # 报警事件说明
-│   ├── VPO_2D.docx            # VPO 2D设计文档
-│   ├── alarm.docx             # 告警参考文档
-│   ├── OXE_2D.html            # OXE 2D原型
-│   ├── VPO2D.html             # VPO 2D原型
-│   ├── VPO_3D.HTML            # VPO 3D原型
-│   └── 项目.txt               # 项目技术规范
+│   ├── 变更更改版记录.md       # 版本变更记录
+│   ├── DEPLOY_SOP.md           # ⭐ 端到端部署 SOP（在线打包→离线安装→启动）
+│   ├── README.md               # docs/ 目录导航
+│   ├── FabTwin_系统架构图.drawio
+│   ├── FabTwin_系统架构图.svg
+│   ├── integration/            # AI 子系统文档
+│   │   ├── DEPLOY_SOP.md       # Dify/n8n/db_proxy 集成 SOP
+│   │   ├── AI能力说明与规划.md
+│   │   ├── dify_n8n_format_reference.md
+│   │   ├── dify/
+│   │   └── n8n/
+│   ├── business/               # 业务文档（与部署解耦）
+│   │   ├── 对接规范文档.md
+│   │   ├── OXE接入指南.md
+│   │   └── 新机台开发SOP_v3.md
+│   └── archive/                # 归档历史（不删，留底）
+│       ├── WIN2022_DEPLOY_SOP.md
+│       ├── IIS_WINDOWS_AUTH_GUIDE.md
+│       ├── FabTwin_项目报告.html
+│       ├── PODOPENER.docx
+│       ├── VPO_2D.docx
+│       ├── alarmnew.docx
+│       └── 项目.txt
 ├── scripts/                    # 工具脚本
 │   └── extract_vpo_model.py   # VPO模型提取工具
 ├── sql/                        # SQL脚本
 │   └── init_oracle_db.sql     # Oracle初始化脚本
 ├── winform_simulator.py       # WinForm(tkinter)模拟器
 ├── PROJECT_STATUS.md          # 项目进度文档
-├── deploy.bat                 # 一键部署
-├── start-dev.bat              # 开发启动
-├── init_db.bat                # 数据库初始化
-├── create_user.bat            # 创建数据库用户
-└── create_user.sql            # 创建用户SQL
+├── deploy/                    # 部署脚本集合（15 个）
+│   ├── README.md                # 脚本功能分类速查
+│   ├── package_offline.bat      # 在线机器打包离线部署包
+│   ├── deploy_iis_nt_final.bat  # IIS 站点+ASP+Windows Auth 部署
+│   ├── start_iis.bat/.ps1       # IIS 模式启动后端（主入口）
+│   ├── start_direct.bat/.ps1    # 直连模式启动（无 IIS）
+│   ├── start_backend.bat/.ps1   # 仅启动后端
+│   ├── start-dev.bat            # 开发模式启动（带热更新）
+│   ├── init_db.bat              # sqlplus 初始化 Oracle
+│   ├── deploy_dify.ps1          # Dify Docker Compose 部署
+│   ├── deploy_n8n.ps1           # n8n Docker Compose 部署
+│   ├── env.bat                  # 共享环境变量
+│   └── web.config               # IIS URL Rewrite
 ```
 
 ## 统一动画配置架构
@@ -425,9 +441,9 @@ DB_POLLER_INTERVAL_MS = 1000
 
 ### 生产部署
 
-- [deploy-sop.md](docs/deploy-sop.md) - 上线部署标准流程与生产环境变量说明
-- [WIN2022_DEPLOY_SOP.md](docs/WIN2022_DEPLOY_SOP.md)
-- [IIS_WINDOWS_AUTH_GUIDE.md](docs/IIS_WINDOWS_AUTH_GUIDE.md)
+- [DEPLOY_SOP.md](docs/DEPLOY_SOP.md) - ⭐ 上线部署标准流程（在线打包 → 离线安装 → 离线启动）
+- [deploy/README.md](deploy/README.md) - 部署脚本功能分类速查
+- 旧文档已归档：[docs/archive/](docs/archive/)
 
 ## 开发规范
 

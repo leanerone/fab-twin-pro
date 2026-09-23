@@ -1,0 +1,103 @@
+{
+  "name": "F7 MES Lot详情",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_mes_lot_info",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "get_mes_lot_info-wh-id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.30.5.216:8001/query/mes_lot_info",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "fabtwin-proxy-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lot_id: $json.body.lot_id || \"\" }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Query DB Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Query DB Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query DB Proxy": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b1fb44b7-b87c-49f4-8619-c8f1e9a16719",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fabtwin-local"
+  },
+  "id": "e7c27dd2-0ad1-4153-8cf3-01b77a90afd8",
+  "tags": []
+}
