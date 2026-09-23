@@ -216,6 +216,8 @@ set FABTWIN_FRONTEND_PORT=5173
 
 ### Step 7. 初始化 Oracle 库（仅新环境 / schema 变更时）
 
+#### 7.1 平台表 + 种子数据（必须）
+
 ```powershell
 cd deploy
 .\init_db.bat
@@ -223,9 +225,26 @@ cd deploy
 
 **做了什么**：用 sqlplus 执行 `sql\init_oracle_db.sql`，输出日志到 `init_db.log`。
 
-**会创建**：所有 DT_EVENT_RAW / DT_LOT_HISTORY / DT_ALARMS 等核心表 + 索引 + 序列。
+**会创建**：20 张平台表 + 11 sequences + 11 triggers + **204 条种子数据**（38 台机台 / 4 楼层 / 37 区域 / 76 Recipe / 5 用户 / 3 角色 / 24 权限映射 / 3 Event-Action 映射 等）。
 
 **若库已存在**：脚本会跳过已存在的对象（CREATE 加了 IF NOT EXISTS 兜底，但 Oracle 10g 没有这语法，必要时手动 DROP 后再跑）。
+
+#### 7.2 AI 表 + AI 配置 KV（必须 — `init_db.bat` 不跑这个，必须手工执行！）
+
+```powershell
+cd ..\sql
+sqlplus <user>/<pwd>@<dsn> @create_ai_tables.sql
+```
+
+**会创建**：4 张 AI 表（`AI_CONFIGS` / `AI_PROVIDER_CONFIGS` / `AI_USAGE_LOGS` / `MACHINE_DIFY_CONFIGS`）+ 1 个默认 Provider（本地规则引擎）+ 7 个 Dify/N8N 键值对 + 4 个 MCP 配置。
+
+**为什么必须单独跑**：`backend/database.py:init_db()` 显式 exclude 了 3 张 AI 表（`ai_configs` / `ai_provider_configs` / `ai_usage_logs`），由 DBA 手动跑 SQL 建表+注 KV（详见 [sql/create_ai_tables.sql](../sql/create_ai_tables.sql) 头部注释）。第 4 张 `MACHINE_DIFY_CONFIGS` 虽然 ORM 会自动建（用 Identity 列），但**这条 SQL 会同时建它的 sequence + trigger**，让 SQL/手工 INSERT 走老接口也兼容。
+
+**漏跑后果**：AI 配置中心、AI 助手、调用量统计全部 500；机台详情页 AI 自动路由不可用。
+
+#### 7.3 DT 时序表（无需手工）
+
+5 张 DT 表（`DT_EVENT_RAW` / `DT_EVENT_RAW_CUR` / `DT_EVENT_STD` / `DT_STATE_SNAPSHOT` / `DT_ALARM_EVENT`）由 backend 启动时 `database.init_db()` 通过 SQLAlchemy `Base.metadata.create_all()` 自动建（init_db.bat **不**调用 [sql/create_dt_tables.sql](../sql/create_dt_tables.sql)）。时序数据本身由生产系统写入，本机测试需要模拟数据时再单独执行该 SQL。
 
 ### Step 8. 部署 IIS 站点（仅新机器）
 
@@ -395,6 +414,7 @@ cd deploy
 | 后端能起但 `curl http://localhost:8002/api/health` 报「ORA-12541」 | `env.bat` 里 `ORACLE_HOST/PORT/SERVICE` 错了 | `tnsping <service>` 或 `sqlplus` 直连验证 |
 | Oracle 10g/11g 报「ORA-28560」 | `ORACLE_DSN_TYPE` 没设 `sid`，或 `ORACLE_CLIENT_DIR` 不对 | `set ORACLE_DSN_TYPE=sid` + 验 `ORACLE_CLIENT_DIR` 下有 `oci.dll` |
 | `init_db.bat` 报 ORA-00955（对象已存在） | 库已建过；跳过或先 DROP | 跳过；若想重跑：`DROP USER <name> CASCADE;` 后再跑 |
+| AI 配置中心 / AI 助手报 ORA-00942（表或视图不存在）| Step 7.2 `create_ai_tables.sql` 没跑 | `sqlplus user/pwd@dsn @sql\create_ai_tables.sql` 后重启后端 |
 | Dify/n8n 起不来 | Docker Desktop 没启动 / WSL2 没装 | `wsl --status`；手动启 Docker Desktop |
 | npm run build 报内存不够 | 机器内存 < 4 GB | 加 `--max-old-space-size=4096` |
 
