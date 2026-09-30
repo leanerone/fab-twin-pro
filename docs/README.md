@@ -12,6 +12,7 @@
 docs/
 ├── README.md                          ← 本文件（导航）
 ├── DEPLOY_SOP.md                      ⭐ 端到端部署 SOP（在线打包 → 离线安装 → 离线启动）
+├── HANDOFF_NOTES.md                   ⭐ 下次接手须知（AI Agent / 新工程师 上下文急救包）
 ├── 系统架构说明书.md                   ← 系统架构总览（技术栈、模块、接口）
 ├── FabTwin_系统架构图.drawio           ← 可编辑架构图（drawio 源文件）
 ├── FabTwin_系统架构图.svg              ← 架构图 SVG 版本（可贴在 PPT 里）
@@ -51,6 +52,7 @@ docs/
 | 我想要… | 看哪里 |
 |---|---|
 | **从 0 部署一套 FabTwin**（在线打包 + 离线安装 + 启动） | [`DEPLOY_SOP.md`](./DEPLOY_SOP.md) ⭐ |
+| **新接手 FabTwin（AI Agent / 新工程师）** | [`HANDOFF_NOTES.md`](./HANDOFF_NOTES.md) ⭐ |
 | **每个 deploy 脚本的用途** | [`../deploy/README.md`](../deploy/README.md) |
 | **架构总览**（技术栈 / 模块 / 接口） | [`系统架构说明书.md`](./系统架构说明书.md) |
 | **架构图** | [`FabTwin_系统架构图.svg`](./FabTwin_系统架构图.svg)（或 `.drawio` 源文件） |
