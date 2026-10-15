@@ -1,8 +1,87 @@
 # 新机台开发 SOP（v3.0）
 
-> 版本：v3.0
-> 更新时间：2026-07-28
-> 核心原则：**文件驱动，模块化，网站上调教动画**
+> 版本：v3.1
+> 更新时间：2026-10-14
+> 核心原则：**文件驱动，模块化，配置驱动视图；动画走通用 Motion JSON 标准（见第〇节）**
+
+---
+
+## 〇、机型动画统一标准：通用 Motion JSON（v1.1，2026-10 起）
+
+> **本节是 2026-10 之后新机型上线的授权路径。** 下文「二、完整开发流程」仍适用于已上线的 PODOPENER / VPO 机型；新增机型请优先走本节流程。
+
+### 0.1 分工与产物
+
+模型开发人员交付**两个文件**，平台零代码接入：
+
+| 产物 | 说明 |
+|---|---|
+| `xxx.svg` | 机台 2D 图，**动画部件必须带 `id`**（如 `Group1_POD`、`ARM_1`、`Wafer_Chuck1`） |
+| `xxx.json` | 通用 Motion JSON（`schema_version: "1.1"`），声明 7 类动作与事件映射 |
+
+不再需要在网站上手工调动画：动作、相位、跟随、角度全部写在 JSON 里。
+
+### 0.2 Motion JSON 结构要点
+
+```json
+{
+  "schema_version": "1.1",
+  "document": { "coord": { "viewBox": [0, 0, 720, 900] } },
+  "parts": [ { "id": "ARM_1" } ],
+  "motions": [
+    {
+      "step": "CHAMBER_PS",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "ARM_1",
+          "when": "params.X == 'Y'",
+          "actions": [
+            { "type": "rotate", "angle": 205, "axis": "z",
+              "duration": 800, "easing": "ease-out",
+              "follow_part_id": "Wafer_Chuck1" }
+          ]
+        }
+      ]
+    }
+  ],
+  "ext": {
+    "deriver": "amat_metsput",
+    "port_carrier_map": { "1": "LLA", "2": "LLB" },
+    "param_defaults": { "SLOT": "1" },
+    "part_aliases": {},
+    "viewBox_fallback": [0, 0, 720, 900]
+  }
+}
+```
+
+- **7 类动作**：`offset`（平移，`offset_y` 正方向向上）、`rotate`、`scale`、`opacity`、`visibility`、`snap`（吸附到 `to_part_id`）、`text`（文字跟随，另外播放器兼容 `move_to`）。
+- **相位（`phase`）**：升序执行，同相位并发。
+- **模板**：`{carrier}` / `{SLOT}` / `{CHAMBER}` / `{ARM}` / `{pickup_part}` 等在播放时按事件 payload 解析。
+- **禁止写死**：PORT/载具映射、缺省值、部件别名、角度表一律放 `ext` 配置节。
+- **业务规则**（如 AMAT 由腔体反推机械臂与角度）放 `ext.deriver` 指向的业务推导器，播放器不感知业务。
+
+### 0.3 上线 4 步
+
+1. **建机型行**：`machine_model_configs` 新增一行，`view_mode = "motion2d"`，`views_config_json.view_2d.model_source` 指向 SVG。
+2. **上传 SVG**：在平台把 `xxx.svg` 上传到该机型（文件落 `backend/uploads/models/`）。
+3. **上传 Motion JSON**：上传 `xxx.json`，平台自动校验并写入 `animation_config_json`。
+   - **阻断（HTTP 400 拒绝）**：动作类型不在白名单、缺 `step`/`rules`/`actions`、模板花括号不配对。
+   - **警告（不阻断，可播放但标出）**：缺 `viewBox`、缺 `parts`、引用的部件 id 不在 SVG 中、`rotate` 未声明 `axis`。
+4. **建机台并绑定**：机台表新增/更新机台，令 `model = model_id` 即完成绑定，详情页自动走 Motion 2D 视图。
+
+### 0.4 视图如何选择（已去前缀化）
+
+详情页**不再按机台号前缀**（`OXE` / `PODOPENER`）判断视图，改为**纯配置驱动**：
+
+| 配置 | 视图 |
+|---|---|
+| `view_mode = "oxe"` 或 `views_config.view_2d.type = "oxe"` | OXE Canvas 看板 |
+| `view_mode = "motion2d"` 或存在 `animation_config.schema_version` | Motion 2D 动画 |
+| `view_mode = "vpo"` / `"vpo3d"` | VPO 2D / 3D |
+| `view_mode = "isometric"` / `"hybrid"` / `"svg"` | 2.5D / 2D |
+
+> 迁移提示：`TEL-DRM-UNIT` 的 `view_mode` 已由 `isometric` 改为 `oxe`，保证现有 36 台 OXE 机台行为不变。
 
 ---
 

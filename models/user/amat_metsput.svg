@@ -1,214 +1,305 @@
 <?xml version="1.0"?>
 <svg width="720" height="899.9999999999999" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <title id="title">AMAT METSPUT schematic</title>
-  <desc id="desc">Line-art SVG rebuilt from the provided AMAT METSPUT reference image.</desc>
-  <defs>
-    <style>
-      .frame { fill: #fff; stroke: #7f7f7f; stroke-width: 2; }
-      .outline { fill: none; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-      .shape { fill: #fff; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-      .light { fill: #f7f7f7; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-      .dash { fill: none; stroke: #454545; stroke-width: 2.2; stroke-dasharray: 10 7; stroke-linecap: round; stroke-linejoin: round; }
-      .blue { font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 700; fill: #1148d8; }
-      .title { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; fill: #222; text-anchor: middle; }
-      .label { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; fill: #222; text-anchor: middle; }
-      .small { font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 700; fill: #222; text-anchor: middle; }
-      .tiny { font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 700; fill: #222; text-anchor: middle; }
-    </style>
-  </defs>
-  <g class="layer">
-    <title>Layer 1</title>
-    <rect class="frame" height="820" id="svg_1" width="640" x="37.78" y="34.81"/>
-    <text class="blue" id="svg_2" x="86" y="116">Ti/TiN</text>
-    <text class="blue" id="svg_3" text-anchor="end" x="620" y="116">AL</text>
-    <text class="blue" font-size="26" id="svg_4" transform="matrix(1 0 0 1 0 0)" x="57" y="286">AL</text>
-    <text class="blue" font-size="26" id="svg_5" text-anchor="end" x="679" y="278">Ti/TiN</text>
-    <text class="blue" font-size="26" id="svg_6" transform="matrix(1 0 0 1 0 0)" x="76" y="537">Ti/TiN</text>
-    <text class="blue" font-size="26" id="svg_7" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="647" y="533">Ti/TiN</text>
-    <text class="blue" font-size="26" id="svg_8" transform="matrix(1 0 0 1 0 0)" x="133" y="677">Degas</text>
-    <text class="blue" font-size="26" id="svg_9" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="583" y="675">Degas</text>
-    <g id="svg_10" transform="matrix(1 0 0 1 0 0)">
-      <ellipse class="light" cx="188" cy="190" id="svg_11" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(-34 188 190)"/>
-      <circle class="shape" cx="188" cy="190" id="CH_2" r="46"/>
-      <text class="label" id="svg_13" x="188" y="196">PVD 2</text>
-      <rect class="light" height="40" id="svg_14" rx="18" transform="matrix(0.829038 -0.559193 0.559193 0.829038 -86.6643 92.5338)" width="56" x="80" y="168"/>
-      <rect class="light" height="40" id="svg_15" rx="18" transform="rotate(-34 266 188)" width="56" x="238" y="168"/>
-    </g>
-    <g id="svg_16">
-      <ellipse class="light" cx="530" cy="190" id="svg_17" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(34 530 190)"/>
-      <circle class="shape" cx="530" cy="190" id="CH_3" r="46"/>
-      <text class="label" id="svg_19" x="530" y="196">PVD 3</text>
-      <rect class="light" height="40" id="svg_20" rx="18" transform="rotate(34 450 188)" width="56" x="422" y="168"/>
-      <rect class="light" height="40" id="svg_21" rx="18" transform="matrix(1 0 0 1 0 0) rotate(34 608 188)" width="56" x="580" y="168"/>
-    </g>
-    <g id="svg_22" transform="matrix(1 0 0 1 -9 -10)">
-      <ellipse class="light" cx="188" cy="350" id="svg_23" rx="90" ry="58" transform="rotate(34 188 350)"/>
-      <circle class="shape" cx="188" cy="350" id="CH_1" r="46"/>
-      <text class="label" id="svg_25" x="188" y="356">PVD 1</text>
-      <rect class="light" height="40" id="svg_26" rx="18" transform="rotate(34 108 348)" width="56" x="80" y="328"/>
-      <rect class="light" height="40" id="svg_27" rx="18" transform="rotate(34 266 348)" width="56" x="238" y="328"/>
-    </g>
-    <g id="svg_28" transform="matrix(1 0 0 1 13 -13)">
-      <ellipse class="light" cx="530" cy="350" id="svg_29" rx="90" ry="58" transform="rotate(-34 530 350)"/>
-      <circle class="shape" cx="530" cy="350" id="CH_4" r="46"/>
-      <text class="label" id="svg_31" x="530" y="356">PVD 4</text>
-      <rect class="light" height="40" id="svg_32" rx="18" transform="rotate(-34 450 348)" width="56" x="422" y="328"/>
-      <rect class="light" height="40" id="svg_33" rx="18" transform="rotate(-34 608 348)" width="56" x="580" y="328"/>
-    </g>
-    <g id="svg_34" transform="matrix(0.999859 0.0168225 -0.0168225 0.999859 4.72759 -6.01675)">
-      <circle class="shape" cx="360" cy="278" id="svg_35" r="124" transform="matrix(1 0 0 1 0 0) matrix(0.854791 0.518972 -0.518972 0.854791 196.549 -146.462)"/>
-      <text class="tiny" font-size="11" id="svg_42" transform="matrix(1 0 0 1 0 0)" x="360" y="193">WAFER HANDLER ROBOTS</text>
-      <g id="ARM_2">
-        <circle class="shape" cx="360" cy="278" id="svg_36" r="28" transform="matrix(1 0 0 1 0 0)"/>
-        <circle class="shape" cx="359" cy="213.5" id="svg_37" r="34.5"/>
-        <circle class="shape" cx="360.5" cy="341.5" id="svg_38" r="33.5"/>
-        <path class="shape" d="m300,300l60,-22l60,22l-10,10l-50,-20l-50,20l-10,-10z" id="svg_39"/>
-        <path class="outline" d="m286,294l50,-28l24,0l-60,34l-14,-6z" id="svg_40"/>
-        <path class="outline" d="m434,294l-50,-28l-24,0l60,34l14,-6z" id="svg_41"/>
-      </g>
-    </g>
-    <g id="svg_47">
-      <path d="m238.75,472.66l73.14,-72.66l103.44,0l73.14,72.66l0,102.75l-73.14,72.66l-103.44,0l-73.14,-72.66l0,-102.75z" fill="#ffffff" id="BUFFER" stroke="#000000" transform="matrix(1 0 0 1 0 0)"/>
-      <g id="ARM_1" transform="translate(0 1) matrix(0.999987 -0.00515784 0.00515784 0.999987 -2.55359 16.8608)">
-        <ellipse class="light" cx="359.54" cy="522" id="svg_48" rx="76" ry="44" transform="rotate(1.25562 359.495 526.277) matrix(0.999876 0.0133529 -0.0108504 0.968472 5.66273 15.9322)"/>
-        <circle class="shape" cx="364.47" cy="453.71" id="svg_49" r="22" transform="rotate(1.25562 362.146 450.88) matrix(1.40824 0.0183803 -0.0152818 1.3331 -144.178 -160.667)"/>
-        <circle class="shape" cx="359.43" cy="527" id="svg_50" r="22" transform="rotate(1.25562 359.335 531.117) matrix(0.999876 0.0133529 -0.0108504 0.968472 5.66273 15.9322)"/>
-        <path class="shape" d="m298.03,513.83l62.25,-22.42l61.73,24.07l-16.11,9.47l-45.8,-18.05l-46.19,16.82l-15.89,-9.9l0.01,0.01z" id="svg_51" transform="rotate(1.25562 360.022 508.19)"/>
-        <path class="outline" d="m302.38,503.53l34.26,-22.79l24,0.32l-62.36,32.1l4.11,-9.63l-0.01,0z" id="svg_52" transform="rotate(1.25562 329.449 496.951)"/>
-        <path class="outline" d="m418.33,506.44l-33.74,-23.7l-24,-0.32l61.62,33.76l-3.89,-9.74l0.01,0z" id="svg_53" transform="rotate(1.25562 391.405 499.298)"/>
-      </g>
-    </g>
-    <g id="svg_56" transform="matrix(1 0 0 1 2 -67)">
-      <ellipse class="shape" cx="298" cy="470" id="CH_A" rx="42" ry="26" transform="matrix(1 0 0 1 0 0)"/>
-      <ellipse class="shape" cx="422" cy="470" id="CH_B" rx="42" ry="26"/>
-      <text class="label" id="svg_59" transform="matrix(1 0 0 1 0 0)" x="298" y="476">A</text>
-      <text class="label" id="svg_60" x="422" y="476">B</text>
-    </g>
-    <path d="m300.6,606.8l0,0c5.16,0 9.33,-3.73 9.33,-8.33l37.33,0l0,0c0,4.6 4.17,8.33 9.33,8.33l0,33.33l0,0c-5.16,0 -9.33,3.73 -9.33,8.33l-37.33,0c0,-4.6 -4.17,-8.33 -9.33,-8.33l0,-33.33z" fill="#cccccc" id="LLA" stroke="#cccccc" transform="matrix(1 0 0 1 0 0)"/>
-    <path d="m373.5,605.33l0,0c5.16,0 9.33,-3.73 9.33,-8.33l37.33,0l0,0c0,4.6 4.17,8.33 9.33,8.33l0,33.33l0,0c-5.16,0 -9.33,3.73 -9.33,8.33l-37.33,0c0,-4.6 -4.17,-8.33 -9.33,-8.33l0,-33.33z" fill="#cccccc" id="LLB"/>
-    <g id="svg_66" transform="translate(8 3)">
-      <circle class="shape" cx="466" cy="636" id="CH_F" r="34" transform="matrix(1 0 0 1 0 0)"/>
-      <circle class="shape" cx="245.5" cy="634" id="CH_E" r="34"/>
-      <text class="label" font-size="25.34" id="svg_69" transform="matrix(1 0 0 1 0 0)" x="243" y="639">E</text>
-      <text class="label" font-size="103.4" id="svg_70" x="465" y="639">F</text>
-    </g>
-    <text font-size="191.19" id="svg_86" text-anchor="middle" x="538" xml:space="preserve" y="431"/>
-    <text font-size="191.19" id="svg_87" text-anchor="middle" x="556" xml:space="preserve" y="439"/>
-    <text font-size="191.19" id="svg_88" text-anchor="middle" x="554" xml:space="preserve" y="455"/>
-    <text font-size="191.19" id="svg_89" text-anchor="middle" x="564" xml:space="preserve" y="450"/>
-    <text class="blue" font-size="26" id="svg_90" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="541.14" y="438">COOL</text>
-    <text class="blue" font-size="26" id="svg_91" text-anchor="end" x="243" y="441">COOL</text>
-    <g id="SMIF_1" transform="matrix(1 0 0 1 -10 -54)">
-      <rect fill="#f7f7f7" height="156" id="smif1OuterFrame" rx="3" stroke="#000000" stroke-width="1.8" width="70" x="300" y="704"/>
-      <rect fill="#ffffff" height="144" id="smif1InnerFrame" rx="2" stroke="#000000" stroke-width="1.2" width="62" x="304" y="708"/>
-      <rect fill="#333333" height="42" id="smif1TopPanel" opacity="0.9" width="62" x="304" y="708"/>
-      <rect fill="#e5e7eb" height="84.07" id="BOARD_1" opacity="0.95" stroke="#000000" width="41.56" x="315.59" y="734.11"/>
-      <path d="m322.02,769.98l28.3,0a3.03,3 0 0 1 3.03,3l0,45m-31.33,-48a3.03,3 0 0 0 -3.03,3l0,45" fill="none" id="POD_1" opacity="0.52" stroke="#4b5563"/>
-      <g id="Group1_CST">
-        <rect fill="#333333" height="34" id="CASSETTE_1" opacity="0.86" stroke="#000000" stroke-width="0.8" transform="matrix(1.43902 0 0 1.01042 -172.414 12.4824)" width="18" x="344.52" y="757.96"/>
-        <path d="m326,785.78l20,0" fill="#b2b2b2" id="L25" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,786.78l20,0" fill="#b2b2b2" id="L24" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,787.78l20,0" fill="#b2b2b2" id="L23" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,788.78l20,0" fill="#b2b2b2" id="L22" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,789.78l20,0" fill="#b2b2b2" id="L21" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-        <path d="m326,790.78l20,0" fill="#b2b2b2" id="L20" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,791.78l20,0" fill="#b2b2b2" id="L19" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,792.78l20,0" fill="#b2b2b2" id="L18" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,793.78l20,0" fill="#b2b2b2" id="L17" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,794.78l20,0" fill="#b2b2b2" id="L16" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,795.78l20,0" fill="#b2b2b2" id="L15" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,796.78l20,0" fill="#b2b2b2" id="L14" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-        <path d="m326,797.78l20,0" fill="#b2b2b2" id="L13" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,798.78l20,0" fill="#b2b2b2" id="L12" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,799.78l20,0" fill="#b2b2b2" id="L11" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,800.78l20,0" fill="#b2b2b2" id="L10" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,801.78l20,0" fill="#b2b2b2" id="L9" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,802.78l20,0" fill="#b2b2b2" id="L8" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,803.78l20,0" fill="#b2b2b2" id="L7" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,804.78l20,0" fill="#b2b2b2" id="L6" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,805.78l20,0" fill="#b2b2b2" id="L5" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,806.78l20,0" fill="#b2b2b2" id="L4" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,807.78l20,0" fill="#b2b2b2" id="L3" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,808.78l20,0" fill="#b2b2b2" id="L2" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,809.78l20,0" fill="#b2b2b2" id="L1" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-      </g>
-      <rect fill="#1f2937" height="12" id="smif1BasePanel" width="62" x="304" y="836"/>
-      <rect fill="#000000" height="17.85" id="smif1FrontPanel" opacity="0.85" width="55.26" x="307.19" y="818.37"/>
-      <path d="m307,708l0,140" fill="none" id="smif1FrameLeft" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m363,708l0,140" fill="none" id="smif1FrameRight" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m307,708l56,0" fill="none" id="smif1FrameTop" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m307,848l56,0" fill="none" id="smif1FrameBottom" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m308,846l54,0" fill="none" id="smif1FrameBottomInner" stroke="#000000" stroke-linecap="round" stroke-width="1.2"/>
-      <path d="m312,842l46,0" fill="none" id="smif1FrameBottomHighlight" opacity="0.65" stroke="#000000" stroke-linecap="round" stroke-width="0.9"/>
-      <text class="small" font-size="15.7" id="smif1Label" x="332.42" y="874">SMIF-1</text>
-      <g id="smif1Handle">
-        <rect fill="#000000" height="30" id="smif1HandleLeft" opacity="0.52" transform="matrix(1 0 0 0.244962 -1182.89 -2101.13)" width="3" x="1498.74" y="11779.46"/>
-        <rect fill="#000000" height="30" id="smif1HandleRight" opacity="0.52" transform="matrix(1 0 0 0.236749 -414.63 -162.007)" width="3" x="768.52" y="3997.35"/>
-      </g>
-    </g>
-    <rect fill="#111827" height="5" id="smif1LampBar" transform="matrix(1 0 0 1 0 0) matrix(1.53598 0 0 1 -221.948 -54)" width="18" x="348.24" y="813.44"/>
-    <circle cx="320.9" cy="761.94" data-off-fill="#4b1113" data-off-opacity="0.45" data-on-fill="#ef4444" data-on-opacity="0.95" fill="#4b1113" id="smif1RedLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5"/>
-    <circle cx="320.9" cy="761.94" fill="#fca5a5" id="smif1RedLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
-    <circle cx="332.8" cy="761.94" data-off-fill="#123524" data-off-opacity="0.45" data-on-fill="#22c55e" data-on-opacity="0.95" fill="#123524" id="smif1GreenLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5"/>
-    <circle cx="332.8" cy="761.94" fill="#bbf7d0" id="smif1GreenLampCore" opacity="0.18" r="0.55"/>
-    <rect fill="#ffffff" height="102" id="CH_C" stroke="#000000" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)" width="83" x="155" y="472"/>
-    <rect fill="#ffffff" height="102" id="CH_D" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="489.5" y="473"/>
-    <g id="svg_61" transform="matrix(1 0 0 1 0 0) translate(0 -1) matrix(1 0 0 1 8 -16)">
-      <text class="label" font-size="15" id="svg_64" x="190" y="548">C</text>
-      <text class="label" font-size="15" id="svg_65" transform="matrix(1 0 0 1 0 0)" x="520" y="546">D</text>
-    </g>
-    <g id="svg_123" transform="matrix(1 0 0 1 69.5 -53.5)">
-      <rect fill="#f7f7f7" height="156" id="svg_124" rx="3" stroke="#000000" stroke-width="1.8" width="70" x="300" y="704"/>
-      <rect fill="#ffffff" height="144" id="svg_125" rx="2" stroke="#000000" stroke-width="1.2" width="62" x="304" y="708"/>
-      <rect fill="#333333" height="42" id="svg_126" opacity="0.9" transform="matrix(1 0 0 1 0 0)" width="62" x="304" y="708"/>
-      <rect fill="#e5e7eb" height="84.07" id="BOARD_2" opacity="0.95" stroke="#000000" width="41.56" x="315.59" y="734.11"/>
-      <path d="m322.02,769.98l28.3,0a3.03,3 0 0 1 3.03,3l0,45m-31.33,-48a3.03,3 0 0 0 -3.03,3l0,45" fill="none" id="POD_2" opacity="0.52" stroke="#4b5563" transform="matrix(1 0 0 1 0 0)"/>
-      <g id="Group2_CST">
-        <rect fill="#333333" height="34" id="CASSETTE_2" opacity="0.86" stroke="#000000" stroke-width="0.8" transform="matrix(1.43902 0 0 1.01042 -172.414 12.4824)" width="18" x="344.52" y="757.96"/>
-        <path d="m326,785.78l20,0" fill="#333333" id="R25" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,786.78l20,0" fill="#333333" id="R24" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,787.78l20,0" fill="#333333" id="R23" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,788.78l20,0" fill="#333333" id="R22" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,789.78l20,0" fill="#333333" id="R21" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-        <path d="m326,790.78l20,0" fill="#333333" id="R20" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,791.78l20,0" fill="#333333" id="R19" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,792.78l20,0" fill="#333333" id="R18" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,793.78l20,0" fill="#333333" id="R17" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,794.78l20,0" fill="#333333" id="R16" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,795.78l20,0" fill="#333333" id="R15" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,796.78l20,0" fill="#333333" id="R14" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-        <path d="m326,797.78l20,0" fill="#333333" id="R13" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,798.78l20,0" fill="#333333" id="R12" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,799.78l20,0" fill="#333333" id="R11" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,800.78l20,0" fill="#333333" id="R10" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,801.78l20,0" fill="#333333" id="R9" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,802.78l20,0" fill="#333333" id="R8" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,803.78l20,0" fill="#333333" id="R7" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,804.78l20,0" fill="#333333" id="R6" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,805.78l20,0" fill="#333333" id="R5" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-        <path d="m326,806.78l20,0" fill="#333333" id="R4" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,807.78l20,0" fill="#333333" id="R3" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,808.78l20,0" fill="#333333" id="R2" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-        <path d="m326,809.78l20,0" fill="#333333" id="R1" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-      </g>
-      <rect fill="#1f2937" height="12" id="svg_198" width="62" x="304" y="836"/>
-      <rect fill="#000000" height="17.85" id="svg_199" opacity="0.85" transform="matrix(1 0 0 1 0 0)" width="55.26" x="307.19" y="818.37"/>
-      <path d="m307,708l0,140" fill="none" id="svg_201" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m363,708l0,140" fill="none" id="svg_202" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m307,708l56,0" fill="none" id="svg_203" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m307,848l56,0" fill="none" id="svg_204" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
-      <path d="m308,846l54,0" fill="none" id="svg_205" stroke="#000000" stroke-linecap="round" stroke-width="1.2"/>
-      <path d="m312,842l46,0" fill="none" id="svg_206" opacity="0.65" stroke="#000000" stroke-linecap="round" stroke-width="0.9"/>
-      <text class="small" font-size="15.7" id="svg_207" x="332.42" y="874">SMIF-2</text>
-      <g id="handle">
-        <rect fill="#000000" height="30" id="svg_194" opacity="0.52" transform="matrix(1 0 0 0.244962 -1182.89 -2101.13)" width="3" x="1498.74" y="11779.46"/>
-        <rect fill="#000000" height="30" id="svg_195" opacity="0.52" transform="matrix(1 0 0 0.236749 -414.63 -162.007)" width="3" x="768.52" y="3997.35"/>
-      </g>
-    </g>
-    <rect fill="#111827" height="5" id="svg_243" transform="matrix(1 0 0 1 0 0) matrix(1.53598 0 0 1 -221.948 -54)" width="18" x="399.76" y="813.44"/>
-    <circle cx="401.6" cy="761.94" data-off-fill="#4b1113" data-off-opacity="0.45" data-on-fill="#ef4444" data-on-opacity="0.95" fill="#4b1113" id="smif2RedLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5"/>
-    <circle cx="400.1" cy="761.94" fill="#fca5a5" id="smif2RedLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
-    <circle cx="412.5" cy="761.94" data-off-fill="#123524" data-off-opacity="0.45" data-on-fill="#22c55e" data-on-opacity="0.95" fill="#123524" id="smif2GreenLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-    <circle cx="412" cy="761.94" fill="#bbf7d0" id="smif2GreenLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
+<title id="title">AMAT METSPUT schematic</title>
+<desc id="desc">Line-art SVG rebuilt from the provided AMAT METSPUT reference image.</desc>
+<defs>
+  <style>.frame { fill: #fff; stroke: #7f7f7f; stroke-width: 2; }
+            .outline { fill: none; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+            .shape { fill: #fff; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+            .light { fill: #f7f7f7; stroke: #454545; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+            .dash { fill: none; stroke: #454545; stroke-width: 2.2; stroke-dasharray: 10 7; stroke-linecap: round; stroke-linejoin: round; }
+            .blue { font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 700; fill: #1148d8; }
+            .title { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; fill: #222; text-anchor: middle; }
+            .label { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; fill: #222; text-anchor: middle; }
+            .small { font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 700; fill: #222; text-anchor: middle; }
+            .tiny { font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 700; fill: #222; text-anchor: middle; }
+            /* === 晶圆真实化（阶段1 v2：彩虹硅片） === */
+            /* 俯视晶圆：彩虹薄膜干涉色 + die 网格纹理（waferPattern 嵌套 pattern） */
+            #Group1_CST_TOPVIEW circle, #Group2_CST_TOPVIEW circle { fill: url(#waferPattern); stroke: #2f3a4d; stroke-width: 1.2; }
+            /* cassette 侧视片槽：金属圆柱侧光，亮银叠片 */
+            #Group1_CST path[id^="L"], #Group2_CST path[id^="R"] { stroke: url(#slotGrad); stroke-width: 0.75; stroke-linecap: round; }</style>
+  <!-- 彩虹薄膜干涉色（斜向，参考真实晶圆照片） -->
+  <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1">
+   <stop offset="0%" stop-color="#ff5f6d"/>
+   <stop offset="18%" stop-color="#ff9f43"/>
+   <stop offset="35%" stop-color="#f7d154"/>
+   <stop offset="50%" stop-color="#4ade80"/>
+   <stop offset="65%" stop-color="#22d3ee"/>
+   <stop offset="80%" stop-color="#3b82f6"/>
+   <stop offset="100%" stop-color="#a855f7"/>
+  </linearGradient>
+  <!-- die 网格（芯片阵列刻线） -->
+  <pattern id="dieGrid" width="0.05" height="0.05" patternUnits="objectBoundingBox">
+   <path d="M0.05,0 L0.05,0.05 M0,0.05 L0.05,0.05" fill="none" stroke="rgba(20,25,40,0.32)" stroke-width="0.008"/>
+  </pattern>
+  <!-- 晶圆质感 = 彩虹底 + 网格叠加 -->
+  <pattern id="waferPattern" width="1" height="1" patternUnits="objectBoundingBox">
+   <rect width="1" height="1" fill="url(#rainbowGrad)"/>
+   <rect width="1" height="1" fill="url(#dieGrid)"/>
+  </pattern>
+  <!-- 侧视晶圆片：横放金属圆柱光泽（userSpace 对齐片槽 x 326→346） -->
+  <linearGradient id="slotGrad" gradientUnits="userSpaceOnUse" x1="326" y1="0" x2="346" y2="0">
+   <stop offset="0%" stop-color="#7e90ac"/>
+   <stop offset="25%" stop-color="#f2f6fb"/>
+   <stop offset="55%" stop-color="#ccd6e5"/>
+   <stop offset="100%" stop-color="#71839f"/>
+  </linearGradient>
+</defs>
+<g class="layer">
+  <title>Layer 1</title>
+  <rect class="frame" fill="#000000" height="820" id="svg_1" width="640" x="44.53" y="34.56">是s sdad</rect>
+  <text class="blue" id="svg_2" x="86" y="116">Ti/TiN</text>
+  <text class="blue" id="svg_3" text-anchor="end" x="620" y="116">AL</text>
+  <text class="blue" font-size="26" id="svg_4" transform="matrix(1 0 0 1 0 0)" x="57" y="286">AL</text>
+  <text class="blue" font-size="26" id="svg_5" text-anchor="end" x="679" y="278">Ti/TiN</text>
+  <text class="blue" font-size="26" id="svg_6" transform="matrix(1 0 0 1 0 0)" x="57" y="537">Ti/TiN</text>
+  <text class="blue" font-size="26" id="svg_7" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="665.5" y="533">Ti/TiN</text>
+  <text class="blue" font-size="26" id="svg_8" transform="matrix(1 0 0 1 0 0)" x="133" y="677">Degas</text>
+  <text class="blue" font-size="26" id="svg_9" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="597.5" y="674.5">Degas</text>
+  <g id="svg_10" transform="matrix(1 0 0 1 0 0)">
+   <ellipse class="light" cx="188" cy="190" id="svg_11" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(-34 188 190)"/>
+   <circle class="shape" cx="188" cy="190" id="CH_2" r="46"/>
+   <text class="label" font-size="15" id="svg_13" x="136" y="240">PVD 2</text>
+   <rect class="light" height="40" id="svg_14" rx="18" transform="matrix(0.829038 -0.559193 0.559193 0.829038 -86.6643 92.5338)" width="56" x="80" y="168"/>
+   <rect class="light" height="40" id="svg_15" rx="18" transform="rotate(-55.1755 249 227)" width="56" x="221" y="207"/>
   </g>
+  <g id="svg_16">
+   <ellipse class="light" cx="530" cy="190" id="svg_17" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(34 530 190)"/>
+   <circle class="shape" cx="530" cy="190" id="CH_3" r="46"/>
+   <text class="label" font-size="15" id="svg_19" x="579" y="241">PVD 3</text>
+   <rect class="light" height="40" id="svg_20" rx="18" transform="rotate(55.9228 466 222)" width="56" x="438" y="202"/>
+   <rect class="light" height="40" id="svg_21" rx="18" transform="matrix(1 0 0 1 0 0) rotate(34 608 188)" width="56" x="580" y="168"/>
+  </g>
+  <g id="svg_22" transform="matrix(1 0 0 1 -9 -10)">
+   <ellipse class="light" cx="188" cy="350" id="svg_23" rx="90" ry="58" transform="rotate(34 188 350)"/>
+   <circle class="shape" cx="188" cy="350" id="CH_1" r="46"/>
+   <text class="label" font-size="15" id="svg_25" x="143" y="308">PVD 1</text>
+   <rect class="light" height="40" id="svg_26" rx="18" transform="rotate(34 108 348)" width="56" x="80" y="328"/>
+   <rect class="light" height="40" id="svg_27" rx="18" transform="rotate(63.4349 258 325)" width="56" x="230" y="305"/>
+  </g>
+  <g id="svg_28" transform="matrix(1 0 0 1 13 -13)">
+   <ellipse class="light" cx="530" cy="350" id="svg_29" rx="90" ry="58" transform="rotate(-34 530 350)"/>
+   <circle class="shape" cx="530" cy="350" id="CH_4" r="46"/>
+   <text class="label" font-size="15" id="svg_31" x="565" y="300">PVD 4</text>
+   <rect class="light" height="40" id="svg_32" rx="18" transform="rotate(116.565 461 331)" width="56" x="433" y="311"/>
+   <rect class="light" height="40" id="svg_33" rx="18" transform="rotate(-34 608 348)" width="56" x="580" y="328"/>
+  </g>
+  <g id="svg_34" transform="matrix(0.999859 0.0168225 -0.0168225 0.999859 4.72759 -6.01675)">
+   <circle class="shape" cx="360" cy="278" id="svg_35" r="124" transform="matrix(1 0 0 1 0 0) matrix(0.854791 0.518972 -0.518972 0.854791 196.549 -146.462)"/>
+   <text class="tiny" font-size="11" id="svg_42" transform="matrix(1 0 0 1 0 0)" x="360" y="193">WAFER HANDLER ROBOTS</text>
+   <g id="ARM_2" transform="matrix(1 0 0 1 0 0)">
+    <circle class="shape" cx="360" cy="278" id="svg_36" r="28" transform="matrix(1 0 0 1 0 0)"/>
+    <circle class="shape" cx="359" cy="213.5" id="Wafer_Chuck2" r="34.5"/>
+    <circle class="shape" cx="360.5" cy="341.5" id="svg_38" r="33.5"/>
+    <path class="shape" d="m300,300l60,-22l60,22l-10,10l-50,-20l-50,20l-10,-10z" id="svg_39"/>
+    <path class="outline" d="m286,294l50,-28l24,0l-60,34l-14,-6z" id="svg_40"/>
+    <path class="outline" d="m434,294l-50,-28l-24,0l60,34l14,-6z" id="svg_41"/>
+   </g>
+  </g>
+  <g id="svg_47" transform="matrix(1 0 0 1 0 0)">
+   <path d="m215.29,472l86.96,-72l122.98,0l86.95,72l0,101.82l-86.95,72l-122.98,0l-86.96,-72l0,-101.82z" fill="#ffffff" id="BUFFER" stroke="#000000"/>
+   <g id="ARM_1" transform="matrix(1 0 0 1 0 0)">
+    <ellipse class="light" cx="363.58" cy="539.98" id="svg_48" rx="59.97" ry="42.23"/>
+    <circle class="shape" cx="364.36" cy="463.6" id="Wafer_Chuck1" r="33.08"/>
+    <path class="shape" d="m311.12,546.38l53.26,-48.88l51.4,54.66l-13.9,20.82l-38.13,-40.98l-39.52,36.67l-13.11,-22.32l0,0.03z" id="svg_51"/>
+    <path class="outline" d="m308.68,524.55l33.03,-21.99l22.88,0.73l-59.98,30.74l4.07,-9.48z" id="svg_52"/>
+    <path class="outline" d="m419.18,528.06l-30.85,-24.05l-22.19,-0.74l56.49,34.51l-3.45,-9.72z" id="svg_53"/>
+   </g>
+  </g>
+  <g id="svg_56" transform="matrix(1 0 0 1 2 -67)">
+   <ellipse class="shape" cx="298" cy="470" id="CH_A" rx="42" ry="26" transform="matrix(1 0 0 1 0 0)"/>
+   <ellipse class="shape" cx="422" cy="470" id="CH_B" rx="42" ry="26"/>
+   <text class="label" font-size="15" id="svg_59" x="250" y="482">A</text>
+   <text class="label" font-size="15" id="svg_60" transform="matrix(1 0 0 1 0 0)" x="470" y="480">B</text>
+  </g>
+  <path d="m298.6,598.72l0,0c5.16,0 9.33,-4.14 9.33,-9.25l37.33,0l0,0c0,5.11 4.17,9.25 9.33,9.25l0,37l0,0c-5.16,0 -9.33,4.14 -9.33,9.25l-37.33,0c0,-5.11 -4.17,-9.25 -9.33,-9.25l0,-37z" fill="#cccccc" id="LLA" stroke="#cccccc" transform="matrix(1 0 0 1 0 0)"/>
+  <path d="m371.75,598.58l0,0c5.16,0 9.33,-4.18 9.33,-9.33l37.33,0l0,0c0,5.15 4.17,9.33 9.33,9.33l0,37.33l0,0c-5.16,0 -9.33,4.18 -9.33,9.33l-37.33,0c0,-5.15 -4.17,-9.33 -9.33,-9.33l0,-37.33z" fill="#cccccc" id="LLB" transform="matrix(1 0 0 1 0 0)"/>
+  <circle class="shape" cx="498" cy="635" id="CH_F" r="34" transform="matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
+  <circle class="shape" cx="244.53" cy="634" id="CH_E" r="34" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
+  <text class="label" font-size="25.34" id="svg_69" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)" x="197.45" y="650">E</text>
+  <text class="label" font-size="103.4" id="svg_70" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)" x="546.46" y="649.5">F</text>
+  <text font-size="191.19" id="svg_86" text-anchor="middle" x="538" xml:space="preserve" y="431"/>
+  <text font-size="191.19" id="svg_87" text-anchor="middle" x="556" xml:space="preserve" y="439"/>
+  <text font-size="191.19" id="svg_88" text-anchor="middle" x="554" xml:space="preserve" y="455"/>
+  <text font-size="191.19" id="svg_89" text-anchor="middle" x="564" xml:space="preserve" y="450"/>
+  <text class="blue" font-size="26" id="svg_90" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="541.14" y="438">COOL</text>
+  <text class="blue" font-size="26" id="svg_91" text-anchor="end" x="243" y="441">COOL</text>
+  <g id="SMIF_1" transform="matrix(1 0 0 1 -10 -54)">
+   <rect fill="#f7f7f7" height="156" id="smif1OuterFrame" rx="3" stroke="#000000" stroke-width="1.8" width="70" x="300" y="704"/>
+   <rect fill="#ffffff" height="144" id="smif1InnerFrame" rx="2" stroke="#000000" stroke-width="1.2" width="62" x="304" y="708"/>
+   <rect fill="#333333" height="42" id="smif1TopPanel" opacity="0.9" width="62" x="304" y="708"/>
+   <rect fill="#e5e7eb" height="84.07" id="BOARD_1" opacity="0.95" stroke="#000000" width="41.56" x="315.59" y="734.11"/>
+   <g data-motion-base-visibility="hidden" id="Group1_POD">
+    <path d="m322.02,769.98l28.3,0a3.03,3 0 0 1 3.03,3l0,45m-31.33,-48a3.03,3 0 0 0 -3.03,3l0,45" fill="none" id="POD_1" opacity="0.52" stroke="#4b5563" transform="matrix(1 0 0 1 0 0)"/>
+    <g id="Group1_CST" transform="matrix(1 0 0 1 0.3 0.4)">
+     <rect fill="#333333" height="34" id="CASSETTE_1" opacity="0.86" stroke="#000000" stroke-width="0.8" transform="matrix(1.43902 0 0 1.01042 -172.414 12.4824)" width="18" x="344.52" y="757.96"/>
+     <path d="m326,785.78l20,0" fill="#b2b2b2" id="L25" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,786.78l20,0" fill="#b2b2b2" id="L24" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,787.78l20,0" fill="#b2b2b2" id="L23" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,788.78l20,0" fill="#b2b2b2" id="L22" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,789.78l20,0" fill="#b2b2b2" id="L21" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
+     <path d="m326,790.78l20,0" fill="#b2b2b2" id="L20" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,791.78l20,0" fill="#b2b2b2" id="L19" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,792.78l20,0" fill="#b2b2b2" id="L18" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,793.78l20,0" fill="#b2b2b2" id="L17" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,794.78l20,0" fill="#b2b2b2" id="L16" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,795.78l20,0" fill="#b2b2b2" id="L15" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,796.78l20,0" fill="#b2b2b2" id="L14" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
+     <path d="m326,797.78l20,0" fill="#b2b2b2" id="L13" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,798.78l20,0" fill="#b2b2b2" id="L12" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,799.78l20,0" fill="#b2b2b2" id="L11" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,800.78l20,0" fill="#b2b2b2" id="L10" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,801.78l20,0" fill="#b2b2b2" id="L9" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,802.78l20,0" fill="#b2b2b2" id="L8" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,803.78l20,0" fill="#b2b2b2" id="L7" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,804.78l20,0" fill="#b2b2b2" id="L6" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,805.78l20,0" fill="#b2b2b2" id="L5" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,806.78l20,0" fill="#b2b2b2" id="L4" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,807.78l20,0" fill="#b2b2b2" id="L3" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,808.78l20,0" fill="#b2b2b2" id="L2" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,809.78l20,0" fill="#b2b2b2" id="L1" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+    </g>
+    <g id="smif1Handle">
+     <rect fill="#000000" height="30" id="smif1HandleLeft" opacity="0.52" transform="matrix(1 0 0 0.244962 -1182.89 -2101.13)" width="3" x="1498.74" y="11779.46"/>
+     <rect fill="#000000" height="30" id="smif1HandleRight" opacity="0.52" transform="matrix(1 0 0 0.236749 -414.63 -162.007)" width="3" x="768.52" y="3997.35"/>
+    </g>
+    <g id="svg_12" transform="matrix(1 0 0 1 10 54)">
+     <rect fill="#111827" height="5" id="smif1LampBar" transform="matrix(1 0 0 1 0 0) matrix(1.53598 0 0 1 -221.948 -54)" width="18" x="348.24" y="813.44"/>
+     <circle cx="320.9" cy="761.94" data-off-fill="#4b1113" data-off-opacity="0.45" data-on-fill="#ef4444" data-on-opacity="0.95" fill="#4b1113" id="smif1RedLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5"/>
+     <circle cx="320.9" cy="761.94" fill="#fca5a5" id="smif1RedLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
+     <circle cx="332.8" cy="761.94" data-off-fill="#123524" data-off-opacity="0.45" data-on-fill="#22c55e" data-on-opacity="0.95" fill="#123524" id="smif1GreenLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5"/>
+     <circle cx="332.8" cy="761.94" fill="#bbf7d0" id="smif1GreenLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
+    </g>
+   </g>
+   <rect fill="#1f2937" height="12" id="smif1BasePanel" width="62" x="304" y="836"/>
+   <rect fill="#000000" height="17.85" id="smif1FrontPanel" opacity="0.85" width="55.26" x="307.19" y="818.37"/>
+   <path d="m307,708l0,140" fill="none" id="smif1FrameLeft" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m363,708l0,140" fill="none" id="smif1FrameRight" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m307,708l56,0" fill="none" id="smif1FrameTop" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m307,848l56,0" fill="none" id="smif1FrameBottom" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m308,846l54,0" fill="none" id="smif1FrameBottomInner" stroke="#000000" stroke-linecap="round" stroke-width="1.2"/>
+   <path d="m312,842l46,0" fill="none" id="smif1FrameBottomHighlight" opacity="0.65" stroke="#000000" stroke-linecap="round" stroke-width="0.9"/>
+   <text class="small" font-size="15.7" id="smif1Label" x="332.42" y="874">SMIF-1</text>
+  </g>
+  <rect fill="#ffffff" height="102" id="CH_C" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="132.25" y="472"/>
+  <rect fill="#ffffff" height="102" id="CH_D" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="511.75" y="471.75"/>
+  <g id="svg_61" transform="matrix(1 0 0 1 0 0) translate(141.11 475.891) scale(1.03148 1) translate(-141.11 -475.891) matrix(1.05667 0 0 1 -23.8457 -17)">
+   <text class="label" font-size="15" id="svg_68" transform="matrix(1 0 0 1 0 0)" x="162" y="510">C</text>
+   <text class="label" font-size="15" id="svg_65" x="556" y="507">D</text>
+  </g>
+  <g id="svg_123" transform="matrix(1 0 0 1 64.5 -54)">
+   <rect fill="#f7f7f7" height="156" id="svg_124" rx="3" stroke="#000000" stroke-width="1.8" width="70" x="300" y="704"/>
+   <rect fill="#ffffff" height="144" id="svg_125" rx="2" stroke="#000000" stroke-width="1.2" width="62" x="304" y="708"/>
+   <rect fill="#333333" height="42" id="svg_126" opacity="0.9" transform="matrix(1 0 0 1 0 0)" width="62" x="304" y="708"/>
+   <rect fill="#e5e7eb" height="84.07" id="BOARD_2" opacity="0.95" stroke="#000000" width="41.56" x="315.59" y="734.11"/>
+   <g data-motion-base-visibility="hidden" id="Group2_POD">
+    <path d="m322.02,769.98l28.3,0a3.03,3 0 0 1 3.03,3l0,45m-31.33,-48a3.03,3 0 0 0 -3.03,3l0,45" fill="none" id="POD_2" opacity="0.52" stroke="#4b5563" transform="matrix(1 0 0 1 0 0)"/>
+    <g id="Group2_CST">
+     <rect fill="#333333" height="34" id="CASSETTE_2" opacity="0.86" stroke="#000000" stroke-width="0.8" transform="matrix(1.43902 0 0 1.01042 -172.414 12.4824)" width="18" x="344.52" y="757.96"/>
+     <path d="m326,785.78l20,0" fill="#333333" id="R25" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,786.78l20,0" fill="#333333" id="R24" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,787.78l20,0" fill="#333333" id="R23" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,788.78l20,0" fill="#333333" id="R22" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,789.78l20,0" fill="#333333" id="R21" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
+     <path d="m326,790.78l20,0" fill="#333333" id="R20" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,791.78l20,0" fill="#333333" id="R19" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,792.78l20,0" fill="#333333" id="R18" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,793.78l20,0" fill="#333333" id="R17" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,794.78l20,0" fill="#333333" id="R16" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,795.78l20,0" fill="#333333" id="R15" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,796.78l20,0" fill="#333333" id="R14" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
+     <path d="m326,797.78l20,0" fill="#333333" id="R13" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,798.78l20,0" fill="#333333" id="R12" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,799.78l20,0" fill="#333333" id="R11" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,800.78l20,0" fill="#333333" id="R10" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,801.78l20,0" fill="#333333" id="R9" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,802.78l20,0" fill="#333333" id="R8" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,803.78l20,0" fill="#333333" id="R7" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,804.78l20,0" fill="#333333" id="R6" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,805.78l20,0" fill="#333333" id="R5" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <path d="m326,806.78l20,0" fill="#333333" id="R4" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,807.78l20,0" fill="#333333" id="R3" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,808.78l20,0" fill="#333333" id="R2" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <path d="m326,809.78l20,0" fill="#333333" id="R1" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+    </g>
+    <g id="smif2Handle">
+     <rect fill="#000000" height="30" id="svg_194" opacity="0.52" transform="matrix(1 0 0 0.244962 -1182.89 -2101.13)" width="3" x="1498.74" y="11779.46"/>
+     <rect fill="#000000" height="30" id="svg_195" opacity="0.52" transform="matrix(1 0 0 0.236749 -414.63 -162.007)" width="3" x="768.52" y="3997.35"/>
+    </g>
+    <g id="svg_24" transform="matrix(1 0 0 1 -64.5 54)">
+     <rect fill="#111827" height="5" id="smif2LampBar" transform="matrix(1 0 0 1 0 0) matrix(1.53598 0 0 1 -221.948 -54)" width="18" x="396.34" y="812.94"/>
+     <circle cx="395.35" cy="761.44" data-off-fill="#4b1113" data-off-opacity="0.45" data-on-fill="#ef4444" data-on-opacity="0.95" fill="#4b1113" id="smif2RedLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <circle cx="395.1" cy="761.19" fill="#fca5a5" id="smif2RedLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
+     <circle cx="405.5" cy="761.44" data-off-fill="#123524" data-off-opacity="0.45" data-on-fill="#22c55e" data-on-opacity="0.95" fill="#123524" id="smif2GreenLamp" opacity="0.45" r="1.55" stroke="#111827" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <circle cx="405.25" cy="761.44" fill="#bbf7d0" id="smif2GreenLampCore" opacity="0.18" r="0.55" transform="matrix(1 0 0 1 0 0)"/>
+    </g>
+   </g>
+   <rect fill="#1f2937" height="12" id="svg_198" width="62" x="304" y="836"/>
+   <rect fill="#000000" height="17.85" id="svg_199" opacity="0.85" transform="matrix(1 0 0 1 0 0)" width="55.26" x="307.19" y="818.37"/>
+   <path d="m307,708l0,140" fill="none" id="svg_201" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m363,708l0,140" fill="none" id="svg_202" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m307,708l56,0" fill="none" id="svg_203" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m307,848l56,0" fill="none" id="svg_204" stroke="#000000" stroke-linecap="round" stroke-width="1.8"/>
+   <path d="m308,846l54,0" fill="none" id="svg_205" stroke="#000000" stroke-linecap="round" stroke-width="1.2"/>
+   <path d="m312,842l46,0" fill="none" id="svg_206" opacity="0.65" stroke="#000000" stroke-linecap="round" stroke-width="0.9"/>
+   <text class="small" font-size="15.7" id="svg_207" x="332.42" y="874">SMIF-2</text>
+  </g>
+  <image height="0" id="svg_18" transform="matrix(1 0 0 1 0 0)" width="0" x="328" xlink:href="data:image/png;svgedit_url=.%2Fimages%2Flogo.svg;base64,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" y="628"/>
+  <g data-motion-base-visibility="hidden" id="Group1_CST_TOPVIEW" transform="translate(171.75 -157.75)">
+   <path d="m131,749l0,43l48,0l0,-43" fill="none" id="LLA25_carrier_outline" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA1" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA2" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA3" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA4" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA5" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA6" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA7" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA8" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA9" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA10" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA11" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA12" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA13" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA14" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA15" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA16" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA17" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA18" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA19" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA20" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA21" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA22" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA23" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA24" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLA25" r="23" stroke="#000000"/>
+  </g>
+  <g data-motion-base-visibility="hidden" id="Group2_CST_TOPVIEW" transform="translate(244.75 -157.75)">
+   <path d="m131,749l0,43l48,0l0,-43" fill="none" id="LLB25_carrier_outline" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB1" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB2" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB3" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB4" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB5" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB6" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB7" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB8" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB9" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB10" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB11" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB12" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB13" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB14" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB15" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB16" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB17" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB18" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB19" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB20" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB21" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB22" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB23" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB24" r="23" stroke="#000000"/>
+   <circle cx="155" cy="771" fill="#000000" id="LLB25" r="23" stroke="#000000"/>
+  </g>
+</g>
 </svg>

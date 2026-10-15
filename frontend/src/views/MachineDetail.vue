@@ -11,6 +11,7 @@ import MachineIsoView from '../components/MachineIsoView.vue'
 import MachineOxeView from '../components/MachineOxeView.vue'
 import MachineVpoView from '../components/MachineVpoView.vue'
 import MachineVpo3DView from '../components/MachineVpo3DView.vue'
+import MachineMotion2D from '../components/MachineMotion2D.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
 import AiAssistant from '../components/AiAssistant.vue'
 import HistoryReplay from '../components/HistoryReplay.vue'
@@ -59,6 +60,7 @@ const playbackEnd = ref(0)
 const rightTab = ref('replay')
 const aiAssistantRef = ref(null)
 const oxeViewRef = ref(null)  // OXE 看板：回放跳转时需重置其只增不减的已播游标
+const motion2dRef = ref(null) // Motion2D 视图：回放跳转时需清空动画状态重新补放
 const aiPrefillQuestion = ref('')  // 从回放 Tab 传递过来的预填问题
 const currentState = ref('idle')
 const processStep = ref('待机')
@@ -127,15 +129,16 @@ const modelConfigReady = ref(false)
 
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
-  // OXE 机台：默认显示 Canvas 实时看板
-  const machineIdVal = machine.value?.id || ''
-  if (machineIdVal.toUpperCase().startsWith('OXE')) {
-    return 'oxe'
-  }
+  const cfg = modelStore.getModelById(modelStore.resolveModelId(machineModel))
+  // 视图选择完全由机型配置驱动（view_mode / views_config / animation_config），
+  // 不再按机台号前缀分流；新机型在 machine_model_configs 里绑定对应配置即可
+  // OXE Canvas 看板
+  if (vm === 'oxe' || cfg?.views_config?.view_2d?.type === 'oxe') return 'oxe'
+  // Motion JSON 2D 动画视图（绑定 animation_config 的机型）
+  if (vm === 'motion2d' || cfg?.animation_config?.schema_version) return 'motion2d'
   // PODOPENER机台：如果view_3d.type=vpo则优先显示3D，否则显示2D
   if (vm === 'vpo' || vm === 'svg-vpo' || vm === 'vpo3d' || vm === 'vpo-3d') {
     // 默认优先展示 3D 视图（更具沉浸感）
-    const cfg = modelStore.getModelById(modelStore.resolveModelId(machineModel))
     if (cfg?.views_config?.view_3d?.type === 'vpo') return 'vpo3d'
     return 'vpo'
   }
@@ -149,11 +152,16 @@ const availableViews = computed(() => {
   const cfg = currentModelConfig.value
   if (!cfg) return []
   const views = []
-  // OXE 机台：仅显示 Canvas 实时看板视图，不显示 3D/2.5D 等其他视图
-  const machineIdVal = machine.value?.id || ''
-  const isOxe = machineIdVal.toUpperCase().startsWith('OXE')
+  // OXE 看板：由机型配置决定（view_mode=oxe 或 view_2d.type=oxe），不再按机台号前缀判断
+  const isOxe = cfg.view_mode === 'oxe' || cfg.views_config?.view_2d?.type === 'oxe'
   if (isOxe) {
     views.push({ key: 'oxe', label: '📊 OXE看板' })
+    return views
+  }
+  // Motion JSON 2D 动画视图：绑定 animation_config（含 schema_version）的机型
+  const hasMotion = cfg.view_mode === 'motion2d' || !!cfg.animation_config?.schema_version
+  if (hasMotion) {
+    views.push({ key: 'motion2d', label: '🎬 Motion动画' })
     return views
   }
   const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' ||
@@ -597,7 +605,14 @@ async function loadMachine() {
 }
 
 // === 实时模式：从 store 接收事件 ===
-let lastProcessedRealtimeTs = ''
+// 注意：事件时间戳存在两种格式（db_poller 推送 "YYYY-MM-DD HH:mm:ss"，模拟器用 ISO T 格式），
+// 字符串直接比较会跨格式误判（空格 < 'T'），必须归一化为 epoch 毫秒再比较
+function tsToMs(ts) {
+  if (!ts) return 0
+  const ms = Date.parse(String(ts).replace(' ', 'T'))
+  return Number.isNaN(ms) ? 0 : ms
+}
+let lastProcessedRealtimeTsMs = 0
 let realtimeEventsInitialized = false
 watch(() => appStore.recentEvents, (evs) => {
   if (mode.value !== 'realtime') return
@@ -607,17 +622,16 @@ watch(() => appStore.recentEvents, (evs) => {
   // 首次接收事件时，只初始化时间戳，不处理历史事件
   if (!realtimeEventsInitialized) {
     realtimeEventsInitialized = true
-    const latestTs = myEvents[0]?.timestamp || myEvents[0]?.event_ts_utc || ''
-    if (latestTs && latestTs > lastProcessedRealtimeTs) {
-      lastProcessedRealtimeTs = latestTs
+    const latestTsMs = tsToMs(myEvents[0]?.timestamp || myEvents[0]?.event_ts_utc)
+    if (latestTsMs > lastProcessedRealtimeTsMs) {
+      lastProcessedRealtimeTsMs = latestTsMs
     }
-    console.log('[MachineDetail] 实时事件初始化, lastProcessedRealtimeTs=', lastProcessedRealtimeTs)
+    console.log('[MachineDetail] 实时事件初始化, lastProcessedRealtimeTsMs=', lastProcessedRealtimeTsMs)
     return
   }
   // 只处理比上次更新的事件
   const newEvents = myEvents.filter(e => {
-    const ts = e.timestamp || e.event_ts_utc || ''
-    return ts > lastProcessedRealtimeTs
+    return tsToMs(e.timestamp || e.event_ts_utc) > lastProcessedRealtimeTsMs
   })
   if (!newEvents.length) return
   console.log('[MachineDetail] 收到新实时事件:', newEvents.length, '个')
@@ -625,8 +639,8 @@ watch(() => appStore.recentEvents, (evs) => {
     events.value.push(ev)
     if (events.value.length > 200) events.value.shift()
     applyEventData(ev)
-    const ts = ev.timestamp || ev.event_ts_utc || ''
-    if (ts > lastProcessedRealtimeTs) lastProcessedRealtimeTs = ts
+    const tsMs = tsToMs(ev.timestamp || ev.event_ts_utc)
+    if (tsMs > lastProcessedRealtimeTsMs) lastProcessedRealtimeTsMs = tsMs
   })
 }, { deep: true })
 
@@ -752,7 +766,7 @@ function switchToRealtime() {
   playbackIdx = 0
   // 重置实时事件初始化标记
   realtimeEventsInitialized = false
-  lastProcessedRealtimeTs = ''
+  lastProcessedRealtimeTsMs = 0
   // 实时模式下回放面板展示最新事件（不驱动模型）
   // 只取最新 N 条：实时画面不需要区段全量历史，量产数据量下这是首屏快慢的关键
   loading.value = true
@@ -832,6 +846,7 @@ function seek(pct) {
     // OXE 看板按「只增不减」的已播游标过滤事件，往回跳时新事件全被滤掉、画面会卡在
     // 上一批 Lot 的状态；重建事件前先让它重置游标并清空状态，保证跟得上跳转
     oxeViewRef.value?.resetReplayCursor?.()
+    motion2dRef.value?.resetReplayCursor?.()
 
     events.value = []
 
@@ -1061,7 +1076,7 @@ onMounted(() => {
 <template>
   <div class="detail-page">
     <!-- 左侧视图区 -->
-    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso', 'is-vpo': viewMode === 'vpo', 'is-oxe': viewMode === 'oxe' }">
+    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso' || viewMode === 'motion2d', 'is-vpo': viewMode === 'vpo', 'is-oxe': viewMode === 'oxe' }">
       <!-- 视图模式切换按钮（多于1个视图时才显示，避免单按钮遮挡内容） -->
       <div v-if="modelConfigReady && availableViews.length > 1" class="view-mode-switcher">
         <button
@@ -1159,6 +1174,17 @@ onMounted(() => {
         :mode="mode"
         :speed="speed"
         :current-lot-id="currentLotId"
+      />
+
+      <!-- Motion JSON 2D 动画视图（新机型：绑定 SVG + Motion JSON） -->
+      <MachineMotion2D
+        v-else-if="viewMode === 'motion2d'"
+        ref="motion2dRef"
+        :machine="machine"
+        :model-config="currentModelConfig"
+        :current-state="currentState"
+        :events="events"
+        :mode="mode"
       />
 
       <button class="back-btn" @click="goBack">← 返回看板</button>

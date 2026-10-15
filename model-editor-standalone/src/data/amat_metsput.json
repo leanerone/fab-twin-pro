@@ -1,0 +1,463 @@
+{
+  "ext": {
+    "machine_type": "amat_metsput",
+    "version": "1.0.0",
+    "description": "AMAT METSPUT 消息驱动动作配置"
+  },
+  "schema_version": "1.0",
+  "document": {
+    "name": "amat_metsput",
+    "src": "amat_metsput",
+    "coord": {
+      "type": "logical",
+      "unit": "px",
+      "origin": "bottom_left",
+      "y_axis": "up"
+    }
+  },
+  "arm_chamber_angles": {
+    "ARM_1": {
+      "A": 330,
+      "B": 30,
+      "C": 265,
+      "D": 95,
+      "E": 225,
+      "F": 135,
+      "LLA": 190,
+      "LLB": 160,
+      "Cross": 0
+    },
+    "ARM_2": {
+      "1": 250,
+      "2": 290,
+      "3": 70,
+      "4": 110,
+      "A": 210,
+      "B": 140,
+      "Cross": 180
+    }
+  },
+  "motions": [
+    {
+      "step": "POD_PLACED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "Group1_POD",
+          "when": "params.SMIFPORTID == '1'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": true,
+              "duration": 1000,
+              "easing": "ease-out"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "Group2_POD",
+          "when": "params.SMIFPORTID == '2'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": true,
+              "duration": 1000,
+              "easing": "ease-out"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "BATCH_INFO_FROM_ECUI",
+      "enabled": true,
+      "when": "params.BATCH_ID && params.LOT_ID && params.Qty && params.RunMode && params.RECIPE1 && params.PORT",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "",
+          "when": "params.PORT=='1'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "BATCH_ID:params.BATCH_ID\nLOT_ID:params.LOT_ID\nQty:params.Qty\nRunMode:params.RunMode\nRECIPE1:params.RECIPE1\nPORT:params.PORT",
+              "x": 64,
+              "y": 722
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "",
+          "when": "params.PORT=='2'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "BATCH_ID:params.BATCH_ID\nLOT_ID:params.LOT_ID\nQty:params.Qty\nRunMode:params.RunMode\nRECIPE1:params.RECIPE1\nPORT:params.PORT",
+              "x": 465,
+              "y": 721
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "CASSETTE_ARRIVAL",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "Group1_CST",
+          "when": "params.PORT=='1'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 128,
+              "duration": 1000,
+              "easing": "linear"
+            },
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": false,
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "Group1_CST_TOPVIEW",
+          "when": "params.PORT=='1'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": true,
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "Group2_CST",
+          "when": "params.PORT=='2'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 128,
+              "duration": 1000,
+              "easing": "linear"
+            },
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": false,
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "Group2_CST_TOPVIEW",
+          "when": "params.PORT=='2'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": true,
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "CHAMBER_PS",
+      "enabled": true,
+      "when": "params.LOT_ID && params.SLOT && params.CHAMBER",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "{from_arm}",
+          "when": "!params.has_entered_chamber",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{carrier}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{from_arm}",
+          "when": "params.has_entered_chamber",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{from_chamber}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            {
+              "type": "text",
+              "content": "{LOT_ID}_{SLOT}"
+            },
+            {
+              "type": "snap",
+              "to_part_id": "{pickup_part}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{from_arm}",
+          "when": "params.cross_arm",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{Cross}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{to_arm}",
+          "when": "params.cross_arm",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{Cross}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{carrier}{SLOT}",
+          "when": "params.cross_arm",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{Cross}",
+              "follow_part_id": "{pickup_part}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{carrier}{SLOT}",
+          "when": "params.cross_arm",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{drop_part}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "{to_arm}",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{CHAMBER}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{CHAMBER}",
+              "follow_part_id": "{to_arm}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 6,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "CH_{CHAMBER}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "WAFER_PROCESS_COMPLETE",
+      "enabled": true,
+      "when": "params.LOT_ID && params.SLOT",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "ARM_1",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{from_chamber}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{pickup_part}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "ARM_1",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{carrier}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{carrier}",
+              "follow_part_id": "{pickup_part}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "POD_REMOVED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "",
+          "when": "params.SMIFPORTID == '1'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "",
+              "x": 64,
+              "y": 722
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "Group1_POD",
+          "when": "params.SMIFPORTID == '1'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": false,
+              "duration": 1000,
+              "easing": "ease-out"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "",
+          "when": "params.SMIFPORTID == '2'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "",
+              "x": 465,
+              "y": 721
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "Group2_POD",
+          "when": "params.SMIFPORTID == '2'",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "visible": false,
+              "duration": 1000,
+              "easing": "ease-out"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

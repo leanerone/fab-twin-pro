@@ -210,6 +210,9 @@ export const api = {
   deleteModelFile: (fileId, modelId) => request('DELETE', `/uploads/models/${fileId}?model_id=${modelId}`),
   extractSvgParts: (modelId) => request('POST', `/uploads/models/${modelId}/extract-svg-parts`),
 
+  // 消息调试API（Motion2D 调试台：注入事件走真实轮询链路驱动动画）
+  debugSendEvent: (data) => request('POST', '/debug/event', data),
+
   // 历史回放API
   getHistory: (toolId, params = {}) => {
     const qs = new URLSearchParams(params).toString();

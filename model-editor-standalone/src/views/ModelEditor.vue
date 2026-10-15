@@ -2,8 +2,11 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { resolveMotionRule } from '../composables/useExprEval'
+import { playMotion, clearMotionTexts, appendMotionText } from '../composables/useMotionPlayback'
 import ModelUpload from '../components/ModelUpload.vue'
 import MotionPreview from '../components/MotionPreview.vue'
+
 
 const authStore = useAuthStore()
 
@@ -114,10 +117,12 @@ function loadAnimConfig(model) {
   if (!model) {
     editingConfig.value = null
     editDirty.value = false
+    showArmAnglePanel.value = false
     return
   }
   editingConfig.value = getAnimConfig(model)
   editDirty.value = false
+  showArmAnglePanel.value = false
   // 默认选中第一个流程（用于调试Tab）
   const flowKeys = Object.keys(editingConfig.value.flows || {})
   if (flowKeys.length > 0 && !flowKeys.includes(debugFlow.value)) {
@@ -134,7 +139,55 @@ function onConfigModelChange(modelId) {
   }
 }
 
-// 保存动画配置到 DB
+function orderMotionRuleKeys(rule = {}) {
+  const next = {
+    phase: rule.phase,
+    target_part_id: rule.target_part_id ?? '',
+  }
+  if (rule.when && String(rule.when).trim() && rule.when !== 'true') {
+    next.when = rule.when
+  }
+  next.actions = Array.isArray(rule.actions) ? rule.actions : []
+  for (const [key, value] of Object.entries(rule)) {
+    if (key === 'phase' || key === 'target_part_id' || key === 'when' || key === 'actions') continue
+    next[key] = value
+  }
+  return next
+}
+
+function orderMotionConfigKeys(config) {
+  if (!config?.motions) return config
+  const { schema_version, document, arm_chamber_angles, ext, motions, parts, ...rest } = config
+  return {
+    ...(ext != null ? { ext } : {}),
+    ...(schema_version != null ? { schema_version } : {}),
+    ...(document != null ? { document } : {}),
+    ...(arm_chamber_angles != null ? { arm_chamber_angles } : {}),
+    ...rest,
+    motions: motions.map((motion) => ({
+      ...motion,
+      rules: (motion.rules || []).map(orderMotionRuleKeys),
+    })),
+  }
+}
+
+async function persistMotionJsonFile(config) {
+  if (!config?.schema_version) return { skipped: true }
+  if (selectedModel.value?.model_id !== 'AMAT_METSPUT') return { skipped: true }
+  const resp = await fetch('/__save-motion-json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(orderMotionConfigKeys(config)),
+  })
+  let data = null
+  try { data = await resp.json() } catch { data = null }
+  if (!resp.ok || !data?.ok) {
+    throw new Error(data?.error || `写回 JSON 失败 (HTTP ${resp.status})`)
+  }
+  return data
+}
+
+// 保存动画配置到 DB，Motion JSON 同时写回 src/data/amat_metsput.json
 async function saveAnimConfig() {
   if (!selectedModel.value || !editingConfig.value) {
     toast('请先选择机型', 'warn')
@@ -151,7 +204,15 @@ async function saveAnimConfig() {
     if (idx >= 0) {
       models.value[idx].animation_config = JSON.parse(JSON.stringify(editingConfig.value))
     }
-    toast('动画配置已保存到DB', 'success')
+    let fileHint = ''
+    try {
+      const written = await persistMotionJsonFile(editingConfig.value)
+      if (written?.path) fileHint = `，并已写回 ${written.path}`
+    } catch (fileErr) {
+      toast(`配置已保存到本地，但未写回 JSON 文件: ${fileErr.message}`, 'warn')
+      return
+    }
+    toast(`动画配置已保存${fileHint}`, 'success')
   } catch (e) {
     toast(`保存失败: ${e.message}`, 'error')
   }
@@ -296,6 +357,35 @@ async function onModelFileUploaded() {
   }
 }
 
+// 刷新按钮：重新从 DB 加载当前机型的动画配置（不依赖文件上传事件）
+async function refreshAnimConfig() {
+  if (!selectedModel.value) {
+    toast('请先选择机型', 'warn')
+    return
+  }
+  const currentId = selectedModel.value.model_id
+  try {
+    const fresh = await api.getModels()
+    models.value = fresh || []
+    const updated = fresh?.find(m => m.model_id === currentId)
+    if (updated) {
+      selectedModel.value = updated
+      loadAnimConfig(updated)
+      const motionCfg = updated.animation_config
+      if (motionCfg && motionCfg.schema_version) {
+        toast(`已刷新：v${motionCfg.schema_version}（${motionCfg.motions?.length || 0} 个步骤）`, 'success')
+      } else {
+        toast('已完成刷新（机型无 Motion JSON 配置）', 'info')
+      }
+    } else {
+      toast('机型数据不存在，请重新选择', 'warn')
+    }
+  } catch (e) {
+    console.error('[ModelEditor] 刷新配置失败:', e)
+    toast(`刷新失败: ${e.message}`, 'error')
+  }
+}
+
 // v2.5.10: 导出当前 animation_config 为 JSON 文件
 function exportAnimConfigJson() {
   if (!editingConfig.value) return
@@ -316,6 +406,8 @@ function exportAnimConfigJson() {
 // === 拖拽录制模式 ===
 const recordMode = ref(false)
 const recordActionType = ref('offset')  // offset / rotate / scale / opacity
+const rotateMode = ref(false)
+const textPickContext = ref(null) // { source: 'record'|'edit', ruleIdx, actionIdx }
 const recordStepInputRef = ref(null)
 // 多选：用数组而非 Set，确保 Vue 响应式可靠追踪
 const selectedPartIds = ref([])
@@ -327,38 +419,43 @@ const lassoState = ref({
 })
 const dragState = ref({
   partId: '',
+  partIds: [],
   startSvgX: 0, startSvgY: 0,
   currentSvgX: 0, currentSvgY: 0,
   startClientX: 0, startClientY: 0,   // mousedown 时屏幕 CSS px（用于 transform 一致）
   finalDxCss: 0, finalDyCss: 0,        // 拖拽结束时 CSS px 偏移（用于累计 base）
+  actionType: 'offset',
+  writeKind: 'record',
   dragging: false,
   startBBox: null,
 })
 // 已保存录制的累计位移 base（CSS px），部件在多次连续录制间停留在结束位置
-// key: partId, value: { x, y }
+// key: partId, value: { x, y }, angle: 0
 const partBaseCss = ref({})
 // 拖拽时实时坐标提示（起点/当前/偏移，SVG 坐标系）
-const dragCoordHint = ref({ visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0 })
+const dragCoordHint = ref({ visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0, angle: 0 })
 // 常驻坐标轴位置：鼠标在 SVG 坐标系中的实时 X/Y（坐标轴位置显示）
 const cursorSvgCoord = ref(null)
 const showRecordPanel = ref(false)
+const recordPanelRef = ref(null)
+const recordPanelPos = ref({ left: 0, top: 0 })
+const recordPanelDragState = ref({
+  dragging: false,
+  offsetX: 0,
+  offsetY: 0,
+  panelWidth: 460,
+  panelHeight: 0,
+})
 const showGroupInput = ref(false)
 const groupNameInput = ref('')
 const groupInputRef = ref(null)
+const activeRecordTargetIndex = ref(null)
+
 const recordForm = ref({
   step: '',
+  enabled: true,
   when: 'true',
-  actionType: 'offset',
-  partId: '',
-  partIds: [],  // 多选时多个目标
-  offsetX: 0, offsetY: 0,
-  startX: 0, startY: 0,   // 起点 SVG 坐标（可微调）
-  endX: 0, endY: 0,       // 终点 SVG 坐标（可微调）
-  angle: 0, pivotX: 0, pivotY: 0,
-  scaleX: 1, scaleY: 1,
-  opacity: 1,
-  duration: 1000,
-  easing: 'linear',
+  rules: [],
 })
 
 const ACTION_TYPE_OPTIONS = [
@@ -367,17 +464,362 @@ const ACTION_TYPE_OPTIONS = [
   { value: 'scale', label: '缩放', icon: '⤢' },
   { value: 'opacity', label: '透明度', icon: '◐' },
 ]
+const MOTION_ACTION_TYPE_OPTIONS = [
+  ...ACTION_TYPE_OPTIONS,
+  { value: 'snap', label: '贴合 snap' },
+  { value: 'text', label: '显示文本' },
+]
 
 // === 已录制动作编辑（双击编辑，调整播放时间等） ===
 const editingMotionIdx = ref(null)
 const showMotionEditPanel = ref(false)
-const editMotionForm = ref({
-  step: '', when: 'true', actionType: 'offset',
-  offsetX: 0, offsetY: 0,
-  angle: 0, pivotX: 0, pivotY: 0,
-  scaleX: 1, scaleY: 1, opacity: 1,
-  duration: 1000, easing: 'linear',
+const motionEditPanelRef = ref(null)
+const motionEditPanelPos = ref({ left: 0, top: 0 })
+const motionEditDragState = ref({
+  dragging: false,
+  offsetX: 0,
+  offsetY: 0,
+  panelWidth: 460,
+  panelHeight: 0,
 })
+const editMotionForm = ref({
+  step: '',
+  enabled: true,
+  when: 'true',
+  rules: [],
+})
+const recordPreviewSnapshot = new Map()
+
+function clampMotionEditPanelPosition(left, top) {
+  const margin = 8
+  const panelWidth = motionEditDragState.value.panelWidth || 460
+  const panelHeight = motionEditDragState.value.panelHeight || 240
+  const maxLeft = Math.max(margin, window.innerWidth - panelWidth - margin)
+  const maxTop = Math.max(margin, window.innerHeight - panelHeight - margin)
+  return {
+    left: Math.min(Math.max(margin, left), maxLeft),
+    top: Math.min(Math.max(margin, top), maxTop),
+  }
+}
+
+function initMotionEditPanelPosition() {
+  const panelWidth = motionEditDragState.value.panelWidth || 460
+  const left = window.innerWidth - panelWidth - 24
+  const top = 40
+  motionEditPanelPos.value = clampMotionEditPanelPosition(left, top)
+}
+
+function startMotionEditDrag(e) {
+  if (e.button !== 0) return
+  const panel = motionEditPanelRef.value
+  if (!panel) return
+  const rect = panel.getBoundingClientRect()
+  motionEditDragState.value = {
+    dragging: true,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    panelWidth: rect.width,
+    panelHeight: rect.height,
+  }
+  e.preventDefault()
+}
+
+function onMotionEditDragMove(e) {
+  const ds = motionEditDragState.value
+  if (!ds.dragging) return
+  motionEditPanelPos.value = clampMotionEditPanelPosition(e.clientX - ds.offsetX, e.clientY - ds.offsetY)
+}
+
+function stopMotionEditDrag() {
+  if (!motionEditDragState.value.dragging) return
+  motionEditDragState.value.dragging = false
+}
+
+// === 机械臂角度表（arm_chamber_angles）维护窗 ===
+const showArmAnglePanel = ref(false)
+const armAnglePanelRef = ref(null)
+const armAnglePanelPos = ref({ left: 0, top: 0 })
+const armAngleDragState = ref({
+  dragging: false,
+  offsetX: 0,
+  offsetY: 0,
+  panelWidth: 520,
+  panelHeight: 0,
+})
+const armAngleForm = ref([])
+
+function clampArmAnglePanelPosition(left, top) {
+  const margin = 8
+  const panelWidth = armAngleDragState.value.panelWidth || 520
+  const panelHeight = armAngleDragState.value.panelHeight || 240
+  const maxLeft = Math.max(margin, window.innerWidth - panelWidth - margin)
+  const maxTop = Math.max(margin, window.innerHeight - panelHeight - margin)
+  return {
+    left: Math.min(Math.max(margin, left), maxLeft),
+    top: Math.min(Math.max(margin, top), maxTop),
+  }
+}
+
+function initArmAnglePanelPosition() {
+  const panelWidth = armAngleDragState.value.panelWidth || 520
+  const left = window.innerWidth - panelWidth - 24
+  const top = 72
+  armAnglePanelPos.value = clampArmAnglePanelPosition(left, top)
+}
+
+function startArmAngleDrag(e) {
+  if (e.button !== 0) return
+  const panel = armAnglePanelRef.value
+  if (!panel) return
+  const rect = panel.getBoundingClientRect()
+  armAngleDragState.value = {
+    dragging: true,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    panelWidth: rect.width,
+    panelHeight: rect.height,
+  }
+  e.preventDefault()
+}
+
+function onArmAngleDragMove(e) {
+  const ds = armAngleDragState.value
+  if (!ds.dragging) return
+  armAnglePanelPos.value = clampArmAnglePanelPosition(e.clientX - ds.offsetX, e.clientY - ds.offsetY)
+}
+
+function stopArmAngleDrag() {
+  if (!armAngleDragState.value.dragging) return
+  armAngleDragState.value.dragging = false
+}
+
+function cloneArmAngleForm(src) {
+  const table = src && typeof src === 'object' && !Array.isArray(src) ? src : {}
+  const arms = Object.keys(table)
+  if (arms.length === 0) {
+    return [
+      { armId: 'ARM_1', rows: [{ pos: '', angle: 0 }] },
+      { armId: 'ARM_2', rows: [{ pos: '', angle: 0 }] },
+    ]
+  }
+  return arms.map((armId) => {
+    const angles = table[armId] && typeof table[armId] === 'object' && !Array.isArray(table[armId])
+      ? table[armId]
+      : {}
+    const rows = Object.entries(angles).map(([pos, angle]) => ({
+      pos: String(pos ?? ''),
+      angle: Number.isFinite(Number(angle)) ? Number(angle) : 0,
+    }))
+    return {
+      armId,
+      rows: rows.length ? rows : [{ pos: '', angle: 0 }],
+    }
+  })
+}
+
+function openArmAnglePanel() {
+  if (!editingConfig.value) {
+    toast('请先选择机型', 'warn')
+    return
+  }
+  if (!editingConfig.value.schema_version) {
+    toast('仅 Motion JSON 支持维护角度表', 'warn')
+    return
+  }
+  armAngleForm.value = cloneArmAngleForm(editingConfig.value.arm_chamber_angles)
+  showArmAnglePanel.value = true
+  nextTick(() => {
+    initArmAnglePanelPosition()
+  })
+}
+
+function addArmAngleArm() {
+  const n = armAngleForm.value.length + 1
+  armAngleForm.value.push({ armId: `ARM_${n}`, rows: [{ pos: '', angle: 0 }] })
+}
+
+function removeArmAngleArm(idx) {
+  if (armAngleForm.value.length <= 1) {
+    toast('至少保留一只机械臂', 'warn')
+    return
+  }
+  armAngleForm.value.splice(idx, 1)
+}
+
+function addArmAngleRow(armIdx) {
+  const arm = armAngleForm.value[armIdx]
+  if (!arm) return
+  arm.rows.push({ pos: '', angle: 0 })
+}
+
+function removeArmAngleRow(armIdx, rowIdx) {
+  const arm = armAngleForm.value[armIdx]
+  if (!arm) return
+  if (arm.rows.length <= 1) {
+    arm.rows.splice(0, 1, { pos: '', angle: 0 })
+    return
+  }
+  arm.rows.splice(rowIdx, 1)
+}
+
+function buildArmChamberAngles() {
+  const out = {}
+  for (const arm of armAngleForm.value) {
+    const armId = String(arm.armId || '').trim()
+    if (!armId) {
+      toast('机械臂名称不能为空', 'error')
+      return null
+    }
+    if (out[armId]) {
+      toast(`机械臂 ${armId} 重复`, 'error')
+      return null
+    }
+    const table = {}
+    const seenPos = new Set()
+    for (const row of arm.rows || []) {
+      const pos = String(row.pos ?? '').trim()
+      if (!pos) continue
+      const angle = Number(row.angle)
+      if (!Number.isFinite(angle)) {
+        toast(`${armId} 位置 ${pos} 的角度无效`, 'error')
+        return null
+      }
+      const posKey = pos.toUpperCase()
+      if (seenPos.has(posKey)) {
+        toast(`${armId} 位置 ${pos} 重复`, 'error')
+        return null
+      }
+      seenPos.add(posKey)
+      table[pos] = angle
+    }
+    out[armId] = table
+  }
+  return out
+}
+
+async function saveArmAnglePanel() {
+  const next = buildArmChamberAngles()
+  if (!next) return
+  if (!editingConfig.value) return
+  editingConfig.value.arm_chamber_angles = next
+  markDirty()
+  showArmAnglePanel.value = false
+  await saveAnimConfig()
+}
+
+function cancelArmAnglePanel() {
+  showArmAnglePanel.value = false
+}
+
+const CHAMBER_ANGLE_TOKEN = '{CHAMBER}'
+
+function isUnsetRotateAngle(value) {
+  if (value === '' || value == null) return true
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (!s || s === CHAMBER_ANGLE_TOKEN || s === '{to_angle}') return true
+    if (s.startsWith('{') && s.endsWith('}')) return false
+  }
+  const n = Number(value)
+  return !Number.isFinite(n)
+}
+
+function formatRotateAngleLabel(angle) {
+  if (isUnsetRotateAngle(angle)) return CHAMBER_ANGLE_TOKEN
+  if (typeof angle === 'string' && angle.trim().startsWith('{')) return angle.trim()
+  return `${angle}°`
+}
+
+function rotateAngleToForm(value) {
+  return isUnsetRotateAngle(value) ? CHAMBER_ANGLE_TOKEN : value
+}
+
+function rotateAngleFromForm(value) {
+  if (isUnsetRotateAngle(value)) return CHAMBER_ANGLE_TOKEN
+  const n = Number(value)
+  return Number.isFinite(n) ? n : String(value).trim()
+}
+
+function getCurrentRotateAngle() {
+  if (dragState.value.actionType === 'rotate') {
+    const hintAngle = Number(dragCoordHint.value?.angle)
+    if (Number.isFinite(hintAngle)) return wrapAngleDeg360(hintAngle)
+  }
+  const partId = selectedPartIds.value[0] || selectedPartId.value || dragState.value.partId || ''
+  const readRotateAngle = (rules) => {
+    if (!Array.isArray(rules) || !rules.length) return null
+    const rule = (partId && rules.find(r => r.target_part_id === partId))
+      || rules[Math.min(Math.max(0, activeRecordTargetIndex.value ?? 0), rules.length - 1)]
+    const action = (rule?.actions || []).find(a => a.type === 'rotate')
+    if (!action || isUnsetRotateAngle(action.angle)) return null
+    const angle = Number(action.angle)
+    return Number.isFinite(angle) ? wrapAngleDeg360(angle) : null
+  }
+  const fromEdit = showMotionEditPanel.value ? readRotateAngle(editMotionForm.value.rules) : null
+  if (fromEdit != null) return fromEdit
+  const fromRecord = readRotateAngle(recordForm.value?.rules)
+  if (fromRecord != null) return fromRecord
+  if (partId && svgInlineRef.value) {
+    const el = svgInlineRef.value.querySelector(`#${CSS.escape(partId)}`)
+    const transform = el?.style?.transform || ''
+    const match = transform.match(/rotate\(\s*(-?[\d.]+)/)
+    if (match) return wrapAngleDeg360(Number(match[1]))
+  }
+  return null
+}
+
+function applyCurrentRotateToArmAngle(armIdx, rowIdx) {
+  const angle = getCurrentRotateAngle()
+  if (angle == null) return
+  const arm = armAngleForm.value[armIdx]
+  if (!arm?.rows?.[rowIdx]) return
+  arm.rows[rowIdx].angle = angle
+}
+
+function clampRecordPanelPosition(left, top) {
+  const margin = 8
+  const panelWidth = recordPanelDragState.value.panelWidth || 460
+  const panelHeight = recordPanelDragState.value.panelHeight || 240
+  const maxLeft = Math.max(margin, window.innerWidth - panelWidth - margin)
+  const maxTop = Math.max(margin, window.innerHeight - panelHeight - margin)
+  return {
+    left: Math.min(Math.max(margin, left), maxLeft),
+    top: Math.min(Math.max(margin, top), maxTop),
+  }
+}
+
+function initRecordPanelPosition() {
+  const panelWidth = recordPanelDragState.value.panelWidth || 460
+  const left = window.innerWidth - panelWidth - 24
+  const top = 40
+  recordPanelPos.value = clampRecordPanelPosition(left, top)
+}
+
+function startRecordPanelDrag(e) {
+  if (e.button !== 0) return
+  const panel = recordPanelRef.value
+  if (!panel) return
+  const rect = panel.getBoundingClientRect()
+  recordPanelDragState.value = {
+    dragging: true,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    panelWidth: rect.width,
+    panelHeight: rect.height,
+  }
+  e.preventDefault()
+}
+
+function onRecordPanelDragMove(e) {
+  const ds = recordPanelDragState.value
+  if (!ds.dragging) return
+  recordPanelPos.value = clampRecordPanelPosition(e.clientX - ds.offsetX, e.clientY - ds.offsetY)
+}
+
+function stopRecordPanelDrag() {
+  if (!recordPanelDragState.value.dragging) return
+  recordPanelDragState.value.dragging = false
+}
 
 // === 部件列表双击编辑部件名称（part_name）并保存到 DB ===
 const editingPartIdx = ref(null)        // 正在编辑的 parts 数组索引
@@ -389,15 +831,25 @@ function setPartNameInputRef(el) {
 }
 
 const EVENT_TEMPLATES = [
+  { label: 'LOT_ID/SLOT/CHAMBER', when: "params.LOT_ID && params.SLOT && params.CHAMBER == 'E'" },
+  { label: '未进过腔', when: '!params.has_entered_chamber' },
+  { label: '已进过腔', when: 'params.has_entered_chamber' },
+  { label: '跨臂交接', when: 'params.cross_arm' },
   { label: '始终触发', when: 'true' },
   { label: 'Port 1', when: "params.port == '1'" },
   { label: 'Port 2', when: "params.port == '2'" },
-  { label: 'Chamber 1', when: "params.chamber == '1'" },
-  { label: 'Chamber 2', when: "params.chamber == '2'" },
-  { label: 'Chamber 3', when: "params.chamber == '3'" },
+  { label: 'Chamber 1', when: "params.CHAMBER == '1'" },
+  { label: 'Chamber 2', when: "params.CHAMBER == '2'" },
+  { label: 'Chamber 3', when: "params.CHAMBER == '3'" },
 ]
 
-const EASING_OPTIONS = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'mechanical']
+const EASING_OPTIONS = [
+  { value: 'linear', label: '线性 linear' },
+  { value: 'ease-in', label: '缓入 ease-in' },
+  { value: 'ease-out', label: '缓出 ease-out' },
+  { value: 'ease-in-out', label: '缓入缓出 ease-in-out' },
+  { value: 'mechanical', label: '机械 mechanical' },
+]
 
 // 已录制动作列表（Motion JSON 的 motions 数组）
 const motionList = computed(() => {
@@ -409,14 +861,26 @@ const motionList = computed(() => {
 function toggleRecordMode() {
   recordMode.value = !recordMode.value
   if (!recordMode.value) {
+    restoreRecordPreview()
     resetDragState()
     clearAllTransforms()
     showRecordPanel.value = false
     showMotionEditPanel.value = false
+    showArmAnglePanel.value = false
     selectedPartIds.value = []
+    rotateMode.value = false
     lassoState.value.active = false
     selectedPartId.value = ''
+    activeRecordTargetIndex.value = null
+    textPickContext.value = null
     highlightSvgPart('')
+  } else {
+    ensureRecordRules()
+    showRecordPanel.value = true
+    nextTick(() => {
+      initRecordPanelPosition()
+      if (recordStepInputRef.value) recordStepInputRef.value.focus()
+    })
   }
   toast(recordMode.value ? '录制模式：先选中部件→拖拽录制动作（选中已锁定，不会误切换）；改选部件请先关闭录制' : '录制模式已关闭（仍可多选/框选/组合）', 'info')
 }
@@ -462,11 +926,9 @@ function highlightSelectedParts() {
   container.querySelectorAll('.part-highlight').forEach(prev => {
     prev.classList.remove('part-highlight')
     prev.style.stroke = ''
-    prev.style.strokeWidth = ''
     prev.style.filter = ''
     prev.querySelectorAll('*').forEach(el => {
       el.style.stroke = ''
-      el.style.strokeWidth = ''
       el.style.filter = ''
     })
   })
@@ -476,13 +938,11 @@ function highlightSelectedParts() {
     if (target) {
       target.classList.add('part-highlight')
       target.style.stroke = '#ff5722'
-      target.style.strokeWidth = '3px'
       target.style.filter = 'drop-shadow(0 0 6px rgba(255, 87, 34, 0.9))'
       const tag = target.tagName.toLowerCase()
       if (tag === 'g' || tag === 'svg') {
         target.querySelectorAll('*').forEach(el => {
           el.style.stroke = '#ff5722'
-          el.style.strokeWidth = '2px'
           el.style.filter = 'drop-shadow(0 0 4px rgba(255, 87, 34, 0.7))'
         })
       }
@@ -504,8 +964,8 @@ function resetDragState() {
       el.style.transformOrigin = ''
     }
   }
-  dragState.value = { partId: '', startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, startClientX: 0, startClientY: 0, finalDxCss: 0, finalDyCss: 0, dragging: false, startBBox: null }
-  dragCoordHint.value = { visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0 }
+  dragState.value = { partId: '', partIds: [], startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, startClientX: 0, startClientY: 0, finalDxCss: 0, finalDyCss: 0, actionType: 'offset', writeKind: 'record', dragging: false, startBBox: null }
+  dragCoordHint.value = { visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0, angle: 0 }
 }
 
 // 彻底清除所有部件的 transform 与累计 base（退出录制模式时调用，部件回到 SVG 原始位置）
@@ -515,15 +975,226 @@ function clearAllTransforms() {
     for (const el of all) {
       if (el.style.transform) el.style.transform = ''
       if (el.style.transformOrigin) el.style.transformOrigin = ''
+      if (el.style.transition) el.style.transition = 'none'
     }
   }
+  restoreRuntimeFollowAttachments()
   partBaseCss.value = {}
 }
 
-// 录制面板微调起终点坐标时，自动重算 offset（offset = end - start）
-function recomputeOffset() {
-  recordForm.value.offsetX = Math.round(recordForm.value.endX - recordForm.value.startX)
-  recordForm.value.offsetY = -Math.round(recordForm.value.endY - recordForm.value.startY)
+function ensureRecordRules() {
+  if (!Array.isArray(recordForm.value.rules) || recordForm.value.rules.length === 0) {
+    recordForm.value.rules = [createEmptyRecordRule(1)]
+  }
+  for (const rule of recordForm.value.rules) {
+    if (!Array.isArray(rule.actions) || rule.actions.length === 0) {
+      rule.actions = [createEmptyMotionAction('offset')]
+    }
+  }
+  return recordForm.value.rules
+}
+
+function getRecordRule(index) {
+  const rules = ensureRecordRules()
+  while (rules.length <= index) {
+    const last = rules[rules.length - 1]
+    rules.push(createEmptyRecordRule((Number(last?.phase) || rules.length) + 1))
+  }
+  return rules[index]
+}
+
+function getRecordAction(ruleIndex, actionIndex = 0) {
+  const rule = getRecordRule(ruleIndex)
+  if (!Array.isArray(rule.actions) || rule.actions.length === 0) {
+    rule.actions = [createEmptyMotionAction('offset')]
+  }
+  while (rule.actions.length <= actionIndex) {
+    rule.actions.push(createEmptyMotionAction(rule.actions[rule.actions.length - 1]?.type || 'offset'))
+  }
+  return rule.actions[actionIndex]
+}
+
+function setActiveRecordTargetIndex(index) {
+  activeRecordTargetIndex.value = index
+}
+
+function setRecordTargetAt(index, partId) {
+  const rule = getRecordRule(index)
+  rule.target_part_id = partId || ''
+  const action = getRecordAction(index, 0)
+  if (action.type === 'rotate' && partId) {
+    const el = svgInlineRef.value?.querySelector(`#${CSS.escape(partId)}`)
+    let bbox = null
+    try { bbox = el ? el.getBBox() : null } catch(_) { bbox = null }
+    if (bbox) {
+      action.pivotX = Math.round(bbox.x + bbox.width / 2)
+      action.pivotY = Math.round(bbox.y + bbox.height / 2)
+    }
+  }
+}
+
+function initializeRecordActionForTarget(index, coords, bbox) {
+  const action = getRecordAction(index, 0)
+  action.type = action.type || recordActionType.value || 'offset'
+  action.startX = Math.round(coords.x)
+  action.startY = Math.round(coords.y)
+  action.endX = Math.round(coords.x)
+  action.endY = Math.round(coords.y)
+  action.offsetX = 0
+  action.offsetY = 0
+  action.finalDxCss = 0
+  action.finalDyCss = 0
+  if (action.type === 'rotate' && bbox) {
+    action.pivotX = Math.round(bbox.x + bbox.width / 2)
+    action.pivotY = Math.round(bbox.y + bbox.height / 2)
+  }
+}
+
+function syncRecordTargets(partIds) {
+  const targets = Array.isArray(partIds) ? partIds.filter(Boolean) : []
+  const rules = ensureRecordRules()
+  if (targets.length === 0) {
+    for (const rule of rules) rule.target_part_id = ''
+    return
+  }
+  targets.forEach((partId, index) => setRecordTargetAt(index, partId))
+  if (rules.length > targets.length) {
+    recordForm.value.rules = rules.slice(0, targets.length)
+  }
+}
+
+function applySelectionToRecordTargets(partIds) {
+  const targets = Array.isArray(partIds) ? partIds.filter(Boolean) : []
+  if (activeRecordTargetIndex.value != null) {
+    if (targets.length > 0) setRecordTargetAt(activeRecordTargetIndex.value, targets[0])
+    return
+  }
+  syncRecordTargets(targets)
+}
+
+function addRecordRule() {
+  const rules = ensureRecordRules()
+  const last = rules[rules.length - 1]
+  rules.push(createEmptyRecordRule((Number(last?.phase) || rules.length) + 1))
+  activeRecordTargetIndex.value = rules.length - 1
+}
+
+function removeRecordRule(index) {
+  const rules = ensureRecordRules()
+  if (rules.length <= 1) {
+    toast('至少保留 1 条 rule', 'warn')
+    return
+  }
+  rules.splice(index, 1)
+  if (activeRecordTargetIndex.value === index) activeRecordTargetIndex.value = null
+  else if (activeRecordTargetIndex.value > index) activeRecordTargetIndex.value -= 1
+}
+
+function addRecordAction(ruleIndex) {
+  const rule = getRecordRule(ruleIndex)
+  rule.actions.push(createEmptyMotionAction(rule.actions[rule.actions.length - 1]?.type || 'offset'))
+}
+
+function removeRecordAction(ruleIndex, actionIndex) {
+  const rule = getRecordRule(ruleIndex)
+  if (rule.actions.length <= 1) {
+    toast('每条 rule 至少保留 1 个 action', 'warn')
+    return
+  }
+  rule.actions.splice(actionIndex, 1)
+}
+
+function getRecordTargetEntries(form = recordForm.value) {
+  return (form.rules || []).map((rule, index) => ({
+    partId: rule.target_part_id || '',
+    action: rule.actions?.[0] || createEmptyMotionAction('offset'),
+    rule,
+    index,
+  }))
+}
+
+function restoreRecordPreview() {
+  if (!svgInlineRef.value || recordPreviewSnapshot.size === 0) return
+  for (const [el, snapshot] of recordPreviewSnapshot.entries()) {
+    if (!el || !el.isConnected) continue
+    el.style.transform = snapshot.transform || ''
+    el.style.transformOrigin = snapshot.transformOrigin || ''
+    el.style.opacity = snapshot.opacity || ''
+    el.style.visibility = snapshot.visibility || ''
+    if (snapshot.visibilityAttr) el.setAttribute('visibility', snapshot.visibilityAttr)
+    else el.removeAttribute('visibility')
+  }
+  recordPreviewSnapshot.clear()
+}
+
+function previewRecordMotion() {
+  if (!svgInlineRef.value) {
+    toast('请先加载 SVG', 'warn')
+    return
+  }
+  const targetEntries = getRecordTargetEntries(recordForm.value)
+  const hasText = (recordForm.value.rules || []).some(rule => (rule.actions || []).some(action => action?.type === 'text'))
+  if (!hasText && (targetEntries.length === 0 || targetEntries.some(entry => !entry.partId))) {
+    toast('未选中部件', 'warn')
+    return
+  }
+  const container = svgInlineRef.value
+  const svg = container.querySelector('svg')
+  if (!svg) {
+    toast('请先加载 SVG', 'warn')
+    return
+  }
+  const ctm = svg.getScreenCTM()
+  if (!ctm) {
+    toast('无法读取 SVG 坐标系', 'warn')
+    return
+  }
+
+  restoreRecordPreview()
+
+  for (const { partId } of targetEntries) {
+    const el = container.querySelector(`#${CSS.escape(partId)}`)
+    if (!el) continue
+    recordPreviewSnapshot.set(el, {
+      transform: el.style.transform || '',
+      transformOrigin: el.style.transformOrigin || '',
+      opacity: el.style.opacity || '',
+      visibility: el.style.visibility || '',
+      visibilityAttr: el.getAttribute('visibility'),
+    })
+  }
+
+  for (const { partId, action: formAction } of targetEntries) {
+    const el = container.querySelector(`#${CSS.escape(partId)}`)
+    if (!el) continue
+    const action = formToAction(formAction)
+    const parts = []
+    if (action.type === 'offset') {
+      const offsetCssX = (action.offset_x || 0) * ctm.a
+      const offsetCssY = -((action.offset_y || 0) * ctm.d)
+      const base = partBaseCss.value[partId] || { x: 0, y: 0 }
+      parts.push(`translate(${base.x + offsetCssX}px, ${base.y + offsetCssY}px)`)
+    } else if (action.type === 'rotate') {
+      el.style.transformBox = 'fill-box'
+      el.style.transformOrigin = 'center'
+      parts.push(`rotate(${action.angle || 0}deg)`)
+    } else if (action.type === 'scale') {
+      parts.push(`scale(${action.scale_x ?? 1}, ${action.scale_y ?? 1})`)
+    } else if (action.type === 'opacity') {
+      el.style.opacity = String(action.to ?? 1)
+    }
+    if (action.visible === true) {
+      el.removeAttribute('visibility')
+      el.style.visibility = ''
+    } else if (action.visible === false) {
+      el.setAttribute('visibility', 'hidden')
+      el.style.visibility = 'hidden'
+    }
+    el.style.transform = parts.join(' ')
+  }
+  syncLiveTextOverlays()
+
+  toast(`已演示: ${targetEntries.map(entry => entry.partId || '文本').join(', ')}`, 'info')
 }
 
 function screenToSvgCoords(e) {
@@ -636,32 +1307,138 @@ function isPartElement(el, containerRect) {
   return true
 }
 
-// 开始拖拽录制：对传入的部件集合启动一次拖拽，记录起点坐标并初始化录制表单
-function startDragRecording(e, partIds) {
+function isGenericSvgId(id) {
+  return /^svg_\d+$/i.test(id || '')
+}
+
+function getElementTagName(el) {
+  return el?.tagName ? el.tagName.toLowerCase().replace(/^.*:/, '') : ''
+}
+
+// 点击命中子 path/circle 时，提升到最近的命名 <g>（如 ARM_1），避免切到 svg_51
+function resolveClickedPartId(startEl, container, containerRect) {
+  if (!startEl || !container) return ''
+
+  // 已选中 group 且点击落在其内部：保持整组，不切到子模块
+  let keptId = ''
+  let keptEl = null
+  for (const id of selectedPartIds.value) {
+    const selectedEl = container.querySelector(`#${CSS.escape(id)}`)
+    if (!selectedEl) continue
+    const tag = getElementTagName(selectedEl)
+    if (tag !== 'g') continue
+    if (selectedEl === startEl || selectedEl.contains(startEl)) {
+      if (!keptEl || keptEl.contains(selectedEl)) {
+        keptEl = selectedEl
+        keptId = id
+      }
+    }
+  }
+  if (keptId) return keptId
+
+  let el = startEl
+  let leafId = ''
+  let namedGroupId = ''
+  while (el && el !== container) {
+    if (isPartElement(el, containerRect)) {
+      const id = el.getAttribute('id')
+      if (!leafId) leafId = id
+      if (getElementTagName(el) === 'g' && id && !isGenericSvgId(id)) {
+        namedGroupId = id
+        break
+      }
+    }
+    el = el.parentElement
+  }
+  return namedGroupId || leafId
+}
+
+function shortestAngleDeltaRad(fromRad, toRad) {
+  let d = toRad - fromRad
+  while (d > Math.PI) d -= Math.PI * 2
+  while (d < -Math.PI) d += Math.PI * 2
+  return d
+}
+
+function wrapAngleDeg360(angle) {
+  const n = Number(angle)
+  if (!Number.isFinite(n)) return 0
+  return ((Math.round(n) % 360) + 360) % 360
+}
+
+// 开始拖拽录制：对传入的部件集合启动一次拖拽，写入当前 rule 的 target/action
+function startDragRecording(e, partIds, targetIndex = 0) {
   const coords = screenToSvgCoords(e)
-  const firstEl = svgInlineRef.value?.querySelector(`#${CSS.escape(partIds[0])}`)
+  const dragPartId = partIds[0]
+  const firstEl = svgInlineRef.value?.querySelector(`#${CSS.escape(dragPartId)}`)
   const bbox = firstEl ? (function() { try { return firstEl.getBBox() } catch(_) { return null } })() : null
+  const action = getRecordAction(targetIndex, 0)
+  const pivotX = action.pivotX || (bbox ? Math.round(bbox.x + bbox.width / 2) : coords.x)
+  const pivotY = action.pivotY || (bbox ? Math.round(bbox.y + bbox.height / 2) : coords.y)
   dragState.value = {
-    partId: partIds[0],
+    partId: dragPartId,
+    partIds: [...partIds],
+    targetIndex,
+    actionType: action.type || recordActionType.value || 'offset',
+    writeKind: 'record',
     startSvgX: coords.x, startSvgY: coords.y,
     currentSvgX: coords.x, currentSvgY: coords.y,
     startClientX: e.clientX, startClientY: e.clientY,   // CSS px，用于 transform 跟随鼠标
+    startPointerAngle: Math.atan2(coords.y - pivotY, coords.x - pivotX),
+    lastPointerAngle: Math.atan2(coords.y - pivotY, coords.x - pivotX),
+    rotateDeltaRad: 0,
+    startRotateAngle: action.angle || 0,
     dragging: true,
     startBBox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null,
   }
-  recordForm.value.partId = partIds[0]
-  recordForm.value.partIds = [...partIds]
-  recordForm.value.actionType = recordActionType.value
-  recordForm.value.startX = Math.round(coords.x)
-  recordForm.value.startY = Math.round(coords.y)
-  recordForm.value.endX = Math.round(coords.x)
-  recordForm.value.endY = Math.round(coords.y)
-  if (bbox && recordActionType.value === 'rotate') {
-    recordForm.value.pivotX = Math.round(bbox.x + bbox.width / 2)
-    recordForm.value.pivotY = Math.round(bbox.y + bbox.height / 2)
-  }
+  setRecordTargetAt(targetIndex, dragPartId)
+  initializeRecordActionForTarget(targetIndex, coords, bbox)
   // 显示拖拽坐标提示（起点/当前/偏移）
-  dragCoordHint.value = { visible: true, startX: coords.x, startY: coords.y, curX: coords.x, curY: coords.y, dx: 0, dy: 0, clientX: e.clientX, clientY: e.clientY }
+  dragCoordHint.value = { visible: true, startX: coords.x, startY: coords.y, curX: coords.x, curY: coords.y, dx: 0, dy: 0, clientX: e.clientX, clientY: e.clientY, angle: action.angle || 0 }
+}
+
+function startRotateSelected(e) {
+  const partIds = selectedPartIds.value.filter(Boolean)
+  if (!partIds.length) {
+    toast('请先选中要旋转的模块', 'warn')
+    rotateMode.value = false
+    return
+  }
+  const coords = screenToSvgCoords(e)
+  const dragPartId = partIds[0]
+  const firstEl = svgInlineRef.value?.querySelector(`#${CSS.escape(dragPartId)}`)
+  const bbox = firstEl ? (function() { try { return firstEl.getBBox() } catch(_) { return null } })() : null
+  const { action, kind } = getActiveRotateAction(dragPartId)
+  const pivotX = action.pivotX || (bbox ? Math.round(bbox.x + bbox.width / 2) : coords.x)
+  const pivotY = action.pivotY || (bbox ? Math.round(bbox.y + bbox.height / 2) : coords.y)
+  if (bbox) {
+    action.pivotX = Math.round(bbox.x + bbox.width / 2)
+    action.pivotY = Math.round(bbox.y + bbox.height / 2)
+  }
+  dragState.value = {
+    partId: dragPartId,
+    partIds: [...partIds],
+    targetIndex: activeRecordTargetIndex.value ?? 0,
+    actionType: 'rotate',
+    writeKind: kind,
+    startSvgX: coords.x, startSvgY: coords.y,
+    currentSvgX: coords.x, currentSvgY: coords.y,
+    lastPointerAngle: Math.atan2(coords.y - pivotY, coords.x - pivotX),
+    rotateDeltaRad: 0,
+    startClientX: e.clientX, startClientY: e.clientY,
+    startPointerAngle: Math.atan2(coords.y - pivotY, coords.x - pivotX),
+    startRotateAngle: Number(action.angle) || 0,
+    dragging: true,
+    startBBox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null,
+  }
+  dragCoordHint.value = {
+    visible: true,
+    startX: coords.x, startY: coords.y,
+    curX: coords.x, curY: coords.y,
+    dx: 0, dy: 0,
+    clientX: e.clientX, clientY: e.clientY,
+    angle: Number(action.angle) || 0,
+  }
 }
 
 function onSvgMouseDown(e) {
@@ -672,22 +1449,35 @@ function onSvgMouseDown(e) {
   mousedownProcessed = true
   setTimeout(() => { mousedownProcessed = false }, 60)
 
-  // === 录制模式：锁定已选中部件，拖拽移动整个选择集，不再切换选中 ===
-  // 用户先选中部件 → 进入/处于录制模式 → 点击不会误切换到别的部件，确保能稳定抓取移动。
-  // 需要改选部件时，请先关闭录制模式。
-  if (recordMode.value && selectedPartIds.value.length > 0) {
+  // === 旋转模式：按住左键拖拽，选中模块同步旋转并写入当前动作 ===
+  if (rotateMode.value) {
+    if (selectedPartIds.value.length === 0) {
+      toast('请先选中要旋转的模块', 'warn')
+      return
+    }
     e.preventDefault()
-    startDragRecording(e, selectedPartIds.value)
+    startRotateSelected(e)
     return
   }
 
-  // 查找点击的部件（跳过 SVG 根、defs、大面积背景等非部件元素）
-  let el = e.target
-  let partId = ''
-  while (el && el !== e.currentTarget) {
-    if (isPartElement(el, containerRect)) { partId = el.getAttribute('id'); break }
-    el = el.parentElement
+  // === 显示文本：点击画布取点，不选中模块 ===
+  if (isTextPickActive()) {
+    e.preventDefault()
+    tryPickTextPosition(e)
+    return
   }
+
+  // === 录制模式：锁定已选中部件，拖拽移动整个选择集，不再切换选中 ===
+  // 用户先选中部件 → 进入/处于录制模式 → 点击不会误切换到别的部件，确保能稳定抓取移动。
+  // 需要改选部件时，请先关闭录制模式。
+  if (recordMode.value && selectedPartIds.value.length > 0 && activeRecordTargetIndex.value == null) {
+    e.preventDefault()
+    startDragRecording(e, selectedPartIds.value, 0)
+    return
+  }
+
+  // 查找点击的部件：子模块命中时提升到最近的命名 group（如 ARM_1）
+  const partId = resolveClickedPartId(e.target, e.currentTarget, containerRect)
 
   if (partId) {
     // === 点击部件：选中 + (录制模式下且无选中时)开始拖拽 ===
@@ -713,13 +1503,15 @@ function onSvgMouseDown(e) {
       }
     }
     selectedPartId.value = partId
+    if (recordMode.value) applySelectionToRecordTargets(selectedPartIds.value)
     highlightSelectedParts()
     scrollSelectedPartsIntoView()
     expandPartsDetails()
 
     // 录制模式 + 首次选中（之前无选中）：立即开始拖拽该部件
     if (recordMode.value && selectedPartIds.value.length > 0) {
-      startDragRecording(e, selectedPartIds.value)
+      const targetIndex = activeRecordTargetIndex.value ?? 0
+      startDragRecording(e, [partId], targetIndex)
     }
   } else {
     // === 点击空白：开始框选（lasso）—— 录制/非录制模式都支持 ===
@@ -733,6 +1525,7 @@ function onSvgMouseDown(e) {
     if (!e.ctrlKey && !e.metaKey) {
       selectedPartIds.value = []
       selectedPartId.value = ''
+      if (recordMode.value) syncRecordTargets([])
       highlightSvgPart('')
     }
   }
@@ -762,30 +1555,52 @@ function onSvgMouseMove(e) {
   // SVG 坐标差：用于记录动画 offset
   const dxSvg = coords.x - ds.startSvgX
   const dySvg = coords.y - ds.startSvgY
-  const partIds = selectedPartIds.value.length > 0 ? selectedPartIds.value : [ds.partId]
+  const partIds = (ds.partIds && ds.partIds.length) ? ds.partIds : (ds.partId ? [ds.partId] : [])
+  const targetIndex = ds.targetIndex ?? 0
+  const actionType = ds.actionType || recordActionType.value || 'offset'
+  const writeKind = ds.writeKind || 'record'
+  const primaryAction = writeKind === 'edit'
+    ? getActiveRotateAction(ds.partId).action
+    : getRecordAction(targetIndex, 0)
   for (const pid of partIds) {
     const el = svgInlineRef.value.querySelector(`#${CSS.escape(pid)}`)
     if (!el) continue
-    switch (recordActionType.value) {
+    switch (actionType) {
       case 'offset': {
         // 累计已保存录制的 base，确保连续录制时部件从上一次结束位置继续移动
         const base = partBaseCss.value[pid] || { x: 0, y: 0 }
         el.style.transform = `translate(${base.x + dxCss}px, ${base.y + dyCss}px)`
+        primaryAction.startX = Math.round(ds.startSvgX)
+        primaryAction.startY = Math.round(ds.startSvgY)
+        primaryAction.endX = Math.round(coords.x)
+        primaryAction.endY = Math.round(coords.y)
+        primaryAction.offsetX = Math.round(primaryAction.endX - primaryAction.startX)
+        primaryAction.offsetY = -Math.round(primaryAction.endY - primaryAction.startY)
+        primaryAction.finalDxCss = dxCss
+        primaryAction.finalDyCss = dyCss
         break
       }
       case 'rotate': {
-        const angle = Math.round(Math.atan2(dySvg, dxSvg) * 180 / Math.PI)
-        el.style.transformOrigin = `${recordForm.value.pivotX}px ${recordForm.value.pivotY}px`
+        const pivotX = primaryAction.pivotX || ds.startSvgX
+        const pivotY = primaryAction.pivotY || ds.startSvgY
+        const pointerAngle = Math.atan2(coords.y - pivotY, coords.x - pivotX)
+        const lastPointerAngle = ds.lastPointerAngle ?? ds.startPointerAngle ?? pointerAngle
+        ds.rotateDeltaRad = (ds.rotateDeltaRad || 0) + shortestAngleDeltaRad(lastPointerAngle, pointerAngle)
+        ds.lastPointerAngle = pointerAngle
+        const angle = wrapAngleDeg360((ds.startRotateAngle || 0) + ds.rotateDeltaRad * 180 / Math.PI)
+        el.style.transformBox = 'fill-box'
+        el.style.transformOrigin = 'center'
         el.style.transform = `rotate(${angle}deg)`
-        recordForm.value.angle = angle
+        primaryAction.type = 'rotate'
+        primaryAction.angle = angle
         break
       }
       case 'scale': {
         const sx = Math.max(0.1, 1 + dxSvg / 100)
         const sy = Math.max(0.1, 1 + dySvg / 100)
         el.style.transform = `scale(${sx}, ${sy})`
-        recordForm.value.scaleX = Math.round(sx * 100) / 100
-        recordForm.value.scaleY = Math.round(sy * 100) / 100
+        primaryAction.scaleX = Math.round(sx * 100) / 100
+        primaryAction.scaleY = Math.round(sy * 100) / 100
         break
       }
     }
@@ -797,6 +1612,7 @@ function onSvgMouseMove(e) {
     curX: coords.x, curY: coords.y,
     dx: dxSvg, dy: dySvg,
     clientX: e.clientX, clientY: e.clientY,
+    angle: Number(primaryAction.angle) || 0,
   }
 }
 
@@ -827,6 +1643,7 @@ function updateLassoSelection() {
     }
   }
   selectedPartIds.value = newSelection
+  if (recordMode.value) syncRecordTargets(newSelection)
   if (newSelection.length > 0) {
     selectedPartId.value = newSelection[newSelection.length - 1]
   }
@@ -855,17 +1672,27 @@ function onSvgMouseUp(e) {
   ds.finalDyCss = e.clientY - ds.startClientY
   const dx = Math.round(coords.x - ds.startSvgX)
   const dy = Math.round(coords.y - ds.startSvgY)
-  if (recordActionType.value === 'offset') {
-    recordForm.value.offsetX = dx
-    recordForm.value.offsetY = -dy
-    recordForm.value.endX = Math.round(coords.x)
-    recordForm.value.endY = Math.round(coords.y)
+  const actionType = ds.actionType || 'offset'
+  const writeKind = ds.writeKind || 'record'
+  const action = writeKind === 'edit'
+    ? getActiveRotateAction(ds.partId).action
+    : getRecordAction(ds.targetIndex ?? 0, 0)
+  if (actionType === 'offset') {
+    action.offsetX = dx
+    action.offsetY = -dy
+    action.endX = Math.round(coords.x)
+    action.endY = Math.round(coords.y)
   }
   // 隐藏拖拽坐标提示
   dragCoordHint.value = { ...dragCoordHint.value, visible: false }
-  showRecordPanel.value = true
   ds.dragging = false
+  if (actionType === 'rotate') {
+    toast(`已旋转 ${action.angle || 0}°`, 'info')
+    return
+  }
+  showRecordPanel.value = true
   nextTick(() => {
+    initRecordPanelPosition()
     if (recordStepInputRef.value) recordStepInputRef.value.focus()
   })
 }
@@ -945,21 +1772,65 @@ function cancelGroupCombine() {
 function clearSelection() {
   selectedPartIds.value = []
   selectedPartId.value = ''
+  rotateMode.value = false
+  if (recordMode.value) syncRecordTargets([])
   highlightSvgPart('')
 }
 
+function toggleRotateMode() {
+  if (rotateMode.value) {
+    rotateMode.value = false
+    toast('已退出旋转模式', 'info')
+    return
+  }
+  if (selectedPartIds.value.length === 0) {
+    toast('请先选中要旋转的模块', 'warn')
+    return
+  }
+  rotateMode.value = true
+  recordActionType.value = 'rotate'
+  toast('旋转模式：按住左键拖拽，选中模块同步旋转', 'info')
+}
+
+function getActiveRotateAction(partId) {
+  if (showMotionEditPanel.value && Array.isArray(editMotionForm.value.rules) && editMotionForm.value.rules.length) {
+    const rules = editMotionForm.value.rules
+    let rule = rules.find(r => r.target_part_id === partId)
+    if (!rule) {
+      const idx = Math.min(Math.max(0, activeRecordTargetIndex.value ?? 0), rules.length - 1)
+      rule = rules[idx]
+      if (!rule.target_part_id) rule.target_part_id = partId || ''
+    }
+    if (!Array.isArray(rule.actions) || rule.actions.length === 0) {
+      rule.actions = [createEmptyMotionAction('rotate')]
+    }
+    const action = rule.actions[0]
+    action.type = 'rotate'
+    return { kind: 'edit', action, rule }
+  }
+  const targetIndex = activeRecordTargetIndex.value ?? 0
+  if (partId) setRecordTargetAt(targetIndex, partId)
+  const action = getRecordAction(targetIndex, 0)
+  action.type = 'rotate'
+  recordActionType.value = 'rotate'
+  return { kind: 'record', action, rule: getRecordRule(targetIndex) }
+}
+
 function cancelRecord() {
+  restoreRecordPreview()
   resetDragState()
+  activeRecordTargetIndex.value = null
   showRecordPanel.value = false
+  textPickContext.value = null
+  clearMotionTexts(svgInlineRef.value, 'live')
 }
 
 function saveRecord() {
   if (!editingConfig.value) return
   const f = recordForm.value
   if (!f.step.trim()) { toast('请输入 Step 名称', 'error'); return }
-  // 目标部件列表（支持多选）
-  const targets = (f.partIds && f.partIds.length > 0) ? f.partIds : [f.partId]
-  if (!targets[0]) { toast('未选中部件', 'error'); return }
+  const rules = (f.rules || []).map(formToRule)
+  if (!validateMotionRules(rules)) return
   // 旧格式 → 转 Motion JSON
   if (!editingConfig.value.schema_version) {
     const oldParts = editingConfig.value.parts || []
@@ -972,39 +1843,26 @@ function saveRecord() {
     }
   }
   if (!Array.isArray(editingConfig.value.motions)) editingConfig.value.motions = []
-  // 构建 action（所有目标共用同一动作参数）
-  let action = { type: f.actionType }
-  switch (f.actionType) {
-    case 'offset': action.offset_x = f.offsetX; action.offset_y = f.offsetY; break
-    case 'rotate': action.angle = f.angle; action.pivot = { x: f.pivotX, y: f.pivotY }; break
-    case 'scale': action.scale_x = f.scaleX; action.scale_y = f.scaleY; break
-    case 'opacity': action.to = f.opacity; break
-  }
-  if (f.duration > 0) action.duration = f.duration
-  if (f.easing && f.easing !== 'linear') action.easing = f.easing
-  // 构建 motion：多目标时生成多条 rules（同一 step 下，每部件一条 rule）
-  const rules = targets.map(pid => ({
-    when: f.when || 'true',
-    target_part_id: pid,
-    actions: [JSON.parse(JSON.stringify(action))],
-  }))
   const motion = {
     step: f.step.trim().toUpperCase(),
-    enabled: true,
+    enabled: f.enabled !== false,
+    when: (f.when || 'true').trim() || 'true',
     rules,
   }
   editingConfig.value.motions.push(motion)
   markDirty()
   // 保存录制后：部件停留在结束位置，便于衔接下一次录制
   // offset 类型累计 CSS px base，连续录制时下一次拖拽从本次结束位置开始
-  if (f.actionType === 'offset' && svgInlineRef.value) {
-    const ds = dragState.value
-    const fdx = ds.finalDxCss || 0
-    const fdy = ds.finalDyCss || 0
-    if (fdx || fdy) {
-      for (const pid of targets) {
-        const base = partBaseCss.value[pid] || { x: 0, y: 0 }
-        partBaseCss.value[pid] = { x: base.x + fdx, y: base.y + fdy }
+  if (svgInlineRef.value) {
+    for (const rule of f.rules || []) {
+      const partId = rule.target_part_id
+      const action = rule.actions?.[0]
+      if (!partId || (action?.type || 'offset') !== 'offset') continue
+      const fdx = action.finalDxCss || 0
+      const fdy = action.finalDyCss || 0
+      if (fdx || fdy) {
+        const base = partBaseCss.value[partId] || { x: 0, y: 0 }
+        partBaseCss.value[partId] = { x: base.x + fdx, y: base.y + fdy }
       }
     }
   }
@@ -1012,8 +1870,18 @@ function saveRecord() {
   dragState.value = { partId: '', startSvgX: 0, startSvgY: 0, currentSvgX: 0, currentSvgY: 0, startClientX: 0, startClientY: 0, finalDxCss: 0, finalDyCss: 0, dragging: false, startBBox: null }
   dragCoordHint.value = { visible: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, clientX: 0, clientY: 0 }
   showRecordPanel.value = false
-  recordForm.value.step = ''
-  toast(`已录制: ${motion.step} → ${targets.join(', ')} (${f.actionType}${targets.length > 1 ? `, ${targets.length}个部件` : ''})`, 'success')
+  recordPreviewSnapshot.clear()
+  activeRecordTargetIndex.value = null
+  recordForm.value = {
+    step: '',
+    enabled: true,
+    when: f.when || 'true',
+    rules: [createEmptyRecordRule(1)],
+  }
+  textPickContext.value = null
+  clearMotionTexts(svgInlineRef.value, 'live')
+  const targetLabel = rules.map(rule => rule.target_part_id || (isTextOnlyRule(rule) ? '文本' : '?')).join(', ')
+  toast(`已录制: ${motion.step} → ${targetLabel} (${rules.length} 条 rules)`, 'success')
 }
 
 function deleteMotion(idx) {
@@ -1024,76 +1892,364 @@ function deleteMotion(idx) {
   markDirty()
 }
 
-// 双击已录制动作 → 编辑（调整播放时间 duration、动作参数、触发条件等）
+function createEmptyMotionAction(type = 'rotate') {
+  return {
+    type,
+    offsetX: 0,
+    offsetY: 0,
+    angle: CHAMBER_ANGLE_TOKEN,
+    pivotX: 0,
+    pivotY: 0,
+    scaleX: 1,
+    scaleY: 1,
+    opacity: 1,
+    duration: 1000,
+    easing: 'linear',
+    followPartId: '',
+    toPartId: '',
+    content: '',
+    textX: 0,
+    textY: 0,
+    textPosSet: false,
+    visibleMode: '',
+  }
+}
+
+function actionToForm(action = {}) {
+  const type = action.type || 'offset'
+  const hasTextPos = type === 'text' && Number.isFinite(Number(action.x)) && Number.isFinite(Number(action.y))
+  return {
+    ...createEmptyMotionAction(type),
+    type,
+    offsetX: action.offset_x ?? 0,
+    offsetY: action.offset_y ?? 0,
+    angle: rotateAngleToForm(action.angle),
+    pivotX: action.pivot?.x ?? 0,
+    pivotY: action.pivot?.y ?? 0,
+    scaleX: action.scale_x ?? 1,
+    scaleY: action.scale_y ?? 1,
+    opacity: action.to ?? 1,
+    duration: action.duration ?? 1000,
+    easing: action.easing || 'linear',
+    followPartId: action.follow_part_id || '',
+    toPartId: action.to_part_id || '',
+    content: action.content || '',
+    textX: hasTextPos ? Number(action.x) : 0,
+    textY: hasTextPos ? Number(action.y) : 0,
+    textPosSet: hasTextPos,
+    visibleMode: action.visible === true ? 'show' : action.visible === false ? 'hide' : '',
+  }
+}
+
+function formToAction(form = {}) {
+  const type = form.type || 'offset'
+  const action = { type }
+  switch (type) {
+    case 'offset':
+      action.offset_x = Number(form.offsetX) || 0
+      action.offset_y = Number(form.offsetY) || 0
+      break
+    case 'rotate':
+      action.angle = rotateAngleFromForm(form.angle)
+      if ((form.followPartId || '').trim()) action.follow_part_id = form.followPartId.trim()
+      break
+    case 'scale':
+      action.scale_x = form.scaleX ?? 1
+      action.scale_y = form.scaleY ?? 1
+      break
+    case 'opacity':
+      action.to = form.opacity ?? 1
+      break
+    case 'snap':
+      action.to_part_id = (form.toPartId || '').trim()
+      break
+    case 'text':
+      action.content = String(form.content || '')
+      if (form.textPosSet) {
+        action.x = Number(form.textX) || 0
+        action.y = Number(form.textY) || 0
+      }
+      break
+  }
+  if (form.visibleMode === 'show') action.visible = true
+  else if (form.visibleMode === 'hide') action.visible = false
+  if (type !== 'text') {
+    action.duration = Number(form.duration) > 0 ? Number(form.duration) : 1000
+    action.easing = form.easing || 'linear'
+  }
+  return action
+}
+
+function setActionVisibleMode(action, mode) {
+  if (!action) return
+  action.visibleMode = action.visibleMode === mode ? '' : mode
+  return action
+}
+
+function isTextOnlyRule(rule = {}) {
+  const actions = Array.isArray(rule.actions) ? rule.actions : []
+  return actions.length > 0 && actions.every(action => action?.type === 'text')
+}
+
+function validateMotionRules(rules) {
+  if (!Array.isArray(rules) || rules.length === 0) {
+    toast('至少需要 1 条 rule', 'error')
+    return false
+  }
+  for (let i = 0; i < rules.length; i++) {
+    const rule = rules[i]
+    if (!rule.actions?.length) {
+      toast(`第 ${i + 1} 条 rule 缺少 actions`, 'error')
+      return false
+    }
+    if (!rule.target_part_id && !isTextOnlyRule(rule)) {
+      toast(`第 ${i + 1} 条 rule 缺少 target_part_id`, 'error')
+      return false
+    }
+    for (let j = 0; j < rule.actions.length; j++) {
+      const action = rule.actions[j]
+      if (action.type === 'snap' && !action.to_part_id) {
+        toast(`第 ${i + 1} 条 rule 的 snap 缺少 to_part_id`, 'error')
+        return false
+      }
+      if (action.type === 'text') {
+        const hasPos = Number.isFinite(Number(action.x)) && Number.isFinite(Number(action.y))
+        if (!rule.target_part_id && !hasPos) {
+          toast(`第 ${i + 1} 条 rule 需提供画布位置，或填写 target_part_id 贴到部件上`, 'error')
+          return false
+        }
+      }
+    }
+  }
+  return true
+}
+
+function setTextPickContext(source, ruleIdx, actionIdx) {
+  textPickContext.value = { source, ruleIdx, actionIdx }
+  toast('显示文本：点击 SVG 选择画布位置', 'info')
+}
+
+function onMotionActionTypeChange(action, ruleIdx, actionIdx, source) {
+  if (action?.type === 'text') {
+    setTextPickContext(source, ruleIdx, actionIdx)
+    toast('显示文本：点击 SVG 选择画布位置', 'info')
+    nextTick(syncLiveTextOverlays)
+    return
+  }
+  const ctx = textPickContext.value
+  if (ctx && ctx.source === source && ctx.ruleIdx === ruleIdx && ctx.actionIdx === actionIdx) {
+    textPickContext.value = null
+  }
+  nextTick(syncLiveTextOverlays)
+}
+
+function getTextActionFromContext(ctx) {
+  if (!ctx) return null
+  const form = ctx.source === 'edit' ? editMotionForm.value : recordForm.value
+  const action = form?.rules?.[ctx.ruleIdx]?.actions?.[ctx.actionIdx]
+  return action?.type === 'text' ? action : null
+}
+
+function getActiveTextAction() {
+  const ctxAction = getTextActionFromContext(textPickContext.value)
+  if (ctxAction) return ctxAction
+  if (showMotionEditPanel.value) {
+    for (const rule of editMotionForm.value.rules || []) {
+      const action = (rule.actions || []).find(item => item?.type === 'text')
+      if (action) return action
+    }
+  }
+  if (showRecordPanel.value || recordMode.value) {
+    const idx = activeRecordTargetIndex.value
+    if (idx != null) {
+      const action = recordForm.value.rules?.[idx]?.actions?.find(item => item?.type === 'text')
+      if (action) return action
+    }
+    for (const rule of recordForm.value.rules || []) {
+      const action = (rule.actions || []).find(item => item?.type === 'text')
+      if (action) return action
+    }
+  }
+  return null
+}
+
+function isTextPickActive() {
+  return !!getActiveTextAction()
+}
+
+function collectLiveTextActions() {
+  const actions = []
+  const pushFrom = (form) => {
+    for (const rule of form?.rules || []) {
+      for (const action of rule.actions || []) {
+        if (action?.type === 'text' && action.textPosSet) actions.push(action)
+      }
+    }
+  }
+  if (showRecordPanel.value) pushFrom(recordForm.value)
+  if (showMotionEditPanel.value) pushFrom(editMotionForm.value)
+  return actions
+}
+
+function syncLiveTextOverlays() {
+  const container = svgInlineRef.value
+  const svg = container?.querySelector('svg')
+  if (!svg) return
+  clearMotionTexts(container, 'live')
+  for (const action of collectLiveTextActions()) {
+    appendMotionText(svg, action, 'live')
+  }
+}
+
+function tryPickTextPosition(e) {
+  if (rotateMode.value) return false
+  const action = getActiveTextAction()
+  if (!action) return false
+  const coords = screenToSvgCoords(e)
+  action.textX = Math.round(coords.x)
+  action.textY = Math.round(coords.y)
+  action.textPosSet = true
+  syncLiveTextOverlays()
+  toast(`已选择画布位置 (${action.textX}, ${action.textY})`, 'info')
+  return true
+}
+
+function ruleToForm(rule = {}) {
+  const actions = Array.isArray(rule.actions) && rule.actions.length
+    ? rule.actions.map(actionToForm)
+    : [createEmptyMotionAction()]
+  return {
+    phase: rule.phase ?? 1,
+    target_part_id: rule.target_part_id || '',
+    when: rule.when && rule.when !== 'true' ? rule.when : '',
+    actions,
+  }
+}
+
+function formToRule(rule = {}) {
+  const next = {
+    phase: Number(rule.phase) || 1,
+    target_part_id: (rule.target_part_id || '').trim(),
+  }
+  const when = (rule.when || '').trim()
+  if (when && when !== 'true') next.when = when
+  next.actions = (rule.actions || []).map(formToAction)
+  return next
+}
+
+function createEmptyRecordRule(phase = 1) {
+  return ruleToForm({
+    phase,
+    target_part_id: '',
+    actions: [{ type: 'offset', duration: 1000, easing: 'linear' }],
+  })
+}
+
+if (!recordForm.value.rules.length) {
+  recordForm.value.rules = [createEmptyRecordRule(1)]
+}
+
+function addEditRule() {
+  const rules = editMotionForm.value.rules
+  const last = rules[rules.length - 1]
+  rules.push(ruleToForm({
+    phase: (Number(last?.phase) || rules.length) + 1,
+    target_part_id: '',
+    actions: [{ type: 'rotate', duration: 1000, easing: 'linear' }],
+  }))
+}
+
+function removeEditRule(index) {
+  if (editMotionForm.value.rules.length <= 1) {
+    toast('至少保留 1 条 rule', 'warn')
+    return
+  }
+  editMotionForm.value.rules.splice(index, 1)
+}
+
+function addEditAction(ruleIndex) {
+  const rule = editMotionForm.value.rules[ruleIndex]
+  if (!rule) return
+  if (!Array.isArray(rule.actions)) rule.actions = []
+  rule.actions.push(createEmptyMotionAction(rule.actions[rule.actions.length - 1]?.type || 'rotate'))
+}
+
+function removeEditAction(ruleIndex, actionIndex) {
+  const rule = editMotionForm.value.rules[ruleIndex]
+  if (!rule?.actions) return
+  if (rule.actions.length <= 1) {
+    toast('每条 rule 至少保留 1 个 action', 'warn')
+    return
+  }
+  rule.actions.splice(actionIndex, 1)
+}
+
+// 双击已录制动作 → 按 JSON rules 完整回填
 function editMotion(idx) {
   const m = editingConfig.value?.motions?.[idx]
   if (!m) return
-  const r = m.rules?.[0]
-  const a = r?.actions?.[0] || {}
   editingMotionIdx.value = idx
   editMotionForm.value = {
     step: m.step || '',
-    when: r?.when || 'true',
-    actionType: a.type || 'offset',
-    offsetX: a.offset_x || 0,
-    offsetY: a.offset_y || 0,
-    angle: a.angle || 0,
-    pivotX: a.pivot?.x || 0,
-    pivotY: a.pivot?.y || 0,
-    scaleX: a.scale_x ?? 1,
-    scaleY: a.scale_y ?? 1,
-    opacity: a.to ?? 1,
-    duration: a.duration ?? 1000,
-    easing: a.easing || 'linear',
+    enabled: m.enabled !== false,
+    when: m.when || m.rules?.find(rule => rule.when)?.when || 'true',
+    rules: (m.rules || []).map(ruleToForm),
+  }
+  if (editMotionForm.value.rules.length === 0) {
+    editMotionForm.value.rules.push(ruleToForm({}))
   }
   showMotionEditPanel.value = true
+  nextTick(() => {
+    initMotionEditPanelPosition()
+  })
 }
 
-function saveMotionEdit() {
-  const idx = editingMotionIdx.value
-  if (idx == null || !editingConfig.value?.motions) return
+async function saveMotionEdit() {
   const f = editMotionForm.value
   if (!f.step.trim()) { toast('Step 名称不能为空', 'error'); return }
-  const m = editingConfig.value.motions[idx]
-  // 更新每条 rule 的 action（同一 step 下所有目标共用动作参数）
-  for (const r of (m.rules || [])) {
-    if (!Array.isArray(r.actions) || r.actions.length === 0) r.actions = [{}]
-    const a = r.actions[0]
-    // 清旧字段，按新类型重写
-    delete a.offset_x; delete a.offset_y; delete a.angle; delete a.pivot
-    delete a.scale_x; delete a.scale_y; delete a.to; delete a.type
-    a.type = f.actionType
-    switch (f.actionType) {
-      case 'offset': a.offset_x = f.offsetX; a.offset_y = f.offsetY; break
-      case 'rotate': a.angle = f.angle; a.pivot = { x: f.pivotX, y: f.pivotY }; break
-      case 'scale': a.scale_x = f.scaleX; a.scale_y = f.scaleY; break
-      case 'opacity': a.to = f.opacity; break
-    }
-    if (f.duration > 0) a.duration = f.duration; else delete a.duration
-    if (f.easing && f.easing !== 'linear') a.easing = f.easing; else delete a.easing
-    r.when = f.when || 'true'
+  if (!editingConfig.value?.motions) editingConfig.value.motions = []
+  const idx = editingMotionIdx.value
+  if (idx == null) {
+    toast('请先双击已有动作再编辑', 'warn')
+    return
   }
-  m.step = f.step.trim().toUpperCase()
-  // 触发响应式更新
-  editingConfig.value.motions[idx] = { ...m, rules: m.rules.map(r => ({ ...r, actions: r.actions.map(x => ({ ...x })) })) }
+  const rules = (f.rules || []).map(formToRule)
+  if (!validateMotionRules(rules)) return
+  const prev = editingConfig.value.motions[idx] || {}
+  editingConfig.value.motions[idx] = {
+    ...prev,
+    step: f.step.trim().toUpperCase(),
+    enabled: f.enabled !== false,
+    when: (f.when || 'true').trim() || 'true',
+    rules,
+  }
   markDirty()
   showMotionEditPanel.value = false
   editingMotionIdx.value = null
-  toast('已更新动作', 'success')
+  textPickContext.value = null
+  clearMotionTexts(svgInlineRef.value, 'live')
+  await saveAnimConfig()
 }
-
 function cancelMotionEdit() {
   showMotionEditPanel.value = false
   editingMotionIdx.value = null
+  textPickContext.value = null
+  clearMotionTexts(svgInlineRef.value, 'live')
 }
 
-// === 单击动作 → 部件跳到该动作预设位置（累计 offset 预览）；双击 → 编辑 ===
+function onRecordPanelPointerDown(ev) {
+  const tag = ev.target?.tagName ? ev.target.tagName.toLowerCase() : ''
+  if (['input', 'select', 'textarea', 'button', 'option', 'label'].includes(tag)) return
+  startRecordPanelDrag(ev)
+}
+
+// === 单击动作 → 只播放当前 step；双击 → 编辑 ===
 let motionClickTimer = null
 function onMotionClick(idx) {
   // 用计时器区分单击与双击：双击时取消单击跳转
   if (motionClickTimer) { clearTimeout(motionClickTimer); motionClickTimer = null; return }
   motionClickTimer = setTimeout(() => {
-    applyMotionPosition(idx)
+    void applyMotionPosition(idx)
     motionClickTimer = null
   }, 230)
 }
@@ -1102,81 +2258,136 @@ function onMotionDblClick(idx) {
   editMotion(idx)
 }
 
-// 点击动作项：累计到该动作（含）的位移，让部件到达预设结束位置
-function applyMotionPosition(idx) {
-  if (!editingConfig.value?.motions) return
+const runtimeFollowAttachments = new Map()
+
+function restoreRuntimeFollowAttachments() {
+  for (const [followerEl, snapshot] of runtimeFollowAttachments.entries()) {
+    if (!followerEl || !snapshot?.parent) continue
+    try {
+      snapshot.parent.insertBefore(followerEl, snapshot.nextSibling || null)
+    } catch (_) {
+      try { snapshot.parent.appendChild(followerEl) } catch (_) { /* ignore */ }
+    }
+  }
+  runtimeFollowAttachments.clear()
+}
+
+// 点击动作项：按 phase 依次播放到该动作，让中间的 snap / rotate 可见
+async function applyMotionPosition(idx) {
+  if (!editingConfig.value?.motions) {
+    console.warn('[applyMotionPosition] 无 motions 配置')
+    return
+  }
   const container = svgInlineRef.value
-  if (!container) return
+  if (!container) {
+    console.warn('[applyMotionPosition] svgInlineRef 为空', { idx, motions: editingConfig.value?.motions?.length })
+    toast('SVG 容器尚未渲染，无法跳转', 'warn')
+    return
+  }
   const svg = container.querySelector('svg')
-  if (!svg) return
+  if (!svg) {
+    console.warn('[applyMotionPosition] SVG 元素不存在于容器中')
+    toast('SVG 内容尚未加载，无法跳转', 'warn')
+    return
+  }
   const ctm = svg.getScreenCTM()
-  if (!ctm) return
+  if (!ctm) {
+    console.warn('[applyMotionPosition] getScreenCTM 返回 null，SVG 可能在隐藏区域', { parentDisplay: svg.parentElement?.style?.display })
+    toast('SVG 坐标系不可用，请尝试切换到其他 Tab 再回来，或点击"初始化"重置', 'warn')
+    return
+  }
+  // 当 viewBox 存在但 SVG 实际渲染宽高为 0 时，ctm.a/ctm.d 为 0
+  if (ctm.a === 0 || ctm.d === 0) {
+    console.warn('[applyMotionPosition] CTM 缩放系数为 0，SVG 可能不可见', { ctm, svgWidth: svg.clientWidth, svgHeight: svg.clientHeight })
+    toast('SVG 在当前视图不可见，请切换到"动画配置"Tab 或点击"初始化"重置画布', 'warn')
+    return
+  }
   const motions = editingConfig.value.motions
-  // 累计 offset（CSS px）+ 最新 rotate/scale（按部件）
-  const accumOffset = {}   // pid -> { x, y } CSS px
-  const lastRotate = {}    // pid -> { angle, pivotX, pivotY }
-  const lastScale = {}     // pid -> { sx, sy }
-  for (let i = 0; i <= idx; i++) {
-    for (const r of (motions[i]?.rules || [])) {
-      const pid = r.target_part_id
-      const a = r.actions?.[0]
-      if (!a) continue
-      if (!accumOffset[pid]) accumOffset[pid] = { x: 0, y: 0 }
-      if (a.type === 'offset') {
-        // offset_x 为 SVG X（右为正），offset_y 向上为正；转 CSS px
-        accumOffset[pid].x += (a.offset_x || 0) * ctm.a
-        accumOffset[pid].y += -((a.offset_y || 0) * ctm.d)
-      } else if (a.type === 'rotate') {
-        lastRotate[pid] = { angle: a.angle || 0, pivotX: a.pivot?.x || 0, pivotY: a.pivot?.y || 0 }
-      } else if (a.type === 'scale') {
-        lastScale[pid] = { sx: a.scale_x ?? 1, sy: a.scale_y ?? 1 }
-      }
-    }
+  const motion = motions[idx]
+  if (!motion) {
+    toast('未找到该动作', 'warn')
+    return
   }
-  const pids = new Set([...Object.keys(accumOffset), ...Object.keys(lastRotate), ...Object.keys(lastScale)])
-  if (pids.size === 0) { toast('该动作无可预览的位移/旋转/缩放', 'warn'); return }
-  for (const pid of pids) {
-    const el = container.querySelector(`#${CSS.escape(pid)}`)
-    if (!el) continue
-    const parts = []
-    const off = accumOffset[pid] || { x: 0, y: 0 }
-    if (off.x || off.y) parts.push(`translate(${off.x}px, ${off.y}px)`)
-    if (lastRotate[pid]) {
-      el.style.transformOrigin = `${lastRotate[pid].pivotX}px ${lastRotate[pid].pivotY}px`
-      if (lastRotate[pid].angle) parts.push(`rotate(${lastRotate[pid].angle}deg)`)
-    }
-    if (lastScale[pid] && (lastScale[pid].sx !== 1 || lastScale[pid].sy !== 1)) {
-      parts.push(`scale(${lastScale[pid].sx}, ${lastScale[pid].sy})`)
-    }
-    el.style.transform = parts.join(' ')
-    // 更新 base，便于衔接后续录制
-    partBaseCss.value[pid] = { x: off.x, y: off.y }
+  const matchedRules = (motion.rules || []).map(rule => resolveMotionRule(rule, {}))
+
+  if (matchedRules.length === 0) {
+    toast('动作中没有可播放的规则', 'warn')
+    return
   }
-  toast(`已跳转到动作 #${idx + 1}「${motions[idx]?.step || ''}」预设位置`, 'info')
+
+  const result = await playMotion({
+    container,
+    rules: matchedRules,
+    onClearTransforms: clearAllTransforms,
+    onPartBase: (pid, pos) => { partBaseCss.value[pid] = pos },
+    onWarn: (msg) => toast(msg, 'warn'),
+  })
+
+  if (!result.ok) {
+    const reasonMap = {
+      container: 'SVG 容器尚未渲染，无法跳转',
+      svg: 'SVG 内容尚未加载，无法跳转',
+      ctm: 'SVG 坐标系不可用，请尝试切换到其他 Tab 再回来，或点击"初始化"重置',
+      'ctm-scale': 'SVG 在当前视图不可见，请切换到"动画配置"Tab 或点击"初始化"重置画布',
+      'no-rules': '动作中没有可播放的规则',
+    }
+    toast(reasonMap[result.reason] || '播放失败', 'warn')
+    return
+  }
+
+  if (result.playedPids.size === 0 && !result.hasText) {
+    toast('动作中引用的部件未在 SVG 中找到，请从 SVG 重新提取部件', 'warn')
+    return
+  }
+
+  selectedPartIds.value = Array.from(result.playedPids)
+  highlightSelectedParts()
+  toast(`已播放动作 #${idx + 1}「${motion.step || ''}」`, 'info')
+}
+
+function describeMotionAction(action = {}) {
+  const vis = action.visible === true ? '+显示' : action.visible === false ? '+隐藏' : ''
+  switch (action.type) {
+    case 'offset': return `位移(${action.offset_x || 0},${action.offset_y || 0})${vis}`
+    case 'rotate': return action.follow_part_id
+      ? `跟随${action.follow_part_id}旋转${formatRotateAngleLabel(action.angle)}${vis}`
+      : `旋转${formatRotateAngleLabel(action.angle)}${vis}`
+    case 'scale': return `缩放(${action.scale_x ?? 1},${action.scale_y ?? 1})${vis}`
+    case 'text': return String(action.content || '').trim()
+      ? `文本「${action.content}」${vis}`
+      : `清除文本${vis}`
+    case 'opacity': return `透明度${action.to ?? 1}${vis}`
+    case 'snap': return `贴合${action.to_part_id || '?'}${vis}`
+    default: return `${action.type || '未知'}${vis}`
+  }
 }
 
 function getMotionSummary(motion) {
   const rules = motion.rules || []
   if (rules.length === 0) return '(无动作)'
-  const r = rules[0]
-  const actions = r.actions || []
-  const dur = actions[0]?.duration ?? 1000
-  const parts = actions.map(a => {
-    switch (a.type) {
-      case 'offset': return `位移(${a.offset_x||0},${a.offset_y||0})`
-      case 'rotate': return `旋转${a.angle||0}°`
-      case 'scale': return `缩放(${a.scale_x||1},${a.scale_y||1})`
-      case 'opacity': return `透明度${a.to??1}`
-      default: return a.type
-    }
-  })
-  return `${r.target_part_id}: ${parts.join(', ')} · ${dur}ms`
+  const whenText = motion.when && motion.when !== 'true' ? `[${motion.when}] ` : ''
+  const ruleText = rules.map((rule) => {
+    const actions = (rule.actions || []).map(describeMotionAction).join('+')
+    const phase = rule.phase != null ? `P${rule.phase} ` : ''
+    const ruleWhen = rule.when && rule.when !== 'true' ? `[${rule.when}] ` : ''
+    return `${phase}${ruleWhen}${rule.target_part_id || (isTextOnlyRule(rule) ? '文本' : '?')}: ${actions}`
+  }).join(' → ')
+  return `${whenText}${ruleText}`
 }
 
-// === 计算属性 ===
 const targetKeys = computed(() => {
   if (!editingConfig.value) return []
   const q = partSearch.value.trim().toLowerCase()
+  const collator = new Intl.Collator('zh-Hans-CN', { sensitivity: 'base' })
+  const compareText = (left, right) => collator.compare(left || '', right || '')
+  const getSortName = (key) => {
+    if (isMotionJson.value) {
+      const part = editingConfig.value.parts?.[Number(key)]
+      return part?.part_name || part?.part_id || ''
+    }
+    const target = editingConfig.value.targets?.[key]
+    return target?.view_2d || target?.view_3d || target?.desc || ''
+  }
   // Motion JSON：返回 parts 数组索引（字符串形式，便于 v-for key）
   if (isMotionJson.value) {
     const arr = Array.isArray(editingConfig.value.parts) ? editingConfig.value.parts : []
@@ -1190,12 +2401,12 @@ const targetKeys = computed(() => {
           (p.part_type || '').toLowerCase().includes(q)
         )
       })
+      .sort((left, right) => compareText(left.p?.part_name || left.p?.part_id || '', right.p?.part_name || right.p?.part_id || '') || compareText(left.p?.part_id || '', right.p?.part_id || ''))
       .map(({ i }) => i)
   }
   // 旧格式：targets 对象
   const allKeys = Object.keys(editingConfig.value.targets || {})
-  if (!q) return allKeys
-  return allKeys.filter(k => {
+  const filtered = !q ? allKeys : allKeys.filter(k => {
     const t = editingConfig.value.targets[k]
     return (
       k.toLowerCase().includes(q) ||
@@ -1204,6 +2415,7 @@ const targetKeys = computed(() => {
       (t?.desc || '').toLowerCase().includes(q)
     )
   })
+  return filtered.sort((left, right) => compareText(getSortName(left), getSortName(right)) || compareText(left, right))
 })
 
 // 总部件数（不受搜索过滤）
@@ -1214,6 +2426,35 @@ const totalPartsCount = computed(() => {
   }
   return Object.keys(editingConfig.value.targets || {}).length
 })
+
+function getTargetPartId(key) {
+  if (!editingConfig.value) return ''
+  if (isMotionJson.value) {
+    const part = editingConfig.value.parts?.[Number(key)]
+    return part?.part_id || String(key)
+  }
+  return String(key)
+}
+
+function getTargetPartName(key) {
+  if (!editingConfig.value) return ''
+  if (isMotionJson.value) {
+    const part = editingConfig.value.parts?.[Number(key)]
+    return part?.part_name || part?.part_id || String(key)
+  }
+  const target = editingConfig.value.targets?.[key]
+  return target?.view_2d || target?.view_3d || target?.desc || String(key)
+}
+
+function getTargetPartMeta(key) {
+  if (!editingConfig.value) return ''
+  if (isMotionJson.value) {
+    const part = editingConfig.value.parts?.[Number(key)]
+    return part?.part_type || part?.desc || ''
+  }
+  const target = editingConfig.value.targets?.[key]
+  return target?.desc || ''
+}
 
 // === 动画调试 ===
 function manualTriggerEvent(eventName) {
@@ -1322,14 +2563,190 @@ const svgPreviewUrl = computed(() => {
 // 修复 <object> 渲染 SVG 空白 / fallback iframe 嵌主页看板问题
 const svgInlineHtml = ref('')
 const svgPreviewLoading = ref(false)
+const showHiddenModules = ref(false)
+const hiddenSvgSnapshot = new Map()
+
+function isSvgHiddenElement(el) {
+  if (!el) return false
+  return (
+    el.hasAttribute('hidden') ||
+    el.getAttribute('display') === 'none' ||
+    el.getAttribute('visibility') === 'hidden' ||
+    el.getAttribute('data-motion-base-visibility') === 'hidden' ||
+    el.style.display === 'none' ||
+    el.style.visibility === 'hidden'
+  )
+}
+
+function applyMotionBaseVisibility() {
+  const svg = svgInlineRef.value?.querySelector('svg')
+  if (!svg) return
+  const hiddenEls = svg.querySelectorAll('[data-motion-base-visibility="hidden"]')
+  for (const el of hiddenEls) {
+    el.setAttribute('visibility', 'hidden')
+    el.style.visibility = 'hidden'
+  }
+}
+
+function restoreHiddenSvgState() {
+  if (!svgInlineRef.value) {
+    hiddenSvgSnapshot.clear()
+    return
+  }
+  for (const [el, snapshot] of hiddenSvgSnapshot.entries()) {
+    if (!el || !el.isConnected) continue
+    if (snapshot.hidden) el.setAttribute('hidden', snapshot.hidden)
+    else el.removeAttribute('hidden')
+    if (snapshot.displayAttr) el.setAttribute('display', snapshot.displayAttr)
+    else el.removeAttribute('display')
+    if (snapshot.visibilityAttr) el.setAttribute('visibility', snapshot.visibilityAttr)
+    else el.removeAttribute('visibility')
+    el.setAttribute('style', snapshot.styleAttr || '')
+  }
+  hiddenSvgSnapshot.clear()
+}
+
+function setHiddenModulesVisible(visible, { silent = false } = {}) {
+  const container = svgInlineRef.value
+  const svg = container?.querySelector('svg')
+  if (!svg) {
+    showHiddenModules.value = false
+    if (!silent) toast('请先加载 SVG', 'warn')
+    return
+  }
+  if (!visible) {
+    restoreHiddenSvgState()
+    showHiddenModules.value = false
+    if (!silent) toast('已恢复隐藏模块', 'info')
+    return
+  }
+  if (showHiddenModules.value && hiddenSvgSnapshot.size > 0) return
+
+  let revealed = 0
+  const allElements = svg.querySelectorAll('*')
+  for (const el of allElements) {
+    if (!isSvgHiddenElement(el)) continue
+    hiddenSvgSnapshot.set(el, {
+      hidden: el.getAttribute('hidden'),
+      displayAttr: el.getAttribute('display'),
+      visibilityAttr: el.getAttribute('visibility'),
+      styleAttr: el.getAttribute('style') || '',
+    })
+    el.removeAttribute('hidden')
+    el.removeAttribute('display')
+    el.removeAttribute('visibility')
+    el.style.display = ''
+    el.style.visibility = ''
+    revealed++
+  }
+  showHiddenModules.value = true
+  if (!silent) toast(revealed ? `已显示 ${revealed} 个隐藏模块` : '未找到隐藏模块', revealed ? 'info' : 'warn')
+}
+
+function toggleHiddenModules() {
+  setHiddenModulesVisible(!showHiddenModules.value)
+}
+
+async function resetSvgCanvas() {
+  const container = svgInlineRef.value
+  const svg = container?.querySelector('svg')
+  if (!svg) {
+    toast('请先加载 SVG', 'warn')
+    return
+  }
+
+  // 先清空再重载，避免相同 SVG 文本不触发 v-html 更新，导致已显示的隐藏模块残留
+  svgInlineHtml.value = ''
+  await nextTick()
+  await loadSvgInline(svgPreviewUrl.value)
+  await nextTick()
+  applyMotionBaseVisibility()
+  clearSelection()
+  resetDragState()
+  showMotionEditPanel.value = false
+  showGroupInput.value = false
+  groupNameInput.value = ''
+  selectedPartIds.value = []
+  selectedPartId.value = ''
+  hiddenSvgSnapshot.clear()
+  showHiddenModules.value = false
+  rotateMode.value = false
+  textPickContext.value = null
+  toast('SVG 画布已恢复到初始状态', 'success')
+}
+
 async function loadSvgInline(url) {
   if (!url) { svgInlineHtml.value = ''; return }
   svgPreviewLoading.value = true
   try {
-    const resp = await fetch(url, { cache: 'no-store' })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    const text = await resp.text()
-    if (!text.includes('<svg')) throw new Error('返回内容不是 SVG')
+    let text = ''
+    // 对绝对 HTTP URL 或相对路径（以 / 开头）都尝试 fetch
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/')) {
+      try {
+        const resp = await fetch(url, { cache: 'no-store' })
+        if (resp.ok) {
+          text = await resp.text()
+          // Vite dev server 对不存在的路径返回 SPA index.html（200 OK），需要检测
+          if (!text.includes('<svg') && !text.trimStart().startsWith('<?xml')) {
+            throw new Error('返回内容不是 SVG（可能是 SPA fallback 页面）')
+          }
+        } else {
+          throw new Error(`HTTP ${resp.status}`)
+        }
+      } catch (fetchErr) {
+        // fetch 失败（可能是相对路径在 file:// 协议或 IndexedDB 路径下），回退到 IndexedDB
+        console.warn('[loadSvgInline] fetch 失败，回退到 IndexedDB:', fetchErr.message)
+        const content = await api.getFileContent(url)
+        console.log('[loadSvgInline] IndexedDB content type:', typeof content, 'length:', content?.length || content?.byteLength || '?', 'first 50 chars:', typeof content === 'string' ? content.slice(0, 50) : '[non-string]')
+        if (typeof content === 'string') {
+          text = content
+        } else if (content instanceof ArrayBuffer) {
+          text = new TextDecoder('utf-8').decode(content)
+        } else if (content?.buffer instanceof ArrayBuffer) {
+          text = new TextDecoder('utf-8').decode(content.buffer)
+        } else {
+          throw new Error('本地 SVG 内容不存在')
+        }
+      }
+    } else {
+      const content = await api.getFileContent(url)
+      if (typeof content === 'string') {
+        text = content
+      } else if (content instanceof ArrayBuffer) {
+        text = new TextDecoder('utf-8').decode(content)
+      } else if (content?.buffer instanceof ArrayBuffer) {
+        text = new TextDecoder('utf-8').decode(content.buffer)
+      } else {
+        throw new Error('本地 SVG 内容不存在')
+      }
+    }
+    if (!text.includes('<svg')) {
+      console.error('[loadSvgInline] 内容不包含 <svg 标签，URL:', url, 'text length:', text.length, 'text start:', text.slice(0, 100))
+      // 如果 text.length 很短且不含 <svg，可能是选错机型，直接显示错误
+      if (text.length < 50 && !text.includes('<')) {
+        throw new Error('返回内容不是 SVG（内容为空或非 HTML）')
+      }
+      // 如果长度较长但没匹配到 <svg，可能是大小写或格式问题，宽松处理
+      console.warn('[loadSvgInline] 使用宽松模式，尝试直接渲染')
+      // 用 DOMParser 验证是否为有效 XML
+      try {
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(text, 'image/svg+xml')
+        const parseError = doc.querySelector('parsererror')
+        if (parseError) {
+          throw new Error('XML 解析失败: ' + parseError.textContent)
+        }
+        // 找到 svg 元素
+        const svgEl = doc.querySelector('svg') || doc.documentElement
+        if (svgEl && svgEl.tagName && svgEl.tagName.toLowerCase() === 'svg') {
+          console.log('[loadSvgInline] DOMParser 验证通过，是有效 SVG')
+        } else {
+          throw new Error('XML 根元素不是 <svg>')
+        }
+      } catch (parseErr) {
+        throw new Error('返回内容不是 SVG: ' + parseErr.message)
+      }
+    }
     svgInlineHtml.value = text
   } catch (e) {
     svgInlineHtml.value = `<div style="color:#f44336;padding:12px">⚠️ SVG 加载失败: ${e.message}</div>`
@@ -1355,12 +2772,10 @@ function highlightSvgPart(partId) {
     prev.classList.remove('part-highlight')
     // 清除 inline style（避免残留）
     prev.style.stroke = ''
-    prev.style.strokeWidth = ''
     prev.style.filter = ''
     // 子元素也清除（<g> 容器情况）
     prev.querySelectorAll('*').forEach(el => {
       el.style.stroke = ''
-      el.style.strokeWidth = ''
       el.style.filter = ''
     })
   }
@@ -1373,14 +2788,12 @@ function highlightSvgPart(partId) {
     // v2.5.12: 直接设置 inline style，强制覆盖 SVG attribute（stroke="..."）
     // 原因：CSS 类的 stroke 即使有 !important 也可能被 SVG attribute 覆盖
     target.style.stroke = '#ff5722'
-    target.style.strokeWidth = '3px'
     target.style.filter = 'drop-shadow(0 0 6px rgba(255, 87, 34, 0.9))'
     // 如果是 <g> 容器（无 stroke），给子元素也加描边
     const tag = target.tagName.toLowerCase()
     if (tag === 'g' || tag === 'svg') {
       target.querySelectorAll('*').forEach(el => {
         el.style.stroke = '#ff5722'
-        el.style.strokeWidth = '2px'
         el.style.filter = 'drop-shadow(0 0 4px rgba(255, 87, 34, 0.7))'
       })
     }
@@ -1395,19 +2808,15 @@ function onSvgClick(e) {
   if (e.detail > 0) return
   if (recordMode.value) return  // 录制模式下由 mousedown 处理
   const containerRect = svgInlineRef.value?.getBoundingClientRect()
-  let el = e.target
-  // 向上查找带 id 的部件祖先（跳过 SVG 根、defs、大面积背景）
-  while (el && el !== e.currentTarget) {
-    if (isPartElement(el, containerRect)) {
-      const id = el.getAttribute('id')
-      selectedPartId.value = id
-      selectedPartIds.value = [id]
-      highlightSelectedParts()
-      scrollPartRowIntoView(id)
-      expandPartsDetails()
-      return
-    }
-    el = el.parentElement
+  const id = resolveClickedPartId(e.target, e.currentTarget, containerRect)
+  if (id) {
+    selectedPartId.value = id
+    selectedPartIds.value = [id]
+    if (recordMode.value) applySelectionToRecordTargets([id])
+    highlightSelectedParts()
+    scrollPartRowIntoView(id)
+    expandPartsDetails()
+    return
   }
   // 点击空白处清除高亮
   selectedPartId.value = ''
@@ -1430,6 +2839,7 @@ function selectPartFromList(partId, event) {
     selectedPartIds.value = [partId]
   }
   selectedPartId.value = partId
+  if (recordMode.value) applySelectionToRecordTargets(selectedPartIds.value)
   highlightSelectedParts()
   scrollSelectedPartsIntoView()
   expandPartsDetails()
@@ -1492,9 +2902,14 @@ function scrollPartRowIntoView(partId) {
   })
 }
 
-// SVG 重新加载时清除残留高亮
-watch(svgInlineHtml, () => {
+// SVG 重新加载时清除残留高亮，并按 SVG 标记恢复默认隐藏模块
+watch(svgInlineHtml, async (html) => {
   selectedPartId.value = ''
+  showHiddenModules.value = false
+  hiddenSvgSnapshot.clear()
+  if (!html) return
+  await nextTick()
+  applyMotionBaseVisibility()
 })
 
 // === Motion JSON 导入 ===
@@ -1547,16 +2962,27 @@ const motionPreviewConfig = computed(() => {
 onMounted(async () => {
   await loadModels()
   document.addEventListener('mousedown', onPartNameOutsideMouseDown, true)
+  window.addEventListener('mousemove', onRecordPanelDragMove)
+  window.addEventListener('mouseup', stopRecordPanelDrag)
+  window.addEventListener('mousemove', onMotionEditDragMove)
+  window.addEventListener('mouseup', stopMotionEditDrag)
+  window.addEventListener('mousemove', onArmAngleDragMove)
+  window.addEventListener('mouseup', stopArmAngleDrag)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onPartNameOutsideMouseDown, true)
+  window.removeEventListener('mousemove', onRecordPanelDragMove)
+  window.removeEventListener('mouseup', stopRecordPanelDrag)
+  window.removeEventListener('mousemove', onMotionEditDragMove)
+  window.removeEventListener('mouseup', stopMotionEditDrag)
+  window.removeEventListener('mousemove', onArmAngleDragMove)
+  window.removeEventListener('mouseup', stopArmAngleDrag)
 })
 </script>
 
 <template>
   <div class="model-editor">
     <div class="editor-header">
-      <h1>🛠️ 模型编辑器</h1>
       <div class="header-tabs">
         <button
           v-for="tab in [
@@ -1703,6 +3129,8 @@ onBeforeUnmount(() => {
                 {{ m.model_id }} ({{ m.model_name }})
               </option>
             </select>
+            <span class="config-toolbar-title">SVG 预览</span>
+            <span class="config-toolbar-note">Ctrl+点击多选，空白处拖拽框选</span>
           </div>
           <div class="config-actions">
             <button
@@ -1718,6 +3146,9 @@ onBeforeUnmount(() => {
               导入JSON
             </button>
             <input ref="importInput" type="file" accept=".json" style="display:none;" @change="onImportJson" />
+            <button class="btn-refresh" :disabled="!selectedModel" @click="refreshAnimConfig" title="重新加载当前机型的动画配置">
+              ⟳ 刷新
+            </button>
             <button class="btn-save" :disabled="!editDirty || !selectedModel" @click="saveAnimConfig">保存</button>
             <button class="btn-export" :disabled="!editingConfig" @click="exportConfig">导出</button>
             <span v-if="editDirty" class="dirty-flag">● 未保存</span>
@@ -1728,28 +3159,12 @@ onBeforeUnmount(() => {
         <div v-else-if="!svgPreviewUrl" class="empty-hint">该机型未配置SVG文件，请先在"模型管理"上传SVG</div>
         <div v-else-if="!editingConfig" class="empty-hint">加载中...</div>
         <div v-else class="config-editor">
-          <!-- 主工作区：SVG + 右侧面板 -->
+          <!-- 主工作区：SVG + 部件列表 + 已录制动作 -->
           <div class="record-main-row">
             <!-- 左：SVG 交互预览 -->
             <div class="record-svg-section">
               <div class="section-header">
-                <h4>SVG 预览{{ recordMode ? '（录制中：拖拽部件录制动作）' : '（Ctrl+点击多选，空白处拖拽框选）' }}</h4>
-                <div class="record-toolbar-right">
-                  <span v-if="selectedPartIds.length > 0" class="selected-count">
-                    已选 {{ selectedPartIds.length }} 个
-                    <button v-if="selectedPartIds.length >= 2" class="btn-small btn-combine" @click="startGroupInput">组合</button>
-                    <button class="btn-small btn-front" @click="bringSelectedToFront">置顶</button>
-                    <button class="btn-small" @click="clearSelection">清除</button>
-                  </span>
-                  <span v-if="recordMode" class="record-action-selector">
-                    动作类型：
-                    <select v-model="recordActionType" class="action-type-select">
-                      <option v-for="a in ACTION_TYPE_OPTIONS" :key="a.value" :value="a.value">
-                        {{ a.icon }} {{ a.label }}
-                      </option>
-                    </select>
-                  </span>
-                </div>
+                <div class="record-toolbar-right"></div>
               </div>
               <!-- 组合名称输入框 -->
               <div v-if="showGroupInput" class="group-input-bar">
@@ -1765,7 +3180,7 @@ onBeforeUnmount(() => {
                 <button class="btn-small btn-combine" @click="confirmGroupCombine">确认</button>
                 <button class="btn-small" @click="cancelGroupCombine">取消</button>
               </div>
-              <div class="svg-preview-wrapper svg-interactive" :class="{ 'recording-mode': recordMode }">
+              <div class="svg-preview-wrapper svg-interactive" :class="{ 'recording-mode': recordMode, 'rotate-mode': rotateMode, 'text-pick-mode': isTextPickActive() }">
                 <div v-if="svgPreviewLoading" class="svg-loading">加载中...</div>
                 <div
                   v-else
@@ -1789,6 +3204,7 @@ onBeforeUnmount(() => {
                   <div class="dc-row"><span class="dc-label">起点</span>({{ Math.round(dragCoordHint.startX) }}, {{ Math.round(dragCoordHint.startY) }})</div>
                   <div class="dc-row"><span class="dc-label">当前</span>({{ Math.round(dragCoordHint.curX) }}, {{ Math.round(dragCoordHint.curY) }})</div>
                   <div class="dc-row"><span class="dc-label">偏移</span>({{ Math.round(dragCoordHint.dx) }}, {{ -Math.round(dragCoordHint.dy) }})</div>
+                  <div v-if="rotateMode || dragState.actionType === 'rotate'" class="dc-row"><span class="dc-label">角度</span>{{ Math.round(dragCoordHint.angle || 0) }}°</div>
                 </div>
                 <!-- 常驻坐标轴位置显示：鼠标在 SVG 坐标系中的实时 X/Y -->
                 <div class="cursor-coord-readout" v-if="cursorSvgCoord && !dragCoordHint.visible">
@@ -1798,12 +3214,44 @@ onBeforeUnmount(() => {
               <div class="svg-preview-url">{{ svgPreviewUrl }}</div>
             </div>
 
-            <!-- 右：已录制动作列表 -->
-            <div class="record-motions-section">
+
+            <!-- 中：部件列表 -->
+            <div class="record-parts-section">
               <div class="section-header">
-                <h4>已录制动作（{{ motionList.length }}）</h4>
+                <h4>部件列表（{{ totalPartsCount }}）</h4>
                 <div class="section-actions">
                   <button class="btn-small" @click="extractSvgPartsToTargets" title="从SVG提取部件列表">提取部件</button>
+                  <button
+                    class="btn-small btn-toggle-hidden"
+                    :class="{ active: showHiddenModules }"
+                    @click="toggleHiddenModules"
+                    title="显示或恢复SVG画布中隐藏的模块"
+                  >
+                    {{ showHiddenModules ? '恢复隐藏' : '显示隐藏' }}
+                  </button>
+                  <button
+                    class="btn-small btn-reset-canvas"
+                    @click="resetSvgCanvas"
+                    title="恢复SVG画布到初始状态"
+                  >
+                    初始化
+                  </button>
+                  <button
+                    class="btn-small btn-rotate-mode"
+                    :class="{ active: rotateMode }"
+                    @click="toggleRotateMode"
+                    title="选中模块后按住左键拖拽同步旋转，并写入当前动作的 rotate"
+                  >
+                    旋转
+                  </button>
+                </div>
+                <div v-if="selectedPartIds.length > 0" class="selected-count-wrap">
+                  <span class="selected-count">
+                    已选 {{ selectedPartIds.length }} 个
+                    <button v-if="selectedPartIds.length >= 2" class="btn-small btn-combine" @click="startGroupInput">组合</button>
+                    <button class="btn-small btn-front" @click="bringSelectedToFront">置顶</button>
+                    <button class="btn-small" @click="clearSelection">清除</button>
+                  </span>
                 </div>
               </div>
               <!-- 选中部件显示区 -->
@@ -1818,6 +3266,52 @@ onBeforeUnmount(() => {
                 <input v-model="partSearch" placeholder="搜索部件..." class="part-search-input" />
                 <button v-if="partSearch" class="btn-clear" @click="partSearch = ''">×</button>
               </div>
+              <div class="parts-details">
+                <div class="parts-details-title">当前部件（{{ totalPartsCount }}）</div>
+                <div class="parts-scroll-body">
+                  <div v-if="targetKeys.length > 0" class="parts-mini-list">
+                    <div
+                      v-for="key in targetKeys"
+                      :key="key"
+                      class="part-mini-item"
+                      :class="{ 'row-selected': selectedPartIds.includes(getTargetPartId(key)) }"
+                      :data-part-id="getTargetPartId(key)"
+                      @click="selectPartFromList(getTargetPartId(key), $event)"
+                      @dblclick.stop="isMotionJson ? startEditPartName(Number(key)) : null"
+                    >
+                      <span class="part-id-label">{{ getTargetPartId(key) }}</span>
+                      <template v-if="isMotionJson && editingPartIdx === Number(key)">
+                        <input
+                          :ref="setPartNameInputRef"
+                          v-model="editingPartNameInput"
+                          class="part-name-input"
+                          @keyup.enter.stop="savePartName(Number(key))"
+                          @keyup.esc.stop="cancelPartName"
+                          @blur="savePartName(Number(key))"
+                        />
+                      </template>
+                      <template v-else>
+                        <span class="part-name-sub">{{ getTargetPartName(key) }}</span>
+                      </template>
+                      <span v-if="getTargetPartMeta(key)" class="part-name-sub">{{ getTargetPartMeta(key) }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="empty-row">暂无部件</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右：已录制动作列表 -->
+            <div class="record-motions-section">
+              <div class="section-header">
+                <h4>已录制动作（{{ motionList.length }}）</h4>
+                <button
+                  class="btn-small btn-reset-canvas"
+                  :disabled="!isMotionJson"
+                  @click="openArmAnglePanel"
+                  title="维护 arm_chamber_angles"
+                >角度表</button>
+              </div>
               <!-- 动作列表（单击跳转到预设位置，双击编辑） -->
               <div class="motion-list">
                 <div
@@ -1831,170 +3325,183 @@ onBeforeUnmount(() => {
                   title="单击跳转到预设位置，双击编辑"
                 >
                   <div class="motion-item-header">
-                    <span class="motion-step">{{ m.step }}</span>
+                    <div class="motion-step-wrap">
+                      <span class="motion-step" :title="m.step">{{ m.step }}</span>
+                      <span v-if="(m.rules || []).length" class="motion-rule-count">（{{ (m.rules || []).length }}条 rules）</span>
+                    </div>
                     <button class="btn-delete" @click.stop="deleteMotion(idx)" title="删除">×</button>
                   </div>
-                  <div class="motion-summary">{{ getMotionSummary(m) }}</div>
-                  <div v-if="m.rules?.[0]?.when && m.rules[0].when !== 'true'" class="motion-when">
-                    when: {{ m.rules[0].when }}
-                  </div>
+                  <div class="motion-summary" :title="getMotionSummary(m)">{{ getMotionSummary(m) }}</div>
                 </div>
                 <div v-if="motionList.length === 0" class="empty-row">
                   暂无动作{{ recordMode ? '，拖拽SVG部件开始录制' : '' }}
                 </div>
                 <div v-if="motionList.length > 0" class="motion-list-tip">提示：单击跳转到预设位置，双击编辑播放时间与参数</div>
               </div>
-              <!-- 部件列表（默认展开，可手动折叠；Ctrl+点击列表行多选） -->
-              <details class="parts-details" open>
-                <summary>部件列表（{{ totalPartsCount }}）{{ selectedPartIds.length > 0 ? ` · 已选 ${selectedPartIds.length}` : '' }}</summary>
-                <div class="parts-mini-list">
-                  <div
-                    v-for="(key, idx) in targetKeys"
-                    :key="'p'+idx"
-                    class="part-mini-item"
-                    :data-part-id="isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key"
-                    :class="{ 'row-selected': selectedPartId === (isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key) || selectedPartIds.includes(isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key) }"
-                    @click="selectPartFromList(isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key, $event)"
-                    @dblclick.stop="isMotionJson && startEditPartName(Number(key))"
-                    :title="isMotionJson ? '单击选中，Ctrl+单击多选，双击编辑名称' : ''"
-                  >
-                    <template v-if="isMotionJson && editingPartIdx === Number(key)">
-                      <input
-                        :ref="setPartNameInputRef"
-                        v-model="editingPartNameInput"
-                        class="part-name-input"
-                        @click.stop
-                        @keyup.enter="savePartName(Number(key))"
-                        @keyup.esc="cancelPartName"
-                        @blur="savePartName(Number(key))"
-                      />
-                    </template>
-                    <template v-else>
-                      <span class="part-id-label">{{ isMotionJson ? editingConfig.parts[Number(key)]?.part_id : key }}</span>
-                      <span
-                        v-if="isMotionJson && editingConfig.parts[Number(key)]?.part_name && editingConfig.parts[Number(key)].part_name !== editingConfig.parts[Number(key)].part_id"
-                        class="part-name-sub"
-                      >— {{ editingConfig.parts[Number(key)].part_name }}</span>
-                    </template>
-                  </div>
-                </div>
-              </details>
             </div>
           </div>
 
           <!-- 录制面板（浮动） -->
-          <div v-if="showRecordPanel" class="record-panel">
-            <div class="record-panel-header">
+          <div v-if="showRecordPanel" ref="recordPanelRef" class="record-panel" :style="{ left: recordPanelPos.left + 'px', top: recordPanelPos.top + 'px', right: 'auto', bottom: 'auto' }" @mousedown="onRecordPanelPointerDown">
+            <div class="record-panel-header record-panel-header-draggable">
               <h4>录制动作</h4>
-              <button class="btn-delete" @click="cancelRecord" title="取消">×</button>
+              <button class="btn-delete" @mousedown.stop @click="cancelRecord" title="取消">×</button>
             </div>
             <div class="record-panel-body">
               <div class="record-field">
-                <label>目标部件</label>
-                <input :value="recordForm.partId" disabled class="record-readonly" />
-              </div>
-              <div class="record-field">
-                <label>动作类型</label>
-                <input :value="ACTION_TYPE_OPTIONS.find(a => a.value === recordForm.actionType)?.label" disabled class="record-readonly" />
-              </div>
-              <!-- offset 参数：起终点坐标可微调，自动重算偏移量 -->
-              <template v-if="recordForm.actionType === 'offset'">
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>起点 X (start_x)</label>
-                    <input type="number" v-model.number="recordForm.startX" @input="recomputeOffset" />
-                  </div>
-                  <div class="record-field">
-                    <label>起点 Y (start_y)</label>
-                    <input type="number" v-model.number="recordForm.startY" @input="recomputeOffset" />
-                  </div>
-                </div>
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>终点 X (end_x)</label>
-                    <input type="number" v-model.number="recordForm.endX" @input="recomputeOffset" />
-                  </div>
-                  <div class="record-field">
-                    <label>终点 Y (end_y)</label>
-                    <input type="number" v-model.number="recordForm.endY" @input="recomputeOffset" />
-                  </div>
-                </div>
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>偏移 X (offset_x)</label>
-                    <input type="number" v-model.number="recordForm.offsetX" />
-                  </div>
-                  <div class="record-field">
-                    <label>偏移 Y (offset_y)</label>
-                    <input type="number" v-model.number="recordForm.offsetY" />
-                  </div>
-                </div>
-              </template>
-              <!-- rotate 参数 -->
-              <template v-if="recordForm.actionType === 'rotate'">
-                <div class="record-field">
-                  <label>angle (°)</label>
-                  <input type="number" v-model.number="recordForm.angle" />
-                </div>
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>pivot_x</label>
-                    <input type="number" v-model.number="recordForm.pivotX" />
-                  </div>
-                  <div class="record-field">
-                    <label>pivot_y</label>
-                    <input type="number" v-model.number="recordForm.pivotY" />
-                  </div>
-                </div>
-              </template>
-              <!-- scale 参数 -->
-              <template v-if="recordForm.actionType === 'scale'">
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>scale_x</label>
-                    <input type="number" step="0.1" v-model.number="recordForm.scaleX" />
-                  </div>
-                  <div class="record-field">
-                    <label>scale_y</label>
-                    <input type="number" step="0.1" v-model.number="recordForm.scaleY" />
-                  </div>
-                </div>
-              </template>
-              <!-- opacity 参数 -->
-              <template v-if="recordForm.actionType === 'opacity'">
-                <div class="record-field">
-                  <label>opacity (0-1)</label>
-                  <input type="number" step="0.1" min="0" max="1" v-model.number="recordForm.opacity" />
-                </div>
-              </template>
-              <!-- 通用参数 -->
-              <div class="record-field-row">
-                <div class="record-field">
-                  <label>duration (ms)</label>
-                  <input type="number" v-model.number="recordForm.duration" />
-                </div>
-                <div class="record-field">
-                  <label>easing</label>
-                  <select v-model="recordForm.easing">
-                    <option v-for="e in EASING_OPTIONS" :key="e" :value="e">{{ e }}</option>
-                  </select>
-                </div>
-              </div>
-              <hr class="record-divider" />
-              <div class="record-field">
                 <label>Step 名称（触发事件）</label>
-                <input ref="recordStepInputRef" v-model="recordForm.step" placeholder="如 POD_PLACED" @keyup.enter="saveRecord" />
+                <input ref="recordStepInputRef" v-model="recordForm.step" placeholder="如 CHAMBER_PS" @keyup.enter="saveRecord" />
               </div>
+              <label class="motion-enabled-row">
+                <input type="checkbox" v-model="recordForm.enabled" />
+                enabled
+              </label>
               <div class="record-field">
-                <label>When 条件</label>
-                <input v-model="recordForm.when" placeholder="如 params.port == '1'" />
+                <label>when（整个 step 共用，再与各 rule 的 when 同时成立）</label>
+                <input v-model="recordForm.when" placeholder="如 params.BATCH_ID && params.LOT_ID" />
                 <div class="event-templates">
                   <button v-for="t in EVENT_TEMPLATES" :key="t.when" class="event-template-btn" @click="recordForm.when = t.when">
                     {{ t.label }}
                   </button>
                 </div>
               </div>
+              <div
+                v-for="(rule, ruleIdx) in recordForm.rules"
+                :key="ruleIdx"
+                class="motion-rule-card"
+                :class="{ 'record-rule-active': activeRecordTargetIndex === ruleIdx }"
+                @mousedown="setActiveRecordTargetIndex(ruleIdx)"
+              >
+                <div class="motion-rule-header">
+                  <span>rule {{ ruleIdx + 1 }}</span>
+                  <button class="btn-small btn-remove-when" @click="removeRecordRule(ruleIdx)">×</button>
+                </div>
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>phase</label>
+                    <input type="number" min="1" step="1" v-model.number="rule.phase" />
+                  </div>
+                  <div class="record-field">
+                    <label>target_part_id</label>
+                    <input
+                      v-model="rule.target_part_id"
+                      :placeholder="(rule.actions || []).every(a => a.type === 'text') ? '显示文本可不填' : '点击模块自动填入，如 ARM_1 或 LLA{SLOT}'"
+                      @focus="setActiveRecordTargetIndex(ruleIdx)"
+                    />
+                  </div>
+                </div>
+                <div class="record-field">
+                  <label>when（本条 rule）</label>
+                  <input v-model="rule.when" placeholder="如 params.PORT == '1'，空则始终匹配" />
+                </div>
+                <div v-for="(action, actionIdx) in rule.actions" :key="actionIdx" class="motion-action-card">
+                  <div class="motion-rule-header">
+                    <span>action {{ actionIdx + 1 }}</span>
+                    <button class="btn-small btn-remove-when" @click="removeRecordAction(ruleIdx, actionIdx)">×</button>
+                  </div>
+                  <div class="record-field-row record-type-row">
+                    <div class="record-field">
+                      <label>type</label>
+                      <select v-model="action.type" @change="onMotionActionTypeChange(action, ruleIdx, actionIdx, 'record')">
+                        <option v-for="a in MOTION_ACTION_TYPE_OPTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
+                      </select>
+                    </div>
+                    <div class="record-visible-field">
+                      <label>visible</label>
+                      <div class="record-visible-options">
+                        <label class="record-visible-toggle" title="播放时显示目标模块">
+                          <input type="checkbox" :checked="action.visibleMode === 'show'" @change="setActionVisibleMode(action, 'show')" />
+                          显示模块
+                        </label>
+                        <label class="record-visible-toggle" title="播放时隐藏目标模块">
+                          <input type="checkbox" :checked="action.visibleMode === 'hide'" @change="setActionVisibleMode(action, 'hide')" />
+                          隐藏模块
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <template v-if="action.type === 'text'">
+                    <div class="record-field">
+                      <label>显示内容</label>
+                      <textarea v-model="action.content" rows="3" placeholder="如 LOT_ID: params.LOT_ID SLOT: params.SLOT" @input="syncLiveTextOverlays"></textarea>
+                    </div>
+                    <div class="record-field">
+                      <label>画布位置</label>
+                      <div class="text-pos-hint" :class="{ missing: !action.textPosSet }">
+                        {{ action.textPosSet ? `(${action.textX}, ${action.textY})` : '需提供画布位置' }}
+                      </div>
+                      <button
+                        class="event-template-btn"
+                        type="button"
+                        @click="setTextPickContext('record', ruleIdx, actionIdx)"
+                      >选择画布位置</button>
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'offset'">
+                    <div class="record-field-row">
+                      <div class="record-field">
+                        <label>offset_x</label>
+                        <input type="number" v-model.number="action.offsetX" />
+                      </div>
+                      <div class="record-field">
+                        <label>offset_y</label>
+                        <input type="number" v-model.number="action.offsetY" />
+                      </div>
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'rotate'">
+                    <div class="record-field">
+                      <label>angle</label>
+                      <input v-model="action.angle" placeholder="{CHAMBER}" />
+                    </div>
+                    <div class="record-field">
+                      <label>follow_part_id</label>
+                      <input v-model="action.followPartId" placeholder="如 ARM_1" />
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'scale'">
+                    <div class="record-field-row">
+                      <div class="record-field">
+                        <label>scale_x</label>
+                        <input type="number" step="0.1" v-model.number="action.scaleX" />
+                      </div>
+                      <div class="record-field">
+                        <label>scale_y</label>
+                        <input type="number" step="0.1" v-model.number="action.scaleY" />
+                      </div>
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'opacity'">
+                    <div class="record-field">
+                      <label>to</label>
+                      <input type="number" step="0.1" min="0" max="1" v-model.number="action.opacity" />
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'snap'">
+                    <div class="record-field">
+                      <label>to_part_id</label>
+                      <input v-model="action.toPartId" placeholder="如 Wafer_Chuck1" />
+                    </div>
+                  </template>
+                  <div v-if="action.type !== 'text'" class="record-field-row">
+                    <div class="record-field">
+                      <label>duration</label>
+                      <input type="number" v-model.number="action.duration" />
+                    </div>
+                    <div class="record-field">
+                      <label>easing</label>
+                      <select v-model="action.easing">
+                        <option v-for="e in EASING_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <button class="event-template-btn event-template-add" @click="addRecordAction(ruleIdx)">+ action</button>
+              </div>
+              <button class="event-template-btn event-template-add" @click="addRecordRule">+ rule</button>
               <div class="record-panel-actions">
+                <button class="btn-cancel-record" @click="resetSvgCanvas">SVG初始化</button>
+                <button class="btn-demo-record" @click="previewRecordMotion">演示动画</button>
                 <button class="btn-save" @click="saveRecord">保存录制</button>
                 <button class="btn-cancel-record" @click="cancelRecord">取消</button>
               </div>
@@ -2002,93 +3509,220 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- 已录制动作编辑面板（浮动，双击动作后出现，调整播放时间等） -->
-          <div v-if="showMotionEditPanel" class="record-panel motion-edit-panel">
-            <div class="record-panel-header">
-              <h4>编辑动作 #{{ (editingMotionIdx ?? 0) + 1 }}</h4>
-              <button class="btn-delete" @click="cancelMotionEdit" title="取消">×</button>
+          <div v-if="showMotionEditPanel" ref="motionEditPanelRef" class="record-panel motion-edit-panel" :style="{ left: motionEditPanelPos.left + 'px', top: motionEditPanelPos.top + 'px', right: 'auto', bottom: 'auto' }">
+            <div class="record-panel-header motion-edit-panel-header" @mousedown="startMotionEditDrag">
+              <h4>编辑动作</h4>
+              <button class="btn-delete" @mousedown.stop @click="cancelMotionEdit" title="取消">×</button>
             </div>
             <div class="record-panel-body">
               <div class="record-field">
                 <label>Step 名称（触发事件）</label>
-                <input v-model="editMotionForm.step" placeholder="如 POD_PLACED" @keyup.enter="saveMotionEdit" />
+                <input v-model="editMotionForm.step" placeholder="如 CHAMBER_PS" />
               </div>
+              <label class="motion-enabled-row">
+                <input type="checkbox" v-model="editMotionForm.enabled" />
+                enabled
+              </label>
               <div class="record-field">
-                <label>动作类型</label>
-                <select v-model="editMotionForm.actionType">
-                  <option v-for="a in ACTION_TYPE_OPTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
-                </select>
-              </div>
-              <template v-if="editMotionForm.actionType === 'offset'">
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>偏移 X (offset_x)</label>
-                    <input type="number" v-model.number="editMotionForm.offsetX" />
-                  </div>
-                  <div class="record-field">
-                    <label>偏移 Y (offset_y)</label>
-                    <input type="number" v-model.number="editMotionForm.offsetY" />
-                  </div>
-                </div>
-              </template>
-              <template v-if="editMotionForm.actionType === 'rotate'">
-                <div class="record-field">
-                  <label>angle (°)</label>
-                  <input type="number" v-model.number="editMotionForm.angle" />
-                </div>
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>pivot_x</label>
-                    <input type="number" v-model.number="editMotionForm.pivotX" />
-                  </div>
-                  <div class="record-field">
-                    <label>pivot_y</label>
-                    <input type="number" v-model.number="editMotionForm.pivotY" />
-                  </div>
-                </div>
-              </template>
-              <template v-if="editMotionForm.actionType === 'scale'">
-                <div class="record-field-row">
-                  <div class="record-field">
-                    <label>scale_x</label>
-                    <input type="number" step="0.1" v-model.number="editMotionForm.scaleX" />
-                  </div>
-                  <div class="record-field">
-                    <label>scale_y</label>
-                    <input type="number" step="0.1" v-model.number="editMotionForm.scaleY" />
-                  </div>
-                </div>
-              </template>
-              <template v-if="editMotionForm.actionType === 'opacity'">
-                <div class="record-field">
-                  <label>opacity (0-1)</label>
-                  <input type="number" step="0.1" min="0" max="1" v-model.number="editMotionForm.opacity" />
-                </div>
-              </template>
-              <div class="record-field-row">
-                <div class="record-field">
-                  <label>duration (ms) · 播放时间</label>
-                  <input type="number" v-model.number="editMotionForm.duration" />
-                </div>
-                <div class="record-field">
-                  <label>easing</label>
-                  <select v-model="editMotionForm.easing">
-                    <option v-for="e in EASING_OPTIONS" :key="e" :value="e">{{ e }}</option>
-                  </select>
-                </div>
-              </div>
-              <hr class="record-divider" />
-              <div class="record-field">
-                <label>When 条件</label>
-                <input v-model="editMotionForm.when" placeholder="如 params.port == '1'" />
+                <label>when（整个 step 共用，再与各 rule 的 when 同时成立）</label>
+                <input v-model="editMotionForm.when" placeholder="如 params.BATCH_ID && params.LOT_ID" />
                 <div class="event-templates">
                   <button v-for="t in EVENT_TEMPLATES" :key="t.when" class="event-template-btn" @click="editMotionForm.when = t.when">
                     {{ t.label }}
                   </button>
                 </div>
               </div>
+              <div
+                v-for="(rule, ruleIdx) in editMotionForm.rules"
+                :key="ruleIdx"
+                class="motion-rule-card"
+              >
+                <div class="motion-rule-header">
+                  <span>rule {{ ruleIdx + 1 }}</span>
+                  <button class="btn-small btn-remove-when" @click="removeEditRule(ruleIdx)">×</button>
+                </div>
+                <div class="record-field-row">
+                  <div class="record-field">
+                    <label>phase</label>
+                    <input type="number" min="1" step="1" v-model.number="rule.phase" />
+                  </div>
+                  <div class="record-field">
+                    <label>target_part_id</label>
+                    <input
+                      v-model="rule.target_part_id"
+                      :placeholder="(rule.actions || []).every(a => a.type === 'text') ? '显示文本可不填' : '如 ARM_1 或 LLA{SLOT}'"
+                    />
+                  </div>
+                </div>
+                <div class="record-field">
+                  <label>when（本条 rule）</label>
+                  <input v-model="rule.when" placeholder="如 params.PORT == '1'，空则始终匹配" />
+                </div>
+                <div v-for="(action, actionIdx) in rule.actions" :key="actionIdx" class="motion-action-card">
+                  <div class="motion-rule-header">
+                    <span>action {{ actionIdx + 1 }}</span>
+                    <button class="btn-small btn-remove-when" @click="removeEditAction(ruleIdx, actionIdx)">×</button>
+                  </div>
+                  <div class="record-field-row record-type-row">
+                    <div class="record-field">
+                      <label>type</label>
+                      <select v-model="action.type" @change="onMotionActionTypeChange(action, ruleIdx, actionIdx, 'edit')">
+                        <option v-for="a in MOTION_ACTION_TYPE_OPTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
+                      </select>
+                    </div>
+                    <div class="record-visible-field">
+                      <label>visible</label>
+                      <div class="record-visible-options">
+                        <label class="record-visible-toggle" title="播放时显示目标模块">
+                          <input type="checkbox" :checked="action.visibleMode === 'show'" @change="setActionVisibleMode(action, 'show')" />
+                          显示模块
+                        </label>
+                        <label class="record-visible-toggle" title="播放时隐藏目标模块">
+                          <input type="checkbox" :checked="action.visibleMode === 'hide'" @change="setActionVisibleMode(action, 'hide')" />
+                          隐藏模块
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <template v-if="action.type === 'text'">
+                    <div class="record-field">
+                      <label>显示内容</label>
+                      <textarea v-model="action.content" rows="3" placeholder="如 LOT_ID: params.LOT_ID SLOT: params.SLOT" @input="syncLiveTextOverlays"></textarea>
+                    </div>
+                    <div class="record-field">
+                      <label>画布位置</label>
+                      <div class="text-pos-hint" :class="{ missing: !action.textPosSet }">
+                        {{ action.textPosSet ? `(${action.textX}, ${action.textY})` : '需提供画布位置' }}
+                      </div>
+                      <button
+                        class="event-template-btn"
+                        type="button"
+                        @click="setTextPickContext('edit', ruleIdx, actionIdx)"
+                      >选择画布位置</button>
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'offset'">
+                    <div class="record-field-row">
+                      <div class="record-field">
+                        <label>offset_x</label>
+                        <input type="number" v-model.number="action.offsetX" />
+                      </div>
+                      <div class="record-field">
+                        <label>offset_y</label>
+                        <input type="number" v-model.number="action.offsetY" />
+                      </div>
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'rotate'">
+                    <div class="record-field">
+                      <label>angle</label>
+                      <input v-model="action.angle" placeholder="{CHAMBER}" />
+                    </div>
+                    <div class="record-field">
+                      <label>follow_part_id</label>
+                      <input v-model="action.followPartId" placeholder="如 ARM_1" />
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'scale'">
+                    <div class="record-field-row">
+                      <div class="record-field">
+                        <label>scale_x</label>
+                        <input type="number" step="0.1" v-model.number="action.scaleX" />
+                      </div>
+                      <div class="record-field">
+                        <label>scale_y</label>
+                        <input type="number" step="0.1" v-model.number="action.scaleY" />
+                      </div>
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'opacity'">
+                    <div class="record-field">
+                      <label>to</label>
+                      <input type="number" step="0.1" min="0" max="1" v-model.number="action.opacity" />
+                    </div>
+                  </template>
+                  <template v-if="action.type === 'snap'">
+                    <div class="record-field">
+                      <label>to_part_id</label>
+                      <input v-model="action.toPartId" placeholder="如 Wafer_Chuck1" />
+                    </div>
+                  </template>
+                  <div v-if="action.type !== 'text'" class="record-field-row">
+                    <div class="record-field">
+                      <label>duration</label>
+                      <input type="number" v-model.number="action.duration" />
+                    </div>
+                    <div class="record-field">
+                      <label>easing</label>
+                      <select v-model="action.easing">
+                        <option v-for="e in EASING_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <button class="event-template-btn event-template-add" @click="addEditAction(ruleIdx)">+ action</button>
+              </div>
+              <button class="event-template-btn event-template-add" @click="addEditRule">+ rule</button>
               <div class="record-panel-actions">
                 <button class="btn-save" @click="saveMotionEdit">保存修改</button>
                 <button class="btn-cancel-record" @click="cancelMotionEdit">取消</button>
+              </div>
+            </div>
+          </div>
+
+
+
+          <!-- 机械臂角度表维护窗 -->
+          <div
+            v-if="showArmAnglePanel"
+            ref="armAnglePanelRef"
+            class="record-panel arm-angle-panel"
+            :style="{ left: armAnglePanelPos.left + 'px', top: armAnglePanelPos.top + 'px', right: 'auto', bottom: 'auto' }"
+          >
+            <div class="record-panel-header motion-edit-panel-header" @mousedown="startArmAngleDrag">
+              <h4>机械臂角度表</h4>
+              <button class="btn-delete" @mousedown.stop @click="cancelArmAnglePanel" title="取消">×</button>
+            </div>
+            <div class="record-panel-body">
+              <div class="record-hint">同一机械臂内位置键不可重复；不同机械臂可使用相同腔体名（如 Cross）。保存后写入 arm_chamber_angles。</div>
+              <div
+                v-for="(arm, armIdx) in armAngleForm"
+                :key="armIdx"
+                class="motion-rule-card"
+              >
+                <div class="motion-rule-header">
+                  <span>机械臂 {{ armIdx + 1 }}</span>
+                  <button class="btn-small btn-remove-when" @click="removeArmAngleArm(armIdx)">×</button>
+                </div>
+                <div class="record-field">
+                  <label>机械臂 ID</label>
+                  <input v-model="arm.armId" placeholder="如 ARM_1" />
+                </div>
+                <div class="arm-angle-row arm-angle-row-head">
+                  <span>位置</span>
+                  <span>角度</span>
+                  <span></span>
+                </div>
+                <div
+                  v-for="(row, rowIdx) in arm.rows"
+                  :key="rowIdx"
+                  class="arm-angle-row"
+                >
+                  <input v-model="row.pos" placeholder="如 E / 1" />
+                  <input
+                    type="number"
+                    v-model.number="row.angle"
+                    title="左键点击代入当前旋转模块角度"
+                    @mousedown.left="applyCurrentRotateToArmAngle(armIdx, rowIdx)"
+                  />
+                  <button class="btn-small btn-remove-when" @click="removeArmAngleRow(armIdx, rowIdx)">×</button>
+                </div>
+                <button class="event-template-btn event-template-add" @click="addArmAngleRow(armIdx)">+ 位置</button>
+              </div>
+              <button class="event-template-btn event-template-add" @click="addArmAngleArm">+ 机械臂</button>
+              <div class="record-panel-actions">
+                <button class="btn-save" @click="saveArmAnglePanel">保存</button>
+                <button class="btn-cancel-record" @click="cancelArmAnglePanel">取消</button>
               </div>
             </div>
           </div>
@@ -2228,7 +3862,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .model-editor {
-  padding: 20px;
+  padding: 10px 20px 20px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -2238,12 +3872,8 @@ onBeforeUnmount(() => {
   background: var(--bg);
 }
 .editor-header {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   flex-shrink: 0;
-}
-.editor-header h1 {
-  font-size: 20px;
-  margin-bottom: 12px;
 }
 .header-tabs {
   display: flex;
@@ -2413,7 +4043,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: auto;
-  height: 400px;
+  min-height: 420px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -2422,7 +4052,7 @@ onBeforeUnmount(() => {
 /* v2.5.4: 内联 SVG 渲染容器 */
 .svg-inline {
   width: 100%;
-  height: 100%;
+  min-height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -2430,7 +4060,7 @@ onBeforeUnmount(() => {
 .svg-inline svg {
   max-width: 100%;
   max-height: 100%;
-  width: auto;
+  width: 100%;
   height: auto;
 }
 
@@ -2461,6 +4091,8 @@ onBeforeUnmount(() => {
 .svg-interactive svg [id] {
   cursor: pointer;
   transition: filter 0.15s ease, outline 0.15s ease;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 .svg-interactive svg [id]:hover {
   filter: drop-shadow(0 0 4px rgba(255, 87, 34, 0.7));
@@ -2468,13 +4100,11 @@ onBeforeUnmount(() => {
 .svg-interactive svg .part-highlight {
   outline: none;
   stroke: #ff5722 !important;
-  stroke-width: 3px !important;
   filter: drop-shadow(0 0 6px rgba(255, 87, 34, 0.9));
 }
 /* <g> 容器无 stroke 时，给子元素也加描边 */
 .svg-interactive svg .part-highlight * {
   stroke: #ff5722 !important;
-  stroke-width: 2px !important;
 }
 /* 部件列表行选中态 */
 .table-row.row-selected {
@@ -2571,6 +4201,7 @@ onBeforeUnmount(() => {
 }
 .no-permission p { margin: 4px 0; color: var(--text-dim); }
 
+
 /* ============ 动画配置 Tab ============ */
 .config-panel { background: var(--panel); border-radius: 8px; }
 .config-toolbar {
@@ -2585,6 +4216,12 @@ onBeforeUnmount(() => {
   top: 0;
   background: var(--panel);
   z-index: 2;
+}
+.config-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .config-selector label { font-size: 12px; color: var(--text-dim); margin-right: 8px; }
 .config-selector select,
@@ -2615,7 +4252,7 @@ onBeforeUnmount(() => {
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-import {
   background: var(--yellow);
-  color: #000;
+  color: #fff;
   border: none;
   padding: 6px 14px;
   border-radius: 4px;
@@ -2625,9 +4262,21 @@ onBeforeUnmount(() => {
 }
 .btn-import:hover { opacity: 0.9; }
 .btn-import:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-refresh {
+  background: var(--blue, #3b82f6);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+.btn-refresh:hover { opacity: 0.9; }
+.btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-export {
   background: var(--accent);
-  color: #000;
+  color: #fff;
   border: none;
   padding: 6px 14px;
   border-radius: 4px;
@@ -2637,7 +4286,7 @@ onBeforeUnmount(() => {
 }
 .btn-export:hover { opacity: 0.9; }
 .btn-export:disabled { opacity: 0.5; cursor: not-allowed; }
-.dirty-flag { color: var(--yellow); font-size: 12px; font-weight: 600; }
+.dirty-flag { color: #fff; font-size: 12px; font-weight: 600; }
 
 .config-editor { padding: 0; }
 
@@ -2645,24 +4294,92 @@ onBeforeUnmount(() => {
 .record-main-row {
   display: flex;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 0 16px 12px;
   align-items: stretch;
 }
-.record-svg-section { flex: 3; min-width: 0; }
-.record-motions-section {
-  flex: 2;
-  min-width: 280px;
+.record-svg-section {
+  flex: 3.2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+.record-parts-section {
+  flex: 1.05;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  max-height: 70vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+.record-motions-section {
+  flex: 1.9;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+.record-svg-section .section-header,
+.record-parts-section .section-header,
+.record-motions-section .section-header {
+  flex: 0 0 auto;
+}
+.record-svg-section .section-header {
+  margin-bottom: 6px;
 }
 .record-svg-section .svg-interactive {
-  height: 70vh;
-  min-height: 400px;
+  min-height: 0;
+  height: auto;
+  overflow: auto;
+  flex: 1 1 auto;
+}
+.record-svg-section .svg-preview-url { flex: 0 0 auto; }
+.record-parts-section .section-header {
+  min-height: auto;
+}
+.record-parts-section .parts-details {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.record-parts-section .parts-details-title {
+  flex: 0 0 auto;
+  padding: 4px 0 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: default;
+}
+.record-parts-section .parts-scroll-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+.record-parts-section .parts-mini-list {
+  max-height: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.record-motions-section .motion-list {
+  min-height: 0;
 }
 .recording-mode {
   border: 2px dashed var(--yellow) !important;
@@ -2856,6 +4573,11 @@ onBeforeUnmount(() => {
   padding: 8px 10px;
   cursor: pointer;
   transition: border-color 0.15s;
+  box-sizing: border-box;
+  height: 92px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .motion-item:hover { border-color: var(--accent); }
 .motion-item[title] { cursor: pointer; }
@@ -2872,26 +4594,134 @@ onBeforeUnmount(() => {
 }
 /* 动作编辑浮窗（与录制面板同体，略偏右下） */
 .motion-edit-panel {
-  right: 12px;
-  left: auto;
   z-index: 60;
+  width: 460px;
+  background: #111827;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+.motion-enabled-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.motion-enabled-row input {
+  width: auto;
+}
+.motion-rule-card,
+.motion-action-card {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+.record-rule-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+.motion-action-card {
+  background: rgba(15, 23, 42, 0.7);
+}
+.motion-rule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--yellow);
+  font-weight: 600;
+}
+.motion-edit-panel .record-panel-header,
+.motion-edit-panel .record-panel-body {
+  background: #111827;
+}
+.motion-edit-panel-header {
+  cursor: move;
+  user-select: none;
+}
+.arm-angle-panel {
+  width: 520px;
+}
+.arm-angle-panel .record-hint {
+  margin-bottom: 10px;
+}
+.arm-angle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 28px;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.arm-angle-row input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.arm-angle-row-head {
+  margin-bottom: 4px;
+}
+.arm-angle-row-head span {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 .motion-item-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+  gap: 6px;
+}
+.motion-step-wrap {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 .motion-step {
   font-family: monospace;
   font-size: 12px;
   color: var(--yellow);
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.motion-rule-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 500;
+  white-space: nowrap;
 }
 .motion-summary {
+  flex: 1;
+  min-height: 0;
+  height: 4.2em;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--text);
-  margin-bottom: 2px;
+  margin-bottom: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .motion-when {
   font-size: 11px;
@@ -2899,14 +4729,31 @@ onBeforeUnmount(() => {
   font-family: monospace;
 }
 .parts-details { margin-top: 8px; font-size: 12px; }
-.parts-details summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; }
+.parts-details summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; flex: 0 0 auto; }
 .parts-mini-list {
   max-height: 150px;
-  overflow-y: auto;
+  overflow: visible;
   margin-top: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.parts-scroll-body::-webkit-scrollbar,
+.parts-mini-list::-webkit-scrollbar {
+  width: 10px;
+}
+.parts-scroll-body::-webkit-scrollbar-track,
+.parts-mini-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.parts-scroll-body::-webkit-scrollbar-thumb,
+.parts-mini-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+}
+.parts-scroll-body::-webkit-scrollbar-thumb:hover,
+.parts-mini-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
 }
 .part-mini-item {
   font-size: 11px;
@@ -2936,15 +4783,13 @@ onBeforeUnmount(() => {
 /* 录制面板 */
 .record-panel {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 380px;
+  width: 460px;
   max-height: 80vh;
   overflow-y: auto;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: #111827;
+  border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.45);
   z-index: 100;
 }
 .record-panel-header {
@@ -2952,12 +4797,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-2);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: #111827;
   border-radius: 12px 12px 0 0;
 }
+.record-panel-header-draggable {
+  cursor: move;
+  user-select: none;
+}
 .record-panel-header h4 { margin: 0; font-size: 14px; color: var(--accent); }
-.record-panel-body { padding: 12px 16px; }
+.record-panel-body { padding: 12px 16px; background: #111827; }
 .record-field { margin-bottom: 8px; }
 .record-field label {
   display: block;
@@ -2965,23 +4814,103 @@ onBeforeUnmount(() => {
   color: var(--text-dim);
   margin-bottom: 3px;
 }
-.record-field input, .record-field select {
+.record-field input, .record-field select, .record-field textarea {
   width: 100%;
   background: var(--bg);
-  color: var(--text);
   border: 1px solid var(--border);
-  padding: 5px 8px;
-  border-radius: 4px;
-  font-size: 13px;
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
   outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
 }
-.record-field input:focus, .record-field select:focus { border-color: var(--accent); }
+.record-visible-field {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+.record-visible-field > label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.record-visible-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+.record-visible-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.record-visible-toggle input {
+  width: auto;
+  margin: 0;
+}
+.record-field input:focus, .record-field select:focus, .record-field textarea:focus { border-color: var(--accent); }
+.text-pos-hint {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.text-pos-hint.missing {
+  color: #fbbf24;
+}
 .record-readonly {
   background: var(--panel-2) !important;
   color: var(--text-dim) !important;
 }
 .record-field-row { display: flex; gap: 8px; }
 .record-field-row .record-field { flex: 1; }
+.record-type-row {
+  align-items: flex-end;
+}
+.target-list { display: flex; flex-direction: column; gap: 10px; }
+.target-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+.target-list-row { display: flex; align-items: center; gap: 8px; }
+.target-list-label {
+  min-width: 72px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.target-list-input { flex: 1; }
+.target-action-row { display: flex; align-items: center; gap: 8px; padding-left: 72px; }
+.target-action-label { min-width: 72px; color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.target-action-select { flex: 1; }
+.target-trajectory { padding-left: 72px; }
+.record-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.when-list { display: flex; flex-direction: column; gap: 6px; }
+.when-list-row { display: flex; gap: 6px; align-items: center; }
+.when-list-row input { flex: 1; }
+.btn-remove-when {
+  width: 28px;
+  padding: 2px 0;
+  line-height: 1;
+}
 .record-divider { margin: 10px 0; border: none; border-top: 1px solid var(--border); }
 .event-templates { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .event-template-btn {
@@ -2994,12 +4923,24 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .event-template-btn:hover { border-color: var(--accent); color: var(--accent); }
+.event-template-add { color: var(--accent); }
 .record-panel-actions {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+  justify-content: flex-end;
 }
-.record-panel-actions .btn-save { flex: 1; }
+.btn-demo-record {
+  background: rgba(6, 182, 212, 0.15);
+  color: #67e8f9;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn-demo-record:hover { border-color: rgba(6, 182, 212, 0.85); color: #a5f3fc; }
 .btn-cancel-record {
   background: var(--panel-2);
   color: var(--text);
@@ -3012,7 +4953,21 @@ onBeforeUnmount(() => {
 .btn-cancel-record:hover { background: var(--bg); }
 @media (max-width: 1100px) {
   .record-main-row { flex-direction: column; }
-  .record-motions-section { max-height: 300px; }
+  .record-parts-section,
+  .record-motions-section,
+  .record-svg-section { height: 300px; }
+  .record-parts-section {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: 260px;
+  }
+  .record-svg-section .svg-interactive {
+    min-height: 0;
+  }
+  .record-parts-section .parts-mini-list {
+    max-height: 160px;
+  }
 }
 
 /* 区块标题 */
@@ -3036,7 +4991,61 @@ onBeforeUnmount(() => {
   font-size: 13px;
   margin: 0;
 }
-.section-actions { display: flex; gap: 6px; }
+.config-toolbar-title {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.config-toolbar-note {
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.section-actions { display: flex; gap: 6px; align-items: flex-start; }
+.section-action-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.selected-count-wrap {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: flex-start;
+}
+.btn-toggle-hidden.active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.55);
+  color: #22c55e;
+}
+.btn-reset-canvas {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+.btn-reset-canvas:hover {
+  border-color: rgba(59, 130, 246, 0.8);
+  color: #60a5fa;
+}
+.text-pick-mode {
+  border: 2px dashed #38bdf8 !important;
+  cursor: crosshair;
+}
+.text-pick-mode .svg-inline { cursor: crosshair; }
+.btn-rotate-mode.active {
+  background: rgba(249, 115, 22, 0.18);
+  border-color: rgba(249, 115, 22, 0.7);
+  color: #fb923c;
+}
+.rotate-mode {
+  border: 2px dashed #fb923c !important;
+  cursor: grab;
+}
+.rotate-mode .svg-inline { cursor: grab; }
+.rotate-mode .svg-inline:active { cursor: grabbing; }
+.btn-combine {
+  color: #fff !important;
+}
 
 /* 通用表格样式 */
 .data-table {

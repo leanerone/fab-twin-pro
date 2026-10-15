@@ -11,7 +11,8 @@
  * 6. 重置按钮恢复所有部件到初始状态
  */
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { evalWhen, extractParamKeys } from '../composables/useExprEval'
+import { evalWhen, resolveMotionRule, enrichMotionParams } from '../composables/useExprEval.motion'
+import { playMotion } from '../composables/useMotionPlayback.motion'
 
 const props = defineProps({
   /** SVG 文件 URL */
@@ -28,9 +29,77 @@ const eventLog = ref([])
 
 // 参数面板
 const paramValues = ref({})
+// BATCH_INFO_FROM_ECUI 登记：LOT_ID → { PORT, BATCH_ID, ... }
+const lotRegistry = new Map()
+// CHAMBER_PS 登记：LOT_ID::slot → { chamber }，下次从该腔取片
+const waferPosRegistry = new Map()
+
+function waferPosKey(lotId, slot) {
+  return `${String(lotId || '').trim()}::${String(slot || '1').trim()}`
+}
+
+function normalizeKey(value) {
+  return String(value || '').trim().toUpperCase()
+}
+
+function armAngleMap() {
+  const src = props.motionConfig?.arm_chamber_angles || {}
+  const out = {}
+  for (const [armId, angles] of Object.entries(src)) {
+    if (!armId || !angles || typeof angles !== 'object' || Array.isArray(angles)) continue
+    const table = {}
+    for (const [k, v] of Object.entries(angles)) {
+      const key = String(k ?? '').trim()
+      const num = Number(v)
+      if (!key || !Number.isFinite(num)) continue
+      table[key] = num
+      table[normalizeKey(key)] = num
+    }
+    out[armId] = table
+  }
+  return out
+}
+
+function findArmByPos(posKey) {
+  const key = String(posKey ?? '').trim()
+  if (!key) return ''
+  const upper = normalizeKey(key)
+  const src = armAngleMap()
+  for (const [armId, table] of Object.entries(src)) {
+    if (table[key] != null || table[upper] != null) return armId
+  }
+  return ''
+}
+
+function armAngleFor(armId, posKey) {
+  if (!armId) return null
+  const key = String(posKey ?? '').trim()
+  if (!key) return null
+  const table = armAngleMap()[armId] || {}
+  const angle = table[key] ?? table[normalizeKey(key)]
+  return Number.isFinite(angle) ? angle : null
+}
+
+function armPickupAngle(armId) {
+  for (const key of ['CHUCK', '1']) {
+    const angle = armAngleFor(armId, key)
+    if (angle != null) return angle
+  }
+  const table = armAngleMap()[armId] || {}
+  const first = Object.keys(table)[0]
+  const angle = first ? table[first] : null
+  return Number.isFinite(angle) ? angle : null
+}
+
+function armChuckPart(armId) {
+  const m = String(armId || '').match(/(\d+)\s*$/)
+  return `Wafer_Chuck${m ? m[1] : '1'}`
+}
 
 // 缓存每个部件的初始 transform（用于 reset）
 const initialTransforms = new Map()
+let stepPlayQueue = Promise.resolve()
+let stepPlaying = false
 
 // === 加载 SVG ===
 async function loadSvg() {
@@ -41,12 +110,49 @@ async function loadSvg() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const resp = await fetch(props.svgUrl)
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    svgInline.value = await resp.text()
+    let svgText = ''
+    // 先尝试 HTTP fetch
+    try {
+      const resp = await fetch(props.svgUrl)
+      if (resp.ok) {
+        svgText = await resp.text()
+        // Vite dev server 对不存在的路径返回 SPA index.html（200 OK），需要检测
+        if (!svgText.includes('<svg') && !svgText.trimStart().startsWith('<?xml')) {
+          throw new Error('返回内容不是 SVG（可能是 SPA fallback 页面）')
+        }
+      } else {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+    } catch (fetchErr) {
+      throw new Error(`SVG 网络加载失败: ${fetchErr.message}`)
+    }
+    if (!svgText.includes('<svg')) {
+      console.error('[MotionPreview] 内容不包含 <svg 标签, URL:', props.svgUrl, 'text length:', svgText.length, 'text start:', svgText.slice(0, 100))
+      if (svgText.length < 50 && !svgText.includes('<')) {
+        throw new Error('返回内容不是 SVG（内容为空或非 HTML）')
+      }
+      console.warn('[MotionPreview] 使用宽松模式，尝试用 DOMParser 验证')
+      try {
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(svgText, 'image/svg+xml')
+        const parseError = doc.querySelector('parsererror')
+        if (parseError) throw new Error('XML 解析失败: ' + parseError.textContent)
+        const svgEl = doc.querySelector('svg') || doc.documentElement
+        if (svgEl && svgEl.tagName && svgEl.tagName.toLowerCase() === 'svg') {
+          console.log('[MotionPreview] DOMParser 验证通过，是有效 SVG')
+        } else {
+          throw new Error('XML 根元素不是 <svg>')
+        }
+      } catch (parseErr) {
+        throw new Error('返回内容不是 SVG: ' + parseErr.message)
+      }
+    }
+    svgInline.value = svgText
     // 等待 DOM 更新后缓存初始 transform
     await nextTick()
     cacheInitialTransforms()
+    // 默认保持 data-motion-base-visibility="hidden" 的模块隐藏；事件触发显示暂预留
+    applyMotionBaseVisibility()
   } catch (e) {
     errorMsg.value = `加载 SVG 失败: ${e.message}`
   } finally {
@@ -56,16 +162,24 @@ async function loadSvg() {
 
 function cacheInitialTransforms() {
   if (!svgContainer.value) return
+  initialTransforms.clear()
   const els = svgContainer.value.querySelectorAll('[id]')
   for (const el of els) {
     const id = el.getAttribute('id')
-    const computed = window.getComputedStyle(el)
-    const transform = computed.transform
-    initialTransforms.set(id, transform !== 'none' ? transform : '')
-    // 确保有 transform-origin
-    if (!el.style.transformOrigin) {
-      el.style.transformOrigin = 'center'
-    }
+    if (!id) continue
+    // 只缓存 CSS 内联 transform，避免把 SVG 属性 transform 再写一遍导致画布错乱
+    initialTransforms.set(id, el.style.transform || '')
+  }
+}
+
+// 默认隐藏 data-motion-base-visibility="hidden" 的模块（如 Group1_POD / CST_TOPVIEW）
+// 事件触发后再显示：暂预留，不在此处自动 reveal
+function applyMotionBaseVisibility() {
+  if (!svgContainer.value) return
+  const hiddenEls = svgContainer.value.querySelectorAll('[data-motion-base-visibility="hidden"]')
+  for (const el of hiddenEls) {
+    el.setAttribute('visibility', 'hidden')
+    el.style.visibility = 'hidden'
   }
 }
 
@@ -89,212 +203,268 @@ const stepList = computed(() => {
   return motions.value.map(m => m.step).filter(Boolean)
 })
 
-// 提取所有 when 表达式中的参数名
-const paramKeys = computed(() => {
-  const whenList = []
-  for (const m of motions.value) {
-    for (const r of m.rules || []) {
-      if (r.when) whenList.push(r.when)
-    }
-  }
-  return extractParamKeys(whenList)
-})
+const DEFAULT_PARAM_VALUES = {
+  BATCH_ID: '2312432141',
+  LOT_ID: 'N1234',
+  Qty: '25',
+  RunMode: 'PR_RUN',
+  RECIPE1: 'ALC12',
+  PORT: '1',
+  SLOT: '1',
+  CHAMBER: 'E',
+  SMIFPORTID: '1',
+}
 
-// 初始化参数默认值
+const paramKeys = computed(() => Object.keys(DEFAULT_PARAM_VALUES))
+
 watch(paramKeys, (keys) => {
   for (const k of keys) {
     if (!(k in paramValues.value)) {
-      paramValues.value[k] = ''
+      paramValues.value[k] = DEFAULT_PARAM_VALUES[k] ?? ''
     }
   }
 }, { immediate: true })
 
 // === 触发事件 ===
-function triggerStep(stepName) {
+async function triggerStep(stepName) {
+  if (stepPlaying) logEvent(stepName, '已排队，等待上一个事件播完', 'info')
+  const run = async () => {
+    stepPlaying = true
+    try {
+      await playQueuedStep(stepName)
+    } catch (e) {
+      logEvent(stepName, e?.message || '播放失败', 'error')
+    } finally {
+      stepPlaying = false
+    }
+  }
+  stepPlayQueue = stepPlayQueue.then(run, run)
+  await stepPlayQueue
+}
+
+async function playQueuedStep(stepName) {
   const motion = motions.value.find(m => m.step === stepName)
   if (!motion) {
     logEvent(stepName, '未找到 step', 'error')
     return
   }
 
-  // 按顺序匹配 rules
-  let matched = false
-  for (const rule of motion.rules || []) {
-    if (evalWhen(rule.when, paramValues.value)) {
-      const targetId = rule.target_part_id || motion.target_part_id
-      const actions = rule.actions || []
-      // 预先在目标元素上设置 transition：取所有 action 中的最大 duration
-      // 避免后续 action（如 duration=0 的 offset）覆盖前一个 action 的过渡设置
-      const targetEl = svgContainer.value?.querySelector(`#${targetId}`)
-      if (targetEl) {
-        const maxDuration = actions.reduce((m, a) => Math.max(m, a.duration || 0), 0)
-        // 取第一个有 easing 的 action 的 easing 作为整体过渡曲线
-        const easingAction = actions.find(a => a.easing)
-        const easing = easingToCss(easingAction?.easing)
-        targetEl.style.transition = maxDuration > 0
-          ? `transform ${maxDuration}ms ${easing}, opacity ${maxDuration}ms ${easing}`
-          : 'none'
-      }
-      for (const action of actions) {
-        executeAction(targetId, action)
-      }
-      logEvent(stepName, `命中: ${rule.when} → ${targetId} ${actions.length}个动作`, 'success')
-      matched = true
-      break
+  if (stepName === 'BATCH_INFO_FROM_ECUI') {
+    const lotId = String(paramValues.value.LOT_ID || '').trim()
+    if (lotId) {
+      lotRegistry.set(lotId, {
+        PORT: paramValues.value.PORT,
+        BATCH_ID: paramValues.value.BATCH_ID,
+        Qty: paramValues.value.Qty,
+        RunMode: paramValues.value.RunMode,
+        RECIPE1: paramValues.value.RECIPE1,
+      })
+      logEvent(stepName, `登记 LOT_ID=${lotId} → PORT=${paramValues.value.PORT || '?'}`, 'info')
     }
   }
 
-  if (!matched) {
-    logEvent(stepName, '无匹配 rule', 'warn')
-  }
-}
+  const { params, matchedBy, lotId, carrier, slot } = enrichMotionParams(paramValues.value, lotRegistry)
 
-// === 执行动作 ===
-// 每个部件维护独立的 translate / rotate / scale 状态，组合后写入 style.transform
-// 避免多个 action 互相覆盖（旧版 bug：applyOffset 会清掉 applyRotate 设置的旋转）
-const partTransformState = new Map()
-
-function getPartState(el) {
-  const id = el.getAttribute('id') || el
-  if (!partTransformState.has(id)) {
-    partTransformState.set(id, { translate: '', rotate: '', scale: '', origin: '' })
-  }
-  return partTransformState.get(id)
-}
-
-function applyCombinedTransform(el) {
-  const s = getPartState(el)
-  const parts = [s.translate, s.rotate, s.scale].filter(Boolean)
-  el.style.transform = parts.join(' ')
-  if (s.origin) el.style.transformOrigin = s.origin
-}
-
-function executeAction(partId, action) {
-  const el = svgContainer.value?.querySelector(`#${partId}`)
-  if (!el) {
-    console.warn(`[MotionPreview] 部件 #${partId} 未找到`)
+  if (!evalWhen(motion.when, params)) {
+    logEvent(stepName, `未命中 step.when: ${motion.when || 'true'}`, 'warn')
     return
   }
 
-  // 注意：transition 由 triggerStep 在调用前预先设置（取 rule 内所有 action 的最大 duration）
-  // 这里不再为单个 action 设置 transition，避免后续 action（如 duration=0）覆盖前者
-
-  switch (action.type) {
-    case 'offset':
-      applyOffset(el, action)
-      break
-    case 'rotate':
-      applyRotate(el, action)
-      break
-    case 'scale':
-      applyScale(el, action)
-      break
-    case 'opacity':
-      el.style.opacity = String(action.to ?? 1)
-      break
-    case 'visibility':
-      el.style.opacity = action.to ? '1' : '0'
-      break
-    case 'flash':
-      applyFlash(el, action)
-      break
-    case 'color':
-      applyColor(el, action)
-      break
-    default:
-      console.log(`[MotionPreview] 未知动作类型: ${action.type}`)
+  if (stepName === 'CHAMBER_PS') {
+    if (matchedBy !== 'LOT_ID' || !carrier) {
+      logEvent(stepName, `未找到 LOT_ID=${lotId || '?'} 的载具映射，请先触发 BATCH_INFO_FROM_ECUI`, 'warn')
+      return
+    }
+    const chamber = String(params.CHAMBER || '').trim()
+    const waferId = `${carrier}${slot || '1'}`
+    const prev = waferPosRegistry.get(waferPosKey(lotId, slot))
+    const fromChamber = String(prev?.chamber || '').trim()
+    let fromArm = fromChamber ? findArmByPos(fromChamber) : findArmByPos(carrier)
+    if (fromChamber && !fromArm) {
+      logEvent(stepName, `未在 arm_chamber_angles 中找到上次腔体 ${fromChamber}`, 'warn')
+      return
+    }
+    let toArm = findArmByPos(chamber)
+    if (fromArm && armAngleFor(fromArm, chamber) != null) toArm = fromArm
+    if (!fromArm) fromArm = toArm
+    const toAngle = armAngleFor(toArm, chamber)
+    if (!chamber || !toArm) {
+      logEvent(stepName, `未在 arm_chamber_angles 中找到位置 ${chamber || '?'}`, 'warn')
+      return
+    }
+    if (toAngle == null) {
+      logEvent(stepName, `未配置 ${toArm} 到腔体 ${chamber} 的角度`, 'warn')
+      return
+    }
+    const pickupPart = armChuckPart(fromArm)
+    const dropPart = armChuckPart(toArm)
+    const crossArm = Boolean(fromArm && toArm && fromArm !== toArm)
+    params.from_arm = fromArm
+    params.to_arm = toArm
+    params.arm = toArm
+    params.ARM = toArm
+    params.pickup_part = pickupPart
+    params.drop_part = dropPart
+    params.cross_arm = crossArm
+    params.has_entered_chamber = Boolean(fromChamber)
+    if (fromChamber) {
+      const fromAngle = armAngleFor(fromArm, fromChamber)
+      if (fromAngle == null) {
+        logEvent(stepName, `未配置 ${fromArm} 到上次腔体 ${fromChamber} 的角度`, 'warn')
+        return
+      }
+      params.from_chamber = fromChamber
+      params.from_angle = fromAngle
+      params.from_part = `CH_${fromChamber}`
+    } else {
+      const pickupAngle = armAngleFor(fromArm, carrier)
+      if (pickupAngle == null) {
+        logEvent(stepName, `未配置 ${fromArm} 到 ${carrier || '?'} 的角度`, 'warn')
+        return
+      }
+      params.from_chamber = ''
+      params.from_angle = pickupAngle
+      params.from_part = pickupPart
+    }
+    if (crossArm) {
+      const crossFrom = armAngleFor(fromArm, 'Cross')
+      const crossTo = armAngleFor(toArm, 'Cross')
+      if (crossFrom == null) {
+        logEvent(stepName, `未配置 ${fromArm} 的 Cross 角度`, 'warn')
+        return
+      }
+      if (crossTo == null) {
+        logEvent(stepName, `未配置 ${toArm} 的 Cross 角度`, 'warn')
+        return
+      }
+      params.cross_angle_from = crossFrom
+      params.cross_angle_to = crossTo
+      logEvent(stepName, `跨臂交接: ${waferId} ${fromArm} → ${toArm}（Cross ${crossFrom}/${crossTo}，LOT_ID=${lotId}）`, 'info')
+    } else if (fromChamber) {
+      logEvent(stepName, `转腔: ${waferId} CH_${fromChamber} → ${pickupPart} → CH_${chamber}（${toArm}，LOT_ID=${lotId}）`, 'info')
+    } else {
+      logEvent(stepName, `进腔: ${waferId} ${carrier} → ${pickupPart} → CH_${chamber}（${toArm}，LOT_ID=${lotId}）`, 'info')
+    }
+    params.to_angle = toAngle
   }
-}
 
-function applyOffset(el, action) {
-  // 逻辑坐标 Y 向上 → SVG 浏览器坐标 Y 向下，需翻转
-  const offsetX = action.offset_x || 0
-  const offsetY = -(action.offset_y || 0) // Y 轴翻转
-  // 2D 场景只用 x/y，z 忽略
-  const s = getPartState(el)
-  s.translate = `translate(${offsetX}px, ${offsetY}px)`
-  applyCombinedTransform(el)
-}
+  if (stepName === 'WAFER_PROCESS_COMPLETE') {
+    if (matchedBy !== 'LOT_ID' || !carrier) {
+      logEvent(stepName, `未找到 LOT_ID=${lotId || '?'} 的载具映射，请先触发 BATCH_INFO_FROM_ECUI`, 'warn')
+      return
+    }
+    const prev = waferPosRegistry.get(waferPosKey(lotId, slot))
+    const fromChamber = String(prev?.chamber || params.CHAMBER || '').trim()
+    if (!fromChamber) {
+      logEvent(stepName, `未找到 LOT_ID=${lotId} SLOT=${slot || '1'} 的上次腔体，请先触发 CHAMBER_PS`, 'warn')
+      return
+    }
+    const fromAngle = armAngleFor('ARM_1', fromChamber)
+    if (fromAngle == null) {
+      logEvent(stepName, `未配置 ARM_1 到上次腔体 ${fromChamber} 的角度`, 'warn')
+      return
+    }
+    const carrierAngle = armAngleFor('ARM_1', carrier)
+    if (carrierAngle == null) {
+      logEvent(stepName, `未配置 ARM_1 到 ${carrier} 的角度`, 'warn')
+      return
+    }
+    params.ARM = 'ARM_1'
+    params.arm = 'ARM_1'
+    params.from_arm = 'ARM_1'
+    params.to_arm = 'ARM_1'
+    params.from_chamber = fromChamber
+    params.from_angle = fromAngle
+    params.carrier_angle = carrierAngle
+    params.to_angle = carrierAngle
+    params.pickup_part = armChuckPart('ARM_1')
+    params.drop_part = armChuckPart('ARM_1')
+    logEvent(stepName, `回载具: ${carrier}${slot || '1'} CH_${fromChamber} → Wafer_Chuck1 → ${carrier}（ARM_1，LOT_ID=${lotId}）`, 'info')
+  }
 
-function applyRotate(el, action) {
-  const angle = action.angle || 0
-  // pivot 逻辑坐标转 SVG 坐标
-  let pivotX = 0, pivotY = 0
-  if (action.pivot) {
-    pivotX = action.pivot.x || 0
-    // Y 轴翻转
-    const viewBoxH = getViewBoxHeight()
-    pivotY = viewBoxH - (action.pivot.y || 0)
-  } else {
-    // 查找 parts 中的 anchor
-    const part = parts.value.find(p => p.part_id === el.getAttribute('id'))
-    if (part?.anchors?.[0]) {
-      pivotX = part.anchors[0].x || 0
-      const viewBoxH = getViewBoxHeight()
-      pivotY = viewBoxH - (part.anchors[0].y || 0)
+  const matchedRules = []
+  for (const rule of motion.rules || []) {
+    if (!evalWhen(rule.when, params)) continue
+    matchedRules.push(resolveMotionRule(rule, params))
+  }
+  // 参数未填导致 rule.when 全不命中时，回退为配置页行为：播该 step 全部 rules
+  if (matchedRules.length === 0) {
+    for (const rule of motion.rules || []) {
+      matchedRules.push(resolveMotionRule(rule, params))
     }
   }
-  const s = getPartState(el)
-  s.origin = `${pivotX}px ${pivotY}px`
-  s.rotate = `rotate(${angle}deg)`
-  applyCombinedTransform(el)
-}
 
-function applyScale(el, action) {
-  const sx = action.scale_x ?? 1
-  const sy = action.scale_y ?? 1
-  const s = getPartState(el)
-  s.scale = `scale(${sx}, ${sy})`
-  applyCombinedTransform(el)
-}
-
-function applyFlash(el, action) {
-  const color = action.color || '#ef4444'
-  const duration = action.duration || 500
-  const originalFill = el.style.fill || ''
-  el.style.fill = color
-  setTimeout(() => {
-    el.style.fill = originalFill
-  }, duration)
-}
-
-function applyColor(el, action) {
-  const target = action.to || '#16a34a'
-  el.style.fill = target
-}
-
-function easingToCss(easing) {
-  const map = {
-    'linear': 'linear',
-    'mechanical': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-    'ease-in': 'ease-in',
-    'ease-out': 'ease-out',
-    'ease-in-out': 'ease-in-out',
+  if (matchedRules.length === 0) {
+    logEvent(stepName, '无匹配 rule', 'warn')
+    return
   }
-  return map[easing] || 'linear'
-}
 
-function getViewBoxHeight() {
-  if (!props.motionConfig?.document?.coord?.viewBox) return 900
-  return props.motionConfig.document.coord.viewBox[3] || 900
+  const result = await playMotion({
+    container: svgContainer.value,
+    rules: matchedRules,
+    reset: false,
+    onWarn: (msg) => logEvent(stepName, msg, 'warn'),
+  })
+
+  if (!result.ok) {
+    const reasonMap = {
+      container: 'SVG 容器尚未渲染',
+      svg: 'SVG 内容尚未加载',
+      ctm: 'SVG 坐标系不可用',
+      'ctm-scale': 'SVG 当前不可见',
+      'no-rules': '无匹配 rule',
+    }
+    logEvent(stepName, reasonMap[result.reason] || '播放失败', 'warn')
+    return
+  }
+
+  if (result.playedPids.size === 0 && !result.hasText) {
+    logEvent(stepName, '动作中引用的部件未在 SVG 中找到', 'warn')
+    return
+  }
+
+  for (const rule of matchedRules) {
+    const targetId = rule.target_part_id || motion.target_part_id
+    const actions = rule.actions || []
+    logEvent(stepName, `命中: ${motion.when || rule.when || 'true'} → ${targetId || '文本'} ${actions.length}个动作`, 'success')
+  }
+
+  if (stepName === 'CHAMBER_PS') {
+    const chamber = String(params.CHAMBER || '').trim()
+    if (lotId && chamber) {
+      waferPosRegistry.set(waferPosKey(lotId, slot), { chamber })
+      logEvent(stepName, `登记晶圆位置: LOT_ID=${lotId} SLOT=${slot || '1'} → CH_${chamber}`, 'info')
+    }
+  }
+
+  if (stepName === 'WAFER_PROCESS_COMPLETE') {
+    if (lotId) {
+      waferPosRegistry.delete(waferPosKey(lotId, slot))
+      logEvent(stepName, `晶圆回槽: LOT_ID=${lotId} SLOT=${slot || '1'} → ${carrier}${slot || '1'}`, 'info')
+    }
+  }
 }
 
 // === 重置 ===
-function resetAll() {
+function resetAll(options = {}) {
   if (!svgContainer.value) return
-  // 清空累积的 transform 状态
-  partTransformState.clear()
+  svgContainer.value.querySelectorAll('[data-motion-text]').forEach(el => el.remove())
   for (const [id, transform] of initialTransforms) {
     const el = svgContainer.value.querySelector(`#${id}`)
     if (el) {
       el.style.transform = transform || ''
       el.style.transformOrigin = ''
+      el.style.transformBox = ''
       el.style.opacity = ''
       el.style.transition = ''
+      el.style.visibility = ''
+      el.removeAttribute('visibility')
       delete el.dataset.transform
     }
   }
-  logEvent('RESET', '所有部件已重置', 'info')
+  applyMotionBaseVisibility()
+  waferPosRegistry.clear()
+  if (!options.silent) logEvent('初始化', '所有部件已重置', 'info')
 }
 
 // === 事件日志 ===
@@ -322,22 +492,6 @@ onMounted(() => {
 
 <template>
   <div class="motion-preview">
-    <!-- 顶部工具栏 -->
-    <div class="preview-toolbar">
-      <div class="toolbar-left">
-        <span v-if="isMotionFormat" class="format-badge motion">
-          Motion JSON v{{ motionConfig.schema_version }}
-        </span>
-        <span v-else class="format-badge old">旧格式 / 无配置</span>
-        <span v-if="svgUrl" class="svg-status" :class="{ ok: svgInline }">
-          {{ svgInline ? 'SVG 已加载' : 'SVG 加载中...' }}
-        </span>
-      </div>
-      <div class="toolbar-right">
-        <button class="btn-reset" @click="resetAll" :disabled="!svgInline">↻ 重置</button>
-      </div>
-    </div>
-
     <div class="preview-body">
       <!-- 左侧：SVG 预览区 -->
       <div class="svg-area">
@@ -352,9 +506,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 右侧：控制面板 -->
+      <!-- 中列：初始化 + 参数 + 事件触发 -->
       <div class="control-panel">
-        <!-- 参数输入 -->
+        <div class="init-section">
+          <button class="btn-small btn-reset-canvas" @click="resetAll" :disabled="!svgInline">初始化</button>
+        </div>
         <div v-if="paramKeys.length > 0" class="param-section">
           <h4>参数</h4>
           <div class="param-grid">
@@ -368,8 +524,6 @@ onMounted(() => {
             </div>
           </div>
         </div>
-
-        <!-- 事件触发按钮 -->
         <div class="trigger-section">
           <h4>事件触发</h4>
           <div v-if="stepList.length === 0" class="empty-row">无可用 step</div>
@@ -387,19 +541,10 @@ onMounted(() => {
             </button>
           </div>
         </div>
+      </div>
 
-        <!-- 部件列表 -->
-        <div v-if="parts.length > 0" class="parts-section">
-          <h4>部件 ({{ parts.length }})</h4>
-          <div class="parts-list">
-            <div v-for="p in parts" :key="p.part_id" class="part-row">
-              <span class="part-id">{{ p.part_id }}</span>
-              <span class="part-name">{{ p.part_name }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 事件日志 -->
+      <!-- 右列：事件日志 -->
+      <div class="log-panel">
         <div class="log-section">
           <h4>事件日志 ({{ eventLog.length }})</h4>
           <div v-if="eventLog.length === 0" class="empty-row">暂无事件</div>
@@ -431,66 +576,46 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.preview-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.toolbar-left { display: flex; gap: 8px; align-items: center; }
-.format-badge {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 10px;
-  font-weight: 600;
-}
-.format-badge.motion {
-  background: rgba(0, 212, 255, 0.15);
-  color: var(--accent);
-}
-.format-badge.old {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--yellow);
-}
-.svg-status {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.svg-status.ok { color: var(--green); }
-
-.btn-reset {
+.btn-small {
+  width: 100%;
   background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--border);
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: 4px;
-  cursor: pointer;
   font-size: 12px;
+  cursor: pointer;
 }
-.btn-reset:hover { border-color: var(--accent); }
-.btn-reset:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-small:hover { border-color: var(--accent); }
+.btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-reset-canvas {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+.btn-reset-canvas:hover {
+  border-color: rgba(59, 130, 246, 0.8);
+  color: #60a5fa;
+}
 
 .preview-body {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 400px 360px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-@media (max-width: 900px) {
-  .preview-body { grid-template-columns: 1fr; }
+@media (max-width: 1280px) {
+  .preview-body { grid-template-columns: 1fr 360px 320px; }
 }
 
 .svg-area {
   background: var(--bg);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   overflow: auto;
   position: relative;
-  padding: 16px;
+  padding: 8px 16px 16px;
 }
 .svg-container {
   max-width: 100%;
@@ -515,14 +640,20 @@ onMounted(() => {
   font-style: italic;
 }
 
-.control-panel {
+.control-panel,
+.log-panel {
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--panel-2);
+  min-width: 0;
 }
-.control-panel h4 {
+.control-panel {
+  overflow-y: auto;
+}
+.control-panel h4,
+.log-panel h4 {
   font-size: 12px;
   color: var(--accent);
   margin: 0 0 8px 0;
@@ -530,12 +661,19 @@ onMounted(() => {
   letter-spacing: 0.5px;
 }
 
+.init-section,
 .param-section,
 .trigger-section,
-.parts-section,
 .log-section {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+}
+.log-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: none;
 }
 
 .param-grid {
@@ -597,30 +735,9 @@ onMounted(() => {
   margin-top: 2px;
 }
 
-.parts-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 150px;
-  overflow-y: auto;
-}
-.part-row {
-  display: flex;
-  gap: 8px;
-  font-size: 11px;
-  padding: 3px 6px;
-}
-.part-id {
-  font-family: monospace;
-  color: var(--accent);
-  min-width: 100px;
-}
-.part-name {
-  color: var(--text-dim);
-}
-
 .log-list {
-  max-height: 200px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 .log-item {

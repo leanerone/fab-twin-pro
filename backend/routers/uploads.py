@@ -53,6 +53,120 @@ class ModelFileResponse(BaseModel):
     version: str
     uploaded_by: str
     created_at: str
+    # Motion JSON 导入校验警告（缺 viewBox/parts、SVG id 未匹配等；不阻断导入）
+    warnings: List[str] = []
+    # 消除 pydantic 对 model_id 字段的 protected namespace 警告
+    model_config = {"protected_namespaces": ()}
+
+
+# Motion JSON 支持的动作类型白名单（与前端 useMotionPlayback 对齐）
+MOTION_ACTION_WHITELIST = {"offset", "rotate", "scale", "opacity", "visibility", "snap", "move_to", "text"}
+
+
+def _extract_svg_ids_from_model(model: MachineModelConfig) -> set:
+    """读取机型已上传 SVG，提取全部元素 id（用于 Motion JSON 的 SVG id 校验）"""
+    try:
+        source_files = json.loads(model.source_files_json) if model.source_files_json else {}
+    except (json.JSONDecodeError, TypeError):
+        return set()
+    current = source_files.get("current_svg") or {}
+    file_url = current.get("file_url", "")
+    if not file_url:
+        return set()
+    abs_path = os.path.join(UPLOAD_DIR, os.path.basename(file_url))
+    if not os.path.exists(abs_path):
+        return set()
+    try:
+        with open(abs_path, "r", encoding="utf-8") as f:
+            root = ET.fromstring(f.read())
+        return {e.get("id") for e in root.iter() if e.get("id")}
+    except Exception:
+        return set()
+
+
+def _validate_motion_json(json_data: dict, svg_ids: set) -> List[str]:
+    """Motion JSON 导入校验
+
+    阻断项（抛 HTTP 400）：
+    - motions 缺失/为空、motion 缺 step 或 rules、rule 缺 actions
+    - 动作类型不在白名单（offset/rotate/scale/opacity/visibility/snap/move_to/text）
+    - 模板花括号不配对
+
+    警告项（返回 warnings，可播放但标出）：
+    - 缺 document.viewBox
+    - 缺 parts 定义
+    - 非模板 part_id 在 SVG 中找不到（运行时可能经 part_aliases 命中，故只警告）
+    - rotate 缺 axis（v1.1 建议显式声明 "z"）
+
+    结构约定：rule = { phase, target_part_id, when, actions: [{ type, ... }] }
+    """
+    warnings = []
+    motions = json_data.get("motions")
+    if not isinstance(motions, list) or not motions:
+        raise HTTPException(status_code=400, detail="Motion JSON 校验失败：motions 缺失或为空数组")
+
+    doc = json_data.get("document") or {}
+    # viewBox 可能直接挂在 document 上，或按规范挂在 document.coord 下
+    viewbox = doc.get("viewBox") or (doc.get("coord") or {}).get("viewBox")
+    if not viewbox:
+        warnings.append("缺 document.viewBox：可播放，运行时将按 ext.viewBox_fallback 或 SVG 自身尺寸兜底")
+    if not json_data.get("parts"):
+        warnings.append("缺 parts 定义：可播放，部件几何将在加载时动态测量")
+
+    template_re = re.compile(r"\{[^{}]*\}")
+
+    def check_template(field_val: str, where: str):
+        if not isinstance(field_val, str):
+            return
+        stripped = template_re.sub("", field_val)
+        if "{" in stripped or "}" in stripped:
+            raise HTTPException(status_code=400, detail=f"Motion JSON 校验失败：{where} 模板花括号不配对: {field_val}")
+
+    def check_part_id(part_id, where: str):
+        if not part_id or not isinstance(part_id, str):
+            return
+        check_template(part_id, where)
+        if "{" in part_id:
+            return  # 模板 id 运行时解析，导入期无法校验
+        if svg_ids and part_id not in svg_ids:
+            warnings.append(f"{where} 引用的部件 id「{part_id}」在已上传 SVG 中不存在（如走 part_aliases 别名可忽略）")
+
+    for mi, motion in enumerate(motions):
+        step = motion.get("step")
+        where_m = f"motions[{mi}]({step or '?'})"
+        if not step:
+            raise HTTPException(status_code=400, detail=f"Motion JSON 校验失败：{where_m} 缺 step（事件名）")
+        rules = motion.get("rules")
+        if not isinstance(rules, list) or not rules:
+            raise HTTPException(status_code=400, detail=f"Motion JSON 校验失败：{where_m} 缺 rules 或为空数组")
+        for ri, rule in enumerate(rules):
+            where_r = f"{where_m}.rules[{ri}]"
+            check_part_id(rule.get("target_part_id"), f"{where_r}.target_part_id")
+            actions = rule.get("actions")
+            if not isinstance(actions, list) or not actions:
+                raise HTTPException(status_code=400, detail=f"Motion JSON 校验失败：{where_r} 缺 actions 或为空数组")
+            for ai, action in enumerate(actions):
+                where_a = f"{where_r}.actions[{ai}]"
+                atype = action.get("type")
+                if atype not in MOTION_ACTION_WHITELIST:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Motion JSON 校验失败：{where_a} 动作类型「{atype}」不支持，"
+                               f"仅支持: {', '.join(sorted(MOTION_ACTION_WHITELIST))}"
+                    )
+                check_part_id(action.get("follow_part_id"), f"{where_a}.follow_part_id")
+                to_pid = action.get("to_part_id")
+                if to_pid and str(to_pid).strip() not in ("{home}", "home"):
+                    check_part_id(to_pid, f"{where_a}.to_part_id")
+                if atype == "rotate":
+                    if "axis" not in action:
+                        warnings.append(f"{where_a} rotate 未声明 axis，建议显式写 \"axis\": \"z\"")
+                    if isinstance(action.get("angle"), str):
+                        check_template(action["angle"], f"{where_a}.angle")
+                elif atype == "text" and action.get("content"):
+                    check_template(action["content"], f"{where_a}.content")
+
+    return warnings
 
 
 class ModelFileListResponse(BaseModel):
@@ -69,6 +183,7 @@ class SvgPartItem(BaseModel):
 
 class SvgPartsResponse(BaseModel):
     """SVG 部件提取结果"""
+    model_config = {"protected_namespaces": ()}
     model_id: str
     parts: List[SvgPartItem]
     total: int
@@ -221,6 +336,19 @@ async def upload_model_file(
     if not model:
         raise HTTPException(status_code=404, detail=f"机型 {model_id} 不存在")
 
+    # Motion JSON（含 schema_version）：先校验再落盘，阻断项直接 400 不产生文件记录
+    motion_data = None
+    motion_warnings: List[str] = []
+    if ext == ".json":
+        try:
+            parsed = json.loads(content.decode("utf-8"))
+            if "schema_version" in parsed:
+                motion_data = parsed
+                svg_ids = _extract_svg_ids_from_model(model)
+                motion_warnings = _validate_motion_json(parsed, svg_ids)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass  # 非 Motion JSON 格式，按普通 JSON 模型文件处理
+
     version = _get_next_version(db, model_id)
     file_id = str(uuid.uuid4())[:8]
     safe_name = f"{model_id}_{version}_{file_id}{ext}"
@@ -235,16 +363,11 @@ async def upload_model_file(
     _save_file_record(db, model_id, file_id, file.filename, file_url,
                       ext, file_size, version, uploaded_by)
 
-    # 如果是 JSON 文件且包含 schema_version，存入 animation_config_json
-    if ext == ".json":
-        try:
-            json_data = json.loads(content.decode("utf-8"))
-            if "schema_version" in json_data:
-                model.animation_config_json = json.dumps(json_data, ensure_ascii=False)
-                model.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                db.commit()
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass  # 非 Motion JSON 格式，忽略
+    # Motion JSON 校验通过，存入 animation_config_json
+    if motion_data is not None:
+        model.animation_config_json = json.dumps(motion_data, ensure_ascii=False)
+        model.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.commit()
 
     return ModelFileResponse(
         file_id=file_id,
@@ -256,6 +379,7 @@ async def upload_model_file(
         version=version,
         uploaded_by=uploaded_by,
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        warnings=motion_warnings,
     )
 
 

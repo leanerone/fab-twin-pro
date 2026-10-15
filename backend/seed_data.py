@@ -519,8 +519,9 @@ def create_machine_model_configs(db: Session):
         vendor="TEL",
         process_type="ETCH",
         version="1.0",
-        view_mode="isometric",
-        description="OXE 刻蚀机 2.5D 等角视图，匹配 OXE_2D.html 的 Canvas 渲染布局",
+        # 视图选择改为配置驱动（不再按机台号 OXE 前缀判断）：view_mode="oxe" → OXE Canvas 看板
+        view_mode="oxe",
+        description="OXE 刻蚀机 Canvas 实时看板（视图由 view_mode 配置驱动）",
         views_config_json=json.dumps(oxe_views, ensure_ascii=False),
         parts_config_json=json.dumps(oxe_parts, ensure_ascii=False),
         state_mapping_json=json.dumps(oxe_states, ensure_ascii=False),

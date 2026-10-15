@@ -11,132 +11,316 @@
       "viewBox": [0, 0, 720, 900]
     }
   },
-  "parts": [
-    {
-      "part_id": "ARM_2",
-      "part_name": "Wafer Handler Robot",
-      "part_type": "group",
-      "anchors": [{ "name": "pivot", "x": 0, "y": 900 }],
-      "view_3d": "ARM_2_3D",
-      "desc": "顶部晶圆传送机械臂"
+  "arm_chamber_angles": {
+    "ARM_1": {
+      "A": 330,
+      "B": 30,
+      "C": 265,
+      "D": 95,
+      "E": 225,
+      "F": 135,
+      "LLA": 190,
+      "LLB": 160,
+      "Cross": 0
     },
-    {
-      "part_id": "Group1_CST",
-      "part_name": "Cassette 1",
-      "part_type": "group",
-      "desc": "1号载具"
-    },
-    {
-      "part_id": "Group2_CST",
-      "part_name": "Cassette 2",
-      "part_type": "group",
-      "desc": "2号载具"
-    },
-    {
-      "part_id": "CH_1",
-      "part_name": "PVD Chamber 1",
-      "part_type": "circle",
-      "desc": "PVD 1号腔体"
-    },
-    {
-      "part_id": "CH_2",
-      "part_name": "PVD Chamber 2",
-      "part_type": "circle",
-      "desc": "PVD 2号腔体"
-    },
-    {
-      "part_id": "CH_3",
-      "part_name": "PVD Chamber 3",
-      "part_type": "circle",
-      "desc": "PVD 3号腔体"
-    },
-    {
-      "part_id": "CH_4",
-      "part_name": "PVD Chamber 4",
-      "part_type": "circle",
-      "desc": "PVD 4号腔体"
-    },
-    {
-      "part_id": "ARM_1",
-      "part_name": "Buffer Robot",
-      "part_type": "group",
-      "desc": "缓冲区机械臂"
-    },
-    {
-      "part_id": "SMIF_1",
-      "part_name": "SMIF Port 1",
-      "part_type": "group",
-      "desc": "1号SMIF口"
+    "ARM_2": {
+      "1": 250,
+      "2": 290,
+      "3": 70,
+      "4": 110,
+      "A": 210,
+      "B": 140,
+      "Cross": 180
     }
+  },
+  "parts": [
+    { "part_id": "ARM_1", "part_name": "Buffer Robot", "part_type": "group", "desc": "缓冲区机械臂" },
+    { "part_id": "ARM_2", "part_name": "Wafer Handler Robot", "part_type": "group", "desc": "顶部晶圆传送机械臂" },
+    { "part_id": "Wafer_Chuck1", "part_name": "ARM_1 Chuck", "part_type": "circle", "desc": "ARM_1 叉爪（晶圆吸附点）" },
+    { "part_id": "Wafer_Chuck2", "part_name": "ARM_2 Chuck", "part_type": "circle", "desc": "ARM_2 叉爪（晶圆吸附点）" },
+    { "part_id": "CH_1", "part_name": "PVD Chamber 1", "part_type": "circle", "desc": "PVD 1号腔体" },
+    { "part_id": "CH_2", "part_name": "PVD Chamber 2", "part_type": "circle", "desc": "PVD 2号腔体" },
+    { "part_id": "CH_3", "part_name": "PVD Chamber 3", "part_type": "circle", "desc": "PVD 3号腔体" },
+    { "part_id": "CH_4", "part_name": "PVD Chamber 4", "part_type": "circle", "desc": "PVD 4号腔体" },
+    { "part_id": "CH_A", "part_name": "Buffer Station A", "part_type": "ellipse", "desc": "缓冲位 A" },
+    { "part_id": "CH_B", "part_name": "Buffer Station B", "part_type": "ellipse", "desc": "缓冲位 B" },
+    { "part_id": "CH_C", "part_name": "Cool Station C", "part_type": "rect", "desc": "冷却位 C" },
+    { "part_id": "CH_D", "part_name": "Cool Station D", "part_type": "rect", "desc": "冷却位 D" },
+    { "part_id": "CH_E", "part_name": "Chamber E", "part_type": "circle", "desc": "E 腔体" },
+    { "part_id": "CH_F", "part_name": "Chamber F", "part_type": "circle", "desc": "F 腔体" },
+    { "part_id": "LLA", "part_name": "Load Lock A", "part_type": "path", "desc": "LLA 传片腔" },
+    { "part_id": "LLB", "part_name": "Load Lock B", "part_type": "path", "desc": "LLB 传片腔" },
+    { "part_id": "SMIF_1", "part_name": "SMIF Port 1", "part_type": "group", "desc": "1号SMIF口" },
+    { "part_id": "SMIF_2", "part_name": "SMIF Port 2", "part_type": "group", "desc": "2号SMIF口" },
+    { "part_id": "BOARD_1", "part_name": "Foup Board 1", "part_type": "rect", "desc": "1号载板" },
+    { "part_id": "BOARD_2", "part_name": "Foup Board 2", "part_type": "rect", "desc": "2号载板" },
+    { "part_id": "BUFFER", "part_name": "Buffer Body", "part_type": "path", "desc": "缓冲区主体" },
+    { "part_id": "Group1_POD", "part_name": "POD 1", "part_type": "group", "desc": "1号POD（默认隐藏，POD_PLACED 显示）" },
+    { "part_id": "Group2_POD", "part_name": "POD 2", "part_type": "group", "desc": "2号POD（默认隐藏）" },
+    { "part_id": "Group1_CST", "part_name": "Cassette 1", "part_type": "group", "desc": "1号 cassette" },
+    { "part_id": "Group2_CST", "part_name": "Cassette 2", "part_type": "group", "desc": "2号 cassette" },
+    { "part_id": "Group1_CST_TOPVIEW", "part_name": "Cassette 1 Top View", "part_type": "group", "desc": "1号俯视 wafer 组（默认隐藏，内含 LLA1~LLA25）" },
+    { "part_id": "Group2_CST_TOPVIEW", "part_name": "Cassette 2 Top View", "part_type": "group", "desc": "2号俯视 wafer 组（默认隐藏，内含 LLB1~LLB25）" }
   ],
   "motions": [
     {
-      "step": "CHAMBER_START",
+      "step": "POD_PLACED",
       "enabled": true,
-      "target_part_id": "ARM_2",
+      "when": "true",
       "rules": [
         {
-          "when": "params.chamber == '1'",
-          "target_part_id": "ARM_2",
+          "phase": 1,
+          "target_part_id": "Group1_POD",
+          "when": "params.SMIFPORTID == '1'",
           "actions": [
-            { "type": "rotate", "angle": 45, "axis": "z", "pivot": { "x": 0, "y": 900 }, "duration": 800, "easing": "mechanical" },
-            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 0 }
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": true, "duration": 1000, "easing": "ease-out" }
           ]
         },
         {
-          "when": "params.chamber == '2'",
-          "target_part_id": "ARM_2",
+          "phase": 2,
+          "target_part_id": "Group2_POD",
+          "when": "params.SMIFPORTID == '2'",
           "actions": [
-            { "type": "rotate", "angle": -5, "axis": "z", "pivot": { "x": 0, "y": 900 }, "duration": 800, "easing": "mechanical" },
-            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 0 }
-          ]
-        },
-        {
-          "when": "params.chamber == '3'",
-          "target_part_id": "ARM_2",
-          "actions": [
-            { "type": "rotate", "angle": 5, "axis": "z", "pivot": { "x": 0, "y": 900 }, "duration": 800, "easing": "mechanical" },
-            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 0 }
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": true, "duration": 1000, "easing": "ease-out" }
           ]
         }
       ]
     },
     {
-      "step": "MIC",
+      "step": "BATCH_INFO_FROM_ECUI",
       "enabled": true,
+      "when": "params.BATCH_ID && params.LOT_ID && params.Qty && params.RunMode && params.RECIPE1 && params.PORT",
       "rules": [
         {
-          "when": "params.port == '1'",
-          "target_part_id": "Group1_CST",
+          "phase": 1,
+          "target_part_id": "",
+          "when": "params.PORT=='1'",
           "actions": [
-            { "type": "offset", "offset_x": 0, "offset_y": 116, "duration": 600, "easing": "mechanical" }
+            {
+              "type": "text",
+              "content": "BATCH_ID:params.BATCH_ID\nLOT_ID:params.LOT_ID\nQty:params.Qty\nRunMode:params.RunMode\nRECIPE1:params.RECIPE1\nPORT:params.PORT",
+              "x": 64,
+              "y": 722
+            }
           ]
         },
         {
-          "when": "params.port == '2'",
-          "target_part_id": "Group1_CST",
+          "phase": 2,
+          "target_part_id": "",
+          "when": "params.PORT=='2'",
           "actions": [
-            { "type": "offset", "offset_x": 0, "offset_y": 116, "duration": 600, "easing": "mechanical" }
+            {
+              "type": "text",
+              "content": "BATCH_ID:params.BATCH_ID\nLOT_ID:params.LOT_ID\nQty:params.Qty\nRunMode:params.RunMode\nRECIPE1:params.RECIPE1\nPORT:params.PORT",
+              "x": 465,
+              "y": 721
+            }
           ]
         }
       ]
     },
     {
-      "step": "MOC",
+      "step": "CASSETTE_ARRIVAL",
       "enabled": true,
+      "when": "true",
       "rules": [
         {
-          "when": "params.port == '1'",
+          "phase": 1,
           "target_part_id": "Group1_CST",
+          "when": "params.PORT=='1'",
           "actions": [
-            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 600, "easing": "mechanical" }
+            { "type": "offset", "offset_x": 0, "offset_y": 128, "duration": 1000, "easing": "linear" },
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": false, "duration": 1000, "easing": "linear" }
           ]
         },
         {
-          "when": "params.port == '2'",
+          "phase": 2,
+          "target_part_id": "Group1_CST_TOPVIEW",
+          "when": "params.PORT=='1'",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": true, "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
           "target_part_id": "Group2_CST",
+          "when": "params.PORT=='2'",
           "actions": [
-            { "type": "offset", "offset_x": 0, "offset_y": 0, "duration": 600, "easing": "mechanical" }
+            { "type": "offset", "offset_x": 0, "offset_y": 128, "duration": 1000, "easing": "linear" },
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": false, "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "Group2_CST_TOPVIEW",
+          "when": "params.PORT=='2'",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": true, "duration": 1000, "easing": "linear" }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "CHAMBER_PS",
+      "enabled": true,
+      "when": "params.LOT_ID && params.SLOT && params.CHAMBER",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "{from_arm}",
+          "when": "!params.has_entered_chamber",
+          "actions": [
+            { "type": "rotate", "angle": "{carrier}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{from_arm}",
+          "when": "params.has_entered_chamber",
+          "actions": [
+            { "type": "rotate", "angle": "{from_chamber}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "text", "content": "{LOT_ID}_{SLOT}" },
+            { "type": "snap", "to_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{from_arm}",
+          "when": "params.cross_arm",
+          "actions": [
+            { "type": "rotate", "angle": "{Cross}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{to_arm}",
+          "when": "params.cross_arm",
+          "actions": [
+            { "type": "rotate", "angle": "{Cross}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{carrier}{SLOT}",
+          "when": "params.cross_arm",
+          "actions": [
+            { "type": "rotate", "angle": "{Cross}", "axis": "z", "follow_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{carrier}{SLOT}",
+          "when": "params.cross_arm",
+          "actions": [
+            { "type": "snap", "to_part_id": "{drop_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "{to_arm}",
+          "actions": [
+            { "type": "rotate", "angle": "{CHAMBER}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "rotate", "angle": "{CHAMBER}", "axis": "z", "follow_part_id": "{to_arm}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 6,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "snap", "to_part_id": "CH_{CHAMBER}", "duration": 1000, "easing": "linear" }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "WAFER_PROCESS_COMPLETE",
+      "enabled": true,
+      "when": "params.LOT_ID && params.SLOT",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "ARM_1",
+          "actions": [
+            { "type": "rotate", "angle": "{from_chamber}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "snap", "to_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "ARM_1",
+          "actions": [
+            { "type": "rotate", "angle": "{carrier}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "rotate", "angle": "{carrier}", "axis": "z", "follow_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "snap", "to_part_id": "{home}", "duration": 1000, "easing": "linear" }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "POD_REMOVED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "",
+          "when": "params.SMIFPORTID == '1'",
+          "actions": [
+            { "type": "text", "content": "", "x": 64, "y": 722 }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "Group1_POD",
+          "when": "params.SMIFPORTID == '1'",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": false, "duration": 1000, "easing": "ease-out" }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "",
+          "when": "params.SMIFPORTID == '2'",
+          "actions": [
+            { "type": "text", "content": "", "x": 465, "y": 721 }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "Group2_POD",
+          "when": "params.SMIFPORTID == '2'",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": 0, "visible": false, "duration": 1000, "easing": "ease-out" }
           ]
         }
       ]
@@ -144,7 +328,23 @@
   ],
   "ext": {
     "machine_type": "amat_metsput",
-    "version": "1.0.0",
-    "description": "AMAT METSPUT消息驱动动作配置"
+    "version": "1.1.0",
+    "description": "AMAT METSPUT 消息驱动动作配置（v1.1 定稿：补 viewBox/parts/axis，硬编码外置 ext）",
+    "deriver": "amat_metsput",
+    "port_carrier_map": {
+      "1": "LLA",
+      "2": "LLB"
+    },
+    "param_defaults": {
+      "SLOT": "1",
+      "CHAMBER": "E",
+      "ARM": "ARM_1",
+      "from_arm": "ARM_1",
+      "to_arm": "ARM_1",
+      "from_angle": 190,
+      "to_angle": 205
+    },
+    "part_aliases": {},
+    "viewBox_fallback": [0, 0, 720, 900]
   }
 }
