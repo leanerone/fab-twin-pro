@@ -23,6 +23,13 @@
             #CH_C, #CH_D { stroke: #3a4250; }
             #svg_36, #svg_38, #Wafer_Chuck1, #Wafer_Chuck2, #svg_48 { fill: url(#armSteel); }
             #svg_39, #svg_51 { fill: url(#armBlade); }
+
+            /* === 整体光影收尾（阶段3） === */
+            #smif1OuterFrame, #svg_124 { fill: url(#smifShell); }
+            #smif1InnerFrame, #svg_125 { fill: url(#smifInner); }
+            #svg_35, #BUFFER { fill: url(#deckPlate); }
+            #svg_1 { fill: url(#framePlate); }
+            #svg_13, #svg_19, #svg_25, #svg_31, #svg_59, #svg_60, #svg_68, #svg_65, #svg_69, #svg_70 { fill: #eef3fa; }
 </style>
   <!-- 彩虹薄膜干涉色（斜向，参考真实晶圆照片） -->
   <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1">
@@ -101,6 +108,40 @@
    <stop offset="0.55" stop-color="#b9c3d2"/>
    <stop offset="1" stop-color="#788294"/>
   </linearGradient>
+  <!-- === 整体光影收尾（阶段3） === -->
+  <!-- 落地阴影：径向渐隐 -->
+  <radialGradient id="groundShadow" cx="0.5" cy="0.5" r="0.5">
+   <stop offset="0" stop-color="#0b0f16" stop-opacity="0.26"/>
+   <stop offset="0.65" stop-color="#0b0f16" stop-opacity="0.1"/>
+   <stop offset="1" stop-color="#0b0f16" stop-opacity="0"/>
+  </radialGradient>
+  <!-- SMIF 外壳金属 -->
+  <linearGradient id="smifShell" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#f2f5f9"/>
+   <stop offset="0.5" stop-color="#c7cfdb"/>
+   <stop offset="1" stop-color="#97a2b1"/>
+  </linearGradient>
+  <linearGradient id="smifInner" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#ffffff"/>
+   <stop offset="0.6" stop-color="#dde3ea"/>
+   <stop offset="1" stop-color="#b4bdc9"/>
+  </linearGradient>
+  <!-- 标签徽章深色金属 -->
+  <linearGradient id="badgeMetal" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#465062"/>
+   <stop offset="0.5" stop-color="#2c3542"/>
+   <stop offset="1" stop-color="#1a212c"/>
+  </linearGradient>
+  <!-- 转盘/缓冲台面板微渐变 -->
+  <radialGradient id="deckPlate" cx="0.5" cy="0.42" r="0.75">
+   <stop offset="0" stop-color="#ffffff"/>
+   <stop offset="0.75" stop-color="#f2f5f9"/>
+   <stop offset="1" stop-color="#dde3ec"/>
+  </radialGradient>
+  <linearGradient id="framePlate" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#ffffff"/>
+   <stop offset="1" stop-color="#edf0f5"/>
+  </linearGradient>
 </defs>
 <g class="layer">
   <title>Layer 1</title>
@@ -114,6 +155,7 @@
   <text class="blue" font-size="26" id="svg_8" transform="matrix(1 0 0 1 0 0)" x="133" y="677">Degas</text>
   <text class="blue" font-size="26" id="svg_9" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="597.5" y="674.5">Degas</text>
   <g id="svg_10" transform="matrix(1 0 0 1 0 0)">
+   <ellipse class="part-shadow" data-for="s3:svg_10" cx="188" cy="196" rx="97" ry="63" fill="url(#groundShadow)"/>
    <ellipse class="light" cx="188" cy="190" id="svg_11" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(-34 188 190)"/>
    <circle class="shape" cx="188" cy="190" id="CH_2" r="46"/>
    <g class="ch-deco" data-for="CH_2" pointer-events="none">
@@ -131,11 +173,13 @@
    <circle cx="206.9" cy="144.4" r="1.1" fill="#3a4250"/>
    <circle cx="233.6" cy="171.1" r="1.1" fill="#3a4250"/>
    </g>
+   <rect class="label-badge" data-for="s3:svg_13" x="111" y="224.5" width="50" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_13" x="136" y="240">PVD 2</text>
    <rect class="light" height="40" id="svg_14" rx="18" transform="matrix(0.829038 -0.559193 0.559193 0.829038 -86.6643 92.5338)" width="56" x="80" y="168"/>
    <rect class="light" height="40" id="svg_15" rx="18" transform="rotate(-55.1755 249 227)" width="56" x="221" y="207"/>
   </g>
   <g id="svg_16">
+   <ellipse class="part-shadow" data-for="s3:svg_16" cx="530" cy="196" rx="97" ry="63" fill="url(#groundShadow)"/>
    <ellipse class="light" cx="530" cy="190" id="svg_17" rx="90" ry="58" transform="matrix(1 0 0 1 0 0) rotate(34 530 190)"/>
    <circle class="shape" cx="530" cy="190" id="CH_3" r="46"/>
    <g class="ch-deco" data-for="CH_3" pointer-events="none">
@@ -153,11 +197,13 @@
    <circle cx="548.9" cy="144.4" r="1.1" fill="#3a4250"/>
    <circle cx="575.6" cy="171.1" r="1.1" fill="#3a4250"/>
    </g>
+   <rect class="label-badge" data-for="s3:svg_19" x="554" y="225.5" width="50" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_19" x="579" y="241">PVD 3</text>
    <rect class="light" height="40" id="svg_20" rx="18" transform="rotate(55.9228 466 222)" width="56" x="438" y="202"/>
    <rect class="light" height="40" id="svg_21" rx="18" transform="matrix(1 0 0 1 0 0) rotate(34 608 188)" width="56" x="580" y="168"/>
   </g>
   <g id="svg_22" transform="matrix(1 0 0 1 -9 -10)">
+   <ellipse class="part-shadow" data-for="s3:svg_22" cx="188" cy="356" rx="97" ry="63" fill="url(#groundShadow)"/>
    <ellipse class="light" cx="188" cy="350" id="svg_23" rx="90" ry="58" transform="rotate(34 188 350)"/>
    <circle class="shape" cx="188" cy="350" id="CH_1" r="46"/>
    <g class="ch-deco" data-for="CH_1" pointer-events="none">
@@ -175,11 +221,13 @@
    <circle cx="206.9" cy="304.4" r="1.1" fill="#3a4250"/>
    <circle cx="233.6" cy="331.1" r="1.1" fill="#3a4250"/>
    </g>
+   <rect class="label-badge" data-for="s3:svg_25" x="118" y="292.5" width="50" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_25" x="143" y="308">PVD 1</text>
    <rect class="light" height="40" id="svg_26" rx="18" transform="rotate(34 108 348)" width="56" x="80" y="328"/>
    <rect class="light" height="40" id="svg_27" rx="18" transform="rotate(63.4349 258 325)" width="56" x="230" y="305"/>
   </g>
   <g id="svg_28" transform="matrix(1 0 0 1 13 -13)">
+   <ellipse class="part-shadow" data-for="s3:svg_28" cx="530" cy="356" rx="97" ry="63" fill="url(#groundShadow)"/>
    <ellipse class="light" cx="530" cy="350" id="svg_29" rx="90" ry="58" transform="rotate(-34 530 350)"/>
    <circle class="shape" cx="530" cy="350" id="CH_4" r="46"/>
    <g class="ch-deco" data-for="CH_4" pointer-events="none">
@@ -197,6 +245,7 @@
    <circle cx="548.9" cy="304.4" r="1.1" fill="#3a4250"/>
    <circle cx="575.6" cy="331.1" r="1.1" fill="#3a4250"/>
    </g>
+   <rect class="label-badge" data-for="s3:svg_31" x="540" y="284.5" width="50" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_31" x="565" y="300">PVD 4</text>
    <rect class="light" height="40" id="svg_32" rx="18" transform="rotate(116.565 461 331)" width="56" x="433" y="311"/>
    <rect class="light" height="40" id="svg_33" rx="18" transform="rotate(-34 608 348)" width="56" x="580" y="328"/>
@@ -223,7 +272,8 @@
    </g>
   </g>
   <g id="svg_47" transform="matrix(1 0 0 1 0 0)">
-   <path d="m215.29,472l86.96,-72l122.98,0l86.95,72l0,101.82l-86.95,72l-122.98,0l-86.96,-72l0,-101.82z" fill="#ffffff" id="BUFFER" stroke="#000000"/>
+   <ellipse class="part-shadow" data-for="s3:BUFFER" cx="363.5" cy="650" rx="152" ry="13" fill="url(#groundShadow)"/>
+  <path d="m215.29,472l86.96,-72l122.98,0l86.95,72l0,101.82l-86.95,72l-122.98,0l-86.96,-72l0,-101.82z" fill="#ffffff" id="BUFFER" stroke="#000000"/>
    <g id="ARM_1" transform="matrix(1 0 0 1 0 0)">
     <ellipse class="light" cx="363.58" cy="539.98" id="svg_48" rx="59.97" ry="42.23"/>
     <circle class="shape" cx="364.36" cy="463.6" id="Wafer_Chuck1" r="33.08"/>
@@ -239,7 +289,8 @@
    </g>
   </g>
   <g id="svg_56" transform="matrix(1 0 0 1 2 -67)">
-   <ellipse class="shape" cx="298" cy="470" id="CH_A" rx="42" ry="26" transform="matrix(1 0 0 1 0 0)"/>
+   <ellipse class="part-shadow" data-for="s3:CH_A" cx="298" cy="474" rx="48" ry="31" fill="url(#groundShadow)"/>
+  <ellipse class="shape" cx="298" cy="470" id="CH_A" rx="42" ry="26" transform="matrix(1 0 0 1 0 0)"/>
    <g class="ch-deco" data-for="CH_A" pointer-events="none">
    <ellipse cx="298" cy="470" rx="42" ry="26" fill="url(#chShade)"/>
    <path d="M263.2,462.8 A37,21 0 0 1 332.8,462.8" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="2" stroke-linecap="round"/>
@@ -247,7 +298,8 @@
    <ellipse cx="298" cy="470" rx="45" ry="29" fill="none" stroke="url(#chFlange)" stroke-width="3.6"/>
    <ellipse cx="298" cy="470" rx="42.8" ry="26.8" fill="none" stroke="#454545" stroke-width="0.9"/>
    </g>
-   <ellipse class="shape" cx="422" cy="470" id="CH_B" rx="42" ry="26"/>
+   <ellipse class="part-shadow" data-for="s3:CH_B" cx="422" cy="474" rx="48" ry="31" fill="url(#groundShadow)"/>
+  <ellipse class="shape" cx="422" cy="470" id="CH_B" rx="42" ry="26"/>
    <g class="ch-deco" data-for="CH_B" pointer-events="none">
    <ellipse cx="422" cy="470" rx="42" ry="26" fill="url(#chShade)"/>
    <path d="M387.2,462.8 A37,21 0 0 1 456.8,462.8" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="2" stroke-linecap="round"/>
@@ -255,11 +307,16 @@
    <ellipse cx="422" cy="470" rx="45" ry="29" fill="none" stroke="url(#chFlange)" stroke-width="3.6"/>
    <ellipse cx="422" cy="470" rx="42.8" ry="26.8" fill="none" stroke="#454545" stroke-width="0.9"/>
    </g>
+   <rect class="label-badge" data-for="s3:svg_59" x="238" y="466.5" width="24" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_59" x="250" y="482">A</text>
+   <rect class="label-badge" data-for="s3:svg_60" x="458" y="464.5" width="24" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_60" transform="matrix(1 0 0 1 0 0)" x="470" y="480">B</text>
   </g>
+  <ellipse class="part-shadow" data-for="s3:LLA" cx="326.6" cy="649" rx="32" ry="7" fill="url(#groundShadow)"/>
   <path d="m298.6,598.72l0,0c5.16,0 9.33,-4.14 9.33,-9.25l37.33,0l0,0c0,5.11 4.17,9.25 9.33,9.25l0,37l0,0c-5.16,0 -9.33,4.14 -9.33,9.25l-37.33,0c0,-5.11 -4.17,-9.25 -9.33,-9.25l0,-37z" fill="#cccccc" id="LLA" stroke="#cccccc" transform="matrix(1 0 0 1 0 0)"/>
+  <ellipse class="part-shadow" data-for="s3:LLB" cx="418.4" cy="649" rx="32" ry="7" fill="url(#groundShadow)"/>
   <path d="m371.75,598.58l0,0c5.16,0 9.33,-4.18 9.33,-9.33l37.33,0l0,0c0,5.15 4.17,9.33 9.33,9.33l0,37.33l0,0c-5.16,0 -9.33,4.18 -9.33,9.33l-37.33,0c0,-5.15 -4.17,-9.33 -9.33,-9.33l0,-37.33z" fill="#cccccc" id="LLB" transform="matrix(1 0 0 1 0 0)"/>
+  <ellipse class="part-shadow" data-for="s3:CH_F" cx="498" cy="639" rx="40" ry="36" fill="url(#groundShadow)" transform="matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
   <circle class="shape" cx="498" cy="635" id="CH_F" r="34" transform="matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
    <g class="ch-deco" data-for="CH_F" pointer-events="none" transform="matrix(1.03114 0 0 1 -21.3287 -0.5)">
    <circle cx="498" cy="635" r="34" fill="url(#chShade)"/>
@@ -274,6 +331,7 @@
    <circle cx="498" cy="597.6" r="1.1" fill="#3a4250"/>
    <circle cx="530.4" cy="616.3" r="1.1" fill="#3a4250"/>
    </g>
+  <ellipse class="part-shadow" data-for="s3:CH_E" cx="244.53" cy="638" rx="40" ry="36" fill="url(#groundShadow)" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
   <circle class="shape" cx="244.53" cy="634" id="CH_E" r="34" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
    <g class="ch-deco" data-for="CH_E" pointer-events="none" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)">
    <circle cx="244.53" cy="634" r="34" fill="url(#chShade)"/>
@@ -288,8 +346,10 @@
    <circle cx="244.5" cy="596.6" r="1.1" fill="#3a4250"/>
    <circle cx="276.9" cy="615.3" r="1.1" fill="#3a4250"/>
    </g>
-  <text class="label" font-size="25.34" id="svg_69" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)" x="197.45" y="650">E</text>
-  <text class="label" font-size="103.4" id="svg_70" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)" x="546.46" y="649.5">F</text>
+  <rect class="label-badge" data-for="s3:svg_69" x="185.45" y="634.5" width="24" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
+   <text class="label" font-size="25.34" id="svg_69" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)" x="197.45" y="650">E</text>
+  <rect class="label-badge" data-for="s3:svg_70" x="534.46" y="634" width="24" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)"/>
+   <text class="label" font-size="103.4" id="svg_70" transform="matrix(1 0 0 1 0 0) matrix(1.03114 0 0 1 -21.3287 -0.5)" x="546.46" y="649.5">F</text>
   <text font-size="191.19" id="svg_86" text-anchor="middle" x="538" xml:space="preserve" y="431"/>
   <text font-size="191.19" id="svg_87" text-anchor="middle" x="556" xml:space="preserve" y="439"/>
   <text font-size="191.19" id="svg_88" text-anchor="middle" x="554" xml:space="preserve" y="455"/>
@@ -297,6 +357,7 @@
   <text class="blue" font-size="26" id="svg_90" text-anchor="end" transform="matrix(1 0 0 1 0 0)" x="541.14" y="438">COOL</text>
   <text class="blue" font-size="26" id="svg_91" text-anchor="end" x="243" y="441">COOL</text>
   <g id="SMIF_1" transform="matrix(1 0 0 1 -10 -54)">
+   <ellipse class="part-shadow" data-for="s3:SMIF_1" cx="335" cy="862" rx="42" ry="9" fill="url(#groundShadow)"/>
    <rect fill="#f7f7f7" height="156" id="smif1OuterFrame" rx="3" stroke="#000000" stroke-width="1.8" width="70" x="300" y="704"/>
    <rect fill="#ffffff" height="144" id="smif1InnerFrame" rx="2" stroke="#000000" stroke-width="1.2" width="62" x="304" y="708"/>
    <rect fill="#333333" height="42" id="smif1TopPanel" opacity="0.9" width="62" x="304" y="708"/>
@@ -353,6 +414,7 @@
    <path d="m312,842l46,0" fill="none" id="smif1FrameBottomHighlight" opacity="0.65" stroke="#000000" stroke-linecap="round" stroke-width="0.9"/>
    <text class="small" font-size="15.7" id="smif1Label" x="332.42" y="874">SMIF-1</text>
   </g>
+  <ellipse class="part-shadow" data-for="s3:CH_C" cx="173.75" cy="576" rx="47" ry="11" fill="url(#groundShadow)"/>
   <rect fill="#ffffff" height="102" id="CH_C" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="132.25" y="472"/>
    <g class="ch-deco" data-for="CH_C" pointer-events="none">
    <rect x="132.25" y="472" width="83" height="102" fill="url(#chShade)"/>
@@ -360,6 +422,7 @@
    <path d="M141.25,479 H206.25" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="2" stroke-linecap="round"/>
    <path d="M141.25,567 H206.25" fill="none" stroke="#141a24" stroke-opacity="0.28" stroke-width="3" stroke-linecap="round"/>
    </g>
+  <ellipse class="part-shadow" data-for="s3:CH_D" cx="553.25" cy="575.75" rx="47" ry="11" fill="url(#groundShadow)"/>
   <rect fill="#ffffff" height="102" id="CH_D" stroke="#000000" transform="matrix(1 0 0 1 0 0)" width="83" x="511.75" y="471.75"/>
    <g class="ch-deco" data-for="CH_D" pointer-events="none">
    <rect x="511.75" y="471.75" width="83" height="102" fill="url(#chShade)"/>
@@ -368,10 +431,13 @@
    <path d="M520.75,566.75 H585.75" fill="none" stroke="#141a24" stroke-opacity="0.28" stroke-width="3" stroke-linecap="round"/>
    </g>
   <g id="svg_61" transform="matrix(1 0 0 1 0 0) translate(141.11 475.891) scale(1.03148 1) translate(-141.11 -475.891) matrix(1.05667 0 0 1 -23.8457 -17)">
+   <rect class="label-badge" data-for="s3:svg_68" x="150" y="494.5" width="24" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_68" transform="matrix(1 0 0 1 0 0)" x="162" y="510">C</text>
+   <rect class="label-badge" data-for="s3:svg_65" x="544" y="491.5" width="24" height="20" rx="10" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.7" opacity="0.96"/>
    <text class="label" font-size="15" id="svg_65" x="556" y="507">D</text>
   </g>
   <g id="svg_123" transform="matrix(1 0 0 1 64.5 -54)">
+   <ellipse class="part-shadow" data-for="s3:svg_123" cx="335" cy="862" rx="42" ry="9" fill="url(#groundShadow)"/>
    <rect fill="#f7f7f7" height="156" id="svg_124" rx="3" stroke="#000000" stroke-width="1.8" width="70" x="300" y="704"/>
    <rect fill="#ffffff" height="144" id="svg_125" rx="2" stroke="#000000" stroke-width="1.2" width="62" x="304" y="708"/>
    <rect fill="#333333" height="42" id="svg_126" opacity="0.9" transform="matrix(1 0 0 1 0 0)" width="62" x="304" y="708"/>
