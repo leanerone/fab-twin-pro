@@ -178,6 +178,17 @@ function applyMatrixPoint(m, x, y) {
   return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }
 }
 
+function getFrozenCenterOrigin(el) {
+  const svg = el?.ownerSVGElement
+  if (!el || !svg || typeof el.getBBox !== 'function') return null
+  let bbox
+  try { bbox = el.getBBox() } catch (_) { return null }
+  const vb = svg.viewBox?.baseVal
+  const ox = vb ? vb.x : 0
+  const oy = vb ? vb.y : 0
+  return `${bbox.x + bbox.width / 2 - ox}px ${bbox.y + bbox.height / 2 - oy}px`
+}
+
 function getRotateOriginScreen(el) {
   const svg = el?.ownerSVGElement
   if (!el || !svg) return el ? getElementCenterRect(el) : { x: 0, y: 0 }
@@ -196,7 +207,7 @@ function applyPreviewTransform(el, state) {
     parts.push(`translate(${state.translateX}px, ${state.translateY}px)`)
   }
   if (state.rotate) {
-    el.style.transformBox = 'fill-box'
+    el.style.transformBox = state.originBox || 'fill-box'
     parts.push(state.rotate)
   }
   if (state.scale) {
@@ -219,7 +230,7 @@ function rotatePointAround(origin, point, deg) {
 
 function ensurePreviewState(previewStates, pid) {
   if (!previewStates.has(pid)) {
-    previewStates.set(pid, { translateX: 0, translateY: 0, rotate: '', scale: '', origin: '' })
+    previewStates.set(pid, { translateX: 0, translateY: 0, rotate: '', scale: '', origin: '', originBox: '' })
   }
   return previewStates.get(pid)
 }
@@ -235,6 +246,7 @@ function readPreviewStateFromEl(el) {
     rotate: rotateMatch ? `rotate(${rotateMatch[1]}deg)` : '',
     scale: scaleMatch ? `scale(${scaleMatch[1]})` : '',
     origin: el.style.transformOrigin || '',
+    originBox: el.style.transformBox || '',
   }
 }
 
@@ -472,7 +484,14 @@ function applyPreviewAction(container, ctm, el, state, action, onWarn) {
   }
   if (action.type === 'rotate') {
     const useCenter = !action.pivot || (action.pivot.x === 0 && action.pivot.y === 0)
-    state.origin = useCenter ? 'center' : `${action.pivot.x}px ${action.pivot.y}px`
+    if (useCenter) {
+      // 冻结旋转原点：fill-box center 会随子部件伸缩漂移，污染旋转轨迹（P1 落点 bug）
+      const frozen = getFrozenCenterOrigin(el)
+      state.origin = frozen || 'center'
+      state.originBox = frozen ? 'view-box' : ''
+    } else {
+      state.origin = `${action.pivot.x}px ${action.pivot.y}px`
+    }
     state.rotate = `rotate(${action.angle || 0}deg)`
     return
   }

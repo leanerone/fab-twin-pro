@@ -12,6 +12,7 @@
  */
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { evalWhen, resolveMotionRule, enrichMotionParams } from '../composables/useExprEval.motion'
+import { computeExtendVec } from '../motionDerivers/amatMetsput'
 import { playMotion } from '../composables/useMotionPlayback.motion'
 import { scopeSvgPaintIds } from '../utils/svgPaintScope'
 
@@ -347,6 +348,16 @@ async function playQueuedStep(stepName) {
       logEvent(stepName, `进腔: ${waferId} ${carrier} → ${pickupPart} → CH_${chamber}（${toArm}，LOT_ID=${lotId}）`, 'info')
     }
     params.to_angle = toAngle
+    const extVec = computeExtendVec(props.motionConfig?.ext, toArm, chamber, toAngle)
+    if (extVec) {
+      params.ext_dx = extVec.dx
+      params.ext_dy = extVec.dy
+      params.ret_dx = -extVec.dx
+      params.ret_dy = -extVec.dy
+      logEvent(stepName, `R轴伸缩: ${toArm} CH_${chamber} θ=${toAngle} ext=(${extVec.dx}, ${extVec.dy})`, 'info')
+    } else {
+      logEvent(stepName, `R轴伸缩参数缺失: arm=${toArm} ch=${chamber} θ=${toAngle} geo=${props.motionConfig?.ext?.extend_geometry ? 'ok' : 'missing'}`, 'warn')
+    }
   }
 
   if (stepName === 'WAFER_PROCESS_COMPLETE') {
@@ -380,6 +391,13 @@ async function playQueuedStep(stepName) {
     params.to_angle = carrierAngle
     params.pickup_part = armChuckPart('ARM_1')
     params.drop_part = armChuckPart('ARM_1')
+    const extVec = computeExtendVec(props.motionConfig?.ext, 'ARM_1', fromChamber, fromAngle)
+    if (extVec) {
+      params.ext_dx = extVec.dx
+      params.ext_dy = extVec.dy
+      params.ret_dx = -extVec.dx
+      params.ret_dy = -extVec.dy
+    }
     logEvent(stepName, `回载具: ${carrier}${slot || '1'} CH_${fromChamber} → Wafer_Chuck1 → ${carrier}（ARM_1，LOT_ID=${lotId}）`, 'info')
   }
 

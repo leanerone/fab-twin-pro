@@ -64,6 +64,7 @@ Thumbs.db
 # Frontend build
 frontend/dist/
 frontend/.vite/
+model-editor-standalone/.vite/
 
 # Backend
 backend/fabtwin.db

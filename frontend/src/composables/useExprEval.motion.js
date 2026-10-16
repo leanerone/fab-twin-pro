@@ -237,6 +237,14 @@ export function resolveMotionRule(rule, eventPayload) {
           next.angle = Number.isFinite(num) ? num : 0
         }
       }
+      if (next.type === 'offset') {
+        for (const key of ['offset_x', 'offset_y']) {
+          if (typeof next[key] === 'string') {
+            const num = Number(resolvePartIdTemplate(next[key], eventPayload))
+            next[key] = Number.isFinite(num) ? num : 0
+          }
+        }
+      }
       if (next.type === 'text' && next.content != null) {
         next.content = resolveTextTemplate(next.content, eventPayload)
       }

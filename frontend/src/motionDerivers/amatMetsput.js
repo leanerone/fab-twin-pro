@@ -34,6 +34,33 @@ function buildArmAngleMap(motionConfig) {
   return out
 }
 
+/**
+ * P1：计算机械臂 R 轴径向伸缩量（臂组局部坐标，写进 offset_x/offset_y）
+ * 几何：chuck 旋转后位置 = pivot + R(θ)·(chuckRest − pivot)；
+ * 屏幕位移 D = 腔心 − chuckPos；chuck 的 CSS translate 会被臂组上的 rotate(θ) 再旋转，
+ * 故局部量 L = R(−θ)·D；offset 写入时 y 翻号（offset_y 为 y-up）。
+ * @returns {{ dx: number, dy: number } | null} 局部伸缩量（dx=offset_x, dy=offset_y）
+ */
+export function computeExtendVec(ext, armId, chamberKey, angleDeg) {
+  const geo = ext?.extend_geometry
+  const arm = geo?.arms?.[armId]
+  const ch = geo?.chambers?.[normalizeKey(chamberKey)]
+  const deg = Number(angleDeg)
+  if (!arm || !ch || !Number.isFinite(deg)) return null
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const rx = arm.chuck_x - arm.pivot_x
+  const ry = arm.chuck_y - arm.pivot_y
+  const px = arm.pivot_x + rx * cos - ry * sin
+  const py = arm.pivot_y + rx * sin + ry * cos
+  const dx = ch.x - px
+  const dy = ch.y - py
+  const lx = dx * cos + dy * sin
+  const ly = -dx * sin + dy * cos
+  return { dx: +lx.toFixed(2), dy: +(-ly).toFixed(2) }
+}
+
 export function createAmatMetsputDeriver() {
   const lotRegistry = new Map()
   const waferPosRegistry = new Map()
@@ -146,6 +173,13 @@ export function createAmatMetsputDeriver() {
         params.cross_angle_to = crossTo
       }
       params.to_angle = toAngle
+      const v = computeExtendVec(ext, toArm, chamber, toAngle)
+      if (v) {
+        params.ext_dx = v.dx
+        params.ext_dy = v.dy
+        params.ret_dx = -v.dx
+        params.ret_dy = -v.dy
+      }
       return { ok: true, params, info: { lotId, carrier, slot, chamber, fromChamber, waferId } }
     }
 
@@ -176,6 +210,13 @@ export function createAmatMetsputDeriver() {
       params.to_angle = carrierAngle
       params.pickup_part = armChuckPart('ARM_1')
       params.drop_part = armChuckPart('ARM_1')
+      const v = computeExtendVec(ext, 'ARM_1', fromChamber, fromAngle)
+      if (v) {
+        params.ext_dx = v.dx
+        params.ext_dy = v.dy
+        params.ret_dx = -v.dx
+        params.ret_dy = -v.dy
+      }
       return { ok: true, params, info: { lotId, carrier, slot, fromChamber } }
     }
 

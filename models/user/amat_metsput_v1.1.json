@@ -237,9 +237,23 @@
         },
         {
           "phase": 6,
+          "target_part_id": "{drop_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{ext_dx}", "offset_y": "{ext_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 6,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
-            { "type": "snap", "to_part_id": "CH_{CHAMBER}", "duration": 1000, "easing": "linear" }
+            { "type": "rotate", "angle": 0, "axis": "z", "follow_part_id": "{drop_part}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 7,
+          "target_part_id": "{drop_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{ret_dx}", "offset_y": "{ret_dy}", "duration": 900, "easing": "linear" }
           ]
         }
       ]
@@ -258,27 +272,48 @@
         },
         {
           "phase": 2,
+          "target_part_id": "{pickup_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{ext_dx}", "offset_y": "{ext_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 3,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
             { "type": "snap", "to_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
           ]
         },
         {
-          "phase": 3,
+          "phase": 4,
+          "target_part_id": "{pickup_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{ret_dx}", "offset_y": "{ret_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "rotate", "angle": 0, "axis": "z", "follow_part_id": "{pickup_part}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 5,
           "target_part_id": "ARM_1",
           "actions": [
             { "type": "rotate", "angle": "{carrier}", "axis": "z", "duration": 1000, "easing": "linear" }
           ]
         },
         {
-          "phase": 3,
+          "phase": 5,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
             { "type": "rotate", "angle": "{carrier}", "axis": "z", "follow_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
           ]
         },
         {
-          "phase": 4,
+          "phase": 6,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
             { "type": "snap", "to_part_id": "{home}", "duration": 1000, "easing": "linear" }
@@ -345,6 +380,25 @@
       "to_angle": 205
     },
     "part_aliases": {},
-    "viewBox_fallback": [0, 0, 720, 900]
+    "viewBox_fallback": [0, 0, 720, 900],
+    "extend_geometry": {
+      "comment": "P1 机械臂 R 轴径向伸缩几何（根 user units，浏览器实测 rest 态）：arms=臂 pivot(fill-box 中心)+chuck 静止心；chambers=腔心",
+      "arms": {
+        "ARM_1": { "pivot_x": 363.58, "pivot_y": 506.36, "chuck_x": 364.36, "chuck_y": 463.60 },
+        "ARM_2": { "pivot_x": 360.02, "pivot_y": 277.00, "chuck_x": 360.09, "chuck_y": 213.49 }
+      },
+      "chambers": {
+        "A": { "x": 300.00, "y": 403.00 },
+        "B": { "x": 424.00, "y": 403.00 },
+        "C": { "x": 173.75, "y": 523.00 },
+        "D": { "x": 553.25, "y": 522.75 },
+        "E": { "x": 230.82, "y": 633.50 },
+        "F": { "x": 492.18, "y": 634.50 },
+        "1": { "x": 179.00, "y": 340.00 },
+        "2": { "x": 188.00, "y": 190.00 },
+        "3": { "x": 530.00, "y": 190.00 },
+        "4": { "x": 543.00, "y": 337.00 }
+      }
+    }
   }
 }
