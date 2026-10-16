@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import ModelUpload from '../components/ModelUpload.vue'
 import MotionPreview from '../components/MotionPreview.vue'
+import { scopeSvgPaintIds } from '../utils/svgPaintScope'
 
 const authStore = useAuthStore()
 
@@ -1339,6 +1340,11 @@ async function loadSvgInline(url) {
 }
 watch(svgPreviewUrl, (url) => loadSvgInline(url), { immediate: true })
 
+// 同一页面两处 v-html 挂载同一 SVG，paint server id 需各自隔离，
+// 否则 url(#id) 解析到隐藏副本会导致渐变/图案填充失效
+const svgInlineHtmlPreview = computed(() => scopeSvgPaintIds(svgInlineHtml.value))
+const svgInlineHtmlConfig = computed(() => scopeSvgPaintIds(svgInlineHtml.value))
+
 // === SVG 部件交互（点击 SVG 元素 ↔ 部件列表行 双向高亮） ===
 const selectedPartId = ref('')
 const svgInlineRef = ref(null)
@@ -1629,7 +1635,7 @@ onBeforeUnmount(() => {
           <h3>🖼️ SVG 预览</h3>
           <div class="svg-preview-wrapper">
             <div v-if="svgPreviewLoading" class="svg-loading">⏳ 加载中...</div>
-            <div v-else class="svg-inline" v-html="svgInlineHtml"></div>
+            <div v-else class="svg-inline" v-html="svgInlineHtmlPreview"></div>
           </div>
           <div class="svg-preview-url">🔗 {{ svgPreviewUrl }}</div>
         </div>
@@ -1771,7 +1777,7 @@ onBeforeUnmount(() => {
                   v-else
                   ref="svgInlineRef"
                   class="svg-inline"
-                  v-html="svgInlineHtml"
+                  v-html="svgInlineHtmlConfig"
                   @click="onSvgClick"
                   @mousedown="onSvgMouseDown"
                   @mousemove="onSvgMouseMove"

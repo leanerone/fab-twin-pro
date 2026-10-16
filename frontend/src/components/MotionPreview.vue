@@ -13,6 +13,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { evalWhen, resolveMotionRule, enrichMotionParams } from '../composables/useExprEval.motion'
 import { playMotion } from '../composables/useMotionPlayback.motion'
+import { scopeSvgPaintIds } from '../utils/svgPaintScope'
 
 const props = defineProps({
   /** SVG 文件 URL */
@@ -113,7 +114,7 @@ async function loadSvg() {
     let svgText = ''
     // 先尝试 HTTP fetch
     try {
-      const resp = await fetch(props.svgUrl)
+      const resp = await fetch(props.svgUrl, { cache: 'no-store' })
       if (resp.ok) {
         svgText = await resp.text()
         // Vite dev server 对不存在的路径返回 SPA index.html（200 OK），需要检测
@@ -147,7 +148,7 @@ async function loadSvg() {
         throw new Error('返回内容不是 SVG: ' + parseErr.message)
       }
     }
-    svgInline.value = svgText
+    svgInline.value = scopeSvgPaintIds(svgText)
     // 等待 DOM 更新后缓存初始 transform
     await nextTick()
     cacheInitialTransforms()

@@ -20,6 +20,7 @@ import {
 } from '../composables/useMotionPlayback'
 import { evalWhen, resolveMotionRule, extractParamKeys } from '../composables/useExprEval'
 import { getMotionDeriver } from '../motionDerivers'
+import { scopeSvgPaintIds } from '../utils/svgPaintScope'
 import api from '../api'
 
 const props = defineProps({
@@ -83,9 +84,9 @@ async function loadAssets() {
     return
   }
   try {
-    const resp = await fetch(svgUrl)
+    const resp = await fetch(svgUrl, { cache: 'no-store' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    svgMarkup.value = await resp.text()
+    svgMarkup.value = scopeSvgPaintIds(await resp.text())
   } catch (e) {
     loadError.value = `SVG 加载失败: ${e.message}`
     return

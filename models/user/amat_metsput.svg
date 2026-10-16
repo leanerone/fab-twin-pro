@@ -33,7 +33,7 @@
    <path d="M0.05,0 L0.05,0.05 M0,0.05 L0.05,0.05" fill="none" stroke="rgba(20,25,40,0.32)" stroke-width="0.008"/>
   </pattern>
   <!-- 晶圆质感 = 彩虹底 + 网格叠加 -->
-  <pattern id="waferPattern" width="1" height="1" patternUnits="objectBoundingBox">
+  <pattern id="waferPattern" width="1" height="1" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox">
    <rect width="1" height="1" fill="url(#rainbowGrad)"/>
    <rect width="1" height="1" fill="url(#dieGrid)"/>
   </pattern>
