@@ -15,9 +15,9 @@
             .tiny { font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 700; fill: #222; text-anchor: middle; }
             /* === 晶圆真实化（阶段1 v2：彩虹硅片） === */
             /* 俯视晶圆：彩虹薄膜干涉色 + die 网格纹理（waferPattern 嵌套 pattern） */
-            #Group1_CST_TOPVIEW circle, #Group2_CST_TOPVIEW circle { fill: url(#waferPattern); stroke: #2f3a4d; stroke-width: 1.2; }
+            #Group1_CST_TOPVIEW circle[id^="LLA"], #Group2_CST_TOPVIEW circle[id^="LLB"] { fill: url(#waferPattern); stroke: #2f3a4d; stroke-width: 1.2; }
             /* cassette 侧视片槽：金属圆柱侧光，亮银叠片 */
-            #Group1_CST path[id^="L"], #Group2_CST path[id^="R"] { stroke: url(#slotGrad); stroke-width: 0.75; stroke-linecap: round; }</style>
+            #Group1_CST rect[id^="L"], #Group2_CST rect[id^="R"] { fill: url(#slotMetal); stroke: #10141a; stroke-width: 0.18; }</style>
   <!-- 彩虹薄膜干涉色（斜向，参考真实晶圆照片） -->
   <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1">
    <stop offset="0%" stop-color="#ff5f6d"/>
@@ -43,6 +43,24 @@
    <stop offset="25%" stop-color="#f2f6fb"/>
    <stop offset="55%" stop-color="#ccd6e5"/>
    <stop offset="100%" stop-color="#71839f"/>
+  </linearGradient>
+  <radialGradient id="waferShade" cx="0.38" cy="0.32" r="0.78">
+   <stop offset="0" stop-color="#ffffff" stop-opacity="0.4"/>
+   <stop offset="0.45" stop-color="#dde8f6" stop-opacity="0.1"/>
+   <stop offset="0.8" stop-color="#8395b8" stop-opacity="0.16"/>
+   <stop offset="1" stop-color="#16233a" stop-opacity="0.5"/>
+  </radialGradient>
+  <linearGradient id="edgeMetal" x1="0" y1="0" x2="1" y2="1">
+   <stop offset="0" stop-color="#ffffff"/>
+   <stop offset="0.35" stop-color="#a9b4c4"/>
+   <stop offset="0.6" stop-color="#eef3f9"/>
+   <stop offset="1" stop-color="#59647a"/>
+  </linearGradient>
+  <linearGradient id="slotMetal" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#f2f6fb"/>
+   <stop offset="0.45" stop-color="#c3ccd9"/>
+   <stop offset="0.8" stop-color="#79828f"/>
+   <stop offset="1" stop-color="#3f4650"/>
   </linearGradient>
 </defs>
 <g class="layer">
@@ -133,31 +151,31 @@
     <path d="m322.02,769.98l28.3,0a3.03,3 0 0 1 3.03,3l0,45m-31.33,-48a3.03,3 0 0 0 -3.03,3l0,45" fill="none" id="POD_1" opacity="0.52" stroke="#4b5563" transform="matrix(1 0 0 1 0 0)"/>
     <g id="Group1_CST" transform="matrix(1 0 0 1 0.3 0.4)">
      <rect fill="#333333" height="34" id="CASSETTE_1" opacity="0.86" stroke="#000000" stroke-width="0.8" transform="matrix(1.43902 0 0 1.01042 -172.414 12.4824)" width="18" x="344.52" y="757.96"/>
-     <path d="m326,785.78l20,0" fill="#b2b2b2" id="L25" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,786.78l20,0" fill="#b2b2b2" id="L24" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,787.78l20,0" fill="#b2b2b2" id="L23" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,788.78l20,0" fill="#b2b2b2" id="L22" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,789.78l20,0" fill="#b2b2b2" id="L21" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-     <path d="m326,790.78l20,0" fill="#b2b2b2" id="L20" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,791.78l20,0" fill="#b2b2b2" id="L19" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,792.78l20,0" fill="#b2b2b2" id="L18" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,793.78l20,0" fill="#b2b2b2" id="L17" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,794.78l20,0" fill="#b2b2b2" id="L16" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,795.78l20,0" fill="#b2b2b2" id="L15" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,796.78l20,0" fill="#b2b2b2" id="L14" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-     <path d="m326,797.78l20,0" fill="#b2b2b2" id="L13" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,798.78l20,0" fill="#b2b2b2" id="L12" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,799.78l20,0" fill="#b2b2b2" id="L11" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,800.78l20,0" fill="#b2b2b2" id="L10" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,801.78l20,0" fill="#b2b2b2" id="L9" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,802.78l20,0" fill="#b2b2b2" id="L8" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,803.78l20,0" fill="#b2b2b2" id="L7" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,804.78l20,0" fill="#b2b2b2" id="L6" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,805.78l20,0" fill="#b2b2b2" id="L5" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,806.78l20,0" fill="#b2b2b2" id="L4" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,807.78l20,0" fill="#b2b2b2" id="L3" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,808.78l20,0" fill="#b2b2b2" id="L2" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,809.78l20,0" fill="#b2b2b2" id="L1" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
+     <rect x="325.8" y="785.37" width="20.4" height="0.82" rx="0.41" id="L25" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="786.37" width="20.4" height="0.82" rx="0.41" id="L24" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="787.37" width="20.4" height="0.82" rx="0.41" id="L23" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="788.37" width="20.4" height="0.82" rx="0.41" id="L22" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="789.37" width="20.4" height="0.82" rx="0.41" id="L21" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="790.37" width="20.4" height="0.82" rx="0.41" id="L20" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="791.37" width="20.4" height="0.82" rx="0.41" id="L19" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="792.37" width="20.4" height="0.82" rx="0.41" id="L18" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="793.37" width="20.4" height="0.82" rx="0.41" id="L17" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="794.37" width="20.4" height="0.82" rx="0.41" id="L16" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="795.37" width="20.4" height="0.82" rx="0.41" id="L15" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="796.37" width="20.4" height="0.82" rx="0.41" id="L14" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="797.37" width="20.4" height="0.82" rx="0.41" id="L13" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="798.37" width="20.4" height="0.82" rx="0.41" id="L12" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="799.37" width="20.4" height="0.82" rx="0.41" id="L11" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="800.37" width="20.4" height="0.82" rx="0.41" id="L10" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="801.37" width="20.4" height="0.82" rx="0.41" id="L9" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="802.37" width="20.4" height="0.82" rx="0.41" id="L8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="803.37" width="20.4" height="0.82" rx="0.41" id="L7" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="804.37" width="20.4" height="0.82" rx="0.41" id="L6" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="805.37" width="20.4" height="0.82" rx="0.41" id="L5" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="806.37" width="20.4" height="0.82" rx="0.41" id="L4" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="807.37" width="20.4" height="0.82" rx="0.41" id="L3" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="808.37" width="20.4" height="0.82" rx="0.41" id="L2" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="809.37" width="20.4" height="0.82" rx="0.41" id="L1" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
     </g>
     <g id="smif1Handle">
      <rect fill="#000000" height="30" id="smif1HandleLeft" opacity="0.52" transform="matrix(1 0 0 0.244962 -1182.89 -2101.13)" width="3" x="1498.74" y="11779.46"/>
@@ -196,31 +214,31 @@
     <path d="m322.02,769.98l28.3,0a3.03,3 0 0 1 3.03,3l0,45m-31.33,-48a3.03,3 0 0 0 -3.03,3l0,45" fill="none" id="POD_2" opacity="0.52" stroke="#4b5563" transform="matrix(1 0 0 1 0 0)"/>
     <g id="Group2_CST">
      <rect fill="#333333" height="34" id="CASSETTE_2" opacity="0.86" stroke="#000000" stroke-width="0.8" transform="matrix(1.43902 0 0 1.01042 -172.414 12.4824)" width="18" x="344.52" y="757.96"/>
-     <path d="m326,785.78l20,0" fill="#333333" id="R25" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,786.78l20,0" fill="#333333" id="R24" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,787.78l20,0" fill="#333333" id="R23" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,788.78l20,0" fill="#333333" id="R22" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,789.78l20,0" fill="#333333" id="R21" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-     <path d="m326,790.78l20,0" fill="#333333" id="R20" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,791.78l20,0" fill="#333333" id="R19" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,792.78l20,0" fill="#333333" id="R18" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,793.78l20,0" fill="#333333" id="R17" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,794.78l20,0" fill="#333333" id="R16" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,795.78l20,0" fill="#333333" id="R15" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,796.78l20,0" fill="#333333" id="R14" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0) matrix(1 0 0 1 0 0)"/>
-     <path d="m326,797.78l20,0" fill="#333333" id="R13" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,798.78l20,0" fill="#333333" id="R12" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,799.78l20,0" fill="#333333" id="R11" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,800.78l20,0" fill="#333333" id="R10" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,801.78l20,0" fill="#333333" id="R9" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,802.78l20,0" fill="#333333" id="R8" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,803.78l20,0" fill="#333333" id="R7" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,804.78l20,0" fill="#333333" id="R6" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,805.78l20,0" fill="#333333" id="R5" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
-     <path d="m326,806.78l20,0" fill="#333333" id="R4" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,807.78l20,0" fill="#333333" id="R3" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,808.78l20,0" fill="#333333" id="R2" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5"/>
-     <path d="m326,809.78l20,0" fill="#333333" id="R1" opacity="0.95" stroke="#000000" stroke-linecap="round" stroke-width="0.5" transform="matrix(1 0 0 1 0 0)"/>
+     <rect x="325.8" y="785.37" width="20.4" height="0.82" rx="0.41" id="R25" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="786.37" width="20.4" height="0.82" rx="0.41" id="R24" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="787.37" width="20.4" height="0.82" rx="0.41" id="R23" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="788.37" width="20.4" height="0.82" rx="0.41" id="R22" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="789.37" width="20.4" height="0.82" rx="0.41" id="R21" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="790.37" width="20.4" height="0.82" rx="0.41" id="R20" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="791.37" width="20.4" height="0.82" rx="0.41" id="R19" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="792.37" width="20.4" height="0.82" rx="0.41" id="R18" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="793.37" width="20.4" height="0.82" rx="0.41" id="R17" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="794.37" width="20.4" height="0.82" rx="0.41" id="R16" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="795.37" width="20.4" height="0.82" rx="0.41" id="R15" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="796.37" width="20.4" height="0.82" rx="0.41" id="R14" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="797.37" width="20.4" height="0.82" rx="0.41" id="R13" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="798.37" width="20.4" height="0.82" rx="0.41" id="R12" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="799.37" width="20.4" height="0.82" rx="0.41" id="R11" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="800.37" width="20.4" height="0.82" rx="0.41" id="R10" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="801.37" width="20.4" height="0.82" rx="0.41" id="R9" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="802.37" width="20.4" height="0.82" rx="0.41" id="R8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="803.37" width="20.4" height="0.82" rx="0.41" id="R7" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="804.37" width="20.4" height="0.82" rx="0.41" id="R6" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="805.37" width="20.4" height="0.82" rx="0.41" id="R5" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="806.37" width="20.4" height="0.82" rx="0.41" id="R4" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="807.37" width="20.4" height="0.82" rx="0.41" id="R3" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="808.37" width="20.4" height="0.82" rx="0.41" id="R2" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
+     <rect x="325.8" y="809.37" width="20.4" height="0.82" rx="0.41" id="R1" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.18"/>
     </g>
     <g id="smif2Handle">
      <rect fill="#000000" height="30" id="svg_194" opacity="0.52" transform="matrix(1 0 0 0.244962 -1182.89 -2101.13)" width="3" x="1498.74" y="11779.46"/>
@@ -272,6 +290,12 @@
    <circle cx="155" cy="771" fill="#000000" id="LLA23" r="23" stroke="#000000"/>
    <circle cx="155" cy="771" fill="#000000" id="LLA24" r="23" stroke="#000000"/>
    <circle cx="155" cy="771" fill="#000000" id="LLA25" r="23" stroke="#000000"/>
+   <g class="wafer-deco" pointer-events="none">
+    <circle cx="155" cy="771" r="23" fill="url(#waferShade)"/>
+    <circle cx="155" cy="771" r="22.1" fill="none" stroke="url(#edgeMetal)" stroke-width="1.5"/>
+    <path d="M138.5,757.5 A20.8,20.8 0 0 1 148.5,750.6" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M150.8,747.5 L155,752.2 L159.2,747.5 Z" fill="#0d1117"/>
+   </g>
   </g>
   <g data-motion-base-visibility="hidden" id="Group2_CST_TOPVIEW" transform="translate(244.75 -157.75)">
    <path d="m131,749l0,43l48,0l0,-43" fill="none" id="LLB25_carrier_outline" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
@@ -300,6 +324,12 @@
    <circle cx="155" cy="771" fill="#000000" id="LLB23" r="23" stroke="#000000"/>
    <circle cx="155" cy="771" fill="#000000" id="LLB24" r="23" stroke="#000000"/>
    <circle cx="155" cy="771" fill="#000000" id="LLB25" r="23" stroke="#000000"/>
+   <g class="wafer-deco" pointer-events="none">
+    <circle cx="155" cy="771" r="23" fill="url(#waferShade)"/>
+    <circle cx="155" cy="771" r="22.1" fill="none" stroke="url(#edgeMetal)" stroke-width="1.5"/>
+    <path d="M138.5,757.5 A20.8,20.8 0 0 1 148.5,750.6" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M150.8,747.5 L155,752.2 L159.2,747.5 Z" fill="#0d1117"/>
+   </g>
   </g>
 </g>
 </svg>
