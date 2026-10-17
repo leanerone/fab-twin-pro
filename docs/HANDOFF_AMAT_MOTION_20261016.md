@@ -191,6 +191,30 @@ rotate 默认 center pivot 时，把原点**冻结为动作应用那一刻的 bb
 
 **浏览器实证**：杆 transform 实测 `scale(1, 2.15~3.30)` 随目标腔几何变化；晶圆中心与 chuck 中心距离轮询 d=0（LLA1 去程/回程、LLA2 回程均精确骑盘）。证据图：`N:\AI\amat_arm2_extend_evidence.png`、`N:\AI\amat_wafer_ride_evidence.png`（本机，未入库）。
 
+### 4.7 锚圆锁定旋转中心 + 整体金属化（2026-10-18，本轮提交）
+
+**用户反馈**：①杆伸出时组旋转中心偏移；②要求整体 SVG 金属化；③全流程回归测试。
+
+**锚圆方案（旋转中心修复）**：引擎 `transform-origin` 恒为 `fill-box center`，而 ARM 组 fill-box = 子元素几何并集——杆 scale 伸出 / chuck offset 伸出会改变组 bbox，导致旋转中心漂移（实测 12.4px）。修复 = 在 `ARM_1`/`ARM_2` 组内各加一个 **r=240、圆心=pivot** 的锚圆（`ARM1_Anchor`/`ARM2_Anchor`），把组 bbox 撑成恒定大圆，伸缩/旋转全程 pivot 不变。
+
+**锚圆关键坑（务必遵守）**：引擎 `resetMotionState()`（useMotionPlayback.js L377-391）复位时对容器内**所有带 id 元素** `removeAttribute('visibility')`——只写 `visibility="hidden"` 会被剥掉，锚圆渲染成 r=240 黑色巨圆盖住机台。正确写法三件套：
+```xml
+<circle ... visibility="hidden" data-motion-base-visibility="hidden" fill="none" pointer-events="none"/>
+```
+`data-motion-base-visibility="hidden"` 让引擎复位后恢复隐藏（L394-400）；`fill="none"` 双保险（getBBox/fill-box 与 fill 无关，几何照常参与计算；即使 visibility 再失效也不渲染）。
+
+**整体金属化（阶段4，纯 SVG 内 `<defs><style>` CSS 覆盖，引擎零改动）**：LLA/LLB 装载锁→chSteel + 描边；腔室底座椭圆（svg_11/17/23/29）→pedestalMetal（径向）；8 阀盖→valveMetal；SMIF 顶/底面板→panelMetal（深色阳极氧化）；SMIF 前窗→glassDark；BOARD→boardMetal；CASSETTE→cassetteMetal。至此晶圆/腔室/臂/SMIF/转盘/装载锁/阀盖/底座全部金属渐变，无扁平色块。
+
+**验证结果（机台页 `#/machine/AMAT-T1` 实测）**：
+| 检查项 | 结果 |
+|---|---|
+| 锚圆 hidden 持久化 | 复位后 computed visibility=hidden、fill=none，无黑圆回归 |
+| ARM_2 杆伸出组中心 | retracted/extended/restored 均 (360,277)，drift=[0,0] |
+| 阶段4 全部 CSS | LLA→chSteel、底座→pedestalMetal、阀盖→valveMetal、SMIF→panelMetal/glassDark、BOARD→boardMetal、CASSETTE→cassetteMetal 全部生效 |
+| 全流程 7 事件回归 | 采样 334 tick/100s：双臂漂移 0px、无晶圆飞行、LLA1 精确归位、杆/chuck 结束态全 identity |
+
+**遗留**：`svg_1` 外框 rect 内曾混入乱码文本（不渲染，本轮已清理）；LLA2 归位差 310.7 为 demo 序列设计（SLOT2 无 COMPLETE 事件），非缺陷。
+
 ---
 
 ## 5. DB 导入资料（量产/本地库都要用）

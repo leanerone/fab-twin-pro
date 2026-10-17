@@ -22,7 +22,7 @@
             #CH_1, #CH_2, #CH_3, #CH_4, #CH_E, #CH_F, #CH_A, #CH_B, #CH_C, #CH_D { fill: url(#chSteel); }
             #CH_C, #CH_D { stroke: #3a4250; }
             #svg_36, #svg_38, #Wafer_Chuck1, #Wafer_Chuck2, #svg_48 { fill: url(#armSteel); }
-            #svg_39, #svg_51 { fill: url(#armBlade); }
+            #svg_39, #svg_51, #ARM1_Link, #ARM2_Link { fill: url(#armBlade); }
 
             /* === 整体光影收尾（阶段3） === */
             #smif1OuterFrame, #svg_124 { fill: url(#smifShell); }
@@ -30,6 +30,22 @@
             #svg_35, #BUFFER { fill: url(#deckPlate); }
             #svg_1 { fill: url(#framePlate); }
             #svg_13, #svg_19, #svg_25, #svg_31, #svg_59, #svg_60, #svg_68, #svg_65, #svg_69, #svg_70 { fill: #eef3fa; }
+
+            /* === 整体金属化（阶段4：剩余元素） === */
+            /* 装载锁 LLA/LLB：不锈钢主体 */
+            #LLA, #LLB { fill: url(#chSteel); stroke: #5b6679; stroke-width: 1.6; }
+            /* 腔室底座椭圆台：径向金属 pedestal */
+            #svg_11, #svg_17, #svg_23, #svg_29 { fill: url(#pedestalMetal); }
+            /* 腔室阀盖/灯罩矩形：拉丝金属 */
+            #svg_14, #svg_15, #svg_20, #svg_21, #svg_26, #svg_27, #svg_32, #svg_33 { fill: url(#valveMetal); }
+            /* SMIF 深色面板（顶控板/底座）：深色阳极氧化金属 */
+            #smif1TopPanel, #svg_126, #smif1BasePanel, #svg_198 { fill: url(#panelMetal); }
+            /* SMIF 承载板：亮金属 */
+            #BOARD_1, #BOARD_2 { fill: url(#boardMetal); }
+            /* SMIF 前显示窗：深色玻璃 */
+            #smif1FrontPanel, #svg_199 { fill: url(#glassDark); }
+            /* cassette 外壳：深色半透明金属 */
+            #CASSETTE_1, #CASSETTE_2 { fill: url(#cassetteMetal); }
 </style>
   <!-- 彩虹薄膜干涉色（斜向，参考真实晶圆照片） -->
   <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1">
@@ -142,10 +158,49 @@
    <stop offset="0" stop-color="#ffffff"/>
    <stop offset="1" stop-color="#edf0f5"/>
   </linearGradient>
+  <!-- === 整体金属化（阶段4） === -->
+  <!-- 腔室底座椭圆台：左上光源径向金属 -->
+  <radialGradient id="pedestalMetal" cx="0.38" cy="0.3" r="0.9">
+   <stop offset="0" stop-color="#ffffff"/>
+   <stop offset="0.45" stop-color="#dbe2ec"/>
+   <stop offset="0.8" stop-color="#a7b2c2"/>
+   <stop offset="1" stop-color="#6e7989"/>
+  </radialGradient>
+  <!-- 阀盖拉丝金属：纵向微渐变 -->
+  <linearGradient id="valveMetal" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#f6f8fb"/>
+   <stop offset="0.5" stop-color="#c2cbd7"/>
+   <stop offset="1" stop-color="#8a94a4"/>
+  </linearGradient>
+  <!-- 深色阳极氧化面板 -->
+  <linearGradient id="panelMetal" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#4b5563"/>
+   <stop offset="0.5" stop-color="#2f3743"/>
+   <stop offset="1" stop-color="#171d26"/>
+  </linearGradient>
+  <!-- 承载板亮金属 -->
+  <linearGradient id="boardMetal" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#f8fafc"/>
+   <stop offset="0.55" stop-color="#d3dae4"/>
+   <stop offset="1" stop-color="#9aa5b4"/>
+  </linearGradient>
+  <!-- 前窗深色玻璃 -->
+  <linearGradient id="glassDark" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#1e2836"/>
+   <stop offset="0.35" stop-color="#0d131c"/>
+   <stop offset="1" stop-color="#05080d"/>
+  </linearGradient>
+  <!-- cassette 外壳深色金属 -->
+  <linearGradient id="cassetteMetal" x1="0" y1="0" x2="1" y2="0">
+   <stop offset="0" stop-color="#565f6e"/>
+   <stop offset="0.3" stop-color="#3a414d"/>
+   <stop offset="0.75" stop-color="#232933"/>
+   <stop offset="1" stop-color="#414a58"/>
+  </linearGradient>
 </defs>
 <g class="layer">
   <title>Layer 1</title>
-  <rect class="frame" fill="#000000" height="820" id="svg_1" width="640" x="44.53" y="34.56">是s sdad</rect>
+  <rect class="frame" fill="#000000" height="820" id="svg_1" width="640" x="44.53" y="34.56"/>
   <text class="blue" id="svg_2" x="86" y="116">Ti/TiN</text>
   <text class="blue" id="svg_3" text-anchor="end" x="620" y="116">AL</text>
   <text class="blue" font-size="26" id="svg_4" transform="matrix(1 0 0 1 0 0)" x="57" y="286">AL</text>
@@ -254,6 +309,10 @@
    <circle class="shape" cx="360" cy="278" id="svg_35" r="124" transform="matrix(1 0 0 1 0 0) matrix(0.854791 0.518972 -0.518972 0.854791 196.549 -146.462)"/>
    <text class="tiny" font-size="11" id="svg_42" transform="matrix(1 0 0 1 0 0)" x="360" y="193">WAFER HANDLER ROBOTS</text>
    <g id="ARM_2" transform="matrix(1 0 0 1 0 0)">
+    <!-- 锚圆：撑住 fill-box 恒定，防止杆伸出时组旋转中心漂移（不参与渲染/交互） -->
+    <circle cx="360.02" cy="277" r="240" visibility="hidden" data-motion-base-visibility="hidden" fill="none" id="ARM2_Anchor" pointer-events="none"/>
+    <!-- 伸缩臂杆（收拢为自然态）：伸出时 scale_y 拉长 + offset_y 保持顶端藏 chuck 下、底端藏轮毂内 -->
+    <rect class="shape" id="ARM2_Link" x="352" y="233.5" width="14" height="61.5" rx="7"/>
     <circle class="shape" cx="360" cy="278" id="svg_36" r="28" transform="matrix(1 0 0 1 0 0)"/>
     <circle class="shape" cx="359" cy="213.5" id="Wafer_Chuck2" r="34.5"/>
     <circle class="shape" cx="360.5" cy="341.5" id="svg_38" r="33.5"/>
@@ -300,6 +359,10 @@
    <ellipse class="part-shadow" data-for="s3:BUFFER" cx="363.5" cy="650" rx="152" ry="13" fill="url(#groundShadow)"/>
   <path d="m215.29,472l86.96,-72l122.98,0l86.95,72l0,101.82l-86.95,72l-122.98,0l-86.96,-72l0,-101.82z" fill="#ffffff" id="BUFFER" stroke="#000000"/>
    <g id="ARM_1" transform="matrix(1 0 0 1 0 0)">
+    <!-- 锚圆：撑住 fill-box 恒定，防止杆伸出时组旋转中心漂移（不参与渲染/交互） -->
+    <circle cx="363.58" cy="506.36" r="240" visibility="hidden" data-motion-base-visibility="hidden" fill="none" id="ARM1_Anchor" pointer-events="none"/>
+    <!-- 伸缩臂杆（收拢为自然态）：伸出时 scale_y 拉长 + offset_y 保持顶端藏 chuck 下、底端藏基座碟内 -->
+    <rect class="shape" id="ARM1_Link" x="357" y="483.6" width="14" height="61.4" rx="7"/>
     <ellipse class="light" cx="363.58" cy="539.98" id="svg_48" rx="59.97" ry="42.23"/>
     <circle class="shape" cx="364.36" cy="463.6" id="Wafer_Chuck1" r="33.08"/>
     <path class="shape" d="M352,535 L376,535 L370,497 L358,497 Z" id="svg_51"/>
