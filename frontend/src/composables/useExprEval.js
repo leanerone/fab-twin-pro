@@ -191,6 +191,18 @@ export function resolveMotionRule(rule, eventPayload, ext = {}) {
       if (next.follow_part_id) next.follow_part_id = resolvePartIdTemplate(next.follow_part_id, eventPayload, ext)
       if (next.to_part_id) next.to_part_id = resolvePartIdTemplate(next.to_part_id, eventPayload, ext)
       if (next.target_part_id) next.target_part_id = resolvePartIdTemplate(next.target_part_id, eventPayload, ext)
+      // offset_x/offset_y 数值模板（如 {ext_dx}，值由 deriver 填入 params）：
+      // 历史上未解析，字面 "{ext_dx}" 进引擎 Number() 得 NaN 回退 0，chuck 伸缩从未生效
+      if (typeof next.offset_x === 'string' && next.offset_x.includes('{')) {
+        next.offset_x = resolvePartIdTemplate(next.offset_x, eventPayload, ext)
+      }
+      if (typeof next.offset_y === 'string' && next.offset_y.includes('{')) {
+        next.offset_y = resolvePartIdTemplate(next.offset_y, eventPayload, ext)
+      }
+      // scale_y 数值模板（如 {link_ext_sy}，伸缩臂杆用，值由 deriver 填入 params）
+      if (typeof next.scale_y === 'string' && next.scale_y.includes('{')) {
+        next.scale_y = resolvePartIdTemplate(next.scale_y, eventPayload, ext)
+      }
       if (next.type === 'rotate' || next.angle != null) {
         let raw = next.angle
         const token = typeof raw === 'string' ? raw.trim() : raw

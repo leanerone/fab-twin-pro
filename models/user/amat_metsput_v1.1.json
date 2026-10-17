@@ -182,15 +182,58 @@
           ]
         },
         {
-          "phase": 2,
+          "phase": 1,
           "target_part_id": "{carrier}{SLOT}",
+          "when": "params.has_entered_chamber",
           "actions": [
-            { "type": "text", "content": "{LOT_ID}_{SLOT}" },
-            { "type": "snap", "to_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+            { "type": "snap", "to_part_id": "CH_{from_chamber}", "duration": 0 }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{pickup_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{pk_ext_dx}", "offset_y": "{pk_ext_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{pickup_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_ext_oy}", "scale_y": "{pk_link_ext_sy}", "duration": 900, "easing": "linear" }
           ]
         },
         {
           "phase": 3,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "text", "content": "{LOT_ID}_{SLOT}" },
+            { "type": "snap", "to_part_id": "{pickup_part}", "duration": 300, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{pickup_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{pk_ret_dx}", "offset_y": "{pk_ret_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{pickup_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_ret_oy}", "scale_y": "{pk_link_ret_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "offset", "offset_x": "{pk_ret_rdx}", "offset_y": "{pk_ret_rdy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 5,
           "target_part_id": "{from_arm}",
           "when": "params.cross_arm",
           "actions": [
@@ -198,7 +241,7 @@
           ]
         },
         {
-          "phase": 3,
+          "phase": 5,
           "target_part_id": "{to_arm}",
           "when": "params.cross_arm",
           "actions": [
@@ -206,7 +249,7 @@
           ]
         },
         {
-          "phase": 3,
+          "phase": 5,
           "target_part_id": "{carrier}{SLOT}",
           "when": "params.cross_arm",
           "actions": [
@@ -214,7 +257,7 @@
           ]
         },
         {
-          "phase": 4,
+          "phase": 6,
           "target_part_id": "{carrier}{SLOT}",
           "when": "params.cross_arm",
           "actions": [
@@ -222,38 +265,52 @@
           ]
         },
         {
-          "phase": 5,
+          "phase": 7,
           "target_part_id": "{to_arm}",
           "actions": [
             { "type": "rotate", "angle": "{CHAMBER}", "axis": "z", "duration": 1000, "easing": "linear" }
           ]
         },
         {
-          "phase": 5,
+          "phase": 7,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
             { "type": "rotate", "angle": "{CHAMBER}", "axis": "z", "follow_part_id": "{to_arm}", "duration": 1000, "easing": "linear" }
           ]
         },
         {
-          "phase": 6,
+          "phase": 8,
           "target_part_id": "{drop_part}",
           "actions": [
             { "type": "offset", "offset_x": "{ext_dx}", "offset_y": "{ext_dy}", "duration": 900, "easing": "linear" }
           ]
         },
         {
-          "phase": 6,
-          "target_part_id": "{carrier}{SLOT}",
+          "phase": 8,
+          "target_part_id": "{drop_link}",
           "actions": [
-            { "type": "rotate", "angle": 0, "axis": "z", "follow_part_id": "{drop_part}", "duration": 900, "easing": "linear" }
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_ext_oy}", "scale_y": "{link_ext_sy}", "duration": 900, "easing": "linear" }
           ]
         },
         {
-          "phase": 7,
+          "phase": 8,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "offset", "offset_x": "{ext_rdx}", "offset_y": "{ext_rdy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 9,
           "target_part_id": "{drop_part}",
           "actions": [
             { "type": "offset", "offset_x": "{ret_dx}", "offset_y": "{ret_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 9,
+          "target_part_id": "{drop_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_ret_oy}", "scale_y": "{link_ret_sy}", "duration": 900, "easing": "linear" }
           ]
         }
       ]
@@ -265,9 +322,16 @@
       "rules": [
         {
           "phase": 1,
-          "target_part_id": "ARM_1",
+          "target_part_id": "{from_arm}",
           "actions": [
             { "type": "rotate", "angle": "{from_chamber}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "snap", "to_part_id": "CH_{from_chamber}", "duration": 0, "easing": "linear" }
           ]
         },
         {
@@ -278,10 +342,17 @@
           ]
         },
         {
+          "phase": 2,
+          "target_part_id": "{pickup_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_ext_oy}", "scale_y": "{link_ext_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
           "phase": 3,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
-            { "type": "snap", "to_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+            { "type": "snap", "to_part_id": "{pickup_part}", "duration": 300, "easing": "linear" }
           ]
         },
         {
@@ -293,30 +364,104 @@
         },
         {
           "phase": 4,
+          "target_part_id": "{pickup_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_ret_oy}", "scale_y": "{link_ret_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
-            { "type": "rotate", "angle": 0, "axis": "z", "follow_part_id": "{pickup_part}", "duration": 900, "easing": "linear" }
+            { "type": "offset", "offset_x": "{ret_rdx}", "offset_y": "{ret_rdy}", "duration": 900, "easing": "linear" }
           ]
         },
         {
           "phase": 5,
-          "target_part_id": "ARM_1",
+          "target_part_id": "{from_arm}",
+          "when": "params.cross_arm",
           "actions": [
-            { "type": "rotate", "angle": "{carrier}", "axis": "z", "duration": 1000, "easing": "linear" }
+            { "type": "rotate", "angle": "{Cross}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "{to_arm}",
+          "when": "params.cross_arm",
+          "actions": [
+            { "type": "rotate", "angle": "{Cross}", "axis": "z", "duration": 1000, "easing": "linear" }
           ]
         },
         {
           "phase": 5,
           "target_part_id": "{carrier}{SLOT}",
+          "when": "params.cross_arm",
           "actions": [
-            { "type": "rotate", "angle": "{carrier}", "axis": "z", "follow_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
+            { "type": "rotate", "angle": "{Cross}", "axis": "z", "follow_part_id": "{pickup_part}", "duration": 1000, "easing": "linear" }
           ]
         },
         {
           "phase": 6,
           "target_part_id": "{carrier}{SLOT}",
+          "when": "params.cross_arm",
           "actions": [
-            { "type": "snap", "to_part_id": "{home}", "duration": 1000, "easing": "linear" }
+            { "type": "snap", "to_part_id": "{drop_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 7,
+          "target_part_id": "{to_arm}",
+          "actions": [
+            { "type": "rotate", "angle": "{carrier}", "axis": "z", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 7,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "rotate", "angle": "{carrier}", "axis": "z", "follow_part_id": "{drop_part}", "duration": 1000, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 8,
+          "target_part_id": "{drop_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{pk_ext_dx}", "offset_y": "{pk_ext_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 8,
+          "target_part_id": "{drop_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_ext_oy}", "scale_y": "{pk_link_ext_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 8,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "offset", "offset_x": "{pk_ext_rdx}", "offset_y": "{pk_ext_rdy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 9,
+          "target_part_id": "{carrier}{SLOT}",
+          "actions": [
+            { "type": "snap", "to_part_id": "{home}", "duration": 300, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 10,
+          "target_part_id": "{drop_part}",
+          "actions": [
+            { "type": "offset", "offset_x": "{pk_ret_dx}", "offset_y": "{pk_ret_dy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 10,
+          "target_part_id": "{drop_link}",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_ret_oy}", "scale_y": "{pk_link_ret_sy}", "duration": 900, "easing": "linear" }
           ]
         }
       ]
@@ -384,8 +529,8 @@
     "extend_geometry": {
       "comment": "P1 机械臂 R 轴径向伸缩几何（根 user units，浏览器实测 rest 态）：arms=臂 pivot(fill-box 中心)+chuck 静止心；chambers=腔心",
       "arms": {
-        "ARM_1": { "pivot_x": 363.58, "pivot_y": 506.36, "chuck_x": 364.36, "chuck_y": 463.60 },
-        "ARM_2": { "pivot_x": 360.02, "pivot_y": 277.00, "chuck_x": 360.09, "chuck_y": 213.49 }
+        "ARM_1": { "pivot_x": 363.58, "pivot_y": 506.36, "chuck_x": 364.36, "chuck_y": 463.60, "link_lbase": 61.4 },
+        "ARM_2": { "pivot_x": 360.02, "pivot_y": 277.00, "chuck_x": 360.09, "chuck_y": 213.49, "link_lbase": 61.5 }
       },
       "chambers": {
         "A": { "x": 300.00, "y": 403.00 },
@@ -397,7 +542,9 @@
         "1": { "x": 179.00, "y": 340.00 },
         "2": { "x": 188.00, "y": 190.00 },
         "3": { "x": 530.00, "y": 190.00 },
-        "4": { "x": 543.00, "y": 337.00 }
+        "4": { "x": 543.00, "y": 337.00 },
+        "LLA": { "x": 326.75, "y": 613.25 },
+        "LLB": { "x": 399.75, "y": 613.25 }
       }
     }
   }

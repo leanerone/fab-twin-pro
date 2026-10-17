@@ -244,6 +244,11 @@ export function resolveMotionRule(rule, eventPayload) {
             next[key] = Number.isFinite(num) ? num : 0
           }
         }
+        // scale_y 数值模板（伸缩臂杆用）：解析失败回退 1（不缩放），避免杆塌缩不可见
+        if (typeof next.scale_y === 'string') {
+          const num = Number(resolvePartIdTemplate(next.scale_y, eventPayload))
+          next.scale_y = Number.isFinite(num) ? num : 1
+        }
       }
       if (next.type === 'text' && next.content != null) {
         next.content = resolveTextTemplate(next.content, eventPayload)

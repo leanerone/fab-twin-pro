@@ -10,7 +10,7 @@
 
 ## 0. 一句话状态
 
-**P1 晶圆落点偏差 bug 已修复并经 3 条路径浏览器验证全部精确命中（本次提交）；ARM_2 蛙腿双臂 / ARM_1 JEL 单臂正式 SVG 重画尚未开始，这是唯一断点。**
+**P1 晶圆落点偏差 bug 已修复；ARM_2 蛙腿双臂 / ARM_1 JEL 单臂正式 SVG 重画已于 2026-10-17 完成并经浏览器三路径复测全部精确命中（见 §4.5）。2026-10-17 追加：伸缩臂杆实体化 + 晶圆骑盘修复并浏览器实证闭环（见 §4.6，根因=动画配置走 DB 不走文件）。AMAT METSPUT 接入主线全部闭环，无遗留断点。**
 
 ---
 
@@ -155,6 +155,42 @@ rotate 默认 center pivot 时，把原点**冻结为动作应用那一刻的 bb
 ### 4.4 每阶段完成标准
 1. 三副本同步；2. 模型调试页按 §3.4 三路径复测落点；3. 机台详情页回放复测（历史曾出过回放矩阵覆盖静态 transform 的问题，现已修，留意回归）；4. 再提交。
 
+### 4.5 完成记录（2026-10-17）
+
+**实施方案（与 §4.2/4.3 原计划的偏差说明）**：最终采用「视觉升级、动画零改动」路线——新结构全部落在原 `ARM_1`/`ARM_2` 组内，动画引用的 9 个 id 原样保留，新增细节（轮毂塔法兰/螺栓、blade 吸附环/真空孔阵列、关节罩、基座塔内环等）放在 `g.arm-deco[pointer-events=none]` 内静态跟随旋转组。§4.2 规划的「肘铰半量 offset + 新 id + JSON 加规则」未实施，作为可选增强留待后续（当前 R 轴全量 offset 只作用 blade，视觉已可接受）。
+
+**新增关键约束（从代码挖掘，比本文档先前记录更细）**：
+- 动画引擎 `transform-origin` 恒为 `fill-box center`（useMotionPlayback.js）→ **SVG 组的渲染包围盒中心必须 == extend_geometry 中的 pivot 坐标**，差 1px 旋转就会甩尾。
+- CSS 渐变/滤镜引用 id `svg_36/38/39/48/51` 必须保留。
+- 运行时通过 bbox 中心校验：ARM_2 (360.02,277.00)、ARM_1 (363.58,506.36)、Wafer_Chuck1 (364.36,463.60)、Wafer_Chuck2 (359.00,213.50)。
+
+**验证结果（浏览器动画调试页，标准触发流程）**：
+| 检查项 | 结果 |
+|---|---|
+| DOM 中 13 个关键 id | 全部存在，ARM_2 含 7 子元素 / ARM_1 含 6 子元素 |
+| 可见副本 bbox 中心 | ARM_2=(360.00,277.00) Δ0.02；ARM_1=(363.58,506.36) Δ0.00，均 == pivot |
+| CHAMBER=A | ARM_1 旋转 matrix == 330° 精确，零平移分量 |
+| CHAMBER=E | ARM_1 == 225° 精确 |
+| CHAMBER=A（回程） | ARM_1 == 330° 精确 |
+| CHAMBER=1（cross_arm） | ARM_1==0°（Cross 位）+ ARM_2==250°（腔1），双臂交接正常 |
+| 三副本同步 | user/uploads/model-editor 三份均 56379 bytes |
+
+**遗留观察项**：调试页 DOM 中有 3-4 个 svg 实例，只有 1 个可见，`document.getElementById` 可能命中隐藏副本导致 getBBox 全 0；校验时用 `querySelectorAll` 过滤可见副本（§1 坑清单已记录取法）。
+
+### 4.6 伸缩臂杆 + 晶圆骑盘修复（2026-10-17，本轮提交）
+
+**用户反馈**：①画面看不到实体机械手臂；②晶圆不在吸附盘上、空中飞。
+
+**根因（重要教训）**：`/api/models/{model_id}` 的动画配置**从 Oracle `MACHINE_MODEL_CONFIGS.animation_config_json` 直读，不读文件**。此前只改了 JSON 文件没写库，页面跑的仍是旧配置——改 JSON 后必须按 §5 同步 DB 才生效（SVG 相反，拷文件即生效）。
+
+**修复内容**：
+- SVG 三副本：`ARM1_Link`/`ARM2_Link` 伸缩杆 rect（桁架杆，物理连接轮毂与 chuck）。
+- 引擎双链路（useMotionPlayback.js / .motion.js + 两侧 useExprEval）：新增 scaleY/scale_y 模板通道。
+- deriver amatMetsput.js：`computeExtendVec` 输出 `link_sy=(lbase+e)/lbase`、`link_oy=e/2`，`fillExtendParams` 注入 `link_ext_sy/oy`、`link_ret_sy/oy`。
+- JSON：`ext.extend_geometry.arms[].link_lbase`（ARM_1=61.4）+ CHAMBER_PS 8 条平行杆规则。
+
+**浏览器实证**：杆 transform 实测 `scale(1, 2.15~3.30)` 随目标腔几何变化；晶圆中心与 chuck 中心距离轮询 d=0（LLA1 去程/回程、LLA2 回程均精确骑盘）。证据图：`N:\AI\amat_arm2_extend_evidence.png`、`N:\AI\amat_wafer_ride_evidence.png`（本机，未入库）。
+
 ---
 
 ## 5. DB 导入资料（量产/本地库都要用）
@@ -225,10 +261,11 @@ COMMIT;
 
 ---
 
-## 7. 回家后的推荐执行顺序
+## 7. 后续推荐执行顺序（2026-10-17 更新：ARM SVG 断点已闭环）
 
-1. `git pull origin test3`，跑三路径冒烟（A / E / A→1 cross_arm），确认落点仍是 0 误差。
-2. 画 ARM_2 蛙腿正式 SVG（先确认 §4.2 下层叉决策点）→ 三副本同步 → 加 `{ext_hx}/{ext_hy}` 半量注入与 p6/p7 规则 → 浏览器验证。
-3. 画 ARM_1 JEL 式单臂 → 同样验证。
-4. 量产库按 §5 路径 B 导入 JSON、拷贝 SVG。
-5. 量产导入 SOP 文档（用户待办，可在本文档 §5 基础上扩成正式 SOP）。
+1. ~~画 ARM_2 / ARM_1 正式 SVG~~ ✅ 已完成（§4.5）。
+2. **M2 — AMAT-T1 RV 事件数据**：本地库造 AMAT-T1 的实时事件流（参照 `backend/seed_oxe_test_data.py` 的 OXE-01 模式），让机台详情页「实时模式」也能看 AMAT 动画回放。
+3. **M3 — 量产导入 SOP 沉淀**：把 §5 扩成正式 SOP（含三副本同步、bbox 中心校验、三路径复测检查单）。
+4. **M4 — 机型库扩展流水线**：以 AMAT-METSPUT 为模板，固化「SVG 绘制约束 → 动画 JSON → deriver → 调试页验证」的新机型接入流程。
+5. 量产库按 §5 路径 B 导入 JSON、拷贝 SVG（随下次上线）。
+6. 可选增强：ARM_2 肘铰半量 offset 动画（§4.5 偏差说明）、下层叉 `svg_38` 吸附点动画。

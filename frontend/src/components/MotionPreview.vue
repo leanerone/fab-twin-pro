@@ -245,6 +245,18 @@ async function triggerStep(stepName) {
 }
 
 async function playQueuedStep(stepName) {
+  // 填伸缩量参数：prefix 为空填放片侧 ext 系，'pk_' 填取还片侧；rdx/rdy 为 root 版（晶圆同步用）
+  const fillExtend = (params, v, prefix = '') => {
+    if (!v) return
+    params[`${prefix}ext_dx`] = v.dx
+    params[`${prefix}ext_dy`] = v.dy
+    params[`${prefix}ret_dx`] = -v.dx
+    params[`${prefix}ret_dy`] = -v.dy
+    params[`${prefix}ext_rdx`] = v.rdx
+    params[`${prefix}ext_rdy`] = v.rdy
+    params[`${prefix}ret_rdx`] = -v.rdx
+    params[`${prefix}ret_rdy`] = -v.rdy
+  }
   const motion = motions.value.find(m => m.step === stepName)
   if (!motion) {
     logEvent(stepName, '未找到 step', 'error')
@@ -318,6 +330,7 @@ async function playQueuedStep(stepName) {
       params.from_chamber = fromChamber
       params.from_angle = fromAngle
       params.from_part = `CH_${fromChamber}`
+      fillExtend(params, computeExtendVec(props.motionConfig?.ext, fromArm, fromChamber, fromAngle), 'pk_')
     } else {
       const pickupAngle = armAngleFor(fromArm, carrier)
       if (pickupAngle == null) {
@@ -327,6 +340,7 @@ async function playQueuedStep(stepName) {
       params.from_chamber = ''
       params.from_angle = pickupAngle
       params.from_part = pickupPart
+      fillExtend(params, computeExtendVec(props.motionConfig?.ext, fromArm, carrier, pickupAngle), 'pk_')
     }
     if (crossArm) {
       const crossFrom = armAngleFor(fromArm, 'Cross')
@@ -350,10 +364,7 @@ async function playQueuedStep(stepName) {
     params.to_angle = toAngle
     const extVec = computeExtendVec(props.motionConfig?.ext, toArm, chamber, toAngle)
     if (extVec) {
-      params.ext_dx = extVec.dx
-      params.ext_dy = extVec.dy
-      params.ret_dx = -extVec.dx
-      params.ret_dy = -extVec.dy
+      fillExtend(params, extVec)
       logEvent(stepName, `R轴伸缩: ${toArm} CH_${chamber} θ=${toAngle} ext=(${extVec.dx}, ${extVec.dy})`, 'info')
     } else {
       logEvent(stepName, `R轴伸缩参数缺失: arm=${toArm} ch=${chamber} θ=${toAngle} geo=${props.motionConfig?.ext?.extend_geometry ? 'ok' : 'missing'}`, 'warn')
@@ -371,34 +382,60 @@ async function playQueuedStep(stepName) {
       logEvent(stepName, `未找到 LOT_ID=${lotId} SLOT=${slot || '1'} 的上次腔体，请先触发 CHAMBER_PS`, 'warn')
       return
     }
-    const fromAngle = armAngleFor('ARM_1', fromChamber)
+    // 取片臂 = 实际服务该腔体的臂（CH_1-4 → ARM_2，A-F → ARM_1）；还片臂 = 服务载具的臂（LLA/LLB → ARM_1）
+    const chamberArm = findArmByPos(fromChamber)
+    if (!chamberArm) {
+      logEvent(stepName, `未在 arm_chamber_angles 中找到上次腔体 ${fromChamber}`, 'warn')
+      return
+    }
+    const returnArm = findArmByPos(carrier)
+    if (!returnArm) {
+      logEvent(stepName, `未在 arm_chamber_angles 中找到载具 ${carrier}`, 'warn')
+      return
+    }
+    const fromAngle = armAngleFor(chamberArm, fromChamber)
     if (fromAngle == null) {
-      logEvent(stepName, `未配置 ARM_1 到上次腔体 ${fromChamber} 的角度`, 'warn')
+      logEvent(stepName, `未配置 ${chamberArm} 到上次腔体 ${fromChamber} 的角度`, 'warn')
       return
     }
-    const carrierAngle = armAngleFor('ARM_1', carrier)
+    const carrierAngle = armAngleFor(returnArm, carrier)
     if (carrierAngle == null) {
-      logEvent(stepName, `未配置 ARM_1 到 ${carrier} 的角度`, 'warn')
+      logEvent(stepName, `未配置 ${returnArm} 到 ${carrier} 的角度`, 'warn')
       return
     }
-    params.ARM = 'ARM_1'
-    params.arm = 'ARM_1'
-    params.from_arm = 'ARM_1'
-    params.to_arm = 'ARM_1'
+    const crossArm = chamberArm !== returnArm
+    params.ARM = returnArm
+    params.arm = returnArm
+    params.from_arm = chamberArm
+    params.to_arm = returnArm
     params.from_chamber = fromChamber
     params.from_angle = fromAngle
     params.carrier_angle = carrierAngle
     params.to_angle = carrierAngle
-    params.pickup_part = armChuckPart('ARM_1')
-    params.drop_part = armChuckPart('ARM_1')
-    const extVec = computeExtendVec(props.motionConfig?.ext, 'ARM_1', fromChamber, fromAngle)
-    if (extVec) {
-      params.ext_dx = extVec.dx
-      params.ext_dy = extVec.dy
-      params.ret_dx = -extVec.dx
-      params.ret_dy = -extVec.dy
+    params.pickup_part = armChuckPart(chamberArm)
+    params.drop_part = armChuckPart(returnArm)
+    params.cross_arm = crossArm
+    if (crossArm) {
+      const crossFrom = armAngleFor(chamberArm, 'Cross')
+      const crossTo = armAngleFor(returnArm, 'Cross')
+      if (crossFrom == null) {
+        logEvent(stepName, `未配置 ${chamberArm} 的 Cross 角度`, 'warn')
+        return
+      }
+      if (crossTo == null) {
+        logEvent(stepName, `未配置 ${returnArm} 的 Cross 角度`, 'warn')
+        return
+      }
+      params.cross_angle_from = crossFrom
+      params.cross_angle_to = crossTo
     }
-    logEvent(stepName, `回载具: ${carrier}${slot || '1'} CH_${fromChamber} → Wafer_Chuck1 → ${carrier}（ARM_1，LOT_ID=${lotId}）`, 'info')
+    // 腔体取片侧伸缩量：blade 伸出进源腔（ext）/带片收回（ret）
+    fillExtend(params, computeExtendVec(props.motionConfig?.ext, chamberArm, fromChamber, fromAngle))
+    // cassette 还片侧伸缩量：blade 伸出到槽位（pk_ext）/抽刀（pk_ret）
+    fillExtend(params, computeExtendVec(props.motionConfig?.ext, returnArm, carrier, carrierAngle), 'pk_')
+    logEvent(stepName, crossArm
+      ? `回载具: ${carrier}${slot || '1'} CH_${fromChamber} → ${params.pickup_part} → Cross → ${params.drop_part} → ${carrier}（${chamberArm}→${returnArm}，LOT_ID=${lotId}）`
+      : `回载具: ${carrier}${slot || '1'} CH_${fromChamber} → ${params.pickup_part} → ${carrier}（${chamberArm}，LOT_ID=${lotId}）`, 'info')
   }
 
   const matchedRules = []

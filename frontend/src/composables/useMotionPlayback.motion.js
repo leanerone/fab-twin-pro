@@ -206,8 +206,10 @@ function applyPreviewTransform(el, state) {
   if (state.translateX || state.translateY) {
     parts.push(`translate(${state.translateX}px, ${state.translateY}px)`)
   }
-  if (state.rotate) {
+  if (state.rotate || state.originBox) {
     el.style.transformBox = state.originBox || 'fill-box'
+  }
+  if (state.rotate) {
     parts.push(state.rotate)
   }
   if (state.scale) {
@@ -344,9 +346,12 @@ function syncFollowerToSnap(plan, previewStates) {
 function animateFollowersWithLeader(followPlans, previewStates, duration, onPartBase) {
   return new Promise((resolve) => {
     const start = performance.now()
+    let rafId = 0
+    let timeoutId = 0
     const tick = (now) => {
       for (const plan of followPlans || []) syncFollowerToSnap(plan, previewStates)
       if (now - start >= duration) {
+        clearTimeout(timeoutId)
         for (const plan of followPlans || []) {
           syncFollowerToSnap(plan, previewStates)
           const st = previewStates.get(plan.followerId)
@@ -355,9 +360,14 @@ function animateFollowersWithLeader(followPlans, previewStates, duration, onPart
         resolve()
         return
       }
-      requestAnimationFrame(tick)
+      rafId = requestAnimationFrame(tick)
     }
-    requestAnimationFrame(tick)
+    rafId = requestAnimationFrame(tick)
+    // 后台/隐藏 tab 下 rAF 不触发，按 wall clock 兜底推进到终态
+    timeoutId = setTimeout(() => {
+      cancelAnimationFrame(rafId)
+      tick(start + duration + 1)
+    }, duration + 800)
   })
 }
 
@@ -480,6 +490,12 @@ function applyPreviewAction(container, ctm, el, state, action, onWarn) {
   if (action.type === 'offset') {
     state.translateX += (action.offset_x || 0) * ctm.a
     state.translateY += -((action.offset_y || 0) * ctm.d)
+    // 可选 scale_y：伸缩臂杆等单 action 内"平移+纵向缩放"同步补间（绝对赋值，收回时写 1）
+    if (action.scale_y != null) {
+      state.scale = `scale(${action.scale_x ?? 1}, ${action.scale_y})`
+      state.origin = 'center'
+      state.originBox = 'fill-box'
+    }
     return
   }
   if (action.type === 'rotate') {

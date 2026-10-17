@@ -130,7 +130,7 @@ function getStateMap(container, create = true) {
 }
 
 function ensureState(states, pid) {
-  if (!states.has(pid)) states.set(pid, { tx: 0, ty: 0, rotate: 0, scale: 1 })
+  if (!states.has(pid)) states.set(pid, { tx: 0, ty: 0, rotate: 0, scale: 1, scaleY: 1 })
   return states.get(pid)
 }
 
@@ -162,6 +162,9 @@ function visualCenter(ctx, pid) {
     if (id) ancestors.unshift(id)
     node = node.parentElement
   }
+  // 沿父链累计动态旋转量：CSS 中子元素的 translate 会被父级动态 rotate 一起旋转
+  // （p ↦ O + t + R(θ)(p − O)，t 在 R(θ) 内部），故各级 tx/ty 须按对应累计角旋转后再加。
+  let rotSum = 0
   let p = { x: g.cx, y: g.cy }
   for (const ancId of ancestors) {
     if (ancId === pid) continue
@@ -172,12 +175,21 @@ function visualCenter(ctx, pid) {
       const pivot = visualCenter(ctx, ancId)
       if (pivot) p = rotatePointAround(pivot, p, s.rotate)
     }
-    p.x += s.tx || 0
-    p.y += s.ty || 0
+    if (s.tx || s.ty) {
+      // 祖先平移在其父空间施加，仅受更高祖先旋转影响（不含自身 rotate）
+      const t = rotSum ? rotateVector(s.tx, s.ty, rotSum) : { x: s.tx, y: s.ty }
+      p.x += t.x
+      p.y += t.y
+    }
+    rotSum += s.rotate || 0
   }
   const st = states.get(pid)
-  p.x += st?.tx || 0
-  p.y += st?.ty || 0
+  if (st && (st.tx || st.ty)) {
+    // 自身平移受全部祖先动态旋转影响（典型：ARM 旋转后 chuck 伸出量随之转向）
+    const t = rotSum ? rotateVector(st.tx, st.ty, rotSum) : { x: st.tx, y: st.ty }
+    p.x += t.x
+    p.y += t.y
+  }
   return p
 }
 
@@ -321,7 +333,7 @@ function applyState(el, state, g) {
   const ly = state.tx * g.invB + state.ty * g.invD
   const parts = [`translate(${lx}px, ${ly}px)`]
   if (state.rotate) parts.push(`rotate(${state.rotate}deg)`)
-  if (state.scale !== 1) parts.push(`scale(${state.scale})`)
+  if (state.scale !== 1 || (state.scaleY ?? 1) !== 1) parts.push(`scale(${state.scale}, ${state.scaleY ?? 1})`)
   // 保留静态 SVG transform：CSS 内联 style.transform 会覆盖 presentation attribute，
   // 否则 Group1_CST_TOPVIEW（translate 171.75 -157.75）等带静态 transform 的部件，
   // 其静态平移会被清掉导致整组子件（晶圆）整体偏移。
@@ -401,6 +413,15 @@ function rotatePointAround(origin, point, deg) {
   }
 }
 
+// 向量旋转（y-down 坐标，正角度视觉顺时针，与 CSS/rotatePointAround 一致）
+function rotateVector(x, y, deg) {
+  const rad = (deg * Math.PI) / 180
+  return {
+    x: x * Math.cos(rad) - y * Math.sin(rad),
+    y: x * Math.sin(rad) + y * Math.cos(rad),
+  }
+}
+
 function toAngleNumber(value, onWarn) {
   const n = Number(value)
   if (Number.isFinite(n)) return n
@@ -427,6 +448,8 @@ function applyActionToState(ctx, pid, el, state, action) {
     case 'offset':
       state.tx += Number(action.offset_x) || 0
       state.ty += -(Number(action.offset_y) || 0) // y 向上为正
+      // 可选 scale_y：伸缩臂杆等单 action 内"平移+纵向缩放"同步补间（绝对赋值，收回时写 1）
+      if (action.scale_y != null) state.scaleY = Number(action.scale_y) || 1
       return {}
     case 'rotate': {
       if (action.follow_part_id) return { skipSelfRotate: true }
@@ -447,9 +470,13 @@ function applyActionToState(ctx, pid, el, state, action) {
       state.rotate = target
       return {}
     }
-    case 'scale':
-      state.scale = Number(action.scale_x ?? action.scale ?? 1) || 1
+    case 'scale': {
+      const s = Number(action.scale_x ?? action.scale ?? 1) || 1
+      state.scale = s
+      // 未给 scale_y 时保持旧语义（等比缩放）
+      state.scaleY = Number(action.scale_y ?? s) || 1
       return {}
+    }
     case 'opacity':
       if (el) el.style.opacity = String(action.to ?? 1)
       return {}
@@ -630,6 +657,12 @@ function animateFollowOrbits(ctx, orbits, instant) {
   const ease = easingFn(orbits.find(o => o.duration > 0)?.easing)
   return new Promise((resolve) => {
     const start = performance.now()
+    let rafId = 0
+    let timeoutId = 0
+    const finish = () => {
+      clearTimeout(timeoutId)
+      resolve()
+    }
     const tick = (now) => {
       const t = Math.min(1, (now - start) / maxDuration)
       const k = ease(t)
@@ -646,12 +679,18 @@ function animateFollowOrbits(ctx, orbits, instant) {
         }
       }
       if (t >= 1) {
-        resolve()
+        finish()
         return
       }
-      requestAnimationFrame(tick)
+      rafId = requestAnimationFrame(tick)
     }
-    requestAnimationFrame(tick)
+    rafId = requestAnimationFrame(tick)
+    // rAF 兜底：后台/隐藏 tab 中 rAF 不触发，await 会永久挂起并卡死后续 phase。
+    // 超时后按 wall clock 直接推进到终态（tick 内 t>=1 会写终值并 finish）。
+    timeoutId = setTimeout(() => {
+      cancelAnimationFrame(rafId)
+      tick(performance.now())
+    }, maxDuration + 800)
   })
 }
 

@@ -39,7 +39,8 @@ function buildArmAngleMap(motionConfig) {
  * 几何：chuck 旋转后位置 = pivot + R(θ)·(chuckRest − pivot)；
  * 屏幕位移 D = 腔心 − chuckPos；chuck 的 CSS translate 会被臂组上的 rotate(θ) 再旋转，
  * 故局部量 L = R(−θ)·D；offset 写入时 y 翻号（offset_y 为 y-up）。
- * @returns {{ dx: number, dy: number } | null} 局部伸缩量（dx=offset_x, dy=offset_y）
+ * @returns {{ dx: number, dy: number, rdx: number, rdy: number } | null}
+ *   dx/dy = 臂局部伸缩量（chuck 用）；rdx/rdy = root 空间伸缩量（晶圆同步平移用，父链纯平移时 1:1）
  */
 export function computeExtendVec(ext, armId, chamberKey, angleDeg) {
   const geo = ext?.extend_geometry
@@ -58,7 +59,38 @@ export function computeExtendVec(ext, armId, chamberKey, angleDeg) {
   const dy = ch.y - py
   const lx = dx * cos + dy * sin
   const ly = -dx * sin + dy * cos
-  return { dx: +lx.toFixed(2), dy: +(-ly).toFixed(2) }
+  // 伸缩量模长 e：伸缩臂杆 scale_y/offset_y 驱动参数（杆以收拢态为自然态，伸长 e）
+  const e = Math.hypot(lx, ly)
+  const lbase = Number(arm.link_lbase)
+  return {
+    dx: +lx.toFixed(2),
+    dy: +(-ly).toFixed(2),
+    rdx: +dx.toFixed(2),
+    rdy: +(-dy).toFixed(2),
+    e: +e.toFixed(2),
+    link_sy: Number.isFinite(lbase) && lbase > 0 ? +((lbase + e) / lbase).toFixed(4) : 1,
+  }
+}
+
+/**
+ * 填伸缩量参数：prefix 为空时填 ext/ext_rdx/ret/ret_rdy 系；prefix 为 'pk_' 时填取还片侧参数。
+ * 晶圆同步用 root 版（rdx/rdy），chuck 用臂局部版（dx/dy）。
+ */
+function fillExtendParams(params, v, prefix = '') {
+  if (!v) return
+  params[`${prefix}ext_dx`] = v.dx
+  params[`${prefix}ext_dy`] = v.dy
+  params[`${prefix}ret_dx`] = -v.dx
+  params[`${prefix}ret_dy`] = -v.dy
+  params[`${prefix}ext_rdx`] = v.rdx
+  params[`${prefix}ext_rdy`] = v.rdy
+  params[`${prefix}ret_rdx`] = -v.rdx
+  params[`${prefix}ret_rdy`] = -v.rdy
+  // 伸缩臂杆参数：伸出 scale_y 拉长 + offset_y=+e/2 保持顶端藏 chuck 下；收回反向
+  params[`${prefix}link_ext_sy`] = v.link_sy ?? 1
+  params[`${prefix}link_ext_oy`] = +((v.e || 0) / 2).toFixed(2)
+  params[`${prefix}link_ret_sy`] = 1
+  params[`${prefix}link_ret_oy`] = -(+((v.e || 0) / 2).toFixed(2))
 }
 
 export function createAmatMetsputDeriver() {
@@ -87,6 +119,11 @@ export function createAmatMetsputDeriver() {
   function armChuckPart(armId) {
     const m = String(armId || '').match(/(\d+)\s*$/)
     return `Wafer_Chuck${m ? m[1] : '1'}`
+  }
+
+  function armLinkPart(armId) {
+    const m = String(armId || '').match(/(\d+)\s*$/)
+    return `ARM${m ? m[1] : '1'}_Link`
   }
 
   /**
@@ -145,6 +182,8 @@ export function createAmatMetsputDeriver() {
       params.ARM = toArm
       params.pickup_part = pickupPart
       params.drop_part = dropPart
+      params.pickup_link = armLinkPart(fromArm)
+      params.drop_link = armLinkPart(toArm)
       params.cross_arm = crossArm
       params.has_entered_chamber = Boolean(fromChamber)
       if (fromChamber) {
@@ -155,6 +194,8 @@ export function createAmatMetsputDeriver() {
         params.from_chamber = fromChamber
         params.from_angle = fromAngle
         params.from_part = `CH_${fromChamber}`
+        // 取片侧（源腔）伸缩量：blade 伸出进源腔取片用
+        fillExtendParams(params, computeExtendVec(ext, fromArm, fromChamber, fromAngle), 'pk_')
       } else {
         const pickupAngle = armAngleFor(angleMap, fromArm, carrier)
         if (pickupAngle == null) {
@@ -163,6 +204,8 @@ export function createAmatMetsputDeriver() {
         params.from_chamber = ''
         params.from_angle = pickupAngle
         params.from_part = pickupPart
+        // 取片侧（cassette 槽位）伸缩量：blade 伸出到 LLA/LLB 取片用
+        fillExtendParams(params, computeExtendVec(ext, fromArm, carrier, pickupAngle), 'pk_')
       }
       if (crossArm) {
         const crossFrom = armAngleFor(angleMap, fromArm, 'Cross')
@@ -173,13 +216,8 @@ export function createAmatMetsputDeriver() {
         params.cross_angle_to = crossTo
       }
       params.to_angle = toAngle
-      const v = computeExtendVec(ext, toArm, chamber, toAngle)
-      if (v) {
-        params.ext_dx = v.dx
-        params.ext_dy = v.dy
-        params.ret_dx = -v.dx
-        params.ret_dy = -v.dy
-      }
+      // 放片侧（目标腔）伸缩量：blade 托片进腔/抽刀用
+      fillExtendParams(params, computeExtendVec(ext, toArm, chamber, toAngle))
       return { ok: true, params, info: { lotId, carrier, slot, chamber, fromChamber, waferId } }
     }
 
@@ -192,31 +230,49 @@ export function createAmatMetsputDeriver() {
       if (!fromChamber) {
         return { ok: false, warn: `未找到 LOT_ID=${lotId} SLOT=${slot || '1'} 的上次腔体，请先触发 CHAMBER_PS` }
       }
-      const fromAngle = armAngleFor(angleMap, 'ARM_1', fromChamber)
+      // 取片臂 = 实际服务该腔体的臂（CH_1-4 → ARM_2，A-F → ARM_1）；还片臂 = 服务载具的臂（LLA/LLB → ARM_1）
+      const chamberArm = findArmByPos(angleMap, fromChamber)
+      if (!chamberArm) {
+        return { ok: false, warn: `未在 arm_chamber_angles 中找到上次腔体 ${fromChamber}` }
+      }
+      const returnArm = findArmByPos(angleMap, carrier)
+      if (!returnArm) {
+        return { ok: false, warn: `未在 arm_chamber_angles 中找到载具 ${carrier}` }
+      }
+      const fromAngle = armAngleFor(angleMap, chamberArm, fromChamber)
       if (fromAngle == null) {
-        return { ok: false, warn: `未配置 ARM_1 到上次腔体 ${fromChamber} 的角度` }
+        return { ok: false, warn: `未配置 ${chamberArm} 到上次腔体 ${fromChamber} 的角度` }
       }
-      const carrierAngle = armAngleFor(angleMap, 'ARM_1', carrier)
+      const carrierAngle = armAngleFor(angleMap, returnArm, carrier)
       if (carrierAngle == null) {
-        return { ok: false, warn: `未配置 ARM_1 到 ${carrier} 的角度` }
+        return { ok: false, warn: `未配置 ${returnArm} 到 ${carrier} 的角度` }
       }
-      params.ARM = 'ARM_1'
-      params.arm = 'ARM_1'
-      params.from_arm = 'ARM_1'
-      params.to_arm = 'ARM_1'
+      const crossArm = chamberArm !== returnArm
+      params.ARM = returnArm
+      params.arm = returnArm
+      params.from_arm = chamberArm
+      params.to_arm = returnArm
       params.from_chamber = fromChamber
       params.from_angle = fromAngle
       params.carrier_angle = carrierAngle
       params.to_angle = carrierAngle
-      params.pickup_part = armChuckPart('ARM_1')
-      params.drop_part = armChuckPart('ARM_1')
-      const v = computeExtendVec(ext, 'ARM_1', fromChamber, fromAngle)
-      if (v) {
-        params.ext_dx = v.dx
-        params.ext_dy = v.dy
-        params.ret_dx = -v.dx
-        params.ret_dy = -v.dy
+      params.pickup_part = armChuckPart(chamberArm)
+      params.drop_part = armChuckPart(returnArm)
+      params.pickup_link = armLinkPart(chamberArm)
+      params.drop_link = armLinkPart(returnArm)
+      params.cross_arm = crossArm
+      if (crossArm) {
+        const crossFrom = armAngleFor(angleMap, chamberArm, 'Cross')
+        const crossTo = armAngleFor(angleMap, returnArm, 'Cross')
+        if (crossFrom == null) return { ok: false, warn: `未配置 ${chamberArm} 的 Cross 角度` }
+        if (crossTo == null) return { ok: false, warn: `未配置 ${returnArm} 的 Cross 角度` }
+        params.cross_angle_from = crossFrom
+        params.cross_angle_to = crossTo
       }
+      // 腔体取片侧：blade 伸出进源腔（ext）/带片收回（ret）
+      fillExtendParams(params, computeExtendVec(ext, chamberArm, fromChamber, fromAngle))
+      // cassette 还片侧：blade 伸出到槽位（pk_ext）/抽刀（pk_ret）
+      fillExtendParams(params, computeExtendVec(ext, returnArm, carrier, carrierAngle), 'pk_')
       return { ok: true, params, info: { lotId, carrier, slot, fromChamber } }
     }
 
