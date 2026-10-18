@@ -98,6 +98,11 @@ function armChuckPart(armId) {
   return `Wafer_Chuck${m ? m[1] : '1'}`
 }
 
+function armLinkPart(armId) {
+  const m = String(armId || '').match(/(\d+)\s*$/)
+  return `ARM${m ? m[1] : '1'}_Link`
+}
+
 // 缓存每个部件的初始 transform（用于 reset）
 const initialTransforms = new Map()
 let stepPlayQueue = Promise.resolve()
@@ -256,6 +261,11 @@ async function playQueuedStep(stepName) {
     params[`${prefix}ext_rdy`] = v.rdy
     params[`${prefix}ret_rdx`] = -v.rdx
     params[`${prefix}ret_rdy`] = -v.rdy
+    // 伸缩臂杆参数（与 deriver fillExtendParams 对齐）：伸出 scale_y 拉长 + offset_y=+e/2；收回反向
+    params[`${prefix}link_ext_sy`] = v.link_sy ?? 1
+    params[`${prefix}link_ext_oy`] = +((v.e || 0) / 2).toFixed(2)
+    params[`${prefix}link_ret_sy`] = 1
+    params[`${prefix}link_ret_oy`] = -(+((v.e || 0) / 2).toFixed(2))
   }
   const motion = motions.value.find(m => m.step === stepName)
   if (!motion) {
@@ -319,6 +329,8 @@ async function playQueuedStep(stepName) {
     params.ARM = toArm
     params.pickup_part = pickupPart
     params.drop_part = dropPart
+    params.pickup_link = armLinkPart(fromArm)
+    params.drop_link = armLinkPart(toArm)
     params.cross_arm = crossArm
     params.has_entered_chamber = Boolean(fromChamber)
     if (fromChamber) {
@@ -414,6 +426,8 @@ async function playQueuedStep(stepName) {
     params.to_angle = carrierAngle
     params.pickup_part = armChuckPart(chamberArm)
     params.drop_part = armChuckPart(returnArm)
+    params.pickup_link = armLinkPart(chamberArm)
+    params.drop_link = armLinkPart(returnArm)
     params.cross_arm = crossArm
     if (crossArm) {
       const crossFrom = armAngleFor(chamberArm, 'Cross')

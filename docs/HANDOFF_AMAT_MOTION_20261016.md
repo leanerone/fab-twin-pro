@@ -10,17 +10,17 @@
 
 ## 0. 一句话状态
 
-**P1 晶圆落点偏差 bug 已修复；ARM_2 蛙腿双臂 / ARM_1 JEL 单臂正式 SVG 重画已于 2026-10-17 完成并经浏览器三路径复测全部精确命中（见 §4.5）。2026-10-17 追加：伸缩臂杆实体化 + 晶圆骑盘修复并浏览器实证闭环（见 §4.6，根因=动画配置走 DB 不走文件）。AMAT METSPUT 接入主线全部闭环，无遗留断点。**
+**2026-10-18 全部闭环**：①三处 `amat_metsput.svg` MD5 全同并加备份；②机台详情页晶圆送腔心 23px 偏差已修（`useMotionPlayback.js measureSvg` 归一 viewBox user 坐标系），E/CH_1 双轮连播 0px；③编辑器调试台臂杆 ARM1_Link 不联动已修（`MotionPreview.vue` 补 pickup_link/drop_link + link_ext/ret 4 参数），trace 实测 scale(1,2.14)/scale(1,3.30) 联动、两路径晶圆居中 0/0.76px。**AMAT METSPUT 接入主线全部闭环，无遗留断点。**
 
 ---
 
-## 1. 回家后恢复环境
+## 1. 换地方开发恢复环境（2026-10-18 更新）
 
 ```powershell
 git fetch origin
 git checkout test3
 git pull origin test3
-git log --oneline -5   # 应能看到 fix(motion): P1 落点 bug 修复 的提交
+git log --oneline -8   # 顶部应有 fix(motion): 详情页腔心 23px 偏差 + 编辑器臂杆联动 的提交
 ```
 
 四件服务（与以往相同）：
@@ -31,7 +31,9 @@ git log --oneline -5   # 应能看到 fix(motion): P1 落点 bug 修复 的提�
 | backend | 8002 | `cd backend; python main.py` |
 | frontend | 5173 | `cd frontend; npm run dev`（依赖未变，无需 npm install） |
 
-动画调试页：浏览器开 `http://localhost:5173/#/model-editor` → 顶部「🔍 动画调试」。
+**两个调试入口**：
+- 机台详情页：`http://localhost:5173/#/machine/AMAT-T1` → 顶部「播放完整流程」
+- 模型编辑器（动画调试台）：`http://localhost:5173/#/model-editor` → 顶部「🔍 动画调试」
 
 **标准触发流程（每次整页重载后都必须完整走一遍，否则 CHAMBER_PS 拒绝执行）：**
 
@@ -41,31 +43,54 @@ git log --oneline -5   # 应能看到 fix(motion): P1 落点 bug 修复 的提�
 4. 再点 `CHAMBER_PS` 触发动画
 5. 看「事件日志」与画面落点
 
+**新地方首次同步**：如果 DB 是空的或旧的，跑一次：
+```powershell
+cd backend
+python seed_amat_metsput.py        # 或 python ..\scripts\sync_amat_motion_to_db.py
+```
+
 坑（都踩过）：
 - 改引擎 composables 后 Vite 会**整页 reload**，DOM/内存状态全丢，必须重走上面 4 步。
 - CHAMBER_PS 日志出现「未找到载具映射」= 漏了第 3 步。
-- 页面里有 **4 个 svg 实例**，只有 1 个可见（宽 720px）。控制台取元素要用
-  `Array.from(document.querySelectorAll('#ID')).find(el => el.getBoundingClientRect().width > 0)`。
+- **页面里有 3 个 svg 实例，只有 1 个可见**（宽 720px，`.svg-container` 下）。控制台取元素要用：
+  ```js
+  const s2 = [...document.querySelectorAll('svg')].filter(s => s.getBoundingClientRect().width > 0)[0];
+  s2.querySelector('#ID')
+  ```
+  `document.getElementById` 会拿到隐藏副本（§4.9 ④）。
+- **hidden-tab 渲染冻结**：`visibilityState=hidden` 时带 `transition: transform 900ms` 的写入不推进（§4.8 伪象），自动化测试时先把 tab 置前。
 - 晶圆位置流转登记在 deriver 内存表（waferPosRegistry）：CHAMBER_PS 成功后晶圆登记到目标腔；想重测 cross_arm，先跑一次 `CHAMBER=A`（进 ARM_1 的 A 腔），再跑 `CHAMBER=1`（ARM_2 从 A 腔取片→PVD 1，触发 cross_arm）。刷新页面即重置。
 
 ---
 
 ## 2. 本次提交内容清单
 
+**2026-10-18 本轮（最新提交）**：
+
+| 文件 | 变更 | 说明 |
+|---|---|---|
+| `frontend/src/composables/useMotionPlayback.js` | +26/-8 | **详情页 23px 偏差引擎修复**：`measureSvg` 归一 viewBox(user) 坐标系（§4.9 ②） |
+| `frontend/src/components/MotionPreview.vue` | +14 | **编辑器臂杆联动修复**：补 `armLinkPart` + `fillExtend` link 4 参数 + `pickup_link/drop_link`（§4.9 ③） |
+| `frontend/src/components/MachineMotion2D.vue` | +8 | `debugPlayFlow` 开播前 `resetView()` 保证跨流程幂等；序列补 WPC SLOT2 |
+| `backend/demo_amat_motion.py` | +2 | demo 序列补 `WAFER_PROCESS_COMPLETE SLOT=2` |
+| `models/user/amat_metsput_v1.1.json` | +1/-1 | 角度表 `ARM_1.LLA` 190→198（夹手朝向） |
+| `model-editor-standalone/src/assets/amat_metsput.svg.bak-20261018` | 新增 | SVG 备份 |
+| `docs/HANDOFF_AMAT_MOTION_20261016.md` | +§4.8/§4.9 | 本文档 |
+
+**2026-10-16/17 前轮（已在 test3）**：
+
 | 文件 | 变更 | 说明 |
 |---|---|---|
 | `frontend/src/composables/useMotionPlayback.motion.js` | +25/-8 | **P1 落点 bug 引擎修复**：rotate 默认原点冻结（详见 §3） |
 | `models/user/amat_metsput_v1.1.json` | +64 | 新增 `extend_geometry` 实测坐标；CHAMBER_PS p6/p7 增加 R 轴伸缩规则（offset `{ext_dx}/{ext_dy}` / `{ret_dx}/{ret_dy}`） |
 | `frontend/src/motionDerivers/amatMetsput.js` | +41 | `computeExtendVec()`：按臂 pivot→腔心几何算出 θ 角与径向伸缩向量并注入模板参数 |
-| `frontend/src/components/MotionPreview.vue` | +18 | CHAMBER_PS / WPC 两个注入点加「L轴伸缩」日志 |
 | `frontend/src/composables/useExprEval.motion.js` | +8 | offset 动作的字符串模板补丁（`{ext_dx}` 等模板能被求值） |
 | `scripts/sync_amat_motion_to_db.py` | 新增 | 一键把 JSON 写入 Oracle `machine_model_configs.animation_config_json`（§5） |
-| `model-editor-standalone/src/assets/amat_metsput.svg` | 同步 | 此前停留在阶段0，本次补齐阶段1-3 全部美化（与源文件 MD5 一致） |
+| `model-editor-standalone/src/assets/amat_metsput.svg` | 同步 | 与源文件 MD5 一致 |
 | `.gitignore` | +1 | 忽略 `model-editor-standalone/.vite/` |
-| `docs/HANDOFF_AMAT_MOTION_20261016.md` | 新增 | 本文档 |
 
 更早、已在 test3 上的三个提交（仅背景，不用动）：
-`7a179e1` 阶段1晶圆彩虹质感 → `406dfc7` 阶段2腔室金属化 → `6405cb8` 阶段3光影装饰收尾。
+`7a179e1` 阶段1晶圆彩虹质感 → `406dfc7` 阶段2腔室金属化 → `6405cb8` 阶段3光影装饰收尾 → `5fb1fd8` 伸缩臂杆实体化 → `01ed11d` 锚圆锁定臂组旋转中心 + 阶段4金属化。
 
 ---
 
@@ -215,6 +240,78 @@ rotate 默认 center pivot 时，把原点**冻结为动作应用那一刻的 bb
 
 **遗留**：`svg_1` 外框 rect 内曾混入乱码文本（不渲染，本轮已清理）；LLA2 归位差 310.7 为 demo 序列设计（SLOT2 无 COMPLETE 事件），非缺陷。
 
+### 4.8 腔心送达回归 + "页面不同步"三层根因实锤（2026-10-18）
+
+**用户反馈**：①动画调试台 SVG 与机台详情不同步；②晶圆送不到 chamber 中心；③run 完送回 CASSETTE 夹手歪。
+
+**修复**：`amat_metsput_v1.1.json` 角度表 `ARM_1.LLA` 190→**198**（夹手朝向修正）；跨流程运行时残留前轮已修（debugPlayFlow 开播前 resetView + 流程补 WPC SLOT2 snap）。
+
+**"改了没生效"根因实锤（不是 HTTP 缓存）**：API 响应无 Cache-Control/ETag/Last-Modified（8002 直连与 5173 代理均验）、无 Service Worker、页面内 default/no-store 两种 fetch 均返回新值——三重证据排除缓存。真因 = **页面生命周期陈旧**：长寿命 tab 在 seed/改文件前已加载，hash 路由 SPA 下同 URL `browser_navigate` = 无操作，组件不重挂载（`loadAssets` 仅挂载时拉一次）。修复 = `location.reload()` 真刷新。
+
+**回归（reload 后连播两遍 + 150ms 中心采样，1812 样本）**：
+| 检查项 | 结果 |
+|---|---|
+| LLA=198 生效 | 两遍首条 ARM_1 写入均 `rotate(198deg)` |
+| 跨流程幂等 | 两遍旋转序列逐条一致（198→225→198→0(Cross)→…→198） |
+| 晶圆送腔心 | LLA1 驻留 E=(230.82,633.5) 3s；LLA2 驻留 CH_1=(179,340) 3s（均精确） |
+| 归位 | 两片终点均 home=(326.75,613.25)；骑叉中间位与几何推算全吻合 |
+| 落腔写入数值 | LLA1 (-95.94,20.25)、LLA2 (-147.73,-273.23)，精确指向腔心 |
+
+**自动化测试伪象（勿误判为 bug）**：hidden tab（`visibilityState=hidden`）下 Chrome 冻结渲染时钟——**带 `transition: transform 900ms` 的 transform 写入完全不推进**（探针实锤：写 translate(80,0) 后 1s 采样仍在起始值），`transition: none` 的写入（轨道逐帧、duration:0 snap）立即生效。故自动化采样中"落腔/伸缩不体现、snap 体现"是环境伪象；真实可见浏览器 transition 正常。`browser_tabs activate` 不能解除（窗口本身不可见）。
+
+**调试台 SVG 不可能与主舞台漂移**：`MachineMotion2D.vue` L363 全组件仅一处 `v-html="svgMarkup"`，调试面板与主舞台共用同一实例；源头 = DB 快照 `view_2d.model_source` → `/uploads/models/amat_metsput.svg`，fetch `no-store`。
+
+**"为什么总是不同步"三层论（给用户的最终解释）**：
+1. **文件 → DB 快照**：`models/user/*.json|svg` 改动必须跑同步脚本（`scripts/sync_amat_motion_to_db.py` 或 `backend/seed_amat_metsput.py`，均幂等），否则 DB 快照漂移；
+2. **页面生命周期**：已打开的页面不会随 DB/文件更新自动刷新（本轮 198 即此因）——改完须刷新页面；
+3. **运行时状态残留**：deriver 登记表/状态缓存跨流程残留（前轮已修，本轮回归验证幂等 ✓）。
+
+### 4.9 详情页腔心 23px 偏差根因 + 编辑器臂杆不联动根因（2026-10-18 下班版）
+
+**用户反馈**：模型编辑器/机台详情/standalone 三处 SVG 一致前提下，机台详情晶圆送不到 chamber 中心，且与动画调试台行为不一致。
+
+**① 三处 SVG 同步实锤（用户任务1）**
+- 三处 `amat_metsput.svg` MD5 全同 `B54EF4A90AD79F8862EDC1F6EAC297FC`：
+  - `models/user/amat_metsput.svg`（源）
+  - `backend/uploads/models/amat_metsput.svg`（DB 快照运行时拉这份）
+  - `model-editor-standalone/src/assets/amat_metsput.svg`
+- 备份：`model-editor-standalone/src/assets/amat_metsput.svg.bak-20261018`
+
+**② 机台详情腔心偏差 23px 根因（用户任务2 修复）**
+- **根因**：`useMotionPlayback.js` 旧 `measureSvg` 用 `el.getCTM()`，含 viewBox→viewport 的渲染缩放 s≈1.197。deriver 注入的位移（ext_dx/dy）是 viewBox user 单位；`applyState` 用含 1/s 的 inv 换算时把位移二次缩放，导致 chuck 少伸 ~16%、晶圆偏离腔心 ~23px。
+- **修复**：`measureSvg` 归一到 **viewBox(user) 坐标系**——用 `M = svg.getScreenCTM().inverse()`（screen→user）把元素/父链 CTM 归一；`getScreenCTM` 不可用时回退 `getCTM`。
+- **代码**：`useMotionPlayback.js` L74-125 `measureSvg`、`userCtmOf`。
+- **回归**：详情页 `#/machine/AMAT-T1` 两轮连播，E 腔/CH_1 均 0px 误差，晶圆精确送达腔心。
+
+**③ 编辑器调试台臂杆不联动根因（用户任务3 修复）**
+- **现象**：`#/model-editor` 动画调试 Tab 下，CHAMBER_PS 时 chuck 已伸出但 `ARM1_Link`（伸缩臂杆）纹丝不动；日志 `target` 字面显示 `{drop_link}`。
+- **根因**：JSON `CHAMBER_PS`/`WAFER_PROCESS_COMPLETE` 规则含 target `{pickup_link}`/`{drop_link}`（各 4 处）和 `offset_x:0, offset_y:"{pk_link_ext_oy}", scale_y:"{pk_link_ext_sy}"` 系参数；但 `MotionPreview.vue` 旧版**从不填** `pickup_link`/`drop_link` 目标 id 和 `link_ext_sy/oy`、`link_ret_sy/oy` 这 4 个参数。模板原样输出→`target` 字面 `"{drop_link}"`→找不到元素→臂杆不动。
+- **修复**（`MotionPreview.vue` 4 处）：
+  - L101-104 新增 `armLinkPart(armId)` → `ARM{n}_Link`
+  - L264-272 `fillExtend` 末尾追加 `link_ext_sy/link_ext_oy/link_ret_sy/link_ret_oy`（公式与 deriver `fillExtendParams` 完全对齐：`link_sy=(lbase+e)/lbase`，`link_ext_oy=+e/2`，`link_ret_sy=1`，`link_ret_oy=-e/2`）
+  - L332-333 CHAMBER_PS 块填 `params.pickup_link = armLinkPart(fromArm)`、`params.drop_link = armLinkPart(toArm)`
+  - L429-430 WAFER_PROCESS_COMPLETE 块同填
+- **引擎侧已支持 `scale_y`**：`useMotionPlayback.motion.js` `applyPreviewAction` L493-498 收到 `scale_y` 即 `state.scale = scale(x,y); origin='center'; originBox='fill-box'`；`applyPreviewTransform` L215-217 输出 scale。所以编辑器只需填参数即可，无需改引擎。
+- **回归（修复后 trace）**：
+  - pickup 侧 chuck translate(1.22,-70.28)、link translate(0,-35.15) scale(1,2.1448)（e≈70.3）
+  - drop 侧 chuck translate(3.19,-141.02)、link translate(0,-70.53) scale(1,3.2973)（e=141.02）
+  - 臂杆已联动伸缩，日志 target 全部解析为 `ARM1_Link`
+  - 两条路径晶圆居中：CH_E dist 0、CH_1 dist 0.76px
+
+**④ 调试陷阱（勿再踩）**
+- **页面上有 3 份 SVG 副本**（`svgCount:3`）：idx0=模型列表面板（隐藏 w=0）、idx1=record-svg-section（隐藏）、**idx2=动画调试预览（可见 720×900，`.svg-container < .svg-area < preview-body < motion-preview < debug-panel`）**。`document.getElementById('ARM_1')` 返回**文档序第一个=隐藏副本**——上一会话"零位移"全部探针都打在了隐藏副本上。
+- **正确探针**：先按可见性过滤再 querySelector：
+  ```js
+  const s2 = [...document.querySelectorAll('svg')].filter(s=>{const r=s.getBoundingClientRect(); return r.width>0})[0];
+  s2.querySelector('#ARM_1')
+  ```
+- **hidden-tab 渲染冻结**（§4.8 已记）：`visibilityState=hidden` 时带 `transition: transform 900ms` 的写入不推进，`transition: none` 的写入立即生效。自动化采样时若怀疑"动画不动"，先看 `document.visibilityState` 和 `el.getAnimations().playState`。
+- **浏览器 MCP 工具链变更**：旧 `mcp_trae-remote-official_browser_browser` 已下线；现用 browseruse skill + `integrated_code_mode.Exec`。Exec 顶层禁止 `return`（用 `text(value)` 输出）；`browser_snapshot` 等返回 `{content:[{text}]}`，须先取 `.content[0].text` 再做字符串处理；`browser_evaluate` 的 script 禁止 IIFE、用顶层 `return`。
+
+**⑤ 本轮 demo 序列补全**
+- `backend/demo_amat_motion.py` 序列补 `WAFER_PROCESS_COMPLETE SLOT=2`（跨臂回 LLA），避免 SLOT2 晶圆位置残留污染下一轮。
+- `frontend/src/components/MachineMotion2D.vue` `debugPlayFlow` 开播前 `resetView()` + 跳过历史事件，保证跨流程幂等。
+
 ---
 
 ## 5. DB 导入资料（量产/本地库都要用）
@@ -272,14 +369,16 @@ COMMIT;
 
 | 文件 | 看什么 |
 |---|---|
-| `frontend/src/composables/useMotionPlayback.motion.js` | Motion2D 引擎。重点函数：`applyPreviewAction`（rotate/offset/snap 分派）、`applyPreviewTransform`、`getFrozenCenterOrigin`（本次新增）、`syncFollowerToSnap`（follower 每帧绝对对齐 leader 中心）、`animateFollowersWithLeader`（rAF 循环）、`measureElementMoveAfterTransform`、`frozenOrigins`（播放前预冻结） |
-| `frontend/src/motionDerivers/amatMetsput.js` | AMAT 专用 deriver：载具/晶圆位置登记、from/to arm 判定、cross_arm 与 Cross 角、`computeExtendVec()`、commit/reset |
-| `frontend/src/components/MotionPreview.vue` | CHAMBER_PS / WPC 模板参数注入点（搜「L轴伸缩」） |
+| `frontend/src/composables/useMotionPlayback.js` | **详情页**引擎入口。本次修复重点：`measureSvg` L74-125（viewBox user 归一）、`userCtmOf` |
+| `frontend/src/composables/useMotionPlayback.motion.js` | **编辑器**Motion2D 引擎。重点函数：`applyPreviewAction`（rotate/offset/scale_y/snap 分派）、`applyPreviewTransform`、`getFrozenCenterOrigin`、`syncFollowerToSnap`、`animateFollowersWithLeader`（rAF）、`measureElementMoveAfterTransform`、`frozenOrigins` |
+| `frontend/src/motionDerivers/amatMetsput.js` | AMAT 专用 deriver：载具/晶圆位置登记、from/to arm 判定、cross_arm 与 Cross 角、`computeExtendVec()`、`fillExtendParams`（link_ext_sy/oy 等 4 参数填法样板）、commit/reset |
+| `frontend/src/components/MotionPreview.vue` | CHAMBER_PS / WPC 模板参数注入点（搜「L轴伸缩」「armLinkPart」「fillExtend」） |
+| `frontend/src/components/MachineMotion2D.vue` | 详情页调试 Tab，`debugPlayFlow` 完整流程编排、`resetView` 跨流程复位 |
 | `frontend/src/composables/useExprEval.motion.js` | `when` 条件与 `{模板}` 求值；offset 字符串模板补丁在此 |
 | `models/user/amat_metsput_v1.1.json` | 角度表 `arm_chamber_angles`、parts、CHAMBER_PS 12 条 phase 规则、`extend_geometry` 实测坐标 |
 
 腔室→机械臂映射（角度表原文）：
-- ARM_1：A330 / B30 / C265 / D95 / E225 / F135 / LLA190 / LLB160 / Cross0
+- ARM_1：A330 / B30 / C265 / D95 / E225 / F135 / LLA198 / LLB160 / Cross0
 - ARM_2：1=250 / 2=290 / 3=70 / 4=110 / A210 / B140 / Cross180
 - cross_arm 条件：from_arm ≠ to_arm（例如晶圆先送 A（ARM_1），再送 1（ARM_2））。
 

@@ -319,7 +319,7 @@ async function debugSendOnce() {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
-// 播放完整流程：与 backend/demo_amat_motion.py 相同的 6 步序列
+// 播放完整流程：与 backend/demo_amat_motion.py 相同的事件序列
 async function debugPlayFlow() {
   if (debugPlaying.value || debugSending.value) return
   const LOT = 'DEMO_LOT01'
@@ -330,10 +330,16 @@ async function debugPlayFlow() {
     ['CHAMBER_PS', { LOT_ID: LOT, SLOT: '1', CHAMBER: 'E' }, 8000],
     ['CHAMBER_PS', { LOT_ID: LOT, SLOT: '2', CHAMBER: '1' }, 8000],
     ['WAFER_PROCESS_COMPLETE', { LOT_ID: LOT, SLOT: '1' }, 5500],
+    ['WAFER_PROCESS_COMPLETE', { LOT_ID: LOT, SLOT: '2' }, 5500],
     ['POD_REMOVED', { SMIFPORTID: '1' }, 0],
   ]
   debugPlaying.value = true
   try {
+    // 开播前复位：清 deriver 业务状态（waferPosRegistry 等）+ 运动状态，
+    // 否则上次流程的残留（如 SLOT2 晶圆位置记录、臂角度）会污染本次推导
+    await playQueue.catch(() => {})
+    resetView()
+    processedCount = (props.events || []).length // 跳过历史事件，只播本次新发的
     for (let i = 0; i < seq.length; i++) {
       const [name, params, gap] = seq[i]
       await debugSend(name, params)

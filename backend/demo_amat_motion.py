@@ -37,6 +37,8 @@ SEQUENCE = [
     ("CHAMBER_PS",            {"LOT_ID": LOT_ID, "SLOT": "2", "CHAMBER": "1"}, 8.0),
     # 加工完成：E 腔 → 载具（回 LLA）
     ("WAFER_PROCESS_COMPLETE", {"LOT_ID": LOT_ID, "SLOT": "1"}, 5.5),
+    # 加工完成：1 号腔 → 载具（跨臂回 LLA）；不遗漏 SLOT2，避免晶圆位置状态残留
+    ("WAFER_PROCESS_COMPLETE", {"LOT_ID": LOT_ID, "SLOT": "2"}, 5.5),
     ("POD_REMOVED",           {"SMIFPORTID": "1"}, 1.0),
 ]
 

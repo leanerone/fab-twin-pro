@@ -77,21 +77,39 @@ function measureSvg(container, onWarn) {
   let geom = geomCache.get(svg)
   if (geom) return geom
   geom = new Map()
+  // getCTM() 含 viewBox→viewport 的渲染缩放 s（本页 s≈1.197），而 deriver 注入的位移
+  // （ext_dx/dy 等）是 viewBox 单位；applyState 用含 1/s 的 inv 换算时会把位移二次缩放，
+  // 导致 chuck 少伸 ~16%、晶圆偏离腔心 ~23px。统一改用「viewBox(user) 坐标系」：
+  // 以 M = svg.getScreenCTM().inverse()（screen→user）把元素/父链 CTM 归一到 user 单位，
+  // 与 deriver / extend_geometry 的 viewBox 几何对齐。getScreenCTM 不可用时回退 getCTM。
+  let toUser = null
+  try {
+    const sctm = svg.getScreenCTM()
+    toUser = sctm ? sctm.inverse() : null
+  } catch (_) { toUser = null }
+  const userCtmOf = (el) => {
+    if (toUser) {
+      try {
+        const m = el.getScreenCTM()
+        if (m) return toUser.multiply(m)
+      } catch (_) { /* fall through to getCTM */ }
+    }
+    try { return el.getCTM() } catch (_) { return null }
+  }
   for (const el of svg.querySelectorAll('[id]')) {
     const id = el.getAttribute('id')
     if (!id) continue
     const local = getLocalCenter(el)
     if (!local) continue // 元素未渲染（display:none 等），跳过，用到时再告警
-    let ctm = null
-    try { ctm = el.getCTM() } catch (_) { ctm = null }
+    const ctm = userCtmOf(el)
     if (!ctm) continue
     const root = new DOMPoint(local.x, local.y).matrixTransform(ctm)
-    // 父链 CTM 的逆（线性部分），用于把 root 空间位移换算成本地 CSS translate
+    // 父链 CTM 的逆（线性部分），用于把 root(user) 空间位移换算成本地 CSS translate
     let inv = null
     const parent = el.parentElement
     if (parent && !(parent instanceof SVGSVGElement)) {
       try {
-        const p = parent.getCTM()
+        const p = userCtmOf(parent)
         if (p) inv = p.inverse()
       } catch (_) { inv = null }
     }
