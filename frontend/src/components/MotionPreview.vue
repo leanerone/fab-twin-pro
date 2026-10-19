@@ -13,7 +13,8 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { evalWhen, resolveMotionRule, enrichMotionParams } from '../composables/useExprEval.motion'
 import { computeExtendVec } from '../motionDerivers/amatMetsput'
-import { playMotion } from '../composables/useMotionPlayback.motion'
+// P3-A：调试页与机台详情页统一使用「逐帧同步圆弧」单引擎（原 .motion.js 的事后屏幕测量补偿已废弃）
+import { playMotion, resetMotionState, invalidateMotionGeometry } from '../composables/useMotionPlayback'
 import { scopeSvgPaintIds } from '../utils/svgPaintScope'
 
 const props = defineProps({
@@ -103,8 +104,6 @@ function armLinkPart(armId) {
   return `ARM${m ? m[1] : '1'}_Link`
 }
 
-// 缓存每个部件的初始 transform（用于 reset）
-const initialTransforms = new Map()
 let stepPlayQueue = Promise.resolve()
 let stepPlaying = false
 
@@ -155,27 +154,15 @@ async function loadSvg() {
       }
     }
     svgInline.value = scopeSvgPaintIds(svgText)
-    // 等待 DOM 更新后缓存初始 transform
+    // 等待 DOM 更新后丢弃旧几何缓存（新 SVG 元素重新测量），并按默认状态隐藏模块
     await nextTick()
-    cacheInitialTransforms()
+    invalidateMotionGeometry(svgContainer.value)
     // 默认保持 data-motion-base-visibility="hidden" 的模块隐藏；事件触发显示暂预留
     applyMotionBaseVisibility()
   } catch (e) {
     errorMsg.value = `加载 SVG 失败: ${e.message}`
   } finally {
     loading.value = false
-  }
-}
-
-function cacheInitialTransforms() {
-  if (!svgContainer.value) return
-  initialTransforms.clear()
-  const els = svgContainer.value.querySelectorAll('[id]')
-  for (const el of els) {
-    const id = el.getAttribute('id')
-    if (!id) continue
-    // 只缓存 CSS 内联 transform，避免把 SVG 属性 transform 再写一遍导致画布错乱
-    initialTransforms.set(id, el.style.transform || '')
   }
 }
 
@@ -472,7 +459,9 @@ async function playQueuedStep(stepName) {
   const result = await playMotion({
     container: svgContainer.value,
     rules: matchedRules,
+    params,
     reset: false,
+    partAliases: props.motionConfig?.ext?.part_aliases || {},
     onWarn: (msg) => logEvent(stepName, msg, 'warn'),
   })
 
@@ -480,8 +469,7 @@ async function playQueuedStep(stepName) {
     const reasonMap = {
       container: 'SVG 容器尚未渲染',
       svg: 'SVG 内容尚未加载',
-      ctm: 'SVG 坐标系不可用',
-      'ctm-scale': 'SVG 当前不可见',
+      geometry: 'SVG 几何测量失败（可能尚未渲染）',
       'no-rules': '无匹配 rule',
     }
     logEvent(stepName, reasonMap[result.reason] || '播放失败', 'warn')
@@ -518,21 +506,9 @@ async function playQueuedStep(stepName) {
 // === 重置 ===
 function resetAll(options = {}) {
   if (!svgContainer.value) return
-  svgContainer.value.querySelectorAll('[data-motion-text]').forEach(el => el.remove())
-  for (const [id, transform] of initialTransforms) {
-    const el = svgContainer.value.querySelector(`#${id}`)
-    if (el) {
-      el.style.transform = transform || ''
-      el.style.transformOrigin = ''
-      el.style.transformBox = ''
-      el.style.opacity = ''
-      el.style.transition = ''
-      el.style.visibility = ''
-      el.removeAttribute('visibility')
-      delete el.dataset.transform
-    }
-  }
-  applyMotionBaseVisibility()
+  // 引擎级复位：清文字、清全部播放状态与内联样式、恢复 data-motion-base-visibility
+  resetMotionState(svgContainer.value)
+  invalidateMotionGeometry(svgContainer.value)
   waferPosRegistry.clear()
   if (!options.silent) logEvent('初始化', '所有部件已重置', 'info')
 }

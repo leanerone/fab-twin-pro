@@ -10,7 +10,7 @@
 
 ## 0. 一句话状态
 
-**2026-10-18 全部闭环**：①三处 `amat_metsput.svg` MD5 全同并加备份；②机台详情页晶圆送腔心 23px 偏差已修（`useMotionPlayback.js measureSvg` 归一 viewBox user 坐标系），E/CH_1 双轮连播 0px；③编辑器调试台臂杆 ARM1_Link 不联动已修（`MotionPreview.vue` 补 pickup_link/drop_link + link_ext/ret 4 参数），trace 实测 scale(1,2.14)/scale(1,3.30) 联动、两路径晶圆居中 0/0.76px。**AMAT METSPUT 接入主线全部闭环，无遗留断点。**
+**2026-10-19 全部闭环**：①AMAT METSPUT 整机 SVG 按审核版预览页重绘为目标态（留白/黑线条清零、全机金属化），三副本 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD`；②`Wafer_Chuck1/2` 因改为 `<g>` 组，JSON `part_type` `circle→group` 并**定向 UPDATE 同步 Oracle**（未动 machines 表）；③**P3-A 单引擎统一**：调试页 `MotionPreview.vue` 改用详情页逐帧引擎 `useMotionPlayback.js`，`useMotionPlayback.motion.js`（事后屏幕测量补偿、follow 滞后根因）**已删除**，CHAMBER_PS 采样证实 chuck 与 ARM1_Link 同帧起落、峰值 `(3.19,-141.02)`/`translate(0,-70.53) scale(1,3.2973)` 与旧版一致；④锚点 bbox 中心实测全部精确守恒。**AMAT METSPUT 接入主线全部闭环。**（遗留非阻塞：ARM_2 蛙腿路径端到端实测因调试页视口塌陷 + CHAMBER 参数注入未驱动 Vue v-model 未取到证据，详见 §4.10。）
 
 ---
 
@@ -65,7 +65,21 @@ python seed_amat_metsput.py        # 或 python ..\scripts\sync_amat_motion_to_d
 
 ## 2. 本次提交内容清单
 
-**2026-10-18 本轮（最新提交）**：
+**2026-10-19 本轮（最新提交）**：
+
+| 文件 | 变更 | 说明 |
+|---|---|---|
+| `models/user/amat_metsput.svg` | 重写为目标态 | 整机 SVG 重绘：留白/黑线条清零、全机金属化、双臂（蛙腿/单臂两段）目标结构；动画引用 id 全保留（§4.10） |
+| `model-editor-standalone/src/assets/amat_metsput.svg` | 同步 | 与上面 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD` |
+| `models/user/amat_metsput_v1.1.json` | +2/-2 | `Wafer_Chuck1/2` `part_type` `circle→group`（因改为 `<g>` 组） |
+| `backend/uploads/models/amat_metsput_v13_a32a0a5e.json` | +2/-2 | 同上（运行时副本） |
+| `frontend/src/components/MotionPreview.vue` | +11/-33 | **P3-A 单引擎统一**：改 import 详情页引擎、删 `cacheInitialTransforms`、`playQueuedStep` 补 `params`+`partAliases`、`resetAll` 改引擎级 `resetMotionState`（§4.10 ③） |
+| `frontend/src/composables/useMotionPlayback.motion.js` | 删除（-715） | P3-A 消除双引擎；确认全仓库唯一引用 `MotionPreview.vue` 后删除 |
+| `docs/HANDOFF_AMAT_MOTION_20261016.md` | +§4.10/§0/§2 | 本文档 |
+
+> SVG 三副本第 3 份 `backend/uploads/models/amat_metsput.svg`（运行时上传目录，**gitignore 不入库**）已手工拷贝同步，未进提交。
+
+**2026-10-18 前轮（已在 test3）**：
 
 | 文件 | 变更 | 说明 |
 |---|---|---|
@@ -312,6 +326,51 @@ rotate 默认 center pivot 时，把原点**冻结为动作应用那一刻的 bb
 - `backend/demo_amat_motion.py` 序列补 `WAFER_PROCESS_COMPLETE SLOT=2`（跨臂回 LLA），避免 SLOT2 晶圆位置残留污染下一轮。
 - `frontend/src/components/MachineMotion2D.vue` `debugPlayFlow` 开播前 `resetView()` + 跳过历史事件，保证跨流程幂等。
 
+### 4.10 整机 SVG 重绘 + P3-A 单引擎统一（2026-10-19，本轮提交）
+
+**背景（用户反馈）**：①动画调试页 CHAMBER_PS 时「圆盘和手臂错开伸出」，机台详情页无此问题；②当前 SVG 与之前确认的蛙腿式设计不匹配——大量留白、腔体未金属化、残留多余黑线条。用户要求先出方案 + 交互式预览页，审核通过后才允许改码（方案由上一轮完成审核，本轮按批准执行）。
+
+**① 双引擎差异根因（用户反馈「错开」的根因）**
+- 调试页原用 `useMotionPlayback.motion.js`：**事后屏幕测量补偿**（`measureElementMoveAfterTransform`），从动件（晶圆/圆盘）在主动件变换落地后才测量跟随 → 中间态滞后。
+- 机台详情页用 `useMotionPlayback.js`：**逐帧同步圆弧计算**（`getLocalCenter`/`visualCenter`/`applyState`），所有元素同起同落。
+- 结论：两页**终态一致、中间态不同**——差异仅存在于播放过程中的从动件跟随时机。
+
+**② SVG 重绘（三副本同步）**
+- 权威内容：审核版预览页 `amat_svg_redesign_preview.html` §3 内嵌「整机目标态 SVG」（`<svg>`→`</svg>`）+ 首行 `<?xml version="1.0"?>` 拼接而成；预览页占位注释替换回真实 `svg_18` base64 image 行。
+- 覆盖三副本并各留 `.bak-20261019` 备份：
+  - `models/user/amat_metsput.svg`（源，入库）
+  - `backend/uploads/models/amat_metsput.svg`（运行时，**gitignore 不入库**，手工拷贝）
+  - `model-editor-standalone/src/assets/amat_metsput.svg`（入库）
+- 三份 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD`（≈62 KB / 690+ 行，UTF-8 无 BOM）；`[xml]` 良构校验通过。
+- **红线全部保留**：`ARM_1`/`ARM_2`/`Wafer_Chuck1`/`Wafer_Chuck2`/`ARM1_Link`/`ARM2_Link`/`ARM1_Anchor`/`ARM2_Anchor` 均各 1 处且为 `<g>`；`svg_18` 存在。
+- viewBox 变更：根元素 `height="900" viewBox="24 24 672 840"`。
+
+**③ P3-A 单引擎统一（`MotionPreview.vue` 复用详情页引擎）**
+- import：`useMotionPlayback.motion` → `useMotionPlayback`（`playMotion, resetMotionState, invalidateMotionGeometry`）。
+- `loadSvg`：`cacheInitialTransforms()` → `invalidateMotionGeometry(svgContainer.value)`。
+- 删除本地 `initialTransforms` Map 与 `cacheInitialTransforms()`。
+- `playQueuedStep`：`playMotion` 调用补 `params` 与 `partAliases`；`reasonMap` 删 `ctm`/`ctm-scale`、增 `geometry`。
+- `resetAll`：改为 `resetMotionState(svgContainer.value)`（引擎级一次性清文字/内联样式/恢复 `data-motion-base-visibility`）+ `invalidateMotionGeometry` + `waferPosRegistry.clear()`。
+- `useMotionPlayback.motion.js` **已删除**（全仓库仅 `MotionPreview.vue` 引用）；`useExprEval.motion.js` 保留（MotionPreview 仍用）。
+
+**④ 验证结果（浏览器动画调试页，标准触发流程）**
+| 检查项 | 结果 |
+|---|---|
+| 三副本 MD5 | 全同 `57EF97E6B57CE59139CC35CA8814E3CD` |
+| 锚点 bbox 中心（`.svg-area svg` 可见副本） | `ARM_1`=[363.58,506.36]、`ARM_2`=[360.02,277]、`Wafer_Chuck1`=[364.36,463.6]、`Wafer_Chuck2`=[359,213.5]、`ARM1_Link`=[364,514.3]、`ARM2_Link`=[359,264.25]，与各 pivot 精确吻合 |
+| CHAMBER_PS（E 腔，活跃臂 ARM_1）同帧采样 | `Wafer_Chuck1` 与 `ARM1_Link` **同帧开始变化、同帧达峰、同帧回撤**（20×150ms 采样）→ 无滞后 |
+| 峰值几何 | chuck `translate(3.19,-141.02)`、link `translate(0,-70.53) scale(1,3.2973)`，与 §4.9 记录**完全一致**（证明与旧版几何等价） |
+| chuck 基圆材质 | `url(#psc4_chSteel)` 灰色金属（非白）；Console 无红色报错 |
+
+**⑤ 本轮踩坑（勿再踩）**
+- **`browser_evaluate` 内 script 含嵌套函数中的 `return` → 整段求值返回 `undefined`**（实测 3 次）。顶格表达式 / 顶层 `return` 正常。修正：探针改为**不含 `return`** 的循环+赋值写法（如 `window.__snap = function(){ ... }`）。
+- **调试页网格在窄视口塌陷**（`1fr 400px 360px`，SVG 可视宽 0）→ 截图看不到画面；改用 DOM 数值采样验证（可行且足够）。
+- **CHAMBER 参数注入受限**：`input[17]` 直接赋 `.value` 并发 `input` 事件**未驱动 Vue v-model**（日志仍 `ARM_1 CH_E`），故 ARM_2 蛙腿路径端到端未取到证据（非阻塞，终态几何已由 §4.5/锚点守恒覆盖）。
+
+**⑥ 遗留（非阻塞，已与用户对齐）**
+- ARM_2 蛙腿路径的端到端动画采样未完成（受上面 ⑤ 视口+参数注入限制）。后续如需补测，建议改用**机台详情页 cross_arm 流程**（`CHAMBER=A` 进 ARM_1 的 A 腔 → `CHAMBER=1` 触发 ARM_2 从 A 腔取片）或先修正调试页参数注入方式。
+- `backend/uploads/models/amat_metsput_v13_a32a0a5e.json` 与 `models/user/amat_metsput_v1.1.json` 的 `part_type` 变更**必须同步 DB**（红线）：本轮用临时脚本对 `AMAT-METSPUT` 的 `animation_config_json` 做**定向 UPDATE**（仅改两处 `part_type`，其余 LLA 角度/viewBox/motions 6 条原样保留），commit 后回读验证通过，未触碰 machines 表。
+
 ---
 
 ## 5. DB 导入资料（量产/本地库都要用）
@@ -370,7 +429,7 @@ COMMIT;
 | 文件 | 看什么 |
 |---|---|
 | `frontend/src/composables/useMotionPlayback.js` | **详情页**引擎入口。本次修复重点：`measureSvg` L74-125（viewBox user 归一）、`userCtmOf` |
-| `frontend/src/composables/useMotionPlayback.motion.js` | **编辑器**Motion2D 引擎。重点函数：`applyPreviewAction`（rotate/offset/scale_y/snap 分派）、`applyPreviewTransform`、`getFrozenCenterOrigin`、`syncFollowerToSnap`、`animateFollowersWithLeader`（rAF）、`measureElementMoveAfterTransform`、`frozenOrigins` |
+| ~~`frontend/src/composables/useMotionPlayback.motion.js`~~ | **已于 2026-10-19 删除**（P3-A 单引擎统一，§4.10 ③）。调试页现复用上一条 `useMotionPlayback.js`，不再有独立引擎 |
 | `frontend/src/motionDerivers/amatMetsput.js` | AMAT 专用 deriver：载具/晶圆位置登记、from/to arm 判定、cross_arm 与 Cross 角、`computeExtendVec()`、`fillExtendParams`（link_ext_sy/oy 等 4 参数填法样板）、commit/reset |
 | `frontend/src/components/MotionPreview.vue` | CHAMBER_PS / WPC 模板参数注入点（搜「L轴伸缩」「armLinkPart」「fillExtend」） |
 | `frontend/src/components/MachineMotion2D.vue` | 详情页调试 Tab，`debugPlayFlow` 完整流程编排、`resetView` 跨流程复位 |
