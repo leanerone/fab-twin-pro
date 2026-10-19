@@ -389,8 +389,14 @@ rg -i "svg_35|svg_39|svg_40|svg_41" .
 |---|---|---|
 | `svg_35` BUFFER 法兰盘 | `class="shape"` + 白色 deckPlate 渐变 + 旋转 matrix | `fill="url(#pedestalMetal)" stroke="#3a4250" stroke-width="2.4"` 径向金属；外层 +r130 法兰环 + 8 颗 M6 螺栓装饰（沿 32px 四角 + 45° 对角） |
 | `BUFFER` 八边形 path | `fill="#ffffff" stroke="#000000"` 硬边白 | `fill="url(#panelMetal)" stroke="#1f2329" stroke-width="1.6"` 深色拉丝金属 |
-| `svg_39` | 小梯形装饰 path（静态） | **包进新组 `ARM2_Link_Lower`**，改为与 `ARM2_Link` 对称的菱形四连杆（M359,295 L379,316.5 L359,338 L339,316.5 Z）；id 保留；CSS `#svg_39 { fill: url(#armBlade); }` 继续生效 |
+| `svg_39` | 小梯形装饰 path（静态） | **包进新组 `ARM2_Link_Lower`**，改为与 `ARM2_Link` 对称的菱形四连杆（`M360,278 L384,306 L360.5,341.5 L336,306 Z`）；id 保留；CSS `#svg_39 { fill: url(#armBlade); }` 继续生效 |
+| `ARM2_Link` 上层菱形 | `M359,233.5 L379,264.25 L359,295 L339,264.25 Z`（未对齐 hub） | 重画为 `M360,278 L384,250 L359,213.5 L336,250 Z`，**hub(360,278) 为共用驱动铰**，与下层菱形共享同一顶点 |
 | `svg_40/svg_41` | outline 弧线装饰 path（与菱形杆视觉冲突） | **删除**（grep 零动画引用） |
+
+**关键几何约束（必须遵守）**：
+- 两个菱形的**连接点**必须在**中心轮毂**（hub `svg_36`, cx=360, cy=278）的圆心 → 上/下层 path 起点统一用 `M360,278`。
+- 上层菱形 `ARM2_Link` 范围 `y ∈ [213.5, 278]`（hub 以上）；下层 `ARM2_Link_Lower` 范围 `y ∈ [278, 341.5]`（**hub 以下**，满足用户视觉要求"菱形手臂应该在圆盘下方"）。
+- 下层菱形末端必须对准 `svg_38` 圆盘中心 `(360.5, 341.5)`（双臂下层 180°背向的吸附盘）。
 
 **红线守住**：
 - 所有动画引用 id 保留：`ARM_1/ARM_2/ARM1_Link/ARM2_Link/ARM1_Anchor/ARM2_Anchor/Wafer_Chuck1/Wafer_Chuck2/svg_36/svg_38/svg_48` 数量未变。
