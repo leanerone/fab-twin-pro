@@ -10,7 +10,7 @@
 
 ## 0. 一句话状态
 
-**2026-10-19 全部闭环**：①AMAT METSPUT 整机 SVG 按审核版预览页重绘为目标态（留白/黑线条清零、全机金属化），三副本 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD`；②`Wafer_Chuck1/2` 因改为 `<g>` 组，JSON `part_type` `circle→group` 并**定向 UPDATE 同步 Oracle**（未动 machines 表）；③**P3-A 单引擎统一**：调试页 `MotionPreview.vue` 改用详情页逐帧引擎 `useMotionPlayback.js`，`useMotionPlayback.motion.js`（事后屏幕测量补偿、follow 滞后根因）**已删除**，CHAMBER_PS 采样证实 chuck 与 ARM1_Link 同帧起落、峰值 `(3.19,-141.02)`/`translate(0,-70.53) scale(1,3.2973)` 与旧版一致；④锚点 bbox 中心实测全部精确守恒。**AMAT METSPUT 接入主线全部闭环。**（遗留非阻塞：ARM_2 蛙腿路径端到端实测因调试页视口塌陷 + CHAMBER 参数注入未驱动 Vue v-model 未取到证据，详见 §4.10。）
+**2026-10-19 全部闭环**：①AMAT METSPUT 整机 SVG 按审核版预览页重绘为目标态（留白/黑线条清零、全机金属化），三副本 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD`；②`Wafer_Chuck1/2` 因改为 `<g>` 组，JSON `part_type` `circle→group` 并**定向 UPDATE 同步 Oracle**（未动 machines 表）；③**P3-A 单引擎统一**：调试页 `MotionPreview.vue` 改用详情页逐帧引擎 `useMotionPlayback.js`，`useMotionPlayback.motion.js`（事后屏幕测量补偿、follow 滞后根因）**已删除**，CHAMBER_PS 采样证实 chuck 与 ARM1_Link 同帧起落、峰值 `(3.19,-141.02)`/`translate(0,-70.53) scale(1,3.2973)` 与旧版一致；④锚点 bbox 中心实测全部精确守恒。⑤**§4.11 BUFFER/ARM_2 下层视觉闭环**：svg_35 BUFFER 法兰盘金属化（pedestalMetal + 法兰环 + 8 螺栓）、BUFFER 八边形换 panelMetal 深色金属描边、svg_39 小梯形改为 ARM2_Link_Lower 对称菱形杆、svg_40/41 装饰弧线臂删除（grep 零动画引用）；三副本 MD5 全同 `8AC30A325F0F7588100389A58CAEE8AC`；DB 不动（纯视觉层）。**AMAT METSPUT 接入主线 + 视觉风格全部闭环。**（遗留非阻塞：ARM_2 下层菱形杆 JSON 伸缩规则待 §4.11 标注 P2 落地。）
 
 ---
 
@@ -370,6 +370,41 @@ rotate 默认 center pivot 时，把原点**冻结为动作应用那一刻的 bb
 **⑥ 遗留（非阻塞，已与用户对齐）**
 - ARM_2 蛙腿路径的端到端动画采样未完成（受上面 ⑤ 视口+参数注入限制）。后续如需补测，建议改用**机台详情页 cross_arm 流程**（`CHAMBER=A` 进 ARM_1 的 A 腔 → `CHAMBER=1` 触发 ARM_2 从 A 腔取片）或先修正调试页参数注入方式。
 - `backend/uploads/models/amat_metsput_v13_a32a0a5e.json` 与 `models/user/amat_metsput_v1.1.json` 的 `part_type` 变更**必须同步 DB**（红线）：本轮用临时脚本对 `AMAT-METSPUT` 的 `animation_config_json` 做**定向 UPDATE**（仅改两处 `part_type`，其余 LLA 角度/viewBox/motions 6 条原样保留），commit 后回读验证通过，未触碰 machines 表。
+
+---
+
+### 4.11 BUFFER/ARM_2 下层视觉闭环 + 装饰臂清理（2026-10-19，本轮提交）
+
+**背景（用户反馈）**：①ARM_2 送入 Chamber 时圆盘和手臂会发生偏移；②`svg_40/svg_41` 两个部件多余（无参数无动作）；③`svg_39` 应与 `ARM2_Link` 一样做成菱形手臂；④BUFFER 法兰盘 `svg_35` 和八边形都未金属化，与其他腔体风格不符。
+
+**前置安全检查（必须做）**：在任何删除前先 grep 全仓库确认无动画规则引用——
+```
+rg -i "svg_35|svg_39|svg_40|svg_41" .
+```
+本轮 grep 结果：`svg_35/svg_39` 仅在 SVG `<style>` 选择器、CSS 覆盖规则（`#svg_35 { } /* 内联 pedestalMetal */` 这种已空）、bak 备份、一次性生成脚本里出现；**`svg_40/svg_41` 零引用** → 可安全删除。HANDOFF §4.2 表已预见 `svg_39/40/41` 可删/可替换。
+
+**改动清单（纯 SVG 结构，零 JSON / deriver / DB 变更）**：
+
+| 部件 | 原 | 改后 |
+|---|---|---|
+| `svg_35` BUFFER 法兰盘 | `class="shape"` + 白色 deckPlate 渐变 + 旋转 matrix | `fill="url(#pedestalMetal)" stroke="#3a4250" stroke-width="2.4"` 径向金属；外层 +r130 法兰环 + 8 颗 M6 螺栓装饰（沿 32px 四角 + 45° 对角） |
+| `BUFFER` 八边形 path | `fill="#ffffff" stroke="#000000"` 硬边白 | `fill="url(#panelMetal)" stroke="#1f2329" stroke-width="1.6"` 深色拉丝金属 |
+| `svg_39` | 小梯形装饰 path（静态） | **包进新组 `ARM2_Link_Lower`**，改为与 `ARM2_Link` 对称的菱形四连杆（M359,295 L379,316.5 L359,338 L339,316.5 Z）；id 保留；CSS `#svg_39 { fill: url(#armBlade); }` 继续生效 |
+| `svg_40/svg_41` | outline 弧线装饰 path（与菱形杆视觉冲突） | **删除**（grep 零动画引用） |
+
+**红线守住**：
+- 所有动画引用 id 保留：`ARM_1/ARM_2/ARM1_Link/ARM2_Link/ARM1_Anchor/ARM2_Anchor/Wafer_Chuck1/Wafer_Chuck2/svg_36/svg_38/svg_48` 数量未变。
+- `ARM2_Anchor`（r=240, cx=360.02, cy=277）撑住 ARM_2 组 fill-box 恒定 → 新增的 `ARM2_Link_Lower` 菱形 path 范围 y=295~338 被 `svg_38` 圆（cy=341.5, r=33.5 → y=308~375）覆盖，bbox 中心不变，旋转锚点守恒。
+- **DB 不动**：本次纯视觉层，`animation_config_json` 零改动，无需同步 Oracle。
+
+**三副本 MD5**（本轮）：`8AC30A325F0F7588100389A58CAEE8AC`（63,309 bytes）。备份：`.bak-20261019-v2`。
+
+**遗留 P2（deriver + JSON 规则新增，与视觉分开评审）**：
+- `ARM2_Link_Lower` 组在 `CHAMBER_PS` / `WAFER_PROCESS_COMPLETE` 规则里需新增与 `ARM2_Link` 同形态的 `offset_y` + `scale_y` 伸缩动作（菱形四连杆纵向压扁）。
+- `computeExtendVec` 新增 ARM_2 cross_arm 分支：从 A 腔取片送 PVD 1 时，ARM_2 下层菱形杆与上层同步伸缩。
+- deriver 逻辑：两个圆盘自动找最近 Chamber 抓取（几何驱动，非视觉）。
+
+**效果图**：`amat_v2_preview.html`（ISA-101 深色面板风格 + 4 处红色差异标注圈 + 三列 Grid 布局），位于项目根目录。
 
 ---
 
