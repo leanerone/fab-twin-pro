@@ -10,7 +10,7 @@
 
 ## 0. 一句话状态
 
-**2026-10-19 全部闭环**：①AMAT METSPUT 整机 SVG 按审核版预览页重绘为目标态（留白/黑线条清零、全机金属化），三副本 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD`；②`Wafer_Chuck1/2` 因改为 `<g>` 组，JSON `part_type` `circle→group` 并**定向 UPDATE 同步 Oracle**（未动 machines 表）；③**P3-A 单引擎统一**：调试页 `MotionPreview.vue` 改用详情页逐帧引擎 `useMotionPlayback.js`，`useMotionPlayback.motion.js`（事后屏幕测量补偿、follow 滞后根因）**已删除**，CHAMBER_PS 采样证实 chuck 与 ARM1_Link 同帧起落、峰值 `(3.19,-141.02)`/`translate(0,-70.53) scale(1,3.2973)` 与旧版一致；④锚点 bbox 中心实测全部精确守恒。⑤**§4.11 BUFFER/ARM_2 下层视觉闭环**：svg_35 BUFFER 法兰盘金属化（pedestalMetal + 法兰环 + 8 螺栓）、BUFFER 八边形换 panelMetal 深色金属描边、svg_39 小梯形改为 ARM2_Link_Lower 对称菱形杆、svg_40/41 装饰弧线臂删除（grep 零动画引用）；三副本 MD5 全同 `8AC30A325F0F7588100389A58CAEE8AC`；DB 不动（纯视觉层）。**AMAT METSPUT 接入主线 + 视觉风格全部闭环。**（遗留非阻塞：ARM_2 下层菱形杆 JSON 伸缩规则待 §4.11 标注 P2 落地。）
+**2026-10-19/20 全部闭环**：①AMAT METSPUT 整机 SVG 按审核版预览页重绘为目标态（留白/黑线条清零、全机金属化），三副本 MD5 全同 `57EF97E6B57CE59139CC35CA8814E3CD`；②`Wafer_Chuck1/2` 因改为 `<g>` 组，JSON `part_type` `circle→group` 并**定向 UPDATE 同步 Oracle**（未动 machines 表）；③**P3-A 单引擎统一**：调试页 `MotionPreview.vue` 改用详情页逐帧引擎 `useMotionPlayback.js`，`useMotionPlayback.motion.js`（事后屏幕测量补偿、follow 滞后根因）**已删除**，CHAMBER_PS 采样证实 chuck 与 ARM1_Link 同帧起落、峰值 `(3.19,-141.02)`/`translate(0,-70.53) scale(1,3.2973)` 与旧版一致；④锚点 bbox 中心实测全部精确守恒。⑤**§4.11 BUFFER/ARM_2 下层视觉闭环**：svg_35 BUFFER 法兰盘金属化（pedestalMetal + 法兰环 + 8 螺栓）、BUFFER 八边形换 panelMetal 深色金属描边、svg_39 小梯形改为 ARM2_Link_Lower 对称菱形杆、svg_40/41 装饰弧线臂删除（grep 零动画引用）；三副本 MD5 全同 `8AC30A325F0F7588100389A58CAEE8AC`；DB 不动（纯视觉层）。**AMAT METSPUT 接入主线 + 视觉风格全部闭环。**⑥**§4.12 机台面板批信息文字优化（2026-10-20）**：`appendMotionText` 扩展「信息卡」模式（`action.panel`，样式全部由 JSON 驱动、引擎不写死机型值），`BATCH_INFO_FROM_ECUI` 两处 text 动作加 `panel` → 6 行纯黑 16px 文字改为「设备屏幕式」信息卡；改动 = 引擎两副本 + 三份 JSON + Oracle 定向 UPDATE；**坐标保持不变**（保住既有「按坐标清空」动作）；调试台实测渲染 `child=22`。⑦**§4.11 菱形臂几何修正**：两菱形共用 hub 圆心 `(360,278)` 作驱动铰、下层菱形整体落在 hub 下方。（遗留非阻塞：ARM_2 下层菱形杆 JSON 伸缩规则待 §4.11 标注 P2 落地。）
 
 ---
 
@@ -411,6 +411,44 @@ rg -i "svg_35|svg_39|svg_40|svg_41" .
 - deriver 逻辑：两个圆盘自动找最近 Chamber 抓取（几何驱动，非视觉）。
 
 **效果图**：`amat_v2_preview.html`（ISA-101 深色面板风格 + 4 处红色差异标注圈 + 三列 Grid 布局），位于项目根目录。
+
+---
+
+### 4.12 机台面板批信息文字 → 屏幕式信息卡（2026-10-20，本轮提交）
+
+**用户反馈**：机台面板上的批信息文字（`BATCH_ID / LOT_ID / Qty / RunMode / RECIPE1 / PORT` 6 行）没有做样式优化，与金属化后的机台画风脱节。
+
+**根因**：这 6 行来自 motion JSON 的 `text` 动作（`BATCH_INFO_FROM_ECUI` 步骤，两处锚点 `x=64,y=722` 与 `x=465,y=721`），引擎 `appendMotionText` 把它拼成 SVG `<text>`，**硬编码 `fill=#000000` / `font-size=16` / `sans-serif`，无任何样式参数**。
+
+**方案（用户确认）**：样式选「② 设备屏幕式」（浅色屏 + 深色头栏 + 等宽读数，与机台自带 SMIF 面板屏幕画风一致）；字段保持 6 项不变；实现走 **SVG 原生**（引擎扩展 + JSON 驱动），不引入 HTML overlay。
+
+**改动清单（引擎 + JSON，零坐标变更）**：
+
+| 文件 | 变更 | 说明 |
+|---|---|---|
+| `frontend/src/composables/useMotionPlayback.js` | +141 | 新增 `TEXT_PANEL_DEFAULTS` / `mkSvgEl` / `buildTextPanel`；`appendMotionText` 增加 `action.panel` 分支 |
+| `model-editor-standalone/src/composables/useMotionPlayback.js` | +140 | 平行引擎副本，保持同步 |
+| `models/user/amat_metsput_v1.1.json` | +2 | 两条 text 动作加 `"panel": { "headerText": "BATCH INFO", "badgeKey": "PORT" }` |
+| `backend/uploads/models/amat_metsput_v13_a32a0a5e.json` | +2 | 同上 |
+| `model-editor-standalone/src/data/amat_metsput.json` | +2 | 同上 |
+
+**关键设计约束（防回归）**：
+- **坐标绝不改**：`x/y` 仍为 `64,722` / `465,721`。同步骤之后另有两条「清空」动作 `{ "type":"text", "content":"", "x":64, "y":722 }`，靠 `removeMotionTextsAt(svg, x, y)` **按坐标精确匹配**删除；改坐标会导致卡片无法被清除。
+- 信息卡模式下 `x/y` 语义 = **卡片左上角**（非 panel 模式仍是文字基线，向后兼容）。
+- `content` 复用既有「键:值」行格式，引擎按 `:` 切分渲染「标签/值两列」，**无需改内容文本**。
+- 全部样式字段（width/headerHeight/rowHeight/padX/padTop/radius/bg/screen/headerBg/headerText/badgeKey/配色/字号/字体）均可由 `action.panel` 覆盖 → **引擎不写死机型专属值**，不污染共享引擎与其它机型。
+- `panel` 缺省时行为与旧版完全一致（DB 未同步前也不会破坏其它机型）。
+
+**DB 同步（红线）**：`/api/models/{id}` 直读 Oracle `MACHINE_MODEL_CONFIGS.animation_config_json`。本轮用**定向 UPDATE**（临时脚本，仅给 AMAT-METSPUT 的两条 text 动作补 `panel`；其余配置含 LLA / viewBox / motions 原样保留，未动 machines 表），回读验证通过。
+
+**浏览器实测（调试台，标准触发流程：选 AMAT-METSPUT → 初始化 → BATCH_INFO_FROM_ECUI）**：
+```
+G|kind=motion|x=64|y=722|child=22|texts=BATCH INFO / PORT 1 / BATCH_ID / 2312432141 / LOT_ID / N1234 /
+QTY / 25 / RUNMODE / PR_RUN / RECIPE1 / ALC12 / PORT / 1
+```
+`child=22` = 2 rect + 1 path + 标题 + 徽标 + 6 标签 + 6 值 + 5 分隔线，与设计一致；Console 无红色报错。
+
+**效果图**：`amat_batchinfo_preview.html`（项目根目录，真实 SVG 内嵌 + 左右两处候选样式对照）。
 
 ---
 

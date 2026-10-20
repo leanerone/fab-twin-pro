@@ -303,9 +303,144 @@ function removeMotionTextsAt(svg, x, y) {
   })
 }
 
+// ============================================================
+// 「信息卡」（text 动作可选面板模式）
+// 所有样式字段均可由 JSON action.panel 覆盖，引擎不写死机型专属值
+// ============================================================
+
+const TEXT_PANEL_DEFAULTS = {
+  width: 170,
+  headerHeight: 20,
+  rowHeight: 15,
+  padX: 10,
+  padTop: 13,
+  radius: 4,
+  bg: '#f4f5f7',
+  bgStroke: '#94a3b8',
+  screen: '#ffffff',
+  screenStroke: '#cbd5e1',
+  headerBg: '#2b3340',
+  headerFill: '#cbd5e1',
+  headerSize: 9,
+  headerText: 'INFO',
+  badgeFill: '#22a06b',
+  badgeKey: '',
+  labelFill: '#6b7280',
+  labelSize: 8,
+  valueFill: '#1f2937',
+  valueSize: 10.5,
+  sepFill: '#e5e7eb',
+  fontFamily: "'Segoe UI','Microsoft YaHei',sans-serif",
+  monoFamily: "Consolas,'Courier New',monospace",
+}
+
+function mkSvgEl(svg, tag, attrs) {
+  const el = document.createElementNS(svg.namespaceURI, tag)
+  for (const k in attrs) {
+    const v = attrs[k]
+    if (v !== undefined && v !== null) el.setAttribute(k, String(v))
+  }
+  return el
+}
+
+/**
+ * 信息卡：外框 + 屏幕 + 头栏 + 标签/值两列 + 细分隔线。
+ * content 按行解析为「键:值」；键名升位作标签，值右对齐等宽显示。
+ * @returns {SVGGElement|null}
+ */
+function buildTextPanel(svg, action, content, kind) {
+  const p = { ...TEXT_PANEL_DEFAULTS, ...(action.panel || {}) }
+  const x = Number(action.x)
+  const y = Number(action.y)
+  const w = Number(p.width)
+  const hh = Number(p.headerHeight)
+  const rh = Number(p.rowHeight)
+  const r = Number(p.radius)
+  const px = Number(p.padX)
+  const rows = String(content).split('\n').map(s => s.trim()).filter(Boolean).map((line) => {
+    const i = line.indexOf(':')
+    return i < 0 ? [line, ''] : [line.slice(0, i).trim(), line.slice(i + 1).trim()]
+  })
+  if (!rows.length) return null
+  const ph = hh + Number(p.padTop) + rows.length * rh
+
+  const g = mkSvgEl(svg, 'g', {
+    'data-motion-text': kind,
+    x: String(x),
+    y: String(y),
+    'pointer-events': 'none',
+  })
+
+  // 外框 + 内屏
+  g.appendChild(mkSvgEl(svg, 'rect', {
+    x, y, width: w, height: ph, rx: r, fill: p.bg, stroke: p.bgStroke, 'stroke-width': 1.2,
+  }))
+  g.appendChild(mkSvgEl(svg, 'rect', {
+    x: x + 3, y: y + 3, width: w - 6, height: ph - 6, rx: 2, fill: p.screen, stroke: p.screenStroke, 'stroke-width': 0.6,
+  }))
+
+  // 头栏（仅上两角圆角）
+  const headerD = [
+    `M${x + r},${y}`,
+    `h${w - 2 * r}`,
+    `a${r},${r} 0 0 1 ${r},${r}`,
+    `v${hh - r}`,
+    `h${-w}`,
+    `v${-(hh - r)}`,
+    `a${r},${r} 0 0 1 ${r},${-r}`,
+    'z',
+  ].join(' ')
+  g.appendChild(mkSvgEl(svg, 'path', { d: headerD, fill: p.headerBg }))
+  const title = mkSvgEl(svg, 'text', {
+    x: x + px, y: y + hh - 6, 'font-family': p.fontFamily, 'font-size': p.headerSize,
+    fill: p.headerFill, 'letter-spacing': 1,
+  })
+  title.textContent = String(p.headerText)
+  g.appendChild(title)
+
+  // 头栏右侧徽标：取 badgeKey 对应行的值
+  const badge = p.badgeKey
+    ? rows.find(([k]) => k.toUpperCase() === String(p.badgeKey).toUpperCase())
+    : null
+  if (badge && badge[1]) {
+    const b = mkSvgEl(svg, 'text', {
+      x: x + w - px, y: y + hh - 6, 'text-anchor': 'end', 'font-family': p.monoFamily,
+      'font-size': p.headerSize, fill: p.badgeFill,
+    })
+    b.textContent = `${p.badgeKey} ${badge[1]}`
+    g.appendChild(b)
+  }
+
+  // 数据行（标签 / 值 / 分隔线）
+  rows.forEach(([k, v], i) => {
+    const ry = y + hh + Number(p.padTop) + i * rh
+    const label = mkSvgEl(svg, 'text', {
+      x: x + px, y: ry, 'font-family': p.fontFamily, 'font-size': p.labelSize,
+      fill: p.labelFill, 'letter-spacing': 0.5,
+    })
+    label.textContent = k.toUpperCase()
+    g.appendChild(label)
+    const value = mkSvgEl(svg, 'text', {
+      x: x + w - px, y: ry, 'text-anchor': 'end', 'font-family': p.monoFamily,
+      'font-size': p.valueSize, fill: p.valueFill,
+    })
+    value.textContent = v
+    g.appendChild(value)
+    if (i < rows.length - 1) {
+      g.appendChild(mkSvgEl(svg, 'line', {
+        x1: x + px, y1: ry + 5.5, x2: x + w - px, y2: ry + 5.5,
+        stroke: p.sepFill, 'stroke-width': 0.6,
+      }))
+    }
+  })
+
+  return g
+}
+
 /**
  * text 动作落 DOM。x/y 直接作为 SVG user space 坐标（与模型组实现一致）。
  * targetEl 存在时为跟随文字（复制目标 transform，随目标移动）。
+ * action.panel 存在时走「信息卡」模式：x/y 为卡片左上角，content 按「键:值」行渲染为屏幕卡。
  */
 export function appendMotionText(svg, action, kind, params = {}, targetEl = null) {
   const content = resolveTextTemplate(action.content, params)
@@ -327,6 +462,12 @@ export function appendMotionText(svg, action, kind, params = {}, targetEl = null
   if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return null
   removeMotionTextsAt(svg, x, y)
   if (isClear) return null
+  // 信息卡模式：x/y 为卡片左上角，content 按「键:值」行渲染为屏幕式信息卡
+  if (action.panel) {
+    const panel = buildTextPanel(svg, action, content, kind)
+    if (panel) svg.appendChild(panel)
+    return panel
+  }
   const el = document.createElementNS(svg.namespaceURI, 'text')
   el.setAttribute('x', String(x))
   el.setAttribute('y', String(y))

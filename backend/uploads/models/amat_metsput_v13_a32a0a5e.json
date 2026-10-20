@@ -99,6 +99,7 @@
             {
               "type": "text",
               "content": "BATCH_ID:params.BATCH_ID\nLOT_ID:params.LOT_ID\nQty:params.Qty\nRunMode:params.RunMode\nRECIPE1:params.RECIPE1\nPORT:params.PORT",
+              "panel": { "headerText": "BATCH INFO", "badgeKey": "PORT" },
               "x": 64,
               "y": 722
             }
@@ -112,6 +113,7 @@
             {
               "type": "text",
               "content": "BATCH_ID:params.BATCH_ID\nLOT_ID:params.LOT_ID\nQty:params.Qty\nRunMode:params.RunMode\nRECIPE1:params.RECIPE1\nPORT:params.PORT",
+              "panel": { "headerText": "BATCH INFO", "badgeKey": "PORT" },
               "x": 465,
               "y": 721
             }
