@@ -206,6 +206,14 @@
           ]
         },
         {
+          "phase": 2,
+          "target_part_id": "{pickup_link_lower}",
+          "when": "params.pickup_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_lower_ext_oy}", "scale_y": "{pk_link_lower_ext_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
           "phase": 3,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
@@ -225,6 +233,14 @@
           "target_part_id": "{pickup_link}",
           "actions": [
             { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_ret_oy}", "scale_y": "{pk_link_ret_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{pickup_link_lower}",
+          "when": "params.pickup_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_lower_ret_oy}", "scale_y": "{pk_link_lower_ret_sy}", "duration": 900, "easing": "linear" }
           ]
         },
         {
@@ -296,6 +312,14 @@
         },
         {
           "phase": 8,
+          "target_part_id": "{drop_link_lower}",
+          "when": "params.drop_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_lower_ext_oy}", "scale_y": "{link_lower_ext_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 8,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
             { "type": "offset", "offset_x": "{ext_rdx}", "offset_y": "{ext_rdy}", "duration": 900, "easing": "linear" }
@@ -313,6 +337,14 @@
           "target_part_id": "{drop_link}",
           "actions": [
             { "type": "offset", "offset_x": 0, "offset_y": "{link_ret_oy}", "scale_y": "{link_ret_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 9,
+          "target_part_id": "{drop_link_lower}",
+          "when": "params.drop_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_lower_ret_oy}", "scale_y": "{link_lower_ret_sy}", "duration": 900, "easing": "linear" }
           ]
         }
       ]
@@ -351,6 +383,14 @@
           ]
         },
         {
+          "phase": 2,
+          "target_part_id": "{pickup_link_lower}",
+          "when": "params.pickup_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_lower_ext_oy}", "scale_y": "{link_lower_ext_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
           "phase": 3,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
@@ -369,6 +409,14 @@
           "target_part_id": "{pickup_link}",
           "actions": [
             { "type": "offset", "offset_x": 0, "offset_y": "{link_ret_oy}", "scale_y": "{link_ret_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{pickup_link_lower}",
+          "when": "params.pickup_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{link_lower_ret_oy}", "scale_y": "{link_lower_ret_sy}", "duration": 900, "easing": "linear" }
           ]
         },
         {
@@ -440,6 +488,14 @@
         },
         {
           "phase": 8,
+          "target_part_id": "{drop_link_lower}",
+          "when": "params.drop_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_lower_ext_oy}", "scale_y": "{pk_link_lower_ext_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 8,
           "target_part_id": "{carrier}{SLOT}",
           "actions": [
             { "type": "offset", "offset_x": "{pk_ext_rdx}", "offset_y": "{pk_ext_rdy}", "duration": 900, "easing": "linear" }
@@ -464,6 +520,14 @@
           "target_part_id": "{drop_link}",
           "actions": [
             { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_ret_oy}", "scale_y": "{pk_link_ret_sy}", "duration": 900, "easing": "linear" }
+          ]
+        },
+        {
+          "phase": 10,
+          "target_part_id": "{drop_link_lower}",
+          "when": "params.drop_link_lower",
+          "actions": [
+            { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_lower_ret_oy}", "scale_y": "{pk_link_lower_ret_sy}", "duration": 900, "easing": "linear" }
           ]
         }
       ]
