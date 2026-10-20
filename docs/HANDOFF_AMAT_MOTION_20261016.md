@@ -406,8 +406,8 @@ rg -i "svg_35|svg_39|svg_40|svg_41" .
 **三副本 MD5**（本轮）：`8AC30A325F0F7588100389A58CAEE8AC`（63,309 bytes）。备份：`.bak-20261019-v2`。
 
 **遗留 P2（deriver + JSON 规则新增，与视觉分开评审）**：
-- ~~`ARM2_Link_Lower` 组在 `CHAMBER_PS` / `WAFER_PROCESS_COMPLETE` 规则里需新增与 `ARM2_Link` 同形态的 `offset_y` + `scale_y` 伸缩动作（菱形四连杆纵向压扁）。~~ → **已闭环，见 §4.13**
-- ~~`computeExtendVec` 新增 ARM_2 cross_arm 分支：从 A 腔取片送 PVD 1 时，ARM_2 下层菱形杆与上层同步伸缩。~~ → **已闭环，见 §4.13**（实际由放片侧 `{drop_link_lower}` 通用规则覆盖，无需专门分支）
+- ~~`ARM2_Link_Lower` 组在 `CHAMBER_PS` / `WAFER_PROCESS_COMPLETE` 规则里需新增与 `ARM2_Link` 同形态的 `offset_y` + `scale_y` 伸缩动作（菱形四连杆纵向压扁）。~~ → **已实现后推翻**（镜像同步违反单边出片物理行为，已回退，见 §4.13）
+- ~~`computeExtendVec` 新增 ARM_2 cross_arm 分支：从 A 腔取片送 PVD 1 时，ARM_2 下层菱形杆与上层同步伸缩。~~ → **已实现后推翻**（同上，见 §4.13）
 - deriver 逻辑：两个圆盘自动找最近 Chamber 抓取（几何驱动，非视觉）。→ **语义待定，另立任务（见 §4.13 末尾）**
 
 **效果图**：`amat_v2_preview.html`（ISA-101 深色面板风格 + 4 处红色差异标注圈 + 三列 Grid 布局），位于项目根目录。
@@ -452,49 +452,45 @@ QTY / 25 / RUNMODE / PR_RUN / RECIPE1 / ALC12 / PORT / 1
 
 ---
 
-### 4.13 ARM_2 下层菱形杆同步镜像伸缩（2026-10-20，闭环 §4.11 遗留 P2 前两项）
+### 4.13 ARM_2 下层菱形杆：镜像方案实现后**推翻** → 恢复单边出片 + z-order 修正（2026-10-20）
 
-**背景**：§4.11 把 `svg_39` 包进 `ARM2_Link_Lower` 组并画成与 `ARM2_Link` 对称的菱形四连杆，但当时只完成视觉层，下层杆没有伸缩动画。本轮补齐 deriver 参数 + JSON 规则：ARM_2 取放片时**上下两层菱形杆同步压扁/回弹，方向镜像**（上层 chuck 在杆顶端 `offset_y=+e/2`，下层 chuck 在杆底端 `offset_y=-e/2`，`scale_y` 相同）。
+**两轮过程**：① 前一轮（`fe78876`）按 §4.11 遗留 P2 规格实现「上下层菱形杆同步镜像伸缩」（8 条 `link_lower` 规则 + deriver 参数），调试台实测通过后提交；② 本轮用户复测指出**两个物理错误**，根因分析后用户确认整体回退镜像方案、另修 z-order。
 
-**改动清单**：
+**用户反馈（原话）**：「你下层手臂，没有放到圆盘下面」+「你送晶圆进chamber应该只有单边手臂动，另外一边是不动的」。
+
+**根因分析**：
+- **双边同时动** = 规格本身错误，非实现 bug：8 条 `{pickup|drop_link_lower}` 镜像规则与上层 `{pickup|drop_link}` 规则**同一相位同时命中**（伸出/收回成对），导致上下两层杆同步镜像伸缩。物理上双臂（dual-blade）机器人单边出片时另一侧 blade 收起不动 → 镜像方案整体回退。
+- **下层杆压盘** = SVG z-order 写反：SVG 文档顺序即渲染层级。上侧先画 `ARM2_Link` 后画 `Wafer_Chuck2`（盘盖杆尖 ✓）；下侧原来先画 `svg_38` 后画 `ARM2_Link_Lower`（杆压盘 ✗）。几何本身正确（下杆尖端 360.5,341.5 = svg_38 圆心，与上侧同构），纯顺序问题。
+
+**本轮修复改动清单**：
 
 | 文件 | 变更 | 说明 |
 |---|---|---|
-| `frontend/src/motionDerivers/amatMetsput.js` | +15 | ①`fillExtendParams` 尾部按前缀注入 4 个镜像参数：`{prefix}link_lower_ext_sy = link_sy`、`{prefix}link_lower_ext_oy = -e/2`、`{prefix}link_lower_ret_sy = 1`、`{prefix}link_lower_ret_oy = +e/2`；②新增 `armLowerLinkPart(armId)`：ARM_2 → `ARM2_Link_Lower`，其他 → `''`；③CHAMBER_PS / WAFER_PROCESS_COMPLETE derive 各补 `pickup_link_lower` / `drop_link_lower` |
-| `frontend/src/components/MotionPreview.vue` | +15 | **调试台不共享 deriver**：该组件内联复制了一份 CHAMBER_PS / WPC 参数推导（本地 `fillExtend` / `armLinkPart` 等），生产视图 MachineMotion2D 才走 `motionDerivers/`。同步补齐 4 处：`fillExtend` 尾部 4 个镜像参数、`armLowerLinkPart` 帮手、两个分支各补 `pickup_link_lower` / `drop_link_lower`。**改 deriver 参数契约时必须同步改这里，否则调试台静默不生效（实测踩过：DB/deriver 全对，调试台就是不命中）** |
-| `models/user/amat_metsput_v1.1.json` | +64 | 8 条镜像规则（CHAMBER_PS phase2/4/8/9 + WPC phase2/4/8/10），各紧随既有上层杆规则 |
-| `backend/uploads/models/amat_metsput_v13_a32a0a5e.json` | +64 / ±1 | 同上 8 条；另对齐历史漂移 `ARM_1.LLA` 190 → 198（models/user 与 DB 早已是 198，运行时直读 DB，该上传副本此前未跟进；本轮后两副本**逐字节一致**） |
-| `model-editor-standalone/src/data/amat_metsput.json` | 0 | **明确不同步**：该副本为老一代配置，无任何 link 伸缩规则（pre-P1 结构），加镜像规则会成为孤儿 |
-
-**镜像规则统一形态**（以 CHAMBER_PS phase2 为例）：
-```json
-{
-  "phase": 2,
-  "target_part_id": "{pickup_link_lower}",
-  "when": "params.pickup_link_lower",
-  "actions": [
-    { "type": "offset", "offset_x": 0, "offset_y": "{pk_link_lower_ext_oy}", "scale_y": "{pk_link_lower_ext_sy}", "duration": 900, "easing": "linear" }
-  ]
-}
-```
+| `models/user/amat_metsput_v1.1.json` | -64 | 删除 8 条镜像规则（CHAMBER_PS phase2/4/8/9 + WPC phase2/4/8/10 的 `link_lower` 块），规则数各 24 → **20** |
+| `backend/uploads/models/amat_metsput_v13_a32a0a5e.json` | -64 | 同上，两副本**逐字节一致**（19,835 chars） |
+| `frontend/src/motionDerivers/amatMetsput.js` | -15 | 全量回退前一轮新增：`fillExtendParams` 尾部 4 个镜像参数注入、`armLowerLinkPart` 帮手、CHAMBER_PS/WPC derive 各两行 `pickup_link_lower`/`drop_link_lower`。上层 `{prefix}link_ext/ret_*` 参数不动 |
+| `frontend/src/components/MotionPreview.vue` | -15 | **调试台不共享 deriver**，同步回退 4 处（本地 `fillExtend` / `armLowerLinkPart` / 两分支各两行）。**改 deriver 参数契约时必须同步改这里** |
+| `models/user/amat_metsput.svg` | ±1 | **z-order 修正**：`svg_38` 挪到 `ARM2_Link_Lower` 组**之后**绘制（盘盖杆尖，与上侧 `ARM2_Link → Wafer_Chuck2` 层级一致）。ARM_2 组最终顺序：`ARM2_Anchor`(hidden) → `svg_36`(hub) → `ARM2_Link` → `Wafer_Chuck2` → `ARM2_Link_Lower` → `svg_38` → `g.arm-deco` |
+| `backend/uploads/models/amat_metsput.svg` + `model-editor-standalone/src/assets/amat_metsput.svg` | 同步 | 三副本 MD5 一致：**`A3B4E2AC0E06D2C8759516EC18BFE188`** |
+| `model-editor-standalone/src/data/amat_metsput.json` | 0 | 老一代配置副本，本就不含 link 规则，无需动 |
 
 **关键设计约束（防回归）**：
-- **单臂机型零影响**：`armLowerLinkPart` 对非 ARM_2 返回空串；`evalWhen` 把 `params.X` 替换为 `'值'`，空串/undefined 均 falsy → 规则跳过。引擎另有缺失目标容错（`useMotionPlayback.js` L937-945）兜底，双保险。
-- **cross_arm 无需专门分支**：A 腔→PVD 1 时 ARM_2 是放片侧，由 `{drop_link_lower}` 规则通用覆盖。
-- **前缀约定不变**：CHAMBER_PS 取片侧 `pk_` 前缀、放片侧无前缀；WPC 相反。镜像参数沿用同前缀。
-- **transform-origin 恒为 fill-box center**（引擎行为）：`ARM2_Anchor`（r=240）锁定 ARM_2 组 bbox → 下层杆 scale 锚点与上层一致，镜像 `offset_y` 即实现「hub 端不动、chuck 端伸出」。
+- **单边出片语义**：ARM_2 取放片时只有 `ARM2_Link`（上层杆）伸缩，`ARM2_Link_Lower`（下层杆）静止——这是物理正确行为，**不要再给下层杆加同步/镜像动画规则**。下层杆与 `svg_38` 仅作为 ARM_2 组的静态成员随臂整体旋转。
+- 将来做「双盘就近抓取」（§4.13 末尾第三项）时，才由 deriver 根据目标腔方位**决定出哪一侧臂**（θ 或 θ+180° 二选一），仍是单边动，绝非双边同步。
+- `link_lower` 相关 token 在 JSON / deriver / MotionPreview 中计数均为 **0**，可作为回归检查点。
+- SVG 三副本同步纪律不变：models/user + backend/uploads + model-editor-standalone/assets，改完必须 MD5 一致。
 
-**DB 同步（红线）**：`cd backend && python ../scripts/sync_amat_motion_to_db.py`（整体覆写；执行时 DB 与 models/user 一致，等价定向更新）。回读验证通过：`AMAT-METSPUT` v1.1，`animation_config_json` 长度 14635 → 16604，`LLA=198`，镜像规则 token 计数与文件一致（target/when 各 4+4，oy/sy 参数 2/2/4/4）。
+**DB 同步（红线）**：临时脚本 `sync_amat_db.py`（sys.path 插 backend，SQLAlchemy 定向 UPDATE `MACHINE_MODEL_CONFIGS`，等价 `scripts/sync_amat_motion_to_db.py`）。回读验证：`ANIMATION_CONFIG_JSON` 长度 16604 → **19835**（与文件逐字符一致）、`link_lower` 计数 0、`"LLA":198` 在位；API `GET /api/models/AMAT-METSPUT` 复验 200、`link_lower` 0。
 
-**调试台实测（2026-10-20，通过）**：模型编辑器 → 动画调试 → 选 AMAT-METSPUT → 初始化 → BATCH_INFO_FROM_ECUI → CHAMBER_PS CHAMBER=A → CHAMBER_PS CHAMBER=1（触发 cross_arm）：
+**调试台实测（2026-10-20，通过）**：新开页签 → 模型编辑器 → 动画调试 → 选 AMAT-METSPUT → 初始化 → BATCH_INFO_FROM_ECUI → CHAMBER_PS CHAMBER=A → CHAMBER_PS CHAMBER=1（触发 cross_arm）：
+- 规则计数 CHAMBER_PS / WPC 各 **20** 条（镜像规则已移除）✓
 - `跨臂交接: LLA1 ARM_1 → ARM_2（Cross 0/180）` + `R轴伸缩: ARM_2 CH_1 θ=250` ✓
-- **ARM2_Link_Lower 命中 ×2**（phase8 伸出 + phase9 收回，与 ARM2_Link 同步）✓
-- ARM_1 路径（CHAMBER_PS=A）无 Link_Lower 命中（when 守卫生效）✓，全程 0 条「部件未找到」告警 ✓
-- 规则计数 CHAMBER_PS / WPC 各 24 条（20 老 + 4 新）✓
-- 坑：调试页签若为旧 vite 进程遗留，HMR 断连后持有陈旧 JS 模块，必须**新开页签**强制全量加载再测。
+- **`ARM2_Link_Lower` 命中 ×0**（下层杆静止，单边出片）✓；`ARM2_Link` 命中 ×2（伸出+收回）✓
+- 全程 **0** 条「部件未找到/未命中」告警 ✓
+- DOM 验证：`#ARM_2` 内 `ARM2_Link_Lower`(idx 20) 在 `svg_38`(idx 24) 之前；`ARM2_Link`(idx 2) 在 `Wafer_Chuck2`(idx 7) 之前 → 两层均为盘盖杆尖 ✓
 
-**遗留 P2（第三项，语义待定）**：
-- deriver 逻辑：两个圆盘（`Wafer_Chuck2` 与下层 `svg_38`）自动找最近 Chamber 抓取（几何驱动，非视觉）。涉及：臂当前角度跟踪、θ+180° 第二运动学解、`extend_geometry` 需加下层 chuck 条目、pickup/drop_part 指向 `svg_38`（普通 circle，非 parts 注册件）、晶圆 follow/snap 链路影响——回归风险高。**2026-10-20 已与用户确认：本期仅交付前两项（下层菱形杆镜像伸缩），本项跳过、另立任务，待语义对齐后再动手**。
+**遗留 P2（第三项，另立任务）**：
+- deriver 逻辑：两个圆盘（`Wafer_Chuck2` 与下层 `svg_38`）自动找最近 Chamber 抓取（几何驱动，非视觉）。涉及：臂当前角度跟踪、θ+180° 第二运动学解、`extend_geometry` 加下层 chuck 条目、pickup/drop_part 指向 `svg_38`、晶圆 follow/snap 链路影响——回归风险高。**2026-10-20 用户确认：本期跳过、另立任务**。做该项时注意：由 deriver 决定出哪一侧臂（单边动），不得恢复双边同步镜像。
 
 ---
 

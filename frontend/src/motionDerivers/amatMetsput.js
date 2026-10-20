@@ -91,11 +91,6 @@ function fillExtendParams(params, v, prefix = '') {
   params[`${prefix}link_ext_oy`] = +((v.e || 0) / 2).toFixed(2)
   params[`${prefix}link_ret_sy`] = 1
   params[`${prefix}link_ret_oy`] = -(+((v.e || 0) / 2).toFixed(2))
-  // 下层臂杆（双臂机型 ARM_2）：与上层同步压扁，方向镜像（offset_y 取反）
-  params[`${prefix}link_lower_ext_sy`] = v.link_sy ?? 1
-  params[`${prefix}link_lower_ext_oy`] = -(+((v.e || 0) / 2).toFixed(2))
-  params[`${prefix}link_lower_ret_sy`] = 1
-  params[`${prefix}link_lower_ret_oy`] = +((v.e || 0) / 2).toFixed(2)
 }
 
 export function createAmatMetsputDeriver() {
@@ -129,12 +124,6 @@ export function createAmatMetsputDeriver() {
   function armLinkPart(armId) {
     const m = String(armId || '').match(/(\d+)\s*$/)
     return `ARM${m ? m[1] : '1'}_Link`
-  }
-
-  // 双臂机型 ARM_2 的下层菱形杆（180° 背向，与上层同步伸缩、方向镜像）；
-  // 单臂机型无下层杆 → 空串，JSON 规则靠 when 守卫跳过
-  function armLowerLinkPart(armId) {
-    return String(armId || '').toUpperCase() === 'ARM_2' ? 'ARM2_Link_Lower' : ''
   }
 
   /**
@@ -195,8 +184,6 @@ export function createAmatMetsputDeriver() {
       params.drop_part = dropPart
       params.pickup_link = armLinkPart(fromArm)
       params.drop_link = armLinkPart(toArm)
-      params.pickup_link_lower = armLowerLinkPart(fromArm)
-      params.drop_link_lower = armLowerLinkPart(toArm)
       params.cross_arm = crossArm
       params.has_entered_chamber = Boolean(fromChamber)
       if (fromChamber) {
@@ -273,8 +260,6 @@ export function createAmatMetsputDeriver() {
       params.drop_part = armChuckPart(returnArm)
       params.pickup_link = armLinkPart(chamberArm)
       params.drop_link = armLinkPart(returnArm)
-      params.pickup_link_lower = armLowerLinkPart(chamberArm)
-      params.drop_link_lower = armLowerLinkPart(returnArm)
       params.cross_arm = crossArm
       if (crossArm) {
         const crossFrom = armAngleFor(angleMap, chamberArm, 'Cross')
