@@ -1,8 +1,8 @@
 # FabTwin Pro — AI 能力说明与后续规划
 
-> 版本：ver2.10.9 对应盘点（2026-09-11）
-> 用途：① 向管理层说明「AI 现在能做什么」；② 明确「run 货历史查询」与「LOG 捞取」两项新能力的落地方案
-> 关联文档：`docs/integration/DEPLOY_SOP.md`、`docs/integration/dify_n8n_format_reference.md`、`docs/变更更改版记录.md`
+> 版本：ver2.10.9 对应盘点（2026-09-11）；2026-10-20 增补第六部分（Agent 标准化 MCP 规划）
+> 用途：① 向管理层说明「AI 现在能做什么」；② 明确「run 货历史查询」与「LOG 捞取」两项新能力的落地方案；③ 明确「标准化 Agent 共调用」的架构演进路线
+> 关联文档：`docs/integration/DEPLOY_SOP.md`、`docs/integration/dify_n8n_format_reference.md`、`docs/变更更改版记录.md`、`docs/系统架构说明书.md` §7.11
 
 ---
 
@@ -388,6 +388,65 @@ Dify Agent 的 system prompt 里约定输出 `<FABTWIN>{...}</FABTWIN>` 结构�
 | 4 | 悬浮球与机台内嵌两个聊天组件的 jump 契约不一致（一个传对象、一个传裸时间戳） | 跳转行为不统一 | 统一为对象契约 |
 | 5 | `get_mes_lot_info` 的 n8n workflow_id 硬编码 | 换 n8n 环境即失效 | 移入 `ai_configs` 配置项 |
 | 6 | db_proxy 地址在生成脚本、10 个 n8n JSON、文档三处重复硬编码 | 改地址要改十几处 | 抽成统一配置/环境变量。**已缓解**：现役只剩 2 个合并版 workflow，实际要改的 n8n 侧从 10 处降到 2 处 |
+
+---
+
+## 第六部分　AI Agent 标准化（MCP）规划（2026-10-20 增补）
+
+> 对应用户诉求：「AI 问答只能一问一答；Dify/n8n 开发了很多内容但做不成标准化 Agent 共调用；网站加载配置混乱。」
+
+### 6.1 为什么选 MCP
+
+MCP（Model Context Protocol）已成事实标准：ChatGPT / Claude / Gemini / Copilot / Cursor 全部接入，2025-12 Anthropic 将其捐入 Linux 基金会 Agentic AI Foundation（OpenAI/AWS/Google/Microsoft 均为成员）。分工上 **MCP 管「Agent↔工具」、A2A 管「Agent↔Agent」**，厂内系统互通以 MCP 为主即可，A2A 暂缓。
+
+- **Dify**：v1.6.0（2025-07）起内置**双向 MCP**——既可把外部 MCP Server 注册为工具/Agent 策略节点，也可把 Dify 应用一键发布为 MCP Server（现场 Dify 若低于 1.6 需先升级）
+- **n8n**：MCP Server Trigger 节点把单条工作流暴露为 MCP 工具；MCP Client Tool 节点消费外部 MCP Server；v2.2+ 有实例级 MCP Server
+- **FastAPI 侧**：用 fastapi-mcp / 官方 FastMCP 可从现有 HTTP API 近乎零改造生成 MCP 工具，传输用 Streamable HTTP
+
+### 6.2 目标架构（两步走）
+
+**形态 A：Dify 为中心的薄接入（先落地，解决一问一答）**
+
+```
+Vue3 前端（AiAssistant / 悬浮球）
+    │  SSE（不再一次性返回）
+    ▼
+FastAPI 透传代理（隐藏 Dify Key，转发 SSE 事件）
+    ▼
+Dify Agent（chat-messages，conversation_id 维持多轮）
+    ├─ 工具：fab_query / fab_admin（现役，经 n8n → db_proxy → Oracle）
+    ├─ 工具：n8n MCP Server Trigger 暴露的其他工作流（MES/SPC/EAP LOG）
+    └─ 工具：fastapi-mcp 封装的 FabTwin 内部 API（机台状态/回放跳转）
+```
+
+要点：① 前端改消费 SSE 事件流（`agent_message` 正文 / `agent_thought` 工具过程 / `message_end` 结束），后端 `_consume_dify_stream` 的聚合逻辑改为**透传**；② `conversation_id` 由后端按 session 维护（沿用 `_dify_conv_map` 思路，但改持久化，进程内存方案废弃）；③ 多轮编排交给 Dify Agent 节点，**不自研 function-calling 循环**（重试/上下文裁剪/工具路由都是重复造轮子）。
+
+**形态 B：独立「Fab MCP 工具网关」（中期沉淀，解决共调用与混乱）**
+
+```
+                ┌───────────── Fab MCP Gateway（统一认证/审计/限流）─────────────┐
+                │  按域拆子 Server：fab-oracle / fab-mes / fab-spc / fab-eap-log │
+                └───▲──────────────▲──────────────▲──────────────▲─────────────┘
+                    │              │              │              │
+                 Dify Agent    n8n 工作流     FabTwin 网站后端   工程师 IDE（Cursor/Trae）
+                 （消费方之一）  （消费方）      （SSE 代理）      （排查问题直接调工具）
+```
+
+要点：① 网关是唯一工具事实源，Dify 从「编排中心」降级为「消费方之一」；② 统一鉴权与调用审计落在这里，替换掉现在散落的 X-API-Key / workflow_id 硬编码；③ 参考 Uber MCP Gateway（单代理 + 渐进发现）、阿里云百炼 Connector（企业系统一次收敛成 MCP 工具）。
+
+### 6.3 落地顺序（与第五部分既有问题联动）
+
+| 步 | 内容 | 联动清理 |
+|---|---|---|
+| 1 | Dify 升级 ≥1.6，确认双向 MCP 可用；现场 n8n 开通 MCP Server Trigger | — |
+| 2 | FastAPI 加 Dify SSE 透传端点；前端两聊天组件改 SSE + 统一 jump 对象契约 | 第五部分 #4 |
+| 3 | n8n 关键工作流改挂 MCP Server Trigger，注册进 Dify | 第五部分 #5（workflow_id 硬编码随 MCP 注册表配置化一并解决） |
+| 4 | fastapi-mcp 封装内部 API（机台状态/模型配置/回放跳转）注册进 Dify | 第五部分 #2（两套工具体系归一到 MCP） |
+| 5 | 形态 B 网关立项（FastAPI 新服务），按域迁移工具，加认证/审计 | 第五部分 #1（ai_mcp.py 死代码移除）、#3、#6 |
+
+### 6.4 「网站这个方式还合适吗」的结论
+
+**方向合适，但接线方式要换**：自研 Vue3 前端 + 自有站点是正确形态（iframe 嵌入 Dify WebApp 定制太差，不满足机台上下文/跳转联动）；问题出在后端自研了同步聚合的中间层，把 Dify 的流式与多轮能力阉割掉了。改为「前端 ↔ FastAPI 透传代理 ↔ Dify Agent（SSE）」后，网站形态保留、体验升级为多轮 + 工具过程可见。配置混乱部分随 §7.10 缓存与形态 B 网关统一收敛。
 
 ---
 

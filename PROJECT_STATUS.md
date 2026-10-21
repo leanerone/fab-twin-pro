@@ -1,14 +1,16 @@
 # FabTwin Pro 项目进度文档
 
-> 更新日期：2026-09-23
-> 当前版本：ver2.10.21
-> 分支：test1（开发与测试都走这个分支）
+> 更新日期：2026-10-20
+> 当前版本：ver2.11.1
+> 分支：**test3**（当前工作分支；test1 已切走，详见 `docs/HANDOFF_AMAT_MOTION_20261016.md`）
 
 ---
 
-## 〇、当前状态速览（2026-09-23）
+## 〇、当前状态速览（2026-10-20）
 
-> **2026-09-23 文档/部署结构整理**：deploy/ 与 docs/ 已精简（旧 deploy.bat / one_click_deploy.bat 已移除；旧文档归档到 `docs/archive/`）；新 `deploy/README.md` 是脚本功能速查；新 `docs/DEPLOY_SOP.md` 是端到端部署指南；详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部。
+> **2026-10-20 ver2.11.1**：AMAT METSPUT 动画修复轮收尾（ARM_2 下层杆镜像方案推翻→恢复单边出片 + z-order 修正，DB 配置已同步 16604→19835 chars）；文档同步刷新（系统架构说明书 ver2.6.1→ver2.11.1）；两项架构规划定案：**DB 查询卡顿三步走**（DBA 复合索引/SQL 改写 → cachetools 进程内缓存 → Garnet xcopy 免安装部署，见系统架构说明书 §7.10）、**AI Agent 标准化两步走**（形态 A：Dify 1.6+ 双向 MCP 薄接入 + 前端 SSE 多轮 → 形态 B：独立 Fab MCP 工具网关，见 §7.11）。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部。
+>
+> **当前开发主线**：AMAT METSPUT（第四机型，配置驱动 motion2d）→ 下一步为 ①DB 性能三步走落地 ②Dify MCP 形态 A 接入 ③AMAT 双盘就近抓取（deriver 决定出哪侧臂）。
 
 ### 本地起服务（四件）
 
@@ -130,9 +132,9 @@ python tests\generate_oxe_alarms.py --date 2026-09-11
 | WinForm模拟器 | 95% | ✅ 可用 | 完整流程、报警模拟、事件ID动态生成 |
 | 2D平面图编辑器 | 80% | ✅ 可用 | 5种工具、拖拽编辑、JSON导入导出 |
 | 楼层3D视图 | 80% | ✅ 可用 | 机台/区域/轨迹/天车3D可视化 |
-| AI助手 | 70% | ⚠️ 待增强 | 规则引擎可用，MCP/Dify待接入 |
+| AI助手 | 70% | ⚠️ 待增强 | 多 Provider + Dify/MCP 工具已接入（工具 2→10）；同步一问一答待升级多轮 Agent（系统架构说明书 §7.11 形态 A） |
 | 模型编辑器 | 60% | ⚠️ 待完善 | 基础框架可用，配置化需完善 |
-| 用户权限 | 0% | 📋 待开发 | 登录页有，权限体系未实现 |
+| 用户权限 | 90% | ✅ 可用 | 4 张权限表 + /users 管理页 + 路由守卫（model_edit/user_manage/ai_config）；WinNT SSO + 账号密码双模式 |
 
 ### 2.2 PODOPENER 专项进度
 
@@ -160,7 +162,7 @@ python tests\generate_oxe_alarms.py --date 2026-09-11
 - **机台数据**: 38台机台，PODOPENER-1已就绪
 - **历史数据**: PODOPENER-1共10920条事件（7天）
 - **当前状态表**: DT_EVENT_RAW_CUR 已创建并投入使用
-- **表总数**: 19张（5张Oracle对齐 + 14张扩展）
+- **表总数**: 29张（5张RV对齐 + 15张业务扩展 + 4张权限 + 4张AI专用 + 1张映射）
 
 ---
 
