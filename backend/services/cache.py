@@ -1,6 +1,10 @@
 """Redis缓存服务：实时状态缓存、热点数据加速"""
 import json
+import threading
+
 import redis
+from cachetools import TTLCache
+
 from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_ENABLED
 
 
@@ -117,3 +121,42 @@ class RedisCache:
 
 
 cache = RedisCache()
+
+
+# ============== T2 进程内 TTL 缓存（cachetools）==============
+# 适用前提：当前为单进程 uvicorn，进程内缓存有效；
+# Garnet 就绪后由 T7 统一切换到「Garnet 优先、内存兜底」，RedisCache 本体暂不动。
+class LocalTTLCache:
+    """轻量 TTL 缓存封装：线程安全 + hit/miss 日志（便于验收与调 TTL）"""
+
+    def __init__(self, name: str, ttl: int, maxsize: int = 64):
+        self.name = name
+        self._store = TTLCache(maxsize=maxsize, ttl=ttl)
+        self._lock = threading.Lock()
+
+    def get(self, key):
+        with self._lock:
+            hit = key in self._store
+            value = self._store.get(key) if hit else None
+        print(f"[TTLCache:{self.name}] {'HIT' if hit else 'MISS'} key={key}", flush=True)
+        return value
+
+    def set(self, key, value):
+        with self._lock:
+            self._store[key] = value
+
+    def invalidate(self, key=None):
+        """key=None 清空全部；否则删除指定 key"""
+        with self._lock:
+            if key is None:
+                self._store.clear()
+                print(f"[TTLCache:{self.name}] INVALIDATE ALL", flush=True)
+            else:
+                existed = self._store.pop(key, None) is not None
+                print(f"[TTLCache:{self.name}] INVALIDATE key={key} existed={existed}", flush=True)
+
+
+# T2 三处缓存点
+machine_state_ttl = LocalTTLCache("machine_state", ttl=60, maxsize=32)   # derive_machines_state 结果
+kpi_stats_ttl = LocalTTLCache("kpi_stats", ttl=60, maxsize=4)            # GET /api/machines/stats
+models_config_ttl = LocalTTLCache("models_config", ttl=300, maxsize=8)   # GET /api/models（保存时主动失效）

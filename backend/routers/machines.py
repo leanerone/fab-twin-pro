@@ -15,6 +15,7 @@ from models import (
 )
 from routers.auth import get_current_user, check_permission
 from schemas import MachineOut
+from services.cache import machine_state_ttl, kpi_stats_ttl
 from services.time_utils import parse_ts
 
 router = APIRouter(prefix="/api/machines", tags=["machines"])
@@ -60,9 +61,15 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
 
     返回 { machine_id: { state, alarm_count_today, wafer_count_today } }
     全部 DT 表查询用 try/except 兜底，失败则回退 Machine 自身字段。
+    T2: 结果按 tool_ids 组合缓存 60s（TTLCache），命中则直接返回。
     """
-    today = _today_str()
     tool_ids = [m.id for m in machines]
+    cache_key = ",".join(sorted(tool_ids))
+    cached = machine_state_ttl.get(cache_key)
+    if cached is not None:
+        return cached
+
+    today = _today_str()
     result: Dict[str, dict] = {}
 
     # 1) 活跃告警：DT_ALARM_EVENT.end_ts_utc IS NULL
@@ -179,6 +186,7 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
             "alarm_count_today": alarm_count_today.get(tid, 0),
             "wafer_count_today": wafer_count_today.get(tid, 0),
         }
+    machine_state_ttl.set(cache_key, result)
     return result
 
 
@@ -204,7 +212,12 @@ def machine_stats(db: Session = Depends(get_db)):
 
     B-#5: 状态/今日告警/今日产量均使用 derive_machines_state 实时推导，
     不再使用 Machine 表缓存字段，确保 KPI 与实际一致。
+    T2: 整体结果缓存 60s（TTLCache）。
     """
+    cached = kpi_stats_ttl.get("stats")
+    if cached is not None:
+        return cached
+
     machines = db.query(Machine).all()
     derived = derive_machines_state(db, machines)
     total = len(machines)
@@ -252,7 +265,7 @@ def machine_stats(db: Session = Depends(get_db)):
     quality = max(0.0, 1 - total_alarms / max(1, total_wafers + total_alarms))
     oee = round(utilization * quality * 100, 1)
 
-    return {
+    resp = {
         "total": total,
         "running": running,
         "idle": idle,
@@ -267,7 +280,8 @@ def machine_stats(db: Session = Depends(get_db)):
         "avg_cycle_time_min": avg_cycle,
         "oee": oee,
     }
-
+    kpi_stats_ttl.set("stats", resp)
+    return resp
 
 @router.get("/{machine_id}", response_model=MachineOut)
 def get_machine(machine_id: str, db: Session = Depends(get_db)):

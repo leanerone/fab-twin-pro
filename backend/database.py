@@ -146,6 +146,11 @@ def init_db():
         _ensure_missing_columns(engine)
     except Exception as e:
         logger.warning(f"[database] 补齐缺失列时出错（忽略，降级处理）：{e}")
+    # ver2.11.1: DT_EVENT_RAW (tool_id, received_ts_utc) 复合索引，幂等创建
+    try:
+        _ensure_dt_event_raw_index(engine)
+    except Exception as e:
+        logger.warning(f"[database] 创建 DT_EVENT_RAW 索引时出错（忽略，降级处理）：{e}")
 
 
 def _has_column(conn, table_name: str, column_name: str) -> bool:
@@ -186,6 +191,49 @@ def _ensure_missing_columns(eng):
             conn.execute(text(ddl))
             conn.commit()
             logger.info(f"[database] {table}.{column} 已自动补齐。")
+
+
+def _ensure_dt_event_raw_index(eng):
+    """ver2.11.1: 幂等创建 DT_EVENT_RAW (tool_id, received_ts_utc) 复合索引。
+
+    - 表不存在（量产管理、尚未由 create_all 创建）时直接跳过；
+    - 索引已存在时跳过；
+    - 对应增量脚本：sql/v2.11.1_add_dt_event_raw_tool_recv_index.sql
+    """
+    index_name = "IDX_DT_EVENT_RAW_TOOL_RECV"
+    with eng.connect() as conn:
+        url = str(eng.url)
+        if url.startswith("sqlite:"):
+            tbl = conn.execute(text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND lower(name)='dt_event_raw'"
+            )).scalar()
+            if not tbl:
+                logger.info("[database] DT_EVENT_RAW 表不存在，跳过索引创建")
+                return
+            conn.execute(text(
+                f"CREATE INDEX IF NOT EXISTS {index_name} ON dt_event_raw (tool_id, received_ts_utc)"
+            ))
+            conn.commit()
+            logger.info(f"[database] 索引 {index_name} 已确认存在（SQLite）。")
+            return
+        # Oracle
+        tbl_cnt = conn.execute(text(
+            "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = 'DT_EVENT_RAW'"
+        )).scalar()
+        if not tbl_cnt:
+            logger.info("[database] DT_EVENT_RAW 表不存在，跳过索引创建")
+            return
+        idx_cnt = conn.execute(text(
+            "SELECT COUNT(*) FROM USER_INDEXES WHERE TABLE_NAME = 'DT_EVENT_RAW' AND INDEX_NAME = :i"
+        ), {"i": index_name}).scalar()
+        if idx_cnt and idx_cnt > 0:
+            logger.info(f"[database] 索引 {index_name} 已存在，跳过")
+            return
+        conn.execute(text(
+            f"CREATE INDEX {index_name} ON DT_EVENT_RAW (TOOL_ID, RECEIVED_TS_UTC)"
+        ))
+        conn.commit()
+        logger.warning(f"[database] 索引 {index_name} 已自动创建。")
 
 
 def get_db():

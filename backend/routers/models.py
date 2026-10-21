@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import MachineModelConfig, EventActionMapping, User
 from routers.auth import get_current_user, check_permission
+from services.cache import models_config_ttl
 
 router = APIRouter(prefix="/api/models", tags=["机台型号配置"])
 
@@ -83,10 +84,14 @@ def _mapping_to_dict(m: EventActionMapping) -> dict:
 
 @router.get("")
 def list_models(db: Session = Depends(get_db)):
-    """获取所有机台型号列表"""
+    """获取所有机台型号列表（T2: TTLCache 300s，任何写操作主动失效）"""
+    cached = models_config_ttl.get("list")
+    if cached is not None:
+        return cached
     models = db.query(MachineModelConfig).order_by(MachineModelConfig.model_id).all()
     result = [_model_to_dict(m) for m in models]
     print(f"[API] /api/models called, returning {len(result)} models: {[m.model_id for m in models]}", flush=True)
+    models_config_ttl.set("list", result)
     return result
 
 
@@ -138,6 +143,7 @@ def create_model(payload: dict, db: Session = Depends(get_db), _: User = Depends
     db.add(m)
     db.commit()
     db.refresh(m)
+    models_config_ttl.invalidate()
     return _model_to_dict(m)
 
 
@@ -180,6 +186,7 @@ def update_model(model_id: str, payload: dict, db: Session = Depends(get_db), _:
     m.updated_at = _now_iso()
     db.commit()
     db.refresh(m)
+    models_config_ttl.invalidate()
     return _model_to_dict(m)
 
 
@@ -192,6 +199,7 @@ def delete_model(model_id: str, db: Session = Depends(get_db), _: User = Depends
     db.query(EventActionMapping).filter(EventActionMapping.model_id == model_id).delete()
     db.delete(m)
     db.commit()
+    models_config_ttl.invalidate()
     return {"status": "ok", "deleted": model_id}
 
 
@@ -241,6 +249,7 @@ def duplicate_model(model_id: str, payload: dict, db: Session = Depends(get_db),
         )
         db.add(new_mp)
     db.commit()
+    models_config_ttl.invalidate()
     return {"status": "ok", "new_model_id": new_id}
 
 

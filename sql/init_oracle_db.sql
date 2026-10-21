@@ -1,7 +1,7 @@
 /* ================================================================
    FabTwin Oracle 数据库初始化脚本（精简版）
    生成时间: 2026-07-24
-   最后更新: 2026-09-02 (ver2.9.0 G批)
+   最后更新: 2026-10-21 (ver2.11.1)
    用户: fabtwin
    表数量: 20（不含5个DT表，不含3个AI表）
    说明:
@@ -13,6 +13,9 @@
        后续由量产 DT 表提供，初始化时不导入
      - ver2.9.0 (2026-09-02): MACHINES / FLOOR_AREAS 表新增 DISPLAY_ORDER 列
        （图层置顶/置底功能），含 DEFAULT 0，INSERT 不指定时自动填 0
+     - ver2.11.1 (2026-10-21): 新增 DT_EVENT_RAW (TOOL_ID, RECEIVED_TS_UTC)
+       复合索引（表存在时才创建，见文末 DT 表注释段）；
+       既有库升级请执行 sql/v2.11.1_add_dt_event_raw_tool_recv_index.sql
    ================================================================ */
 
 SET DEFINE OFF;
@@ -333,6 +336,34 @@ CREATE TABLE VEHICLES (
 -- DT 表（DT_EVENT_RAW / DT_EVENT_RAW_CUR / DT_EVENT_STD / DT_ALARM_EVENT / DT_STATE_SNAPSHOT）
 -- 由量产环境管理，建表和数据均不在此脚本中
 -- 应用首次启动时若不存在，backend/main.py 的 init_db() 会自动创建
+--
+-- ver2.11.1 (2026-10-21): DT_EVENT_RAW (TOOL_ID, RECEIVED_TS_UTC) 复合索引
+-- 说明：本脚本执行时 DT_EVENT_RAW 可能尚不存在（量产管理 / 首次启动由应用创建），
+--       因此采用「表存在才建索引」的条件块，不存在则跳过、不报错；
+--       应用启动后建表的场景，索引由 backend/main.py 的 init_db() 同步创建。
+--       既有库升级请改用 sql/v2.11.1_add_dt_event_raw_tool_recv_index.sql。
+BEGIN
+    DECLARE
+        v_cnt NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v_cnt
+        FROM USER_TABLES
+        WHERE TABLE_NAME = 'DT_EVENT_RAW';
+
+        IF v_cnt > 0 THEN
+            SELECT COUNT(*) INTO v_cnt
+            FROM USER_INDEXES
+            WHERE TABLE_NAME = 'DT_EVENT_RAW'
+              AND INDEX_NAME = 'IDX_DT_EVENT_RAW_TOOL_RECV';
+
+            IF v_cnt = 0 THEN
+                EXECUTE IMMEDIATE 'CREATE INDEX IDX_DT_EVENT_RAW_TOOL_RECV ON DT_EVENT_RAW (TOOL_ID, RECEIVED_TS_UTC)';
+                EXECUTE IMMEDIATE 'BEGIN DBMS_STATS.GATHER_TABLE_STATS(USER, ''DT_EVENT_RAW''); END;';
+            END IF;
+        END IF;
+    END;
+END;
+/
 
 -- AI 表（AI_CONFIGS / AI_PROVIDER_CONFIGS / AI_USAGE_LOGS）
 -- 由 sql/create_ai_tables.sql 手动建表，不在此脚本中
