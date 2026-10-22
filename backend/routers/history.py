@@ -128,6 +128,38 @@ def _date_scope_clause(db, date_str: str):
     return or_(*conds)
 
 
+def _date_range_clause(db, start_dt, end_dt):
+    """生成「限定在 [start_dt, end_dt] 连续区间」的 SQL 条件，按时间列真实类型选写法。
+
+    - TIMESTAMP 列：两列各自的闭区间比较 OR（两列都可能是真实时间源）
+    - VARCHAR2 列 ：逐天 LIKE 前缀 OR；跨度超过 14 天返回 None（交给 Python 层过滤，
+                    避免拼出上百个 OR 条件拖垮解析器）
+
+    返回 None 表示无法在 SQL 层表达，调用方应跳过该过滤、仅靠 Python 层精确过滤。
+    """
+    if start_dt is None or end_dt is None:
+        return None
+
+    if _ts_columns_are_temporal(db):
+        return or_(
+            and_(DT_EVENT_RAW.received_ts_utc >= start_dt,
+                 DT_EVENT_RAW.received_ts_utc <= end_dt),
+            and_(DT_EVENT_RAW.event_ts_utc >= start_dt,
+                 DT_EVENT_RAW.event_ts_utc <= end_dt),
+        )
+
+    if (end_dt.date() - start_dt.date()).days > 14:
+        return None
+    conds = []
+    day = start_dt.date()
+    while day <= end_dt.date():
+        for p in build_date_like_patterns(day.strftime("%Y-%m-%d")):
+            conds.append(DT_EVENT_RAW.received_ts_utc.like(p))
+            conds.append(DT_EVENT_RAW.event_ts_utc.like(p))
+        day += timedelta(days=1)
+    return or_(*conds) if conds else None
+
+
 def _resolve_tool_ids(db, machine_id: str) -> set:
     """将 machine_id 解析为对应的 tool_id 集合（支持 VPO-01 -> PODOPENER-1 映射）"""
     tool_ids = {machine_id}
@@ -249,13 +281,17 @@ def get_history(
 
     性能优化（索引已建、瓶颈在 Python CLOB 解析层）：
     - SQL层：
-        a) 同一天查询 + TIMESTAMP 列 → SQL OFFSET/FETCH 真分页，返回行数 = limit
-        b) 其他情况 → limit 从 5000 降到 limit*2（默认 limit=500 → 取 1000 行）
-        c) before_raw_id keyset 翻页：SQL 层已 raw_id < before_raw_id，再加 limit*2
+        a) 同一天 → 天级/小时级范围条件压进 SQL（TIMESTAMP 列用区间比较，
+           VARCHAR2 列用 LIKE 前缀）；跨天用 _date_range_clause 缩范围
+        b) 统一只拉 fetch_limit = max(limit*2, 300) 行；不用 OFFSET/FETCH
+           （Oracle 12c+ 专属，11g 报 ORA-00933），.limit() 全版本兼容
+        c) before_raw_id keyset 翻页：SQL 层已 raw_id < before_raw_id
     - Python层：
-        a) 跳过 SQL 已精确处理掉的 start_dt/end_dt 过滤
+        a) 按最终 timestamp 精确过滤 start_dt/end_dt（SQL 两列 OR 命中列
+           未必是展示用列，需兜底复核）
         b) 只对最终需要返回的行解析 CLOB（_event_to_dict）
         c) event_category 仍在 Python 层（依赖 payload_json 内容，SQL 不好做）
+        d) 统一截断最多返回 limit 条
     """
     tool_ids = _resolve_tool_ids(db, tool_id)
 
@@ -276,19 +312,32 @@ def get_history(
     is_temporal = _ts_columns_are_temporal(db)
 
     # ── 分支 A：同一天 + TIMESTAMP 列 ──────────────────────────────────────
-    # SQL OFFSET/FETCH 真分页 + SQL 层直接比时间，Python 不需要再 parse CLOB 过滤时间
+    # 小时级 range_clause 直接压进 SQL（含天级范围），取 fetch_limit 行后
+    # Python 层再按最终 timestamp 精确过滤兜底（SQL 是 received/event 两列 OR，
+    # 命中列未必是 ev["timestamp"] 采用的那列）。
+    # 不用 OFFSET/FETCH：那是 Oracle 12c+ 语法，公司 11g 直接 ORA-00933 → 500；
+    # .limit() 由 SQLAlchemy 在 11g 上自动改写成 ROWNUM 子查询，全版本兼容。
     if clause is not None and is_temporal:
+        fetch_limit = max(limit * 2, 300)
         rows = (
-            base_query.filter(clause)
+            base_query.filter(_date_range_clause(db, start_dt, end_dt))
             .order_by(DT_EVENT_RAW.raw_id.desc())
-            .offset(offset)
-            .fetch(limit)
+            .limit(fetch_limit)
             .all()
         )
-        # Python 层只保留 category 过滤（依赖 payload_json）
         events = []
         for r in rows:
             ev = _event_to_dict(r)
+            ts = ev.get("timestamp", "")
+            if not ts:
+                continue
+            ev_dt = parse_ts(ts)
+            if not ev_dt:
+                continue
+            if start_dt and ev_dt < start_dt:
+                continue
+            if end_dt and ev_dt > end_dt:
+                continue
             if event_category and ev["event_category"] != event_category:
                 continue
             events.append(ev)
@@ -321,16 +370,20 @@ def get_history(
                 continue
             events.append(ev)
         events.sort(key=lambda e: e["timestamp"])
-        # offset 兼容：keyset 翻页（before_raw_id 有值）时 offset=0 不走切片
-        if offset > 0 and not before_raw_id:
-            events = events[offset:offset + limit]
 
     # ── 分支 C：跨天区间 / 无时间（实时模式取最新 N 条） ──────────────────────
-    # SQL 层无法精确表达 → 取 limit*2 行，Python 层精确过滤
+    # 跨天时先用 _date_range_clause 把 SQL 扫描范围压进区间内：千万级数据下
+    # 「拉最新 limit*2 行再过滤」只覆盖最近几分钟，老区段会全部漏掉返回空。
+    # 无时间参数（实时模式）保持拉最新 N 行不过滤。
     else:
         fetch_limit = max(limit * 2, 300)  # 同样从 5000 降
+        q = base_query
+        if start_dt and end_dt:
+            range_clause = _date_range_clause(db, start_dt, end_dt)
+            if range_clause is not None:
+                q = q.filter(range_clause)
         rows = (
-            base_query.order_by(DT_EVENT_RAW.raw_id.desc())
+            q.order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(fetch_limit)
             .all()
         )
@@ -351,12 +404,15 @@ def get_history(
                 continue
             events.append(ev)
         events.sort(key=lambda e: e["timestamp"])
-        # offset 兼容
-        if offset > 0 and not before_raw_id:
-            events = events[offset:offset + limit]
 
-    total = len(events)
-    paged = events if not (offset > 0 and not before_raw_id) else events  # 上面已切片
+    # 统一截断：offset>0 的非 keyset 翻页切片；其余情况最多返回 limit 条
+    # （此前分支 B/C 只在 offset>0 时才切片，offset=0 会把 fetch_limit 行全量返回，
+    #  实测 limit=2000 返回 4000 条 / 3.4MB，前端一次渲染卡死）
+    if offset > 0 and not before_raw_id:
+        paged = events[offset:offset + limit]
+    else:
+        paged = events[:limit]
+    total = len(paged)
 
     # 下一页游标：返回结果中 raw_id 最小值减 1
     # 兼容 "RAW12345678" 字符串格式和纯数字格式

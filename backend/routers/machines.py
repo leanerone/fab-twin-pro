@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import DateTime, and_, inspect, or_
+from sqlalchemy import DateTime, and_, func, inspect, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -134,13 +134,30 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
         pass
 
     # 2) 最新快照 per tool_id（DT_STATE_SNAPSHOT）
+    # 千万级下 ORDER BY 时间列全表排序再 LIMIT 2000 是主要慢点：改 GROUP BY
+    # 取每台 MAX(ts) 再回表 JOIN，只返回机台数量级行数。
+    # （VARCHAR2 存 ISO "YYYY-MM-DD HH:MM:SS" 时 MAX 字典序 == 时间序，安全；
+    #   同 ts 并列时 Python 层 dedup 兜底）
     latest_snap: Dict[str, DT_STATE_SNAPSHOT] = {}
     try:
+        snap_max_sq = (
+            db.query(
+                DT_STATE_SNAPSHOT.tool_id.label("tool_id"),
+                func.max(DT_STATE_SNAPSHOT.snapshot_ts_utc).label("max_ts"),
+            )
+            .filter(DT_STATE_SNAPSHOT.tool_id.in_(tool_ids))
+            .group_by(DT_STATE_SNAPSHOT.tool_id)
+            .subquery()
+        )
         snaps = (
             db.query(DT_STATE_SNAPSHOT)
-            .filter(DT_STATE_SNAPSHOT.tool_id.in_(tool_ids))
-            .order_by(DT_STATE_SNAPSHOT.snapshot_ts_utc.desc())
-            .limit(2000)
+            .join(
+                snap_max_sq,
+                and_(
+                    DT_STATE_SNAPSHOT.tool_id == snap_max_sq.c.tool_id,
+                    DT_STATE_SNAPSHOT.snapshot_ts_utc == snap_max_sq.c.max_ts,
+                ),
+            )
             .all()
         )
         for s in snaps:
@@ -149,14 +166,27 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
     except Exception:
         pass
 
-    # 3) 最新标准事件 per tool_id（DT_EVENT_STD.machine_state）
+    # 3) 最新标准事件 per tool_id（DT_EVENT_STD.machine_state），同快照的 MAX+JOIN
     latest_std: Dict[str, DT_EVENT_STD] = {}
     try:
+        std_max_sq = (
+            db.query(
+                DT_EVENT_STD.tool_id.label("tool_id"),
+                func.max(DT_EVENT_STD.created_ts_utc).label("max_ts"),
+            )
+            .filter(DT_EVENT_STD.tool_id.in_(tool_ids))
+            .group_by(DT_EVENT_STD.tool_id)
+            .subquery()
+        )
         evs = (
             db.query(DT_EVENT_STD)
-            .filter(DT_EVENT_STD.tool_id.in_(tool_ids))
-            .order_by(DT_EVENT_STD.created_ts_utc.desc())
-            .limit(2000)
+            .join(
+                std_max_sq,
+                and_(
+                    DT_EVENT_STD.tool_id == std_max_sq.c.tool_id,
+                    DT_EVENT_STD.created_ts_utc == std_max_sq.c.max_ts,
+                ),
+            )
             .all()
         )
         for e in evs:
@@ -170,7 +200,10 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
     #       再用 parse_ts 精确过滤兜底，语义与改前一致但不再全表扫描。
     alarm_count_today: Dict[str, int] = {tid: 0 for tid in tool_ids}
     try:
-        q = db.query(DT_ALARM_EVENT).filter(DT_ALARM_EVENT.tool_id.in_(tool_ids))
+        # 列裁剪：只取 tool_id + start_ts_utc，避免整行（含大字段）回表
+        q = db.query(
+            DT_ALARM_EVENT.tool_id, DT_ALARM_EVENT.start_ts_utc
+        ).filter(DT_ALARM_EVENT.tool_id.in_(tool_ids))
         day_cond = _day_clause(db, DT_ALARM_EVENT, DT_ALARM_EVENT.start_ts_utc, today)
         if day_cond is not None:
             q = q.filter(day_cond)
@@ -192,8 +225,14 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
             c = _day_clause(db, DT_EVENT_RAW, col, today)
             if c is not None:
                 raw_cond_parts.append(c)
+        # 列裁剪：只取判定所需 4 列，payload_json CLOB 之外不再整行回表
         q = (
-            db.query(DT_EVENT_RAW)
+            db.query(
+                DT_EVENT_RAW.tool_id,
+                DT_EVENT_RAW.event_ts_utc,
+                DT_EVENT_RAW.received_ts_utc,
+                DT_EVENT_RAW.payload_json,
+            )
             .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
             .filter(DT_EVENT_RAW.parse_status == "PARSED")
         )

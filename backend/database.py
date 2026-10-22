@@ -151,6 +151,11 @@ def init_db():
         _ensure_dt_event_raw_index(engine)
     except Exception as e:
         logger.warning(f"[database] 创建 DT_EVENT_RAW 索引时出错（忽略，降级处理）：{e}")
+    # ver2.12: 首页/回放性能索引（EVENT_TS_UTC / ALARM.START_TS / SNAPSHOT / STD），幂等创建
+    try:
+        _ensure_dt_perf_indexes(engine)
+    except Exception as e:
+        logger.warning(f"[database] 创建 DT 性能索引时出错（忽略，降级处理）：{e}")
 
 
 def _has_column(conn, table_name: str, column_name: str) -> bool:
@@ -193,47 +198,83 @@ def _ensure_missing_columns(eng):
             logger.info(f"[database] {table}.{column} 已自动补齐。")
 
 
-def _ensure_dt_event_raw_index(eng):
-    """ver2.11.1: 幂等创建 DT_EVENT_RAW (tool_id, received_ts_utc) 复合索引。
+def _ensure_index(eng, table: str, index_name: str, columns: str):
+    """幂等创建单个索引（Oracle + SQLite）：表不存在跳过，索引已存在跳过。
 
-    - 表不存在（量产管理、尚未由 create_all 创建）时直接跳过；
-    - 索引已存在时跳过；
-    - 对应增量脚本：sql/v2.11.1_add_dt_event_raw_tool_recv_index.sql
+    table/columns 传小写即可，Oracle 分支内部转大写。
+    注意：千万级大表首次 CREATE INDEX 需等待数十秒，属一次性成本，
+    日志里会打 WARNING 提示，勿当作启动卡死。
     """
-    index_name = "IDX_DT_EVENT_RAW_TOOL_RECV"
     with eng.connect() as conn:
         url = str(eng.url)
         if url.startswith("sqlite:"):
             tbl = conn.execute(text(
-                "SELECT name FROM sqlite_master WHERE type='table' AND lower(name)='dt_event_raw'"
-            )).scalar()
+                "SELECT name FROM sqlite_master WHERE type='table' AND lower(name)=:t"
+            ), {"t": table.lower()}).scalar()
             if not tbl:
-                logger.info("[database] DT_EVENT_RAW 表不存在，跳过索引创建")
+                logger.info(f"[database] {table} 表不存在，跳过索引 {index_name}")
                 return
             conn.execute(text(
-                f"CREATE INDEX IF NOT EXISTS {index_name} ON dt_event_raw (tool_id, received_ts_utc)"
+                f"CREATE INDEX IF NOT EXISTS {index_name} ON {table.lower()} {columns.lower()}"
             ))
             conn.commit()
             logger.info(f"[database] 索引 {index_name} 已确认存在（SQLite）。")
             return
         # Oracle
         tbl_cnt = conn.execute(text(
-            "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = 'DT_EVENT_RAW'"
-        )).scalar()
+            "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = UPPER(:t)"
+        ), {"t": table}).scalar()
         if not tbl_cnt:
-            logger.info("[database] DT_EVENT_RAW 表不存在，跳过索引创建")
+            logger.info(f"[database] {table} 表不存在，跳过索引 {index_name}")
             return
         idx_cnt = conn.execute(text(
-            "SELECT COUNT(*) FROM USER_INDEXES WHERE TABLE_NAME = 'DT_EVENT_RAW' AND INDEX_NAME = :i"
-        ), {"i": index_name}).scalar()
+            "SELECT COUNT(*) FROM USER_INDEXES WHERE TABLE_NAME = UPPER(:t) AND INDEX_NAME = UPPER(:i)"
+        ), {"t": table, "i": index_name}).scalar()
         if idx_cnt and idx_cnt > 0:
             logger.info(f"[database] 索引 {index_name} 已存在，跳过")
             return
+        logger.warning(
+            f"[database] 正在创建索引 {index_name} ON {table.upper()} {columns.upper()}，"
+            "大表首次创建可能需要数十秒……"
+        )
         conn.execute(text(
-            f"CREATE INDEX {index_name} ON DT_EVENT_RAW (TOOL_ID, RECEIVED_TS_UTC)"
+            f"CREATE INDEX {index_name} ON {table.upper()} {columns.upper()}"
         ))
         conn.commit()
         logger.warning(f"[database] 索引 {index_name} 已自动创建。")
+
+
+def _ensure_dt_event_raw_index(eng):
+    """ver2.11.1: 幂等创建 DT_EVENT_RAW (tool_id, received_ts_utc) 复合索引。
+
+    对应增量脚本：sql/v2.11.1_add_dt_event_raw_tool_recv_index.sql
+    """
+    _ensure_index(eng, "dt_event_raw", "IDX_DT_EVENT_RAW_TOOL_RECV",
+                  "(tool_id, received_ts_utc)")
+
+
+def _ensure_dt_perf_indexes(eng):
+    """ver2.12: 首页/历史回放性能索引，幂等创建。
+
+    背景：用户量产库 DT_EVENT_RAW 已 1000 万条，首页 derive_machines_state
+    与回放日期过滤全部退化为全表扫描（本地 1.5 万行实测 /api/machines
+    冷态 7.3s，量产量级放大为数十秒）。补齐：
+    - DT_EVENT_RAW(EVENT_TS_UTC)                回放/今日产量的 event 时间源过滤
+    - DT_STATE_SNAPSHOT(TOOL_ID, SNAPSHOT_TS_UTC)  最新快照 MAX+JOIN
+    - DT_EVENT_STD(TOOL_ID, CREATED_TS_UTC)        最新标准事件 MAX+JOIN
+    注：DT_ALARM_EVENT.START_TS_UTC 在 models.py 已 index=True（实际索引名
+    IDX_DT_ALARM_EVENT_START），无需重复创建（Oracle 同列重复索引 ORA-01408）。
+    """
+    specs = [
+        ("dt_event_raw",      "IDX_DT_EVENT_RAW_EVT_TS", "(event_ts_utc)"),
+        ("dt_state_snapshot", "IDX_SNAPSHOT_TOOL_TS",    "(tool_id, snapshot_ts_utc)"),
+        ("dt_event_std",      "IDX_STD_TOOL_TS",         "(tool_id, created_ts_utc)"),
+    ]
+    for table, index_name, columns in specs:
+        try:
+            _ensure_index(eng, table, index_name, columns)
+        except Exception as e:
+            logger.warning(f"[database] 创建索引 {index_name} 失败（忽略，降级处理）：{e}")
 
 
 def get_db():

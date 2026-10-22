@@ -115,6 +115,28 @@ def on_startup():
         print(f"[DB] Connected to: {engine.url}")
         print("[DB] 数据库初始化完成")
 
+        # T4.5: 预热 DT 表时间列类型反射缓存。
+        # machines._col_is_temporal / history._ts_columns_are_temporal 首次调用
+        # 要 inspect 数据字典（Oracle 单表 400-800ms），不预热会全部叠加到第一个
+        # 用户请求上（本地实测 /api/machines 冷态因此多耗 ~2s）。
+        try:
+            from routers.machines import _col_is_temporal
+            from routers.history import _ts_columns_are_temporal
+            _pw_db = SessionLocal()
+            try:
+                _ts_columns_are_temporal(_pw_db)
+                for _t, _c in (
+                    ("dt_alarm_event", "start_ts_utc"),
+                    ("dt_event_raw", "event_ts_utc"),
+                    ("dt_event_raw", "received_ts_utc"),
+                ):
+                    _col_is_temporal(_pw_db, _t, _c)
+                print("[DB] 时间列反射缓存预热完成")
+            finally:
+                _pw_db.close()
+        except Exception as _pw_err:
+            print(f"[DB] 反射缓存预热失败（忽略，首个请求会兜底探测）: {_pw_err}")
+
         db = SessionLocal()
         try:
             machine_count = db.query(Machine).count()
