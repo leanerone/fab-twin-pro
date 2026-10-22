@@ -119,6 +119,9 @@ watch(() => props.prefillQuestion, (newQ) => {
 
 // ==================== 聊天逻辑 ====================
 
+// 流式开关（T4）：默认开；localStorage.fabtwin_ai_stream = '0' 切回旧整段返回
+const useStream = localStorage.getItem('fabtwin_ai_stream') !== '0'
+
 async function ask(questionText) {
   const q = (questionText || input.value || '').trim()
   if (!q || loading.value) return
@@ -135,6 +138,65 @@ async function ask(questionText) {
   scrollToBottom()
 
   loading.value = true
+
+  if (useStream) {
+    // ---- SSE 流式：打字机追加 + 工具调用过程可见 ----
+    const msg = {
+      role: 'assistant',
+      content: '',
+      thoughts: [],
+      streaming: true,
+      time: new Date().toLocaleTimeString(),
+    }
+    messages.value.push(msg)
+    try {
+      await api.aiChatStream({
+        question: q,
+        session_id: sessionId.value,
+        machine_id: props.machineId,
+        user_role: 'user',
+      }, {
+        onChunk: (t) => {
+          msg.content += t
+          nextTick(scrollToBottom)
+        },
+        onThought: (evt) => {
+          msg.thoughts.push(evt)
+        },
+        onFinal: (evt) => {
+          sessionId.value = evt.session_id || sessionId.value
+          // final.answer 为后端干净版（剔除 FABTWIN/JUMP 标记），整体校正
+          if (evt.answer) msg.content = evt.answer
+          msg.sql = evt.sql
+          msg.jump_timestamp = evt.jump_timestamp
+          msg.jump_machine_id = evt.jump_machine_id
+          msg.machine_online = evt.machine_online
+          msg.table_data = evt.table_data
+          msg.tool_calls = evt.tool_calls
+          msg.sources = evt.sources
+          msg.provider_name = evt.provider_name
+          msg.model = evt.model
+          msg.config_id = evt.config_id
+          msg.usage = evt.usage
+          msg.streaming = false
+        },
+        onError: (e) => {
+          if (!msg.content) msg.content = '抱歉，查询失败：' + e.message
+          msg.streaming = false
+        },
+      })
+    } catch (e) {
+      msg.content = '抱歉，查询失败：' + (e.message || '服务不可用')
+      msg.streaming = false
+    } finally {
+      loading.value = false
+      await nextTick()
+      scrollToBottom()
+    }
+    return
+  }
+
+  // ---- 旧版整段返回（保留一个版本周期） ----
   try {
     // 使用统一的AI聊天接口
     const resp = await api.aiChat({
@@ -203,9 +265,9 @@ function onSpeechError(msg) {
   console.warn('[语音] 错误:', msg)
 }
 
-// 跳转到回放时间
+// 跳转到回放时间（T4 统一契约：与悬浮球一致传对象 { machine_id, timestamp }）
 function jumpToTime(ts) {
-  emit('jump', ts)
+  emit('jump', { machine_id: props.machineId || '', timestamp: ts })
 }
 
 function scrollToBottom() {
@@ -237,7 +299,15 @@ function clearChat() {
       <template v-for="(m, i) in messages" :key="i">
         <div class="chat-msg user">{{ m.content }}</div>
         <div class="chat-msg ai">
-          <div class="msg-text">{{ m.content }}</div>
+          <!-- 工具调用过程（T4 流式 agent_thought） -->
+          <details v-if="m.thoughts && m.thoughts.length" class="thoughts-panel">
+            <summary>工具调用过程（{{ m.thoughts.length }}）</summary>
+            <div v-for="(t, ti) in m.thoughts" :key="ti" class="thought-item">
+              <span v-if="t.tool" class="thought-tool">{{ t.tool }}</span>
+              <span class="thought-text">{{ t.thought || t.observation || '' }}</span>
+            </div>
+          </details>
+          <div class="msg-text">{{ m.content }}<span v-if="m.streaming" class="stream-cursor">▍</span></div>
           <!-- SQL展示 -->
           <div v-if="m.sql" class="sql">{{ m.sql }}</div>
           <!-- 表格数据 -->
@@ -267,7 +337,7 @@ function clearChat() {
           </div>
         </div>
       </template>
-      <div v-if="loading" class="chat-msg ai">查询中...</div>
+      <div v-if="loading && !messages.some(m => m.streaming)" class="chat-msg ai">查询中...</div>
     </div>
     <div class="chat-suggestions">
       <button v-for="s in suggestions" :key="s" @click="ask(s)">{{ s }}</button>
@@ -381,6 +451,42 @@ function clearChat() {
 }
 .msg-text {
   word-break: break-word;
+}
+/* T4 流式：打字机光标 + 工具调用过程面板 */
+.stream-cursor {
+  display: inline-block;
+  color: var(--accent, #4da3ff);
+  animation: cursor-blink 0.9s steps(2) infinite;
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.thoughts-panel {
+  margin: 0 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.thoughts-panel summary {
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+.thought-item {
+  display: flex;
+  gap: 6px;
+  padding: 3px 0;
+  border-top: 1px dashed var(--border);
+  line-height: 1.5;
+  word-break: break-all;
+}
+.thought-tool {
+  flex-shrink: 0;
+  color: var(--accent, #4da3ff);
+  font-weight: 600;
 }
 .chat-msg.ai .sql {
   font-family: 'Consolas', monospace;

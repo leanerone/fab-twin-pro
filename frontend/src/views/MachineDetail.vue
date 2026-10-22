@@ -941,7 +941,10 @@ function onSpeedChange(s) {
 }
 
 // 跳转到指定时间：在当前区段内直接跳，否则调整区段后重新加载
-async function jumpToTime(ts) {
+async function jumpToTime(payload) {
+  if (!payload) return
+  // T4 统一契约：AiAssistant 与悬浮球均传对象 { machine_id, timestamp }，兼容旧裸时间戳
+  const ts = (typeof payload === 'object') ? payload.timestamp : payload
   if (!ts) return
   const target = parseTs(ts)
   if (!target) return

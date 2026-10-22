@@ -75,6 +75,67 @@ export const api = {
   aiQuery: (question, machineId) => request('POST', '/ai/query', { question, machine_id: machineId }),
   // AI 统一聊天接口
   aiChat: (data) => request('POST', '/ai/chat', data),
+  // AI 流式聊天（SSE，T4）：fetch + ReadableStream 解析（EventSource 不支持 POST/自定义头）
+  // handlers: { onChunk(text), onThought(evt), onFinal(evt), onError(err) }
+  aiChatStream: async (data, handlers = {}) => {
+    const token = getToken();
+    if (!token) {
+      const currentHash = window.location.hash;
+      if (!currentHash.includes('/login')) window.location.hash = '#/login';
+      throw new Error('No token available');
+    }
+    const res = await fetch(BASE + '/ai/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem('fabtwin_token');
+        const currentHash = window.location.hash;
+        if (!currentHash.includes('/login')) window.location.hash = '#/login';
+      }
+      let detail = '';
+      try {
+        const errBody = await res.json();
+        detail = errBody.detail || errBody.message || errBody.error || '';
+      } catch (_) {
+        try { detail = await res.text(); } catch (_) {}
+      }
+      throw new Error(detail ? `${detail}` : `API error: ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const rawEvt = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        for (const line of rawEvt.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          if (payload === '[DONE]') return;
+          let evt;
+          try { evt = JSON.parse(payload); } catch (_) { continue; }
+          const name = evt.event || '';
+          if (name === 'agent_message' || name === 'message' || name === 'message_replace') {
+            if (evt.answer) handlers.onChunk?.(evt.answer);
+          } else if (name === 'agent_thought') {
+            handlers.onThought?.(evt);
+          } else if (name === 'final') {
+            handlers.onFinal?.(evt);
+          } else if (name === 'error') {
+            handlers.onError?.(new Error(evt.message || '流式调用失败'));
+          }
+        }
+      }
+    }
+  },
   // AI 配置管理（Dify/N8N）
   aiGetConfig: () => request('GET', '/ai/config'),
   aiUpdateConfig: (config) => request('PUT', '/ai/config', config),

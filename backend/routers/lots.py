@@ -67,6 +67,9 @@ def _resolve_tool_ids(db: Session, machine_id: str) -> set:
 
     注意：machine_tool_mappings 表可能不存在于量产 Oracle 中，需要 try-except。
     """
+    # machine_id 为空时返回空集合（调用方查询命中空 IN 得到空列表，而非 None.upper() 500）
+    if not machine_id:
+        return set()
     tool_ids = {machine_id}
 
     # PODOPENER 机台量产 tool_id 通常是 PODOPENER（不带 -1）

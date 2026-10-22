@@ -681,6 +681,314 @@ class AIMiddleware:
 
         return result
 
+    # ==================== 流式聊天（SSE 透传，T4） ====================
+    #
+    # 后端 → 前端帧协议（每帧一行 "data: {json}\n\n"）：
+    #   透传帧：Dify 原始事件（agent_message 正文分片 / agent_thought 工具过程 /
+    #           message_end usage / retriever_resources RAG 引用 等）
+    #   错误帧：{"event": "error", "message": "..."}
+    #   收尾帧：{"event": "final", "session_id":..., "answer": 完整干净正文,
+    #           "jump_timestamp":..., "jump_machine_id":..., "table_data":...,
+    #           "sources":[...], "tool_calls":[...], "usage":{...},
+    #           "provider":..., "provider_name":..., "model":..., "config_id":...,
+    #           "success": true|false}
+    #   结束标记：data: [DONE]
+    #
+    # 路由策略：Dify 走 _stream_dify() 逐 chunk 透传；非 Dify（本地规则 /
+    # OpenAI 兼容）委托 chat() 同步执行后包装单帧下发——前端只需一套渲染逻辑。
+
+    _FAB_TAG = "<FABTWIN>"
+
+    @staticmethod
+    def _sse_line(obj) -> str:
+        """事件对象编码为一帧 SSE data 行"""
+        return "data: " + json.dumps(obj, ensure_ascii=False, default=str) + "\n\n"
+
+    def _parse_fab_block(self, fab_text: str, tool_calls_recorder: list = None):
+        """解析 <FABTWIN>{...}</FABTWIN> 块 → (jump_ts, jump_mid, table_data, extra_sources)。
+        解析失败/格式不合法时对应字段返回 None，并记录到 tool_calls_recorder。"""
+        m = re.search(r'<FABTWIN>\s*(\{.*?\})\s*</FABTWIN>', fab_text or "", re.DOTALL)
+        if not m:
+            # 无闭合标签（流被截断）→ 宽松提取首个 JSON 对象尝试解析
+            m = re.search(r'<FABTWIN>\s*(\{.*)', fab_text or "", re.DOTALL)
+        if not m:
+            return None, None, None, None
+        try:
+            block = json.loads(m.group(1))
+        except Exception as e:
+            if tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "fabtwin_structured_parse", "status": "error",
+                    "error": f"<FABTWIN> JSON 解析失败: {str(e)[:200]}",
+                    "raw": m.group(1)[:300],
+                })
+            return None, None, None, None
+        if not isinstance(block, dict):
+            return None, None, None, None
+        jump_ts = jump_mid = None
+        table_data = None
+        extra_sources = None
+        td = block.get("table_data")
+        if td is not None:
+            if isinstance(td, dict) and isinstance(td.get("headers"), list) and isinstance(td.get("rows"), list):
+                table_data = td
+            elif tool_calls_recorder is not None:
+                tool_calls_recorder.append({
+                    "tool": "fabtwin_structured_parse", "status": "warn",
+                    "warn": f"table_data 格式不合法，丢弃: {str(td)[:200]}",
+                })
+        if block.get("jump_timestamp"):
+            jump_ts = str(block["jump_timestamp"]).strip() or None
+        if block.get("jump_machine_id"):
+            jump_mid = str(block["jump_machine_id"]).strip() or None
+        es = block.get("sources")
+        if isinstance(es, list):
+            extra_sources = es
+        return jump_ts, jump_mid, table_data, extra_sources
+
+    def chat_stream(self, question: str, session_id: str = None, machine_id: str = None,
+                    context: Dict = None, user_role: str = "user", config_id: int = None):
+        """流式聊天入口（生成器），逐帧 yield SSE data 行字符串。
+
+        Dify 路由：_stream_dify() 逐 chunk 透传，自管会话保存与 usage 日志；
+        非 Dify 路由：委托 chat() 同步执行（它自管会话/日志），结果包装单帧。
+        收尾总是发 final 帧 + [DONE]。
+        """
+        if not session_id:
+            session_id = f"sess_{uuid.uuid4().hex[:16]}"
+
+        # ---- 路由判定（不改状态）：机台专属 Dify 命中 或 全局 dify/hybrid ----
+        machine_dify = None
+        if not config_id and machine_id:
+            machine_dify = self._get_machine_dify_config(machine_id)
+        route_is_dify = bool(machine_dify) or self.provider in ("dify", "hybrid")
+
+        if not route_is_dify:
+            # 非 Dify：委托 chat() 完整同步执行（路由/会话/日志全包），包装单帧
+            result = None
+            try:
+                result = self.chat(question, session_id, machine_id, context, user_role, config_id)
+            except Exception as e:
+                yield self._sse_line({"event": "error", "message": str(e)[:300]})
+                yield self._sse_line({
+                    "event": "final", "session_id": session_id,
+                    "answer": f"抱歉，AI 服务暂时不可用。\n错误详情：{str(e)[:200]}",
+                    "success": False,
+                })
+                yield "data: [DONE]\n\n"
+                return
+            answer = result.get("answer", "")
+            if answer:
+                yield self._sse_line({"event": "agent_message", "answer": answer})
+            yield self._sse_line({
+                "event": "final",
+                "session_id": result.get("session_id", session_id),
+                "answer": answer,
+                "sql": result.get("sql", ""),
+                "jump_timestamp": result.get("jump_timestamp"),
+                "jump_machine_id": result.get("jump_machine_id"),
+                "machine_online": result.get("machine_online"),
+                "table_data": result.get("table_data"),
+                "tool_calls": result.get("tool_calls", []),
+                "sources": result.get("sources", []),
+                "usage": result.get("usage", {}),
+                "provider": result.get("provider"),
+                "provider_name": result.get("provider_name"),
+                "model": result.get("model"),
+                "config_id": result.get("config_id"),
+                "success": True,
+            })
+            yield "data: [DONE]\n\n"
+            return
+
+        # ==================== Dify 流式分支（自管会话与日志） ====================
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        tool_calls_record = []
+        execution_log = [{"step": "start_stream", "provider": "dify", "timestamp": datetime.now().isoformat()}]
+        success = True
+        error_msg = None
+
+        # 路由切换（与 chat() 一致）：机台专属 Dify 命中时改写运行时配置
+        if machine_dify:
+            self.provider = "dify"
+            self.dify_enabled = True  # 命中专属Dify必须显式启用，否则守卫失败
+            self.dify_base_url = machine_dify.get("dify_base_url", "")
+            self.dify_api_key = machine_dify.get("dify_api_key", "")
+            self.model = f"dify-{machine_dify.get('config_name', '')}"
+            self.provider_name = machine_dify.get("config_name", "Dify")
+            self.current_config_id = None
+            execution_log.append({"step": "route", "decision": "machine_dify", "config": self.provider_name})
+            print(f"[AI-stream] 机台 {machine_id} 命中专属 Dify: {self.provider_name}")
+
+        # 会话：保存用户消息
+        if session_id not in self.sessions:
+            self.sessions[session_id] = {
+                "messages": [],
+                "created_at": datetime.now().isoformat(),
+                "machine_id": machine_id,
+            }
+        session = self.sessions[session_id]
+        session["messages"].append({
+            "role": "user", "content": question, "timestamp": datetime.now().isoformat(),
+        })
+
+        # 逐 chunk 透传
+        execution_log.append({"step": "call_dify_stream"})
+        stream_result = {}
+        try:
+            for evt in self._stream_dify(
+                question, session_id, machine_id, user_role,
+                stream_result=stream_result,
+            ):
+                yield self._sse_line(evt)
+        except Exception as e:
+            print(f"[AI-stream] Dify 流式调用失败: {e}")
+            execution_log.append({"step": "error", "error": str(e)[:200]})
+            success = False
+            error_msg = str(e)
+            if self.provider == "hybrid":
+                # hybrid：回退本地规则（与 chat() 一致）
+                execution_log.append({"step": "fallback", "reason": f"Dify失败: {str(e)[:100]}"})
+                try:
+                    lr = self._local_rule_engine(
+                        question, machine_id, user_role,
+                        execution_log=execution_log, tool_calls_record=tool_calls_record,
+                        usage_tracker=usage,
+                    )
+                    lr = self._normalize_response(lr)
+                    stream_result["answer"] = lr.get("answer", "")
+                    if stream_result["answer"]:
+                        yield self._sse_line({"event": "agent_message", "answer": stream_result["answer"]})
+                except Exception as e2:
+                    stream_result["answer"] = f"抱歉，AI 服务暂时不可用。\n错误详情：{str(e)[:200]}"
+                    error_msg = f"双重失败: Dify={str(e)[:100]}, 本地={str(e2)[:100]}"
+            else:
+                # 纯 Dify：不兜底本地规则，直接错误帧（与 chat() 行为一致）
+                err_text = (
+                    f"❌ Dify 调用失败，未做本地兜底。\n"
+                    f"错误详情：{str(e)[:300]}\n\n"
+                    f"请检查 Dify 服务状态、API Key、Base URL 是否正确。"
+                )
+                stream_result["answer"] = err_text
+                yield self._sse_line({"event": "error", "message": str(e)[:300]})
+                yield self._sse_line({"event": "agent_message", "answer": err_text})
+
+        # ---- 收尾：会话映射 / usage 截获 / FABTWIN 与旧标记解析 ----
+        dify_returned_cid = stream_result.get("conversation_id")
+        sid_key = str(session_id).strip()
+        if sid_key and dify_returned_cid:
+            self._dify_conv_map[sid_key] = str(dify_returned_cid)
+            print(f"[Dify-stream] ✓ 会话映射已保存: {sid_key} → {dify_returned_cid}")
+
+        mu = stream_result.get("usage") or {}
+        if isinstance(mu, dict):
+            usage["prompt_tokens"] = int(mu.get("prompt_tokens") or mu.get("input_tokens") or 0)
+            usage["completion_tokens"] = int(mu.get("completion_tokens") or mu.get("output_tokens") or 0)
+            usage["total_tokens"] = int(mu.get("total_tokens") or 0)
+            if usage["total_tokens"] == 0:
+                usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+
+        answer = stream_result.get("answer", "")
+        # 去复述：首行完全等于用户问题时删该行（与 _call_dify 一致）
+        q_norm = (question or "").strip()
+        if q_norm and answer:
+            a_norm = answer.strip()
+            first_line = a_norm.split("\n")[0].strip() if a_norm else ""
+            if first_line == q_norm:
+                rest = a_norm[len(first_line):].lstrip("\n").strip()
+                if len(rest) >= 2:
+                    answer = rest
+
+        jump_ts = jump_mid = None
+        table_data = None
+        extra_sources = None
+        if stream_result.get("fab_text"):
+            jump_ts, jump_mid, table_data, extra_sources = self._parse_fab_block(
+                stream_result["fab_text"], tool_calls_record)
+        # 旧 [JUMP]/[MACHINE] 标记兜底：流式透传未过滤（正文可能已展示），
+        # final 帧给出剔除后的干净版，前端用 final.answer 整体校正
+        jm = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
+        if jm:
+            jump_ts = jump_ts or jm.group(1).strip()
+            answer = re.sub(r'\[JUMP:\s*[^\]]+\]', '', answer).strip()
+        mm = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
+        if mm:
+            jump_mid = jump_mid or mm.group(1).strip()
+            answer = re.sub(r'\[MACHINE:\s*[^\]]+\]', '', answer).strip()
+
+        # sources：Dify 应用 + RAG 引用 + FABTWIN 扩展来源
+        sources = [{"type": "dify", "app_id": self.dify_app_id}]
+        for i, doc in enumerate((stream_result.get("rag_records") or [])[:10]):
+            score = doc.get("score") or doc.get("rerank_score")
+            sources.append({
+                "type": "rag",
+                "doc_id": doc.get("id") or doc.get("document_id") or doc.get("segment_id") or f"rag_{i}",
+                "doc_name": doc.get("name") or doc.get("document_name") or doc.get("title") or f"文档{i+1}",
+                "content": (doc.get("content") or doc.get("text") or doc.get("segment_content") or "")[:500],
+                "page": doc.get("page") or doc.get("page_number"),
+                "score": float(score) if score is not None else None,
+            })
+        if isinstance(extra_sources, list) and extra_sources:
+            sources.extend([s for s in extra_sources if isinstance(s, dict)])
+
+        tool_calls_record.append({
+            "tool": "dify_chat",
+            "status": "success" if success else "error",
+            "conversation_id": dify_returned_cid or session_id,
+            "input_tokens": usage["prompt_tokens"],
+            "output_tokens": usage["completion_tokens"],
+            "streamed": True,
+        })
+
+        # 保存 AI 回复 + 截断历史
+        session["messages"].append({
+            "role": "assistant", "content": answer, "timestamp": datetime.now().isoformat(),
+            "metadata": {"streamed": True},
+        })
+        if len(session["messages"]) > 100:
+            session["messages"] = session["messages"][-100:]
+
+        # 使用量与执行日志
+        try:
+            self._log_usage(
+                session_id=session_id,
+                config_id=self.current_config_id,
+                provider=self.provider,
+                provider_name=self.provider_name or self._infer_provider_name(),
+                model=self.model,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                question_preview=question[:500],
+                answer_preview=answer[:500],
+                success=success,
+                error_msg=error_msg,
+                tool_calls=tool_calls_record,
+                execution_log=execution_log,
+            )
+        except Exception as e:
+            print(f"[AI-stream] 使用量记录失败: {e}")
+
+        yield self._sse_line({
+            "event": "final",
+            "session_id": session_id,
+            "answer": answer,
+            "sql": "",
+            "jump_timestamp": jump_ts,
+            "jump_machine_id": jump_mid or machine_id,
+            "machine_online": None,
+            "table_data": table_data,
+            "tool_calls": tool_calls_record,
+            "sources": sources,
+            "usage": usage,
+            "provider": self.provider,
+            "provider_name": self.provider_name or self._infer_provider_name(),
+            "model": self.model,
+            "config_id": self.current_config_id,
+            "success": success,
+        })
+        yield "data: [DONE]\n\n"
+
     def _build_system_prompt(self, machine_id: str = None, context: Dict = None,
                              user_role: str = "user") -> str:
         """构建系统提示词"""
@@ -1229,6 +1537,191 @@ Lot ID 格式说明：
             "metadata": metadata,
             "retriever_resources": rag_records,
         }
+
+    def _stream_dify(self, question: str, session_id: str, machine_id: str = None,
+                     user_role: str = "user", stream_result: Dict = None):
+        """流式调用 Dify，逐事件 yield（透传帧，dict 形态）。
+
+        与 _call_dify 的差异：
+        - 不在本地聚合等待完整答案，而是逐 SSE 事件 yield 给 chat_stream 透传前端
+        - 正文分片（message/agent_message/message_replace）经 <FABTWIN> lookahead 过滤：
+          标记块内的结构化 JSON 不下发，累积到 stream_result["fab_text"] 供收尾解析
+        - 聚合结果写入调用方传入的 stream_result（并发安全，不用实例属性）：
+          answer / conversation_id / usage / rag_records / fab_text / thoughts_count
+
+        请求构造、conversation_id 映射、4xx inputs 回退重试与 _call_dify 一致。
+        """
+        if stream_result is None:
+            stream_result = {}
+        stream_result.update({
+            "answer": "", "conversation_id": None, "usage": None,
+            "rag_records": [], "fab_text": "", "thoughts_count": 0,
+        })
+
+        if not self.dify_enabled or not self.dify_base_url or not self.dify_api_key:
+            raise RuntimeError(
+                "Dify 未启用或缺少配置（dify_base_url/dify_api_key 为空），未做本地兜底。"
+                "请检查全局 Dify 配置或机台专属 Dify 配置。"
+            )
+
+        base = self.dify_base_url.rstrip('/')
+        url = f"{base}/chat-messages" if base.endswith('/v1') else f"{base}/v1/chat-messages"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.dify_api_key}",
+        }
+        meta = self._get_machine_metadata(machine_id)
+        inputs = {
+            "machine_id": machine_id or "",
+            "user_role": user_role or "user",
+        }
+        if meta.get("machine_model"):
+            inputs["machine_model"] = meta["machine_model"]
+        if meta.get("chambers"):
+            inputs["chambers"] = int(meta["chambers"])
+        payload = {
+            "inputs": inputs,
+            "query": question,
+            "response_mode": "streaming",
+            "user": f"fabtwin_{user_role}" if user_role else "fabtwin_user",
+        }
+        # conversation_id 规则同 _call_dify：必须是 Dify 返回的 UUID，首次不传
+        sid_key = str(session_id).strip() if session_id else ""
+        dify_cid = self._dify_conv_map.get(sid_key) if sid_key else None
+        if dify_cid:
+            payload["conversation_id"] = dify_cid
+
+        conv_info = f"session={sid_key or '(none)'}" + (
+            f" → dify_cid={dify_cid}" if dify_cid else " → 首次请求(无conversation_id)"
+        )
+        print(f"[Dify-stream] → POST {url}, {conv_info}, query_len={len(question)}")
+
+        resp = requests.post(url, json=payload, headers=headers, timeout=120, stream=True)
+        # ---------- 4xx inputs 回退重试（与 _call_dify 同逻辑） ----------
+        if 400 <= resp.status_code < 500:
+            try:
+                body_json = resp.json() if resp.text else {}
+            except Exception:
+                body_json = {}
+            msg = body_json.get("message") or body_json.get("error") or (resp.text or "")[:500]
+            print(f"[Dify-stream] × HTTP {resp.status_code}（首次请求，尝试兼容回退）: {str(msg)[:300]}")
+            if (("inputs" in str(msg).lower() or "field" in str(msg).lower() or "param" in str(msg).lower())
+                    and payload.get("inputs") != {}):
+                payload2 = dict(payload)
+                payload2["inputs"] = {}
+                print(f"[Dify-stream] ↻ 回退重试：清空 inputs")
+                resp2 = requests.post(url, json=payload2, headers=headers, timeout=120, stream=True)
+                if resp2.status_code < 400:
+                    resp = resp2
+                    print(f"[Dify-stream] ✓ 回退重试成功 HTTP {resp.status_code}")
+            if resp.status_code >= 400:
+                body_txt = ""
+                body_json = {}
+                try:
+                    body_txt = resp.text
+                    body_json = resp.json() if body_txt else {}
+                except Exception:
+                    pass
+                dify_msg = (body_json.get("message") or body_json.get("error")
+                            or body_json.get("detail") or "")
+                if isinstance(dify_msg, list):
+                    dify_msg = "; ".join(str(x) for x in dify_msg)
+                raise RuntimeError(
+                    f"Dify HTTP {resp.status_code}: "
+                    f"{dify_msg or ('无 message 字段，原始body: ' + (body_txt or '')[:400])}"
+                )
+        resp.raise_for_status()
+
+        # ---------- 逐事件透传 + FABTWIN 过滤 ----------
+        fab_tag = self._FAB_TAG
+        keep = len(fab_tag) - 1   # lookahead：保留末尾 8 字符防标记跨 chunk
+        pending = ""              # 正文 lookahead 缓冲
+        fab_mode = False          # 已进入 <FABTWIN> 块（后续内容全部吞掉）
+        answer_parts = []
+        fab_parts = []
+
+        def _filter_text(text):
+            """正文分片经 FABTWIN 过滤，返回可下发的文本段列表"""
+            nonlocal pending, fab_mode
+            out = []
+            if fab_mode:
+                fab_parts.append(text)
+                return out
+            pending += text
+            idx = pending.find(fab_tag)
+            if idx >= 0:
+                if idx > 0:
+                    out.append(pending[:idx])
+                fab_parts.append(pending[idx:])
+                pending = ""
+                fab_mode = True
+            elif len(pending) > keep:
+                out.append(pending[:-keep])
+                pending = pending[-keep:]
+            return out
+
+        try:
+            for raw in resp.iter_lines():
+                line = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+                line = (line or "").strip()
+                if not line or line.startswith(":"):
+                    continue
+                if line.startswith("data:"):
+                    data_str = line[len("data:"):].strip()
+                    if data_str == "[DONE]":
+                        break
+                else:
+                    data_str = line
+                try:
+                    evt = json.loads(data_str)
+                except Exception:
+                    continue
+                if not isinstance(evt, dict):
+                    continue
+                event = evt.get("event")
+                if event in ("message", "agent_message", "message_replace"):
+                    chunk = evt.get("answer")
+                    if isinstance(chunk, str) and chunk:
+                        for vis in _filter_text(chunk):
+                            answer_parts.append(vis)
+                            fwd = dict(evt)
+                            fwd["answer"] = vis
+                            yield fwd
+                    if not stream_result["conversation_id"]:
+                        stream_result["conversation_id"] = evt.get("conversation_id")
+                elif event == "message_end":
+                    mmeta = evt.get("metadata") or {}
+                    if isinstance(mmeta.get("usage"), dict):
+                        stream_result["usage"] = mmeta["usage"]
+                    if not stream_result["conversation_id"]:
+                        stream_result["conversation_id"] = evt.get("conversation_id")
+                    yield evt
+                elif event == "agent_thought":
+                    stream_result["thoughts_count"] += 1
+                    yield evt
+                elif event == "retriever_resources":
+                    for r in (evt.get("records") or []):
+                        if isinstance(r, dict):
+                            stream_result["rag_records"].append(r)
+                    yield evt
+                else:
+                    # workflow_started / workflow_finished 等其他事件原样透传
+                    yield evt
+        finally:
+            try:
+                resp.close()
+            except Exception:
+                pass
+
+        # 冲刷 lookahead 残余（全程未出现 FABTWIN 时 pending 里的尾巴）
+        if pending and not fab_mode:
+            answer_parts.append(pending)
+            yield {"event": "agent_message", "answer": pending}
+
+        stream_result["answer"] = "".join(answer_parts)
+        stream_result["fab_text"] = "".join(fab_parts)
+        print(f"[Dify-stream] ✓ 流结束: answer_len={len(stream_result['answer'])}, "
+              f"fab={'有' if fab_mode else '无'}, thoughts={stream_result['thoughts_count']}")
 
     def _call_dify(self, question: str, session_id: str, machine_id: str = None,
                    user_role: str = "user",

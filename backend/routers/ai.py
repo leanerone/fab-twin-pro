@@ -14,6 +14,7 @@
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -50,6 +51,33 @@ def ai_chat(req: AIChatRequest, db: Session = Depends(get_db)):
         config_id=req.config_id,
     )
     return AIChatResponse(**result)
+
+
+@router.post("/chat/stream")
+def ai_chat_stream(req: AIChatRequest):
+    """统一AI聊天接口 - SSE 流式版（T4：打字机输出 + 工具调用过程可见）
+
+    - Dify 路由：逐 chunk 透传（agent_message / agent_thought / message_end）
+    - 非 Dify 路由（本地规则 / OpenAI兼容）：同步执行后包装单帧，前端一套渲染逻辑
+    - 收尾帧 event=final 携带 answer/jump/table_data/sources/usage 等结构化字段
+    - Dify Key 仅后端读取（ai_configs 表），前端永不接触
+    """
+    return StreamingResponse(
+        ai_middleware.chat_stream(
+            question=req.question,
+            session_id=req.session_id,
+            machine_id=req.machine_id,
+            context=req.context,
+            user_role=req.user_role or "user",
+            config_id=req.config_id,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # 提示反代关闭响应缓冲（nginx 识别；IIS ARR 见 deploy/web.config responseBufferLimit）
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ========== 旧版兼容接口 ==========
