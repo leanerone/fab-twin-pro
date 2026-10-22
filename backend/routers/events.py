@@ -2,20 +2,34 @@
 
 关键设计：
 - MachineEvent.timestamp 是 VARCHAR2，格式可能为 ISO T/空格/NLS中文，
-  不在 SQL 层用 LIKE 过滤日期或 ORDER BY 时间戳
-- 全部在 Python 层用 parse_ts 解析和过滤
+  SQL 层用前缀 LIKE 缩小范围（T1-B），Python 层用 parse_ts 精确过滤兜底
+- ORDER BY 时间戳仍在 Python 层做（字符串排序不可靠）
 """
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import MachineEvent, Machine
 from schemas import EventOut
-from services.time_utils import parse_ts
+from services.time_utils import parse_ts, build_date_like_patterns
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+
+
+def _apply_date_like(q, col, date: str):
+    """VARCHAR2 时间列：有 date 时加前缀 LIKE 缩小 SQL 层范围（T1-B）。
+
+    无 date 或 date 非法时原样返回，由 Python 层 parse_ts 兜底。
+    """
+    if not date:
+        return q
+    patterns = build_date_like_patterns(date)
+    if patterns:
+        q = q.filter(or_(*[col.like(p) for p in patterns]))
+    return q
 
 
 @router.get("/{machine_id}", response_model=List[EventOut])
@@ -26,6 +40,7 @@ def get_events(
 ):
     """获取某机台某天所有事件（用于历史回放）"""
     q = db.query(MachineEvent).filter(MachineEvent.machine_id == machine_id)
+    q = _apply_date_like(q, MachineEvent.timestamp, date)
     events = q.limit(5000).all()
 
     if date:
@@ -72,6 +87,7 @@ def get_timeline(
         MachineEvent.machine_id == machine_id,
         MachineEvent.metric.isnot(None),
     )
+    q = _apply_date_like(q, MachineEvent.timestamp, date)
     events = q.limit(5000).all()
 
     if date:

@@ -17,6 +17,7 @@ from database import get_db
 from models import Lot, MachineEvent, DT_EVENT_RAW, MachineToolMapping
 from schemas import LotOut, EventOut
 from services.time_utils import parse_ts, normalize_ts, extract_date, build_date_like_patterns
+from routers.machines import _day_clause
 
 router = APIRouter(prefix="/api/lots", tags=["lots"])
 
@@ -97,35 +98,29 @@ def list_lots(
 
     从 DT_EVENT_RAW 解析 lot_id，而不是从模拟的 Lot 表读取。
 
-    注意：Oracle 中 received_ts_utc 可能是中文格式（如 2026-7-22 下午3:00:48），
-    因此不在 SQL 层用 LIKE 过滤日期或 ORDER BY 时间戳，全部在 Python 层处理。
+    时间列是双形态（量产 TIMESTAMP/本地 VARCHAR2）：SQL 层按列类型用
+    半开区间或前缀 LIKE 缩小范围，Python 层 parse_ts 精确过滤兜底。
     """
     # 解析 machine_id 对应的所有 tool_id（含映射关系）
     tool_ids = _resolve_tool_ids(db, machine_id)
 
-    # SQL层日期过滤：用 LIKE 缩小到指定日期范围（同时检查两个字段）
-    # 如果LIKE过滤结果为空，回退到无LIKE查询
+    # T1-B: SQL 层按日期缩范围。原实现对 received/event 两列一律打 LIKE，
+    # 在量产 TIMESTAMP 列上恒不匹配（恒空→回退全量 5000），历史日期永远查不到。
+    # 现改为按列真实类型分支：TIMESTAMP 走半开区间、VARCHAR2 走前缀 LIKE。
     base_query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-    rows = []
     if date:
-        like_patterns = build_date_like_patterns(date)
-        if like_patterns:
-            like_conditions = []
-            for p in like_patterns:
-                like_conditions.append(DT_EVENT_RAW.received_ts_utc.like(p))
-                like_conditions.append(DT_EVENT_RAW.event_ts_utc.like(p))
-            rows = (
-                base_query.filter(or_(*like_conditions))
-                .order_by(DT_EVENT_RAW.raw_id.desc())
-                .limit(5000)
-                .all()
-            )
-    if not rows:
-        rows = (
-            base_query.order_by(DT_EVENT_RAW.raw_id.desc())
-            .limit(5000)
-            .all()
-        )
+        cond_parts = []
+        for col in (DT_EVENT_RAW.received_ts_utc, DT_EVENT_RAW.event_ts_utc):
+            c = _day_clause(db, DT_EVENT_RAW, col, date)
+            if c is not None:
+                cond_parts.append(c)
+        if cond_parts:
+            base_query = base_query.filter(or_(*cond_parts))
+    rows = (
+        base_query.order_by(DT_EVENT_RAW.raw_id.desc())
+        .limit(5000)
+        .all()
+    )
 
     # 解析 payload_json 提取 lot_id，在 Python 层过滤日期
     lot_set = {}  # lot_id -> {start_dt, end_dt, start_time, end_time, ...}

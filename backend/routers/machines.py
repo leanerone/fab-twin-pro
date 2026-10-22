@@ -1,10 +1,12 @@
 """机台相关 API"""
 import json
+import logging
 from typing import List, Optional, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import DateTime, and_, inspect, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -16,7 +18,9 @@ from models import (
 from routers.auth import get_current_user, check_permission
 from schemas import MachineOut
 from services.cache import machine_state_ttl, kpi_stats_ttl
-from services.time_utils import parse_ts
+from services.time_utils import parse_ts, build_date_like_patterns
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/machines", tags=["machines"])
 
@@ -34,6 +38,49 @@ def require_model_edit(user: User = Depends(get_current_user), db: Session = Dep
 #            → 最新标准事件(DT_EVENT_STD.machine_state)
 #            → DB 存储的 Machine.state
 # 今日产量 = 今日 WaferUnloaded 事件数；今日告警数 = 今日 DT_ALARM_EVENT 数
+
+_COL_TEMPORAL_CACHE: Dict[str, bool] = {}
+
+
+def _col_is_temporal(db, table_name: str, col_name: str) -> bool:
+    """反射判定某列是否 DATE/TIMESTAMP（量产形态）；字符列返回 False（本地形态）。
+
+    结果按 (table, col) 缓存。探测失败按字符列处理，避免把查询打死。
+    """
+    key = f"{table_name}.{col_name}"
+    if key in _COL_TEMPORAL_CACHE:
+        return _COL_TEMPORAL_CACHE[key]
+    temporal = False
+    try:
+        cols = inspect(db.get_bind()).get_columns(table_name)
+        col = next((c for c in cols if str(c.get("name", "")).lower() == col_name.lower()), None)
+        temporal = isinstance(col.get("type"), DateTime) if col else False
+    except Exception as e:
+        logger.warning("[machines] 探测 %s 列类型失败，按字符列处理: %s", key, e)
+    _COL_TEMPORAL_CACHE[key] = temporal
+    return temporal
+
+
+def _day_clause(db, model, col, date_str: str):
+    """生成「限定在 date_str 这一天」的 SQL 条件，按列真实类型选写法。
+
+    - TIMESTAMP/DATE 列：半开区间 [当日00:00, 次日00:00)
+    - 字符列：前缀 LIKE，兼容 ISO T分隔/空格分隔/NLS 月日不补零
+    返回 None 表示 date_str 非法，调用方应跳过 SQL 层日期过滤。
+    """
+    table = model.__tablename__
+    if _col_is_temporal(db, table, col.key):
+        try:
+            day = datetime.strptime(date_str, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+        nxt = day + timedelta(days=1)
+        return and_(col >= day, col < nxt)
+    patterns = build_date_like_patterns(date_str)
+    if not patterns:
+        return None
+    return or_(*[col.like(p) for p in patterns])
+
 
 def _normalize_state(raw_state: Optional[str]) -> str:
     """把 DT 的 machine_state 归一化到前端 state 词表 (run/idle/error/maint/setup)"""
@@ -119,14 +166,15 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
         pass
 
     # 4) 今日告警数 per tool_id（DT_ALARM_EVENT.start_ts_utc 今日）
+    # T1-B: SQL 层按日期缩范围（量产 TIMESTAMP 走区间、本地 VARCHAR2 走 LIKE），
+    #       再用 parse_ts 精确过滤兜底，语义与改前一致但不再全表扫描。
     alarm_count_today: Dict[str, int] = {tid: 0 for tid in tool_ids}
     try:
-        today_alarms = (
-            db.query(DT_ALARM_EVENT)
-            .filter(DT_ALARM_EVENT.tool_id.in_(tool_ids))
-            .limit(5000)
-            .all()
-        )
+        q = db.query(DT_ALARM_EVENT).filter(DT_ALARM_EVENT.tool_id.in_(tool_ids))
+        day_cond = _day_clause(db, DT_ALARM_EVENT, DT_ALARM_EVENT.start_ts_utc, today)
+        if day_cond is not None:
+            q = q.filter(day_cond)
+        today_alarms = q.limit(5000).all()
         for a in today_alarms:
             dt = parse_ts(a.start_ts_utc)
             if dt and dt.strftime("%Y-%m-%d") == today:
@@ -135,15 +183,23 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
         pass
 
     # 5) 今日产量：DT_EVENT_RAW payload event_name 含 UNLOAD 今日（parse_status=PARSED）
+    # T1-B: 时间源是 event_ts_utc 或 received_ts_utc，对两列各生成日期条件再 OR，
+    #       SQL 层缩到今日范围，Python 层 parse_ts 精确过滤兜底，语义不变。
     wafer_count_today: Dict[str, int] = {tid: 0 for tid in tool_ids}
     try:
-        rows = (
+        raw_cond_parts = []
+        for col in (DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc):
+            c = _day_clause(db, DT_EVENT_RAW, col, today)
+            if c is not None:
+                raw_cond_parts.append(c)
+        q = (
             db.query(DT_EVENT_RAW)
             .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
             .filter(DT_EVENT_RAW.parse_status == "PARSED")
-            .limit(10000)
-            .all()
         )
+        if raw_cond_parts:
+            q = q.filter(or_(*raw_cond_parts))
+        rows = q.limit(10000).all()
         for r in rows:
             dt = parse_ts(r.event_ts_utc or r.received_ts_utc)
             if not dt or dt.strftime("%Y-%m-%d") != today:

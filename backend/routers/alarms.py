@@ -2,20 +2,34 @@
 
 关键设计：
 - Alarm.timestamp 是 VARCHAR2，格式可能为 ISO T/空格/NLS中文，
-  不在 SQL 层用 LIKE 过滤日期或 ORDER BY 时间戳
-- 全部在 Python 层用 parse_ts 解析和过滤
+  SQL 层用前缀 LIKE 缩小范围（T1-B），Python 层用 parse_ts 精确过滤兜底
+- ORDER BY 时间戳仍在 Python 层做（字符串排序不可靠）
 """
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Alarm
 from schemas import AlarmOut
-from services.time_utils import parse_ts, normalize_ts
+from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 
 router = APIRouter(prefix="/api/alarms", tags=["alarms"])
+
+
+def _apply_date_like(q, col, date: str):
+    """VARCHAR2 时间列：有 date 时加前缀 LIKE 缩小 SQL 层范围（T1-B）。
+
+    无 date 或 date 非法时原样返回，由 Python 层 parse_ts 兜底。
+    """
+    if not date:
+        return q
+    patterns = build_date_like_patterns(date)
+    if patterns:
+        q = q.filter(or_(*[col.like(p) for p in patterns]))
+    return q
 
 
 @router.get("/stats")
@@ -29,7 +43,8 @@ def alarm_stats(
     if machine_id:
         q = q.filter(Alarm.machine_id == machine_id)
 
-    # Alarm 表通常数据量不大，全部取出在 Python 层过滤日期
+    # T1-B: SQL 层按日期缩范围，Python 层 parse_ts 精确过滤兜底
+    q = _apply_date_like(q, Alarm.timestamp, date)
     alarms = q.limit(5000).all()
 
     if date:
@@ -69,13 +84,14 @@ def list_alarms(
 ):
     """获取机台当天告警
 
-    Alarm.timestamp 是 VARCHAR2，格式不统一，不在 SQL 层用 LIKE，
-    全部取回在 Python 层用 parse_ts 过滤。
+    Alarm.timestamp 是 VARCHAR2，格式不统一。SQL 层用前缀 LIKE 缩范围（T1-B），
+    Python 层 parse_ts 精确过滤兜底。
     """
     q = db.query(Alarm)
     if machine_id:
         q = q.filter(Alarm.machine_id == machine_id)
 
+    q = _apply_date_like(q, Alarm.timestamp, date)
     alarms = q.limit(5000).all()
 
     if date:
