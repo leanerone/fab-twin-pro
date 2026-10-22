@@ -6,6 +6,9 @@ let reconnectTimer = null
 let reconnectAttempts = 0
 const MAX_RECONNECT_DELAY = 8000
 
+// 外部订阅 raw_event 的回调列表（供详情页视图组件消费同一条 WS 流，不再各自开 HTTP 轮询）
+let _rawEventSubscribers = []
+
 // VFEI事件类型映射
 const VFEI_EVENT_TYPES = {
   'EC_ALARM_REPORT': 'alarm',
@@ -132,7 +135,6 @@ export function useWebSocket() {
           } else if (msg.type === 'raw_event' && msg.data) {
                 // DB轮询推送的原始事件（db_poller）
                 const raw = msg.data
-                console.log('[WS] 收到DB轮询事件:', raw.event_name, 'tool_id=', raw.tool_id, 'ts=', raw.timestamp)
                 const parsedEvent = parseVfeiEvent({
                   ...raw.payload,
                   machine_id: raw.tool_id,
@@ -148,6 +150,10 @@ export function useWebSocket() {
                   alarm_info: raw.alarm_info,
                 })
                 store.applyRealtimeEvent(parsedEvent)
+                // 广播给详情页视图组件（MachineOxeView/Motion2D 等）——它们自己的 HTTP 轮询会删掉
+                for (const cb of _rawEventSubscribers) {
+                  try { cb(parsedEvent) } catch (e) { console.warn('[WS] raw_event subscriber error:', e) }
+                }
               } else if (msg.type === 'cur_status' && Array.isArray(msg.data)) {
             // 当前状态更新（CUR表）
             msg.data.forEach(cur => {
@@ -183,6 +189,18 @@ export function useWebSocket() {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify(event))
       }
+    },
+
+    // 订阅 raw_event（db_poller 推送的原始事件，已经过 parseVfeiEvent）。
+    // 详情页视图组件（MachineOxeView 等）用它替代自己的 HTTP 轮询。
+    // 组件负责在 onUnmounted 或 stopLivePolling 时 unsubscribe。
+    subscribeRawEvent(cb) {
+      if (typeof cb === 'function' && !_rawEventSubscribers.includes(cb)) {
+        _rawEventSubscribers.push(cb)
+      }
+    },
+    unsubscribeRawEvent(cb) {
+      _rawEventSubscribers = _rawEventSubscribers.filter(c => c !== cb)
     },
 
     // 断开连接

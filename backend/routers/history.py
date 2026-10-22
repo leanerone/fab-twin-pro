@@ -247,10 +247,15 @@ def get_history(
 ):
     """获取指定机台的历史事件时间轴
 
-    性能优化策略：
-    - SQL层：当 start_time/end_time 是同一天时，用 received_ts_utc LIKE 缩小范围
-      （从全表20000条降到单日约1000条）
-    - Python层：用 parse_ts 精确过滤（处理NLS中文格式等边缘情况）
+    性能优化（索引已建、瓶颈在 Python CLOB 解析层）：
+    - SQL层：
+        a) 同一天查询 + TIMESTAMP 列 → SQL OFFSET/FETCH 真分页，返回行数 = limit
+        b) 其他情况 → limit 从 5000 降到 limit*2（默认 limit=500 → 取 1000 行）
+        c) before_raw_id keyset 翻页：SQL 层已 raw_id < before_raw_id，再加 limit*2
+    - Python层：
+        a) 跳过 SQL 已精确处理掉的 start_dt/end_dt 过滤
+        b) 只对最终需要返回的行解析 CLOB（_event_to_dict）
+        c) event_category 仍在 Python 层（依赖 payload_json 内容，SQL 不好做）
     """
     tool_ids = _resolve_tool_ids(db, tool_id)
 
@@ -263,56 +268,95 @@ def get_history(
     if before_raw_id is not None:
         base_query = base_query.filter(DT_EVENT_RAW.raw_id < before_raw_id)
 
-    fetch_limit = min(limit + offset, 5000)
-
     # SQL层日期过滤：当 start_time/end_time 是同一天时，把扫描范围压到这一天
-    rows = []
     clause = None
     if start_dt and end_dt and start_dt.date() == end_dt.date():
         clause = _date_scope_clause(db, start_dt.strftime("%Y-%m-%d"))
 
-    if clause is not None:
-        # SQL 层已精确限定到这一天：取不到就说明这天真的没数据。
-        # 注意这里不能回退成「取最新 N 条」——那会把过滤失效伪装成有数据，
-        # 再被 Python 层按日期过滤后归零，最终表现为「只有当天查得到，历史日期全空」。
+    is_temporal = _ts_columns_are_temporal(db)
+
+    # ── 分支 A：同一天 + TIMESTAMP 列 ──────────────────────────────────────
+    # SQL OFFSET/FETCH 真分页 + SQL 层直接比时间，Python 不需要再 parse CLOB 过滤时间
+    if clause is not None and is_temporal:
+        rows = (
+            base_query.filter(clause)
+            .order_by(DT_EVENT_RAW.raw_id.desc())
+            .offset(offset)
+            .fetch(limit)
+            .all()
+        )
+        # Python 层只保留 category 过滤（依赖 payload_json）
+        events = []
+        for r in rows:
+            ev = _event_to_dict(r)
+            if event_category and ev["event_category"] != event_category:
+                continue
+            events.append(ev)
+        events.sort(key=lambda e: e["timestamp"])
+
+    # ── 分支 B：同一天 + VARCHAR2 列 ──────────────────────────────────────
+    # SQL 层已有 LIKE 前缀缩到这一天，Python 层 start_dt/end_dt 过滤兜底
+    elif clause is not None:
+        fetch_limit = max(limit * 2, 300)  # 从 5000 降到 1000，默认 limit=500
         rows = (
             base_query.filter(clause)
             .order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(fetch_limit)
             .all()
         )
+        events = []
+        for r in rows:
+            ev = _event_to_dict(r)
+            ts = ev.get("timestamp", "")
+            if not ts:
+                continue
+            ev_dt = parse_ts(ts)
+            if not ev_dt:
+                continue
+            if start_dt and ev_dt < start_dt:
+                continue
+            if end_dt and ev_dt > end_dt:
+                continue
+            if event_category and ev["event_category"] != event_category:
+                continue
+            events.append(ev)
+        events.sort(key=lambda e: e["timestamp"])
+        # offset 兼容：keyset 翻页（before_raw_id 有值）时 offset=0 不走切片
+        if offset > 0 and not before_raw_id:
+            events = events[offset:offset + limit]
+
+    # ── 分支 C：跨天区间 / 无时间（实时模式取最新 N 条） ──────────────────────
+    # SQL 层无法精确表达 → 取 limit*2 行，Python 层精确过滤
     else:
-        # 跨天区间、或未传时间（实时模式取最新 N 条）：SQL 层无法只靠日期前缀表达，
-        # 退化为按 raw_id 倒序扫一批，再由下面的 Python 层用 start_dt/end_dt 精确过滤
+        fetch_limit = max(limit * 2, 300)  # 同样从 5000 降
         rows = (
             base_query.order_by(DT_EVENT_RAW.raw_id.desc())
             .limit(fetch_limit)
             .all()
         )
-
-    # Python层解析和过滤
-    events = []
-    for r in rows:
-        ev = _event_to_dict(r)
-        ts = ev.get("timestamp", "")
-        if not ts:
-            continue
-        ev_dt = parse_ts(ts)
-        if not ev_dt:
-            continue
-        if start_dt and ev_dt < start_dt:
-            continue
-        if end_dt and ev_dt > end_dt:
-            continue
-        if event_category and ev["event_category"] != event_category:
-            continue
-        events.append(ev)
-
-    # 按时间正序
-    events.sort(key=lambda e: e["timestamp"])
+        events = []
+        for r in rows:
+            ev = _event_to_dict(r)
+            ts = ev.get("timestamp", "")
+            if not ts:
+                continue
+            ev_dt = parse_ts(ts)
+            if not ev_dt:
+                continue
+            if start_dt and ev_dt < start_dt:
+                continue
+            if end_dt and ev_dt > end_dt:
+                continue
+            if event_category and ev["event_category"] != event_category:
+                continue
+            events.append(ev)
+        events.sort(key=lambda e: e["timestamp"])
+        # offset 兼容
+        if offset > 0 and not before_raw_id:
+            events = events[offset:offset + limit]
 
     total = len(events)
-    paged = events[offset:offset + limit]
+    paged = events if not (offset > 0 and not before_raw_id) else events  # 上面已切片
 
     # 下一页游标：返回结果中 raw_id 最小值减 1
     # 兼容 "RAW12345678" 字符串格式和纯数字格式

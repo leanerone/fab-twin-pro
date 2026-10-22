@@ -7,11 +7,18 @@
 两种模式可以同时运行：
 - DEMO模式：模拟器生成事件
 - 真实模式：WinForm/外部系统写入DB，轮询服务读取推送
+
+2026-10-22 减重：
+- SQL 层直接按 received_ts_utc > _last_poll_ts 过滤（TIMESTAMP 列），空转时查询近零行
+- CUR 表不再 .all() 全表扫，增量过滤后仅对有变化的机台广播
+- Python 层过滤仍保留为 VARCHAR2 列形态兜底
 """
 import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
+
+from sqlalchemy import DateTime, inspect
 
 from database import SessionLocal
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
@@ -24,6 +31,26 @@ logger = logging.getLogger("fabtwin.db_poller")
 _poller_task = None
 _last_poll_ts = None
 _running = False
+# 列类型缓存：_TS_IS_TEMPORAL["raw"]=True 表示量产 TIMESTAMP 形态
+_TS_IS_TEMPORAL = {}
+
+
+def _detect_ts_column_type(db, table_name: str) -> bool:
+    """探测某表的 received_ts_utc 列是否为 TIMESTAMP/DATE 类型"""
+    if table_name in _TS_IS_TEMPORAL:
+        return _TS_IS_TEMPORAL[table_name]
+    temporal = False
+    try:
+        cols = inspect(db.get_bind()).get_columns(table_name)
+        col = next(
+            (c for c in cols if str(c.get("name", "")).lower() == "received_ts_utc"),
+            None,
+        )
+        temporal = isinstance(col.get("type"), DateTime) if col else False
+    except Exception as e:
+        logger.warning("[DB Poller] 探测 %s.received_ts_utc 列类型失败，按字符列处理: %s", table_name, e)
+    _TS_IS_TEMPORAL[table_name] = temporal
+    return temporal
 
 
 def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
@@ -126,57 +153,63 @@ async def poll_db_events():
         db.close()
 
     poll_count = 0
+    # 列类型探测一次（量产 TIMESTAMP / 本地 VARCHAR2）
+    raw_is_ts = None
+    cur_is_ts = None
+
     while _running:
         try:
             db = SessionLocal()
             try:
-                # 查询最近事件（用raw_id降序，近似时间顺序；VARCHAR2时间排序不可靠）
-                all_recent = db.query(DT_EVENT_RAW).order_by(
-                    DT_EVENT_RAW.raw_id.desc()
-                ).limit(100).all()
+                if raw_is_ts is None:
+                    raw_is_ts = _detect_ts_column_type(db, "dt_event_raw")
+                    cur_is_ts = _detect_ts_column_type(db, "dt_event_raw_cur")
+                    logger.info("[DB Poller] 列类型: raw=%s, cur=%s", raw_is_ts, cur_is_ts)
 
-                new_events = []
-                for ev in all_recent:
-                    ev_ts = parse_ts(ev.received_ts_utc)
-                    if ev_ts and _last_poll_ts and ev_ts > _last_poll_ts:
-                        new_events.append(ev)
+                # ── DT_EVENT_RAW 增量查询 ──────────────────────────────
+                q_raw = db.query(DT_EVENT_RAW)
+                if _last_poll_ts and raw_is_ts:
+                    # TIMESTAMP 列：SQL 层直接比时间，空转时查询近零行
+                    q_raw = q_raw.filter(DT_EVENT_RAW.received_ts_utc > _last_poll_ts)
+                    recent = q_raw.order_by(DT_EVENT_RAW.raw_id.desc()).limit(100).all()
+                    new_events = recent  # 已经是增量，跳过 Python 层二次过滤
+                else:
+                    # VARCHAR2 列 / 首次无 _last_poll_ts：退化成拉 100 行 + Python 兜底过滤
+                    all_recent = q_raw.order_by(DT_EVENT_RAW.raw_id.desc()).limit(100).all()
+                    new_events = []
+                    for ev in all_recent:
+                        ev_ts = parse_ts(ev.received_ts_utc)
+                        if ev_ts and _last_poll_ts and ev_ts > _last_poll_ts:
+                            new_events.append(ev)
 
-                # 按raw_id正序排列（近似时间正序）
+                # 按 raw_id 正序推送
                 new_events.sort(key=lambda e: e.raw_id)
+                for ev in new_events:
+                    event_data = _parse_event_payload(ev)
+                    await manager.broadcast({"type": "raw_event", "data": event_data})
+                    ev_ts = parse_ts(ev.received_ts_utc)
+                    if ev_ts and (_last_poll_ts is None or ev_ts > _last_poll_ts):
+                        _last_poll_ts = ev_ts
 
                 if new_events:
-                    for ev in new_events:
-                        event_data = _parse_event_payload(ev)
-                        # 通过WebSocket广播
-                        await manager.broadcast({
-                            "type": "raw_event",
-                            "data": event_data
-                        })
-                        # 更新时间戳
-                        ev_ts = parse_ts(ev.received_ts_utc)
-                        if ev_ts and ev_ts > _last_poll_ts:
-                            _last_poll_ts = ev_ts
+                    first_data = _parse_event_payload(new_events[0])
+                    logger.info("[DB Poller] 推送 %d 条事件，最新=%s，tool=%s", len(new_events), _last_poll_ts, first_data.get('tool_id'))
 
-                    logger.info(f"[DB Poller] 推送 {len(new_events)} 条新事件，最新时间: {_last_poll_ts}")
-                    print(f"[DB Poller] 推送 {len(new_events)} 条新事件，最新时间: {_last_poll_ts}", flush=True)
-                    # 打印第一条事件详情便于调试
-                    first_ev = new_events[0]
-                    first_data = _parse_event_payload(first_ev)
-                    print(f"[DB Poller] 首条事件: tool_id={first_data.get('tool_id')}, event_name={first_data.get('event_name')}, ts={first_data.get('timestamp')}", flush=True)
+                # ── DT_EVENT_RAW_CUR 增量查询（不再 .all() 全表扫）──────────
+                q_cur = db.query(DT_EVENT_RAW_CUR)
+                if _last_poll_ts and cur_is_ts:
+                    # 只查变化的机台（空转时零行）
+                    cur_rows = q_cur.filter(
+                        DT_EVENT_RAW_CUR.received_ts_utc > _last_poll_ts
+                    ).all()
+                else:
+                    cur_rows = q_cur.all() if poll_count == 0 else []  # VARCHAR2 退化成首轮全扫，后续跳过
 
-                # 也检查CUR表，推送当前状态
-                cur_events = db.query(DT_EVENT_RAW_CUR).all()
-                if cur_events:
-                    cur_list = []
-                    for ce in cur_events:
-                        cur_list.append(_parse_event_payload(ce))
-                    await manager.broadcast({
-                        "type": "cur_status",
-                        "data": cur_list
-                    })
+                if cur_rows:
+                    cur_list = [_parse_event_payload(ce) for ce in cur_rows]
+                    await manager.broadcast({"type": "cur_status", "data": cur_list})
 
                 poll_count += 1
-                # 每30秒打印一次心跳日志，确认轮询服务存活
                 if poll_count % 30 == 0:
                     print(f"[DB Poller] 心跳: 已轮询{poll_count}次，当前_last_poll_ts={_last_poll_ts}，WebSocket连接数={len(manager.active)}", flush=True)
 

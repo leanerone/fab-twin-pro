@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { useWebSocket } from '../composables/useWebSocket'
 
 // ==================== Props 契约（与 PODOPENER 一致）====================
 const props = defineProps({
@@ -1526,8 +1527,9 @@ function resetReplayCursor() {
 
 defineExpose({ resetReplayCursor })
 
-// ==================== 实时模式（1秒轮询 /api/oxe/latest-event）====================
-let livePollTimer = null
+// ==================== 实时模式（WS 订阅 db_poller raw_event，替代独立 HTTP 轮询）====================
+const ws = useWebSocket()
+let _wsRawHandler = null
 
 function startLivePolling() {
   stopLivePolling()
@@ -1536,37 +1538,33 @@ function startLivePolling() {
 
   activeState.liveMode = true
   activeState.lastPollRawId = 0
-  // 先 bootstrap 重建状态，再启动 1 秒轮询
+
+  // WS raw_event 订阅：同一条后端 db_poller 推送，按机台 tool_id 过滤后喂给 applyEvent。
+  // 不再每秒独立请求 /api/oxe/latest-event。
+  _wsRawHandler = function (parsedEvent) {
+    if (!activeState.liveMode) return
+    if (String(parsedEvent.tool_id || '') !== String(toolId)) return
+    const rawId = Number(parsedEvent.raw_id || 0)
+    if (!rawId || rawId <= activeState.lastPollRawId) return
+    activeState.lastPollRawId = rawId
+    const normalized = normalizeIncomingEvent(parsedEvent)
+    if (normalized && (normalized.event_type || normalized.event_name)) {
+      applyEvent(normalized)
+    }
+  }
+
+  // 先 bootstrap 重建状态，再订阅 WS 流
   bootstrapFromLatestPodPlaced(toolId).finally(function () {
     if (!activeState.liveMode) return
-    livePollTimer = setInterval(function () {
-      if (!activeState.liveMode) {
-        clearInterval(livePollTimer)
-        livePollTimer = null
-        return
-      }
-      fetch('/api/oxe/latest-event?tool_id=' + encodeURIComponent(toolId), { cache: 'no-store' })
-        .then(function (res) { if (!res.ok) return null; return res.json() })
-        .then(function (data) {
-          if (!data || data.error) return
-          const rawId = Number(data.raw_id || 0)
-          if (rawId && rawId > activeState.lastPollRawId) {
-            activeState.lastPollRawId = rawId
-            const normalized = normalizeIncomingEvent(data)
-            if (normalized && (normalized.event_type || normalized.event_name)) {
-              applyEvent(normalized)
-            }
-          }
-        }).catch(function () {})
-    }, 1000)
+    ws.subscribeRawEvent(_wsRawHandler)
   })
 }
 
 function stopLivePolling() {
   activeState.liveMode = false
-  if (livePollTimer) {
-    clearInterval(livePollTimer)
-    livePollTimer = null
+  if (_wsRawHandler) {
+    ws.unsubscribeRawEvent(_wsRawHandler)
+    _wsRawHandler = null
   }
 }
 
