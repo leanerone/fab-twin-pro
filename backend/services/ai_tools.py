@@ -601,7 +601,12 @@ def get_mes_lot_info(db: Session, lot_id: str) -> dict:
         if not client:
             return {"answer": "⚠️ MCP 客户端初始化失败。", "sql": ""}
 
-        workflow_id = "ymOYQpVMhHr7cWJH"
+        # T8：workflow_id 从 MCP 注册表读取（环境变量 N8N_MES_WORKFLOW_ID 可覆盖），不再硬编码
+        from services.mcp_registry import find_mcp_tool_by_name
+        _tool_cfg = find_mcp_tool_by_name("get_mes_lot_info")
+        workflow_id = _tool_cfg.workflow_id if _tool_cfg else ""
+        if not workflow_id:
+            return {"answer": "⚠️ get_mes_lot_info 未配置 n8n workflow_id。", "sql": ""}
 
         # 1. 发起执行
         exec_resp = client.call_tool("execute_workflow", {

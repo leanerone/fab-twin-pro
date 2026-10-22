@@ -179,6 +179,11 @@ export const api = {
   aiSetDefaultModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/default`),
   aiToggleModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/toggle`),
   aiSwitchModelConfig: (id) => request('POST', `/ai/model-configs/switch?config_id=${id}`),
+
+  // MCP Server (N8N) 配置（管理面板已登录，但不要求强鉴权跳转，保持与原裸 fetch 一致的行为）
+  aiGetMcpConfig: () => request('GET', '/ai/mcp/config', null, false),
+  aiSaveMcpConfig: (payload) => request('PUT', '/ai/mcp/config', payload, false),
+  aiTestMcpConnection: () => request('POST', '/ai/mcp/test', null, false),
   // 机台专属 Dify 配置管理
   aiGetMachineDifyConfigs: () => request('GET', '/ai/machine-dify'),
   aiCreateMachineDifyConfig: (data) => request('POST', '/ai/machine-dify', data),

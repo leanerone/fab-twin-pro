@@ -11,6 +11,7 @@
 """
 from dataclasses import dataclass, field
 from typing import Dict, List
+import os
 
 
 @dataclass
@@ -21,6 +22,7 @@ class MCPToolConfig:
     mcp_tool_name: str  # N8N MCP Server 上的实际工具名
     parameters: Dict  # OpenAI Function Calling 参数 schema
     keywords: List[str] = field(default_factory=list)  # 关键词兜底
+    workflow_id: str = ""  # n8n 工作流 ID（execute_workflow 类工具用），可用环境变量覆盖
 
 
 # ==================== 工具注册表 ====================
@@ -48,6 +50,8 @@ MCP_REGISTRY: Dict[str, MCPToolConfig] = {
             "required": ["lot"]
         },
         keywords=["lot", "批次", "产品", "工艺", "状态", "晶圆", "花篮", "控片", "追溯"],
+        # 原 ai_tools.py 硬编码值迁移至此；部署侧可用 N8N_MES_WORKFLOW_ID 覆盖
+        workflow_id=os.getenv("N8N_MES_WORKFLOW_ID", "ymOYQpVMhHr7cWJH"),
     ),
     # 后续新增工具只需在此追加，例如：
     # "get_mes_alarm_info": MCPToolConfig(

@@ -22,6 +22,19 @@ from routers.machines import _day_clause
 router = APIRouter(prefix="/api/lots", tags=["lots"])
 
 
+def _unwrap(payload: dict) -> dict:
+    """兼容两种 payload 形态：量产为顶层平铺（lot_id/alarm_id 等在根上），
+    本地种子数据为信封结构（业务字段在 data 子对象内）。
+    返回合并视图：data 子键提升到顶层，同名字段以顶层为准。"""
+    data = payload.get("data")
+    if isinstance(data, dict) and data:
+        merged = dict(data)
+        merged.update(payload)
+        merged.pop("data", None)
+        return merged
+    return payload
+
+
 def _find_raw_id_anchor(db, tool_ids: set, target_dt: datetime) -> Optional[int]:
     """在 raw_id 中定位到 ts <= target_dt 的最大 raw_id（与 history.py 逻辑一致）"""
     try:
@@ -104,13 +117,16 @@ def list_lots(
     时间列是双形态（量产 TIMESTAMP/本地 VARCHAR2）：SQL 层按列类型用
     半开区间或前缀 LIKE 缩小范围，Python 层 parse_ts 精确过滤兜底。
     """
-    # 解析 machine_id 对应的所有 tool_id（含映射关系）
+    # 解析 machine_id 对应的所有 tool_id（含映射关系）；
+    # machine_id 为空时不加机台过滤，扫全机台最近事件（AI 场景常无参查批次）
     tool_ids = _resolve_tool_ids(db, machine_id)
 
     # T1-B: SQL 层按日期缩范围。原实现对 received/event 两列一律打 LIKE，
     # 在量产 TIMESTAMP 列上恒不匹配（恒空→回退全量 5000），历史日期永远查不到。
     # 现改为按列真实类型分支：TIMESTAMP 走半开区间、VARCHAR2 走前缀 LIKE。
-    base_query = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+    base_query = db.query(DT_EVENT_RAW)
+    if tool_ids:
+        base_query = base_query.filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
     if date:
         cond_parts = []
         for col in (DT_EVENT_RAW.received_ts_utc, DT_EVENT_RAW.event_ts_utc):
@@ -129,7 +145,7 @@ def list_lots(
     lot_set = {}  # lot_id -> {start_dt, end_dt, start_time, end_time, ...}
     for row in rows:
         try:
-            payload = json.loads(row.payload_json) if row.payload_json else {}
+            payload = _unwrap(json.loads(row.payload_json) if row.payload_json else {})
         except Exception:
             payload = {}
 
@@ -153,7 +169,7 @@ def list_lots(
         if lot_id not in lot_set:
             lot_set[lot_id] = {
                 "id": lot_id,
-                "machine_id": machine_id,
+                "machine_id": row.tool_id or machine_id,
                 "product": payload.get("product", ""),
                 "wafer_count": payload.get("QTY", 25),
                 "status": "run" if payload.get("run_mode") else "done",
@@ -196,7 +212,7 @@ def get_lot(lot_id: str, db: Session = Depends(get_db)):
     matched = []
     for row in rows:
         try:
-            payload = json.loads(row.payload_json) if row.payload_json else {}
+            payload = _unwrap(json.loads(row.payload_json) if row.payload_json else {})
         except Exception:
             payload = {}
         if payload.get("lot_id") == lot_id:
@@ -235,20 +251,23 @@ def get_lot_events(lot_id: str, db: Session = Depends(get_db)):
     events = []
     for row in rows:
         try:
-            payload = json.loads(row.payload_json) if row.payload_json else {}
+            payload = _unwrap(json.loads(row.payload_json) if row.payload_json else {})
         except Exception:
             payload = {}
         if payload.get("lot_id") != lot_id:
             continue
 
+        # EventOut.id 要求 int；本地 raw_id 形如 "RAW99960549"，提取数字部分
+        raw_id_str = str(row.raw_id)
+        digits = "".join(ch for ch in raw_id_str if ch.isdigit())
         events.append({
-            "id": row.raw_id,
+            "id": int(digits) if digits else 0,
             "machine_id": row.tool_id,
             "timestamp": normalize_ts(row.event_ts_utc or row.received_ts_utc),
             "event_type": payload.get("event_type", "VFEI"),
-            "event_code": payload.get("event_name", ""),
-            "description": payload.get("alarm_text", ""),
-            "level": "warn" if payload.get("alarm_id") else "info",
+            "event_code": payload.get("event_name") or payload.get("action", ""),
+            "description": payload.get("alarm_text") or payload.get("message", ""),
+            "level": "warn" if (payload.get("alarm_id") or payload.get("alarm_code")) else "info",
             "metric": None,
             "value": None,
             "lot_id": lot_id,

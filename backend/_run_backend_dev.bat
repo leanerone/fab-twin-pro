@@ -1,0 +1,17 @@
+@echo off
+cd /d "E:\AI\fab-twin-pro-main\backend"
+set "DB_TYPE=oracle"
+set "ORACLE_HOST=localhost"
+set "ORACLE_PORT=1521"
+set "ORACLE_SERVICE=XEPDB1"
+set "ORACLE_USER=fabtwin"
+set "ORACLE_PASSWORD=fabtwin"
+set "ORACLE_DSN_TYPE=service_name"
+set "ORACLE_CLIENT_DIR="
+set "SIMULATION_ENABLED=False"
+set "DB_POLLER_ENABLED=True"
+set "NO_PROXY=*"
+set "no_proxy=*"
+set "HTTP_PROXY="
+set "HTTPS_PROXY="
+venv\Scripts\python.exe main.py

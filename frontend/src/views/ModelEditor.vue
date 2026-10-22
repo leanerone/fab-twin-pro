@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useModelStore } from '../stores/model'
 import ModelUpload from '../components/ModelUpload.vue'
 import MotionPreview from '../components/MotionPreview.vue'
 import { scopeSvgPaintIds } from '../utils/svgPaintScope'
@@ -46,9 +47,13 @@ function toast(msg, type = 'info') {
 }
 
 // === 模型管理 ===
-async function loadModels() {
+const modelStore = useModelStore()
+
+// T6: 收编到 Pinia store。挂载时复用 300s 缓存；增删改/上传后 force 刷新保证数据最新
+async function loadModels(force = false) {
   try {
-    models.value = await api.getModels()
+    await modelStore.loadModels(force)
+    models.value = modelStore.models
   } catch (e) {
     console.error('加载模型失败:', e)
     toast(`加载模型失败: ${e.message}`, 'error')
@@ -62,7 +67,7 @@ async function createModel() {
   }
   try {
     await api.createModel(newModel.value)
-    await loadModels()
+    await loadModels(true)
     newModel.value = {
       model_id: '', model_name: '', vendor: '',
       process_type: 'ETCH', view_mode: 'svg', description: '',
@@ -85,7 +90,7 @@ async function deleteModel(model) {
   if (!confirm(`确认删除机型 ${model.model_id}？\n该操作不可恢复，关联的文件、动画配置将一并清除。`)) return
   try {
     await api.deleteModel(model.model_id)
-    await loadModels()
+    await loadModels(true)
     if (selectedModel.value?.model_id === model.model_id) {
       selectedModel.value = null
     }
@@ -278,7 +283,8 @@ async function onModelFileUploaded() {
   if (!selectedModel.value) return
   const currentId = selectedModel.value.model_id
   try {
-    const fresh = await api.getModels()
+    await modelStore.loadModels(true)
+    const fresh = modelStore.models
     models.value = fresh || []
     // 重新选中当前机型，使 selectedModel 引用最新数据
     const updated = fresh?.find(m => m.model_id === currentId)

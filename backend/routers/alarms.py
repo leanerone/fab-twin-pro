@@ -76,22 +76,40 @@ def alarm_stats(
     }
 
 
-@router.get("", response_model=List[AlarmOut])
+@router.get("")
 def list_alarms(
     machine_id: str = Query(default=None),
     date: str = Query(default=None, description="日期 YYYY-MM-DD"),
+    page: int = Query(default=None, ge=1, description="页码（T7：传入启用 SQL 层真分页）"),
+    page_size: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
     """获取机台当天告警
 
     Alarm.timestamp 是 VARCHAR2，格式不统一。SQL 层用前缀 LIKE 缩范围（T1-B），
     Python 层 parse_ts 精确过滤兜底。
+    T7 真分页：传 page 时按 id 倒序（≈时间倒序）SQL 层 OFFSET/FETCH（Oracle 12c+），
+    返回 {total, page, page_size, items}；不传 page 保持旧行为（数组，5000 封顶）。
     """
     q = db.query(Alarm)
     if machine_id:
         q = q.filter(Alarm.machine_id == machine_id)
 
     q = _apply_date_like(q, Alarm.timestamp, date)
+
+    if page is not None:
+        total = q.count()
+        rows = (
+            q.order_by(Alarm.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        # 页内按解析时间倒序（VARCHAR2 字符串排序不可靠）
+        rows.sort(key=lambda a: parse_ts(a.timestamp) or parse_ts("1970-01-01"), reverse=True)
+        return {"total": total, "page": page, "page_size": page_size,
+                "items": [AlarmOut.model_validate(a) for a in rows]}
+
     alarms = q.limit(5000).all()
 
     if date:

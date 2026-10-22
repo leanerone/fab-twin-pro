@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import OHTPosition
 
-router = APIRouter()
+router = APIRouter(prefix="/api/oht", tags=["oht"])
 
 
 @router.get("/")

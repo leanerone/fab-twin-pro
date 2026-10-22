@@ -489,3 +489,21 @@ class MachineDifyConfig(Base):
     is_active = Column(Integer, default=1)                # 是否启用：1=启用，0=禁用
     created_at = Column(String(255))
     updated_at = Column(String(255))
+
+
+class AIConversation(Base):
+    """前端 session_id → Dify conversation_id 映射持久化（T5）
+    后端重启/多实例下多轮会话不丢；进程内存 _dify_conv_map 作为缓存与兜底。
+    注意：AI 相关表不在 init_db() 自动创建范围，由 DBA 执行
+    sql/v2.12_add_ai_conversations.sql 完成。
+    """
+    __tablename__ = "ai_conversations"
+
+    id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
+    session_id = Column(String(64), nullable=False, index=True)  # 前端 sess_xxx
+    user_id = Column(Integer, nullable=True)                     # 预留：登录用户ID
+    machine_id = Column(String(64), default="")                  # 机台详情页会话按机台隔离
+    dify_conv_id = Column(String(64), default="")                # Dify 返回的 UUID
+    provider = Column(String(32), default="dify")
+    created_at = Column(String(255))
+    updated_at = Column(String(255), index=True)

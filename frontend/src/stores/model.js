@@ -8,6 +8,9 @@ export const useModelStore = defineStore('model', () => {
   const currentModelId = ref('')
   const loading = ref(false)
   const eventActions = ref([])
+  const lastLoadedAt = ref(0)
+  // 与后端 GET /api/models 的 TTLCache(300s) 对齐：已加载且未过期则复用，不再每页全表拉取
+  const MODELS_TTL = 300 * 1000
 
   const modelMap = computed(() => {
     const m = {}
@@ -45,19 +48,24 @@ export const useModelStore = defineStore('model', () => {
     return mode
   }
 
-  async function loadModels() {
-    if (loading.value) return
+  async function loadModels(force = false) {
+    if (loading.value) return models.value
+    if (!force && models.value.length && Date.now() - lastLoadedAt.value < MODELS_TTL) {
+      return models.value
+    }
     loading.value = true
     try {
       const data = await api.getModels()
       console.log('[modelStore] loadModels got', data?.length, 'models:', data?.map(m => m.model_id))
       models.value = data || []
+      lastLoadedAt.value = Date.now()
       preloadModelAssets(data || [])
     } catch (e) {
       console.error('[modelStore] loadModels FAILED:', e)
     } finally {
       loading.value = false
     }
+    return models.value
   }
 
   function preloadModelAssets(modelList) {

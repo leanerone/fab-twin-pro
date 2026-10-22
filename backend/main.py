@@ -39,7 +39,14 @@ from services.db_poller import start_db_poller
 from services.cache import cache
 from services.ai_mcp import ai_mcp
 
-app = FastAPI(title="FabTwin API", version="1.0")
+# T8：operation_id 统一用函数名（默认会拼路径后缀，如 list_machines_api_machines_get），
+# 让 MCP 工具名保持 list_machines / get_machine 这种干净命名。
+# 前端只按 URL 调接口，不消费 operationId，无副作用。
+app = FastAPI(
+    title="FabTwin API",
+    version="1.0",
+    generate_unique_id_function=lambda route: route.name,
+)
 
 # CORS 中间件
 app.add_middleware(
@@ -72,6 +79,35 @@ app.include_router(uploads.router, tags=["uploads"])
 app.include_router(rv_router, tags=["rv"])
 app.include_router(oxe.router, tags=["oxe"])
 app.include_router(debug.router, tags=["debug"])
+
+# ========== MCP（T8）：把内部只读 API 注册为标准 MCP 工具 ==========
+# 选择性暴露：只挂读类/跳转类，管理操作（写/删/用户/上传/AI配置）一律不挂。
+# Dify/n8n 以 MCP Client 连 http://<host>:8002/mcp 即可调这些工具。
+from fastapi_mcp import FastApiMCP
+
+_MCP_READ_OPERATIONS = [
+    # 机台状态
+    "list_machines", "get_machine", "machine_stats",
+    # 实时事件（EAP LOG）
+    "get_events", "get_latest_events", "get_event_timeline",
+    # 告警
+    "list_alarms", "alarm_stats",
+    # 批次 / MES
+    "list_lots", "get_lot", "get_lot_events",
+    # 历史回溯
+    "get_history", "get_history_timeline", "get_alarm_history", "get_event_detail",
+    # OXE 事件
+    "get_latest_event", "get_history_events",
+    # OHT / 配方 / 布局 / 型号 / RV 消息
+    "get_oht_positions", "get_oht_history",
+    "get_recipes", "get_recipe",
+    "list_floors", "get_floor", "get_floor_machines",
+    "list_models", "get_model",
+    "get_current_rv", "get_rv_history",
+]
+
+mcp = FastApiMCP(app, include_operations=_MCP_READ_OPERATIONS)
+mcp.mount_http()  # Streamable HTTP，默认 /mcp
 
 # ========== WebSocket 端点 ==========
 @app.websocket("/ws/realtime")

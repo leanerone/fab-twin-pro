@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Recipe
 
-router = APIRouter()
+router = APIRouter(prefix="/api/recipes", tags=["recipes"])
 
 
 @router.get("/")

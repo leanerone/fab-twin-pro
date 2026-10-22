@@ -184,11 +184,23 @@ def _resolve_tool_ids(db, machine_id: str) -> set:
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
-    """解析VFEI事件payload"""
+    """解析VFEI事件payload。
+
+    兼容两种形态：量产为顶层平铺（event_name/lot_id 等在根上），
+    本地种子数据为信封结构（业务字段在 data 子对象内）——
+    信封形态下 data 子键提升到顶层，同名字段以顶层为准。
+    """
     try:
-        return json.loads(payload_json) if payload_json else {}
+        payload = json.loads(payload_json) if payload_json else {}
     except Exception:
         return {"_raw": payload_json}
+    data = payload.get("data")
+    if isinstance(data, dict) and data:
+        merged = dict(data)
+        merged.update(payload)
+        merged.pop("data", None)
+        return merged
+    return payload
 
 
 def _event_to_dict(row: DT_EVENT_RAW) -> dict:
@@ -200,6 +212,9 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
     # 告警事件名清单与 ai_tools/oxe 共用：量产 OXE 用的是 ALARM_REPORT，
     # 旧版此处只认 EC_ALARM_REPORT，导致真实告警被归为 other、alarm 字段为 null
     if str(event_name).upper().strip() in ALARM_EVENT_NAMES:
+        event_category = "alarm"
+    elif event_name == "UNKNOWN" and str(payload.get("event_type", "")).upper() == "ALARM":
+        # 本地信封形态：无 event_name，用 event_type=ALARM 归类
         event_category = "alarm"
     elif event_name in ("DETACH_POD_PLACE", "ATTACH_POD_PLACE", "POD_PLACED", "POD_REMOVED",
                         "LOCK_PORT_COMPLETED", "UNLOCK_PORT_COMPLETED", "MVIN", "MVOU",
@@ -223,8 +238,9 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
 
     alarm_info = None
     if event_category == "alarm":
-        alarm_id = payload.get("alarm_id", "")
-        alarm_text = payload.get("alarm_text", "")
+        # 量产平铺用 alarm_id/alarm_text；本地信封用 alarm_code/message
+        alarm_id = payload.get("alarm_id") or payload.get("alarm_code", "")
+        alarm_text = payload.get("alarm_text") or payload.get("message", "")
         severity = "warn"
         if alarm_id in ("9004", "0201"):
             severity = "crit"
@@ -234,6 +250,14 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
             severity = "warn"
         elif alarm_id == "0411":
             severity = "info"
+        # 本地信封形态带 severity 字段（CRITICAL/WARNING/INFO），覆盖数字码默认
+        sev_raw = str(payload.get("severity", "")).upper()
+        if sev_raw in ("CRITICAL", "CRIT"):
+            severity = "crit"
+        elif sev_raw in ("WARNING", "WARN"):
+            severity = "warn"
+        elif sev_raw == "INFO":
+            severity = "info"
         alarm_info = {
             "alarm_id": alarm_id,
             "alarm_text": alarm_text,
@@ -242,8 +266,19 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
 
     ts_value = row.event_ts_utc or row.received_ts_utc
 
-    # 构造可读的事件描述：优先 alarm_text/description，其次 event_name
-    description = payload.get("alarm_text") or payload.get("description") or event_name
+    # 构造可读的事件描述：优先 alarm_text/message/description，其次 event_name
+    description = (payload.get("alarm_text") or payload.get("message")
+                   or payload.get("description") or event_name)
+    if description == "UNKNOWN":
+        # 本地信封形态：按 event_type 从业务字段拼可读描述（EAP LOG 给 AI/前端解读用）
+        et = str(payload.get("event_type", "")).upper()
+        if et == "STATE":
+            description = f"STATE {payload.get('state', '')} step={payload.get('step', '')}"
+        elif et == "SENSOR":
+            description = (f"SENSOR T={payload.get('temperature')} P={payload.get('pressure')} "
+                           f"GAS={payload.get('gas_flow')} RF={payload.get('rf_power')}")
+        elif et == "TRANSFER":
+            description = f"TRANSFER {payload.get('action', '')} lot={payload.get('lot_id', '')}"
 
     return {
         "raw_id": row.raw_id,
@@ -484,7 +519,7 @@ def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
 
 
 @router.get("/{tool_id}/timeline")
-def get_timeline(
+def get_history_timeline(
     tool_id: str,
     date: Optional[str] = Query(None, description="日期 YYYY-MM-DD，默认今天"),
     db: Session = Depends(get_db),

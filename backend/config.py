@@ -31,11 +31,12 @@ else:
 
 DB_IS_SQLITE = False  # 保留变量供兼容性检查，始终为 False
 
-# ========== Redis 缓存配置 ==========
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_DB = 0
-REDIS_ENABLED = False
+# ========== Redis 缓存配置（T7: Garnet 优先、内存兜底）==========
+# 默认 127.0.0.1 而非 localhost：避免本机无监听时 IPv6+IPv4 双协议栈顺序连接、超时翻倍
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_ENABLED = os.getenv("REDIS_ENABLED", "false").strip().lower() in ("1", "true", "yes")
 
 # ========== API 服务配置 ==========
 API_HOST = "0.0.0.0"

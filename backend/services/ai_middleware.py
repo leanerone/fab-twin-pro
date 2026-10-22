@@ -24,7 +24,7 @@ import time
 import uuid
 import requests
 from typing import Optional, List, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from config import (
     AI_MCP_ENABLED, AI_MCP_URL, AI_MCP_API_KEY,
@@ -175,6 +175,7 @@ class AIMiddleware:
         # 启动时加载配置
         self._load_dify_n8n_from_db()  # 加载Dify/N8N
         self._load_llm_config()         # 加载LLM默认配置
+        self._cleanup_old_conversations()  # T5: 清理7天未更新的会话映射（表未建则跳过）
 
     def _load_dify_n8n_from_db(self):
         """从 ai_configs 键值对表加载 Dify/N8N 配置"""
@@ -488,6 +489,79 @@ class AIMiddleware:
         if url:
             return "自定义OpenAI兼容"
         return ""
+
+    # ---------- T5：session_id → Dify conversation_id 映射持久化 ----------
+    # 读：先查内存 map，miss 再查 ai_conversations 表，命中回填内存；
+    # 写：内存 + 落库 upsert。表未建/DB 异常时降级为纯内存（与旧行为一致）。
+    def _conv_get(self, sid_key: str) -> Optional[str]:
+        cid = self._dify_conv_map.get(sid_key)
+        if cid:
+            return cid
+        try:
+            db = _get_db()
+            try:
+                from models import AIConversation
+                row = (db.query(AIConversation)
+                       .filter(AIConversation.session_id == sid_key)
+                       .order_by(AIConversation.updated_at.desc())
+                       .first())
+                if row and row.dify_conv_id:
+                    self._dify_conv_map[sid_key] = row.dify_conv_id
+                    print(f"[Dify] 会话映射已从DB恢复: {sid_key} -> {row.dify_conv_id}")
+                    return row.dify_conv_id
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[Dify] 会话映射查库失败（降级纯内存）: {str(e)[:120]}")
+        return None
+
+    def _conv_put(self, sid_key: str, dify_cid, machine_id: str = None):
+        self._dify_conv_map[sid_key] = str(dify_cid)
+        try:
+            db = _get_db()
+            try:
+                from models import AIConversation
+                now = datetime.now().isoformat()
+                row = (db.query(AIConversation)
+                       .filter(AIConversation.session_id == sid_key)
+                       .first())
+                if row:
+                    row.dify_conv_id = str(dify_cid)
+                    row.updated_at = now
+                    if machine_id:
+                        row.machine_id = machine_id
+                else:
+                    db.add(AIConversation(
+                        session_id=sid_key,
+                        machine_id=machine_id or "",
+                        dify_conv_id=str(dify_cid),
+                        provider="dify",
+                        created_at=now,
+                        updated_at=now,
+                    ))
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[Dify] 会话映射落库失败（仅内存）: {str(e)[:120]}")
+
+    def _cleanup_old_conversations(self, days: int = 7):
+        """清理超过 N 天未更新的会话映射（表未建/异常则跳过，不影响启动）"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIConversation
+                cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+                n = (db.query(AIConversation)
+                     .filter(AIConversation.updated_at < cutoff)
+                     .delete(synchronize_session=False))
+                db.commit()
+                if n:
+                    print(f"[AI] 已清理 {n} 条超过 {days} 天未更新的 Dify 会话映射")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[AI] 会话映射清理跳过: {str(e)[:120]}")
 
     def chat(self, question: str, session_id: str = None, machine_id: str = None,
              context: Dict = None, user_role: str = "user", config_id: int = None) -> Dict[str, Any]:
@@ -884,7 +958,7 @@ class AIMiddleware:
         try:
             sid_key = str(session_id).strip()
             if sid_key and dify_returned_cid:
-                self._dify_conv_map[sid_key] = str(dify_returned_cid)
+                self._conv_put(sid_key, dify_returned_cid, machine_id=machine_id)
                 print(f"[Dify-stream] [OK] 会话映射已保存: {sid_key} -> {dify_returned_cid}")
 
             mu = stream_result.get("usage") or {}
@@ -1595,7 +1669,7 @@ Lot ID 格式说明：
         }
         # conversation_id 规则同 _call_dify：必须是 Dify 返回的 UUID，首次不传
         sid_key = str(session_id).strip() if session_id else ""
-        dify_cid = self._dify_conv_map.get(sid_key) if sid_key else None
+        dify_cid = self._conv_get(sid_key) if sid_key else None
         if dify_cid:
             payload["conversation_id"] = dify_cid
 
@@ -1798,7 +1872,7 @@ Lot ID 格式说明：
             #   3. 后续请求必须传 Dify 返回的 UUID
             # 因此维护一个映射: session_id → dify_conv_id (UUID)
             sid_key = str(session_id).strip() if session_id else ""
-            dify_cid = self._dify_conv_map.get(sid_key) if sid_key else None
+            dify_cid = self._conv_get(sid_key) if sid_key else None
             if dify_cid:
                 payload["conversation_id"] = dify_cid  # 非首次 → 传 Dify 返回的 UUID
             # 注意: 首次请求不传 conversation_id（若传了 sess_xxx 这种非 UUID 会 400）
@@ -1891,7 +1965,7 @@ Lot ID 格式说明：
             dify_returned_cid = data.get("conversation_id")
             # 保存 session_id → dify_conv_id 映射（若 Dify 返回了 UUID，后续请求用它）
             if sid_key and dify_returned_cid:
-                self._dify_conv_map[sid_key] = str(dify_returned_cid)
+                self._conv_put(sid_key, dify_returned_cid, machine_id=machine_id)
                 print(f"[Dify] ✓ 会话映射已保存: {sid_key} → {dify_returned_cid}")
             conversation_id = dify_returned_cid or session_id
 

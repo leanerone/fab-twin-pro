@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed, reactive } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useModelStore } from '../stores/model'
 
 const props = defineProps({
   floorId: { type: Number, default: 1 },
@@ -182,13 +183,13 @@ const processTypes = ['ETCH', 'WAT', 'WS', 'STK', 'CMP', 'PVD', 'LITHO', 'IMP']
 
 // 模型配置列表（用于新建机台时绑定）
 const modelConfigs = ref([])
+const modelStore = useModelStore()
 
+// T6: 收编到 Pinia store（store 内 300s 缓存复用），不再裸 fetch 直调 /api/models
 async function loadModelConfigs() {
   try {
-    const res = await fetch('/api/models')
-    if (res.ok) {
-      modelConfigs.value = await res.json()
-    }
+    await modelStore.loadModels()
+    modelConfigs.value = modelStore.models
   } catch (e) {
     console.error('加载模型配置失败:', e)
   }

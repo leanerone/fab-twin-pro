@@ -59,9 +59,11 @@ const savedDifyKeyPreview = ref('')
 const savedN8nSecretPreview = ref('')
 
 // MCP Server (N8N) 配置
+// T6: 默认地址配置化（frontend/.env 设 VITE_MCP_N8N_URL 即可改内网地址，无需改代码）
+const DEFAULT_MCP_N8N_URL = import.meta.env.VITE_MCP_N8N_URL || ''
 const mcpConfig = ref({
   mcp_n8n_enabled: false,
-  mcp_n8n_url: 'http://10.30.116.137/mcp-server/http',
+  mcp_n8n_url: DEFAULT_MCP_N8N_URL,
   mcp_n8n_token: '',
   mcp_n8n_timeout: 30,
 })
@@ -243,12 +245,12 @@ async function testN8nConnection() {
 }
 
 // ========== MCP Server (N8N) 配置 ==========
+// T6: 裸 fetch 收敛进 api/index.js 封装
 async function loadMcpConfig() {
   try {
-    const res = await fetch('/api/ai/mcp/config')
-    const data = await res.json()
+    const data = await api.aiGetMcpConfig()
     mcpConfig.value.mcp_n8n_enabled = data.enabled || false
-    mcpConfig.value.mcp_n8n_url = data.url || 'http://10.30.116.137/mcp-server/http'
+    mcpConfig.value.mcp_n8n_url = data.url || DEFAULT_MCP_N8N_URL
     mcpConfig.value.mcp_n8n_timeout = data.timeout || 30
     mcpTokenSet.value = data.token_set || false
     mcpTokenPreview.value = data.token_preview || ''
@@ -269,12 +271,7 @@ async function saveMcpConfig() {
     if (!payload.mcp_n8n_token && mcpTokenSet.value) {
       delete payload.mcp_n8n_token
     }
-    const res = await fetch('/api/ai/mcp/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const data = await res.json()
+    const data = await api.aiSaveMcpConfig(payload)
     if (data.success) {
       showToast('success', 'MCP 配置已保存')
       await loadMcpConfig()
@@ -295,8 +292,7 @@ async function testMcpConnection() {
   }
   testingMcp.value = true
   try {
-    const res = await fetch('/api/ai/mcp/test', { method: 'POST' })
-    const data = await res.json()
+    const data = await api.aiTestMcpConnection()
     if (data.success) {
       showToast('success', data.message || 'MCP 连接成功')
       mcpTools.value = data.tools || []
