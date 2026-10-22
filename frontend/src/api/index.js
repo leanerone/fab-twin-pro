@@ -107,33 +107,63 @@ export const api = {
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buf = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep;
-      while ((sep = buf.indexOf('\n\n')) >= 0) {
-        const rawEvt = buf.slice(0, sep);
-        buf = buf.slice(sep + 2);
-        for (const line of rawEvt.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          if (payload === '[DONE]') return;
-          let evt;
-          try { evt = JSON.parse(payload); } catch (_) { continue; }
-          const name = evt.event || '';
-          if (name === 'agent_message' || name === 'message' || name === 'message_replace') {
-            if (evt.answer) handlers.onChunk?.(evt.answer);
-          } else if (name === 'agent_thought') {
-            handlers.onThought?.(evt);
-          } else if (name === 'final') {
-            handlers.onFinal?.(evt);
-          } else if (name === 'error') {
-            handlers.onError?.(new Error(evt.message || '流式调用失败'));
+    // 终端帧追踪：流结束（done）时若没收到过 final/error/[DONE]，
+    // 说明后端生成器异常中断（或反代悬死），必须主动 onError 让 UI 复位，
+    // 否则前端永远卡在"思考中"。
+    let gotTerminal = false;
+    // 读超时兜底：最后一次收到数据后超过 READ_TIMEOUT_MS 仍无新数据，
+    // 判定连接悬死（IIS ARR 保持连接等超时的场景），主动 cancel + onError。
+    const READ_TIMEOUT_MS = 180000;
+    let readTimer = null;
+    const resetReadTimer = () => {
+      if (readTimer) clearTimeout(readTimer);
+      readTimer = setTimeout(() => {
+        try { reader.cancel(); } catch (_) {}
+      }, READ_TIMEOUT_MS);
+    };
+    resetReadTimer();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        resetReadTimer();
+        buf += decoder.decode(value, { stream: true });
+        let sep;
+        while ((sep = buf.indexOf('\n\n')) >= 0) {
+          const rawEvt = buf.slice(0, sep);
+          buf = buf.slice(sep + 2);
+          for (const line of rawEvt.split('\n')) {
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            if (payload === '[DONE]') { gotTerminal = true; return; }
+            let evt;
+            try { evt = JSON.parse(payload); } catch (_) { continue; }
+            const name = evt.event || '';
+            if (name === 'agent_message' || name === 'message' || name === 'message_replace') {
+              if (evt.answer) handlers.onChunk?.(evt.answer);
+            } else if (name === 'agent_thought') {
+              handlers.onThought?.(evt);
+            } else if (name === 'final') {
+              gotTerminal = true;
+              handlers.onFinal?.(evt);
+            } else if (name === 'error') {
+              gotTerminal = true;
+              handlers.onError?.(new Error(evt.message || '流式调用失败'));
+            }
           }
         }
       }
+      // 连接被异常取消（读超时）或服务器中断，且没收到任何终端帧
+      if (!gotTerminal) {
+        handlers.onError?.(new Error('流式响应中断（未收到结束帧），请重试'));
+      }
+    } catch (e) {
+      if (!gotTerminal) {
+        handlers.onError?.(new Error(e.message || '流式连接异常中断'));
+      }
+    } finally {
+      if (readTimer) { clearTimeout(readTimer); readTimer = null; }
     }
   },
   // AI 配置管理（Dify/N8N）

@@ -874,100 +874,108 @@ class AIMiddleware:
                 yield self._sse_line({"event": "agent_message", "answer": err_text})
 
         # ---- 收尾：会话映射 / usage 截获 / FABTWIN 与旧标记解析 ----
+        # 整段包 try：任何收尾异常（日志编码、FABTWIN 解析、session 保存等）
+        # 都不允许阻断下面的 final 帧 + [DONE]，否则前端永远卡在"思考中"。
         dify_returned_cid = stream_result.get("conversation_id")
-        sid_key = str(session_id).strip()
-        if sid_key and dify_returned_cid:
-            self._dify_conv_map[sid_key] = str(dify_returned_cid)
-            print(f"[Dify-stream] ✓ 会话映射已保存: {sid_key} → {dify_returned_cid}")
-
-        mu = stream_result.get("usage") or {}
-        if isinstance(mu, dict):
-            usage["prompt_tokens"] = int(mu.get("prompt_tokens") or mu.get("input_tokens") or 0)
-            usage["completion_tokens"] = int(mu.get("completion_tokens") or mu.get("output_tokens") or 0)
-            usage["total_tokens"] = int(mu.get("total_tokens") or 0)
-            if usage["total_tokens"] == 0:
-                usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
-
         answer = stream_result.get("answer", "")
-        # 去复述：首行完全等于用户问题时删该行（与 _call_dify 一致）
-        q_norm = (question or "").strip()
-        if q_norm and answer:
-            a_norm = answer.strip()
-            first_line = a_norm.split("\n")[0].strip() if a_norm else ""
-            if first_line == q_norm:
-                rest = a_norm[len(first_line):].lstrip("\n").strip()
-                if len(rest) >= 2:
-                    answer = rest
-
         jump_ts = jump_mid = None
         table_data = None
-        extra_sources = None
-        if stream_result.get("fab_text"):
-            jump_ts, jump_mid, table_data, extra_sources = self._parse_fab_block(
-                stream_result["fab_text"], tool_calls_record)
-        # 旧 [JUMP]/[MACHINE] 标记兜底：流式透传未过滤（正文可能已展示），
-        # final 帧给出剔除后的干净版，前端用 final.answer 整体校正
-        jm = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
-        if jm:
-            jump_ts = jump_ts or jm.group(1).strip()
-            answer = re.sub(r'\[JUMP:\s*[^\]]+\]', '', answer).strip()
-        mm = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
-        if mm:
-            jump_mid = jump_mid or mm.group(1).strip()
-            answer = re.sub(r'\[MACHINE:\s*[^\]]+\]', '', answer).strip()
-
-        # sources：Dify 应用 + RAG 引用 + FABTWIN 扩展来源
         sources = [{"type": "dify", "app_id": self.dify_app_id}]
-        for i, doc in enumerate((stream_result.get("rag_records") or [])[:10]):
-            score = doc.get("score") or doc.get("rerank_score")
-            sources.append({
-                "type": "rag",
-                "doc_id": doc.get("id") or doc.get("document_id") or doc.get("segment_id") or f"rag_{i}",
-                "doc_name": doc.get("name") or doc.get("document_name") or doc.get("title") or f"文档{i+1}",
-                "content": (doc.get("content") or doc.get("text") or doc.get("segment_content") or "")[:500],
-                "page": doc.get("page") or doc.get("page_number"),
-                "score": float(score) if score is not None else None,
-            })
-        if isinstance(extra_sources, list) and extra_sources:
-            sources.extend([s for s in extra_sources if isinstance(s, dict)])
-
-        tool_calls_record.append({
-            "tool": "dify_chat",
-            "status": "success" if success else "error",
-            "conversation_id": dify_returned_cid or session_id,
-            "input_tokens": usage["prompt_tokens"],
-            "output_tokens": usage["completion_tokens"],
-            "streamed": True,
-        })
-
-        # 保存 AI 回复 + 截断历史
-        session["messages"].append({
-            "role": "assistant", "content": answer, "timestamp": datetime.now().isoformat(),
-            "metadata": {"streamed": True},
-        })
-        if len(session["messages"]) > 100:
-            session["messages"] = session["messages"][-100:]
-
-        # 使用量与执行日志
         try:
-            self._log_usage(
-                session_id=session_id,
-                config_id=self.current_config_id,
-                provider=self.provider,
-                provider_name=self.provider_name or self._infer_provider_name(),
-                model=self.model,
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                total_tokens=usage.get("total_tokens", 0),
-                question_preview=question[:500],
-                answer_preview=answer[:500],
-                success=success,
-                error_msg=error_msg,
-                tool_calls=tool_calls_record,
-                execution_log=execution_log,
-            )
+            sid_key = str(session_id).strip()
+            if sid_key and dify_returned_cid:
+                self._dify_conv_map[sid_key] = str(dify_returned_cid)
+                print(f"[Dify-stream] [OK] 会话映射已保存: {sid_key} -> {dify_returned_cid}")
+
+            mu = stream_result.get("usage") or {}
+            if isinstance(mu, dict):
+                usage["prompt_tokens"] = int(mu.get("prompt_tokens") or mu.get("input_tokens") or 0)
+                usage["completion_tokens"] = int(mu.get("completion_tokens") or mu.get("output_tokens") or 0)
+                usage["total_tokens"] = int(mu.get("total_tokens") or 0)
+                if usage["total_tokens"] == 0:
+                    usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+
+            # 去复述：首行完全等于用户问题时删该行（与 _call_dify 一致）
+            q_norm = (question or "").strip()
+            if q_norm and answer:
+                a_norm = answer.strip()
+                first_line = a_norm.split("\n")[0].strip() if a_norm else ""
+                if first_line == q_norm:
+                    rest = a_norm[len(first_line):].lstrip("\n").strip()
+                    if len(rest) >= 2:
+                        answer = rest
+
+            extra_sources = None
+            if stream_result.get("fab_text"):
+                jump_ts, jump_mid, table_data, extra_sources = self._parse_fab_block(
+                    stream_result["fab_text"], tool_calls_record)
+            # 旧 [JUMP]/[MACHINE] 标记兜底：流式透传未过滤（正文可能已展示），
+            # final 帧给出剔除后的干净版，前端用 final.answer 整体校正
+            jm = re.search(r'\[JUMP:\s*([^\]]+)\]', answer)
+            if jm:
+                jump_ts = jump_ts or jm.group(1).strip()
+                answer = re.sub(r'\[JUMP:\s*[^\]]+\]', '', answer).strip()
+            mm = re.search(r'\[MACHINE:\s*([^\]]+)\]', answer)
+            if mm:
+                jump_mid = jump_mid or mm.group(1).strip()
+                answer = re.sub(r'\[MACHINE:\s*[^\]]+\]', '', answer).strip()
+
+            # sources：Dify 应用 + RAG 引用 + FABTWIN 扩展来源
+            for i, doc in enumerate((stream_result.get("rag_records") or [])[:10]):
+                score = doc.get("score") or doc.get("rerank_score")
+                sources.append({
+                    "type": "rag",
+                    "doc_id": doc.get("id") or doc.get("document_id") or doc.get("segment_id") or f"rag_{i}",
+                    "doc_name": doc.get("name") or doc.get("document_name") or doc.get("title") or f"文档{i+1}",
+                    "content": (doc.get("content") or doc.get("text") or doc.get("segment_content") or "")[:500],
+                    "page": doc.get("page") or doc.get("page_number"),
+                    "score": float(score) if score is not None else None,
+                })
+            if isinstance(extra_sources, list) and extra_sources:
+                sources.extend([s for s in extra_sources if isinstance(s, dict)])
+
+            tool_calls_record.append({
+                "tool": "dify_chat",
+                "status": "success" if success else "error",
+                "conversation_id": dify_returned_cid or session_id,
+                "input_tokens": usage["prompt_tokens"],
+                "output_tokens": usage["completion_tokens"],
+                "streamed": True,
+            })
+
+            # 保存 AI 回复 + 截断历史
+            session["messages"].append({
+                "role": "assistant", "content": answer, "timestamp": datetime.now().isoformat(),
+                "metadata": {"streamed": True},
+            })
+            if len(session["messages"]) > 100:
+                session["messages"] = session["messages"][-100:]
+
+            # 使用量与执行日志
+            try:
+                self._log_usage(
+                    session_id=session_id,
+                    config_id=self.current_config_id,
+                    provider=self.provider,
+                    provider_name=self.provider_name or self._infer_provider_name(),
+                    model=self.model,
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                    total_tokens=usage.get("total_tokens", 0),
+                    question_preview=question[:500],
+                    answer_preview=answer[:500],
+                    success=success,
+                    error_msg=error_msg,
+                    tool_calls=tool_calls_record,
+                    execution_log=execution_log,
+                )
+            except Exception as e:
+                print(f"[AI-stream] 使用量记录失败: {e}")
         except Exception as e:
-            print(f"[AI-stream] 使用量记录失败: {e}")
+            # 收尾段异常：answer 可能已被部分处理（JUMP 标记剔除等），
+            # 但仍必须把已收到的内容通过 final 帧交付，绝不让前端裸等。
+            print(f"[AI-stream] 收尾处理异常（final 帧仍发送）: {type(e).__name__}: {e}")
+            execution_log.append({"step": "finalize_error", "error": str(e)[:200]})
 
         yield self._sse_line({
             "event": "final",
@@ -1613,7 +1621,7 @@ Lot ID 格式说明：
                 resp2 = requests.post(url, json=payload2, headers=headers, timeout=120, stream=True)
                 if resp2.status_code < 400:
                     resp = resp2
-                    print(f"[Dify-stream] ✓ 回退重试成功 HTTP {resp.status_code}")
+                    print(f"[Dify-stream] [OK] 回退重试成功 HTTP {resp.status_code}")
             if resp.status_code >= 400:
                 body_txt = ""
                 body_json = {}
@@ -1720,7 +1728,7 @@ Lot ID 格式说明：
 
         stream_result["answer"] = "".join(answer_parts)
         stream_result["fab_text"] = "".join(fab_parts)
-        print(f"[Dify-stream] ✓ 流结束: answer_len={len(stream_result['answer'])}, "
+        print(f"[Dify-stream] [DONE] 流结束: answer_len={len(stream_result['answer'])}, "
               f"fab={'有' if fab_mode else '无'}, thoughts={stream_result['thoughts_count']}")
 
     def _call_dify(self, question: str, session_id: str, machine_id: str = None,

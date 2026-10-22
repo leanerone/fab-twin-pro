@@ -1,11 +1,24 @@
 """FabTwin 半导体厂数字孪生 - FastAPI 入口"""
 import os
+import sys
 import asyncio
 import logging
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+# Windows 控制台默认 GBK：print/logging 输出含 ✓ 等非 GBK 字符会直接
+# UnicodeEncodeError，在 SSE 生成器里炸断流（前端永远等不到 final/[DONE]）。
+# 强制 UTF-8 + errors='replace'：无法编码的字符降级为 ?，绝不让日志炸业务。
+# IIS/服务化部署下 stdout 可能无 reconfigure 属性，try 保护。
+for _stream_name in ("stdout", "stderr"):
+    _s = getattr(sys, _stream_name, None)
+    try:
+        if _s is not None and hasattr(_s, "reconfigure"):
+            _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # 配置日志：确保db_poller等模块的logger.info能输出到控制台
 logging.basicConfig(
