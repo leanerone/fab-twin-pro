@@ -110,6 +110,11 @@ python tests\test_n8n_f1_f10.py --merged --proxy http://10.30.5.216:8001 --json-
 # 演示数据生成：数据库内容不在仓库里（含敏感数据被 .gitignore 排除），换机器后需重建
 python tests\generate_today_demo.py                        # 生成"今天"的完整演示数据
 python tests\generate_oxe_alarms.py --date 2026-09-11      # OXE-1 告警演示数据
+
+# 千万级灌库（性能验收用，约 43 分钟灌满 1000 万行；小数据量性能实测会严重失真）
+python tests\seed_10m.py
+python tests\diag_machines.py    # 首页/详情/统计慢查询逐条定位（Q1~Q5 独立计时）
+python tests\perf_matrix.py      # 全端点冷/暖态耗时矩阵（权威计时用 curl.exe 直测）
 ```
 
 ### WinForm 模拟器
