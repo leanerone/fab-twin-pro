@@ -265,11 +265,18 @@ def _ensure_dt_perf_indexes(eng):
     - DT_EVENT_STD(TOOL_ID, CREATED_TS_UTC)        最新标准事件 MAX+JOIN
     注：DT_ALARM_EVENT.START_TS_UTC 在 models.py 已 index=True（实际索引名
     IDX_DT_ALARM_EVENT_START），无需重复创建（Oracle 同列重复索引 ORA-01408）。
+
+    ver2.12.1 补：千万级实测（10M 行）首页/详情/统计冷态 34s+ 的唯一真凶是
+    Q5 今日产量（DT_EVENT_RAW 全表扫 53.7s）——parse_status='PARSED' 无索引 +
+    两列 LIKE OR。machines.py 已把 Q5 拆为 received/event 两分支单列谓词，
+    此处补复合索引让主路径（received 分支）全索引命中：
+    - DT_EVENT_RAW(PARSE_STATUS, RECEIVED_TS_UTC)  今日产量 received 分支
     """
     specs = [
-        ("dt_event_raw",      "IDX_DT_EVENT_RAW_EVT_TS", "(event_ts_utc)"),
-        ("dt_state_snapshot", "IDX_SNAPSHOT_TOOL_TS",    "(tool_id, snapshot_ts_utc)"),
-        ("dt_event_std",      "IDX_STD_TOOL_TS",         "(tool_id, created_ts_utc)"),
+        ("dt_event_raw",      "IDX_DT_EVENT_RAW_EVT_TS",      "(event_ts_utc)"),
+        ("dt_state_snapshot", "IDX_SNAPSHOT_TOOL_TS",         "(tool_id, snapshot_ts_utc)"),
+        ("dt_event_std",      "IDX_STD_TOOL_TS",              "(tool_id, created_ts_utc)"),
+        ("dt_event_raw",      "IDX_DT_EVENT_RAW_PARSED_RECV", "(parse_status, received_ts_utc)"),
     ]
     for table, index_name, columns in specs:
         try:

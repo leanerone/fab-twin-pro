@@ -216,30 +216,37 @@ def derive_machines_state(db: Session, machines) -> Dict[str, dict]:
         pass
 
     # 5) 今日产量：DT_EVENT_RAW payload event_name 含 UNLOAD 今日（parse_status=PARSED）
-    # T1-B: 时间源是 event_ts_utc 或 received_ts_utc，对两列各生成日期条件再 OR，
-    #       SQL 层缩到今日范围，Python 层 parse_ts 精确过滤兜底，语义不变。
+    # 千万级实测：event_ts/received_ts 两列 LIKE 直接 OR，Oracle 放弃索引全表扫
+    # （本地 10M 行冷态 53.7s，是首页/详情/统计 34s+ 的唯一真凶）。
+    # 改为两分支各查再按 raw_id 合并去重：每个分支是单列谓词可走索引
+    # （VARCHAR2 走前缀 LIKE 范围扫，TIMESTAMP 走半开区间），语义与 OR 完全一致；
+    # 配合复合索引 IDX_DT_EVENT_RAW_PARSED_RECV(parse_status, received_ts_utc)
+    # 让主路径（received 分支）全索引命中。
     wafer_count_today: Dict[str, int] = {tid: 0 for tid in tool_ids}
     try:
-        raw_cond_parts = []
-        for col in (DT_EVENT_RAW.event_ts_utc, DT_EVENT_RAW.received_ts_utc):
-            c = _day_clause(db, DT_EVENT_RAW, col, today)
-            if c is not None:
-                raw_cond_parts.append(c)
-        # 列裁剪：只取判定所需 4 列，payload_json CLOB 之外不再整行回表
-        q = (
-            db.query(
-                DT_EVENT_RAW.tool_id,
-                DT_EVENT_RAW.event_ts_utc,
-                DT_EVENT_RAW.received_ts_utc,
-                DT_EVENT_RAW.payload_json,
+        # 列裁剪：只取判定所需列，payload_json CLOB 之外不再整行回表
+        raw_rows = []
+        for col in (DT_EVENT_RAW.received_ts_utc, DT_EVENT_RAW.event_ts_utc):
+            q = (
+                db.query(
+                    DT_EVENT_RAW.raw_id,
+                    DT_EVENT_RAW.tool_id,
+                    DT_EVENT_RAW.event_ts_utc,
+                    DT_EVENT_RAW.received_ts_utc,
+                    DT_EVENT_RAW.payload_json,
+                )
+                .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
+                .filter(DT_EVENT_RAW.parse_status == "PARSED")
             )
-            .filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
-            .filter(DT_EVENT_RAW.parse_status == "PARSED")
-        )
-        if raw_cond_parts:
-            q = q.filter(or_(*raw_cond_parts))
-        rows = q.limit(10000).all()
-        for r in rows:
+            day_cond = _day_clause(db, DT_EVENT_RAW, col, today)
+            if day_cond is not None:
+                q = q.filter(day_cond)
+            raw_rows.extend(q.limit(10000).all())
+        seen_raw_ids = set()
+        for r in raw_rows:
+            if r.raw_id in seen_raw_ids:
+                continue
+            seen_raw_ids.add(r.raw_id)
             dt = parse_ts(r.event_ts_utc or r.received_ts_utc)
             if not dt or dt.strftime("%Y-%m-%d") != today:
                 continue
