@@ -10,3 +10,7 @@ faster-whisper>=1.0.0
 imageio-ffmpeg>=0.4.9
 python-multipart>=0.0.6
 cachetools>=5.3
+# T8: fastapi-mcp 封装内部只读 API 为 MCP 工具（main.py /mcp）
+# mcp 须钉 <2：fastapi-mcp 0.4.x 与 mcp 2.x 不兼容
+fastapi-mcp>=0.4.0,<0.5
+mcp>=1.30,<2
