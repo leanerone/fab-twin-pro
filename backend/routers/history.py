@@ -60,8 +60,15 @@ from database import get_db
 from models import DT_EVENT_RAW, MachineToolMapping
 from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 from services.ai_tools import ALARM_EVENT_NAMES
+from services.cache import HybridTTLCache
 
 router = APIRouter(prefix="/api/history", tags=["history"])
+
+# 回放查询缓存（test31）：同参数重复查询（反复切日期/重进回放页）直接命中。
+# 历史日期数据不变可安全缓存；当天数据最多 60s 延迟可见（回放场景可接受）。
+# 仅缓存带时间范围的查询；实时模式（无 start/end，取最新N条）不缓存。
+_history_ttl = HybridTTLCache("history", ttl=60, maxsize=32)
+_timeline_ttl = HybridTTLCache("history_timeline", ttl=120, maxsize=64)
 
 
 # 缓存 DT_EVENT_RAW 时间列的类型判定结果（每进程只探测一次）
@@ -301,6 +308,31 @@ def _event_to_dict(row: DT_EVENT_RAW) -> dict:
     }
 
 
+def _collect_events(rows, start_dt=None, end_dt=None, event_category=None):
+    """统一的事件收集循环（test31 合并原 A/B/C 三分支的重复代码）
+
+    与原实现相比：
+    - 每行时间只解析一次（原来 _event_to_dict 内 normalize_ts 一次 +
+      循环内 parse_ts 一次，strptime 失败还抛异常，2000行×2次开销显著）
+    - 先按时间过滤再解析 CLOB payload —— 被过滤掉的行不再付出 json.loads 代价
+    """
+    events = []
+    for r in rows:
+        ev_dt = parse_ts(r.event_ts_utc or r.received_ts_utc)
+        if ev_dt is None:
+            continue
+        if start_dt and ev_dt < start_dt:
+            continue
+        if end_dt and ev_dt > end_dt:
+            continue
+        ev = _event_to_dict(r)
+        if event_category and ev["event_category"] != event_category:
+            continue
+        events.append((ev_dt, ev))
+    events.sort(key=lambda pair: pair[0])
+    return [ev for _, ev in events]
+
+
 @router.get("/{tool_id}")
 def get_history(
     tool_id: str,
@@ -310,6 +342,7 @@ def get_history(
     limit: int = Query(500, ge=1, le=20000),
     offset: int = Query(0, ge=0),
     before_raw_id: Optional[str] = None,
+    include_payload: bool = Query(True, description="False 时不返回完整payload，响应体大幅缩小"),
     db: Session = Depends(get_db),
 ):
     """获取指定机台的历史事件时间轴
@@ -322,12 +355,20 @@ def get_history(
            （Oracle 12c+ 专属，11g 报 ORA-00933），.limit() 全版本兼容
         c) before_raw_id keyset 翻页：SQL 层已 raw_id < before_raw_id
     - Python层：
-        a) 按最终 timestamp 精确过滤 start_dt/end_dt（SQL 两列 OR 命中列
-           未必是展示用列，需兜底复核）
-        b) 只对最终需要返回的行解析 CLOB（_event_to_dict）
-        c) event_category 仍在 Python 层（依赖 payload_json 内容，SQL 不好做）
-        d) 统一截断最多返回 limit 条
+        a) 按最终 timestamp 精确过滤 start_dt/end_dt（_collect_events，
+           时间每行只解析一次，被过滤行不解析 CLOB）
+        b) event_category 仍在 Python 层（依赖 payload_json 内容，SQL 不好做）
+        c) 统一截断最多返回 limit 条
+    - 缓存（test31）：带时间范围的查询结果缓存 60s（Garnet 优先，内存兜底）
     """
+    # ── 缓存命中路径（不查库） ─────────────────────────────────
+    cache_key = None
+    if (start_time or end_time) and offset == 0 and before_raw_id is None:
+        cache_key = f"{tool_id}|{start_time}|{end_time}|{event_category}|{limit}|{include_payload}"
+        cached = _history_ttl.get(cache_key)
+        if cached is not None:
+            return cached
+
     tool_ids = _resolve_tool_ids(db, tool_id)
 
     start_dt = parse_ts(start_time) if start_time else None
@@ -360,23 +401,7 @@ def get_history(
             .limit(fetch_limit)
             .all()
         )
-        events = []
-        for r in rows:
-            ev = _event_to_dict(r)
-            ts = ev.get("timestamp", "")
-            if not ts:
-                continue
-            ev_dt = parse_ts(ts)
-            if not ev_dt:
-                continue
-            if start_dt and ev_dt < start_dt:
-                continue
-            if end_dt and ev_dt > end_dt:
-                continue
-            if event_category and ev["event_category"] != event_category:
-                continue
-            events.append(ev)
-        events.sort(key=lambda e: e["timestamp"])
+        events = _collect_events(rows, start_dt, end_dt, event_category)
 
     # ── 分支 B：同一天 + VARCHAR2 列 ──────────────────────────────────────
     # SQL 层已有 LIKE 前缀缩到这一天，Python 层 start_dt/end_dt 过滤兜底
@@ -388,23 +413,7 @@ def get_history(
             .limit(fetch_limit)
             .all()
         )
-        events = []
-        for r in rows:
-            ev = _event_to_dict(r)
-            ts = ev.get("timestamp", "")
-            if not ts:
-                continue
-            ev_dt = parse_ts(ts)
-            if not ev_dt:
-                continue
-            if start_dt and ev_dt < start_dt:
-                continue
-            if end_dt and ev_dt > end_dt:
-                continue
-            if event_category and ev["event_category"] != event_category:
-                continue
-            events.append(ev)
-        events.sort(key=lambda e: e["timestamp"])
+        events = _collect_events(rows, start_dt, end_dt, event_category)
 
     # ── 分支 C：跨天区间 / 无时间（实时模式取最新 N 条） ──────────────────────
     # 跨天时先用 _date_range_clause 把 SQL 扫描范围压进区间内：千万级数据下
@@ -422,23 +431,7 @@ def get_history(
             .limit(fetch_limit)
             .all()
         )
-        events = []
-        for r in rows:
-            ev = _event_to_dict(r)
-            ts = ev.get("timestamp", "")
-            if not ts:
-                continue
-            ev_dt = parse_ts(ts)
-            if not ev_dt:
-                continue
-            if start_dt and ev_dt < start_dt:
-                continue
-            if end_dt and ev_dt > end_dt:
-                continue
-            if event_category and ev["event_category"] != event_category:
-                continue
-            events.append(ev)
-        events.sort(key=lambda e: e["timestamp"])
+        events = _collect_events(rows, start_dt, end_dt, event_category)
 
     # 统一截断：offset>0 的非 keyset 翻页切片；其余情况最多返回 limit 条
     # （此前分支 B/C 只在 offset>0 时才切片，offset=0 会把 fetch_limit 行全量返回，
@@ -449,6 +442,10 @@ def get_history(
         paged = events[:limit]
     total = len(paged)
 
+    if not include_payload:
+        for ev in paged:
+            ev.pop("payload", None)
+
     # 下一页游标：返回结果中 raw_id 最小值减 1
     # 兼容 "RAW12345678" 字符串格式和纯数字格式
     next_raw_id = None
@@ -456,7 +453,7 @@ def get_history(
         min_raw_id = min(e["raw_id"] for e in paged)
         next_raw_id = _decrement_raw_id(min_raw_id)
 
-    return {
+    result = {
         "tool_id": tool_id,
         "total": total,
         "limit": limit,
@@ -464,6 +461,9 @@ def get_history(
         "next_raw_id": next_raw_id,
         "events": paged,
     }
+    if cache_key is not None:
+        _history_ttl.set(cache_key, result)
+    return result
 
 
 def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
@@ -527,9 +527,15 @@ def get_history_timeline(
     """获取机台单日时间轴摘要（按小时聚合）
 
     不在SQL层做日期过滤，通过 raw_id 锚点 + Python 层日期过滤+按小时聚合。
+    test31：结果缓存 120s（按 tool_id+date）；去掉构建后即丢弃的 events 明细列表。
     """
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
+
+    cache_key = f"{tool_id}|{date}"
+    cached = _timeline_ttl.get(cache_key)
+    if cached is not None:
+        return cached
 
     tool_ids = _resolve_tool_ids(db, tool_id)
 
@@ -551,13 +557,11 @@ def get_history_timeline(
             .all()
         )
 
-    # 按小时聚合（在Python层解析时间）
-    hours = {h: {"alarm": 0, "pod": 0, "process": 0, "other": 0, "events": []} for h in range(24)}
+    # 按小时聚合（时间每行只解析一次；不构建用不到的明细列表）
+    hours = {h: {"alarm": 0, "pod": 0, "process": 0, "other": 0} for h in range(24)}
 
     for row in rows:
-        ev = _event_to_dict(row)
-        ts = ev.get("timestamp", "")
-        dt = parse_ts(ts)
+        dt = parse_ts(row.event_ts_utc or row.received_ts_utc)
         if not dt:
             continue
         # 只统计指定日期
@@ -565,15 +569,10 @@ def get_history_timeline(
             continue
         hour = dt.hour
 
+        ev = _event_to_dict(row)
         cat = ev["event_category"]
         if 0 <= hour < 24:
             hours[hour][cat] += 1
-            hours[hour]["events"].append({
-                "raw_id": ev["raw_id"],
-                "event_name": ev["event_name"],
-                "timestamp": ts,
-                "alarm": ev.get("alarm"),
-            })
 
     timeline = []
     for h in range(24):
@@ -588,11 +587,13 @@ def get_history_timeline(
             "has_events": total > 0,
         })
 
-    return {
+    result = {
         "tool_id": tool_id,
         "date": date,
         "timeline": timeline,
     }
+    _timeline_ttl.set(cache_key, result)
+    return result
 
 
 @router.get("/{tool_id}/alarms")
@@ -612,6 +613,8 @@ def get_alarm_history(
         event_category="alarm",
         limit=limit * 3,
         offset=0,
+        before_raw_id=None,
+        include_payload=True,
         db=db,
     )
 
