@@ -41,11 +41,6 @@ function loadMore() {
   visibleCount.value += PAGE_SIZE
 }
 
-// 换区段/换机台后事件列表整体变化，重置回第一页
-watch(() => props.events, () => {
-  visibleCount.value = PAGE_SIZE
-})
-
 // 从所选区段事件推导 LOT 列表：
 // start_time 取该 Lot 最早事件，product/QTY 取最新非空值，过滤 NULL
 // 注：不再推导 status —— run_mode 无法可靠反映 Lot 是否在跑，展示出来是虚假状态
@@ -161,40 +156,70 @@ function formatTime(ts) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// 当 jumpTimestamp 变化时，滚动事件列表到最接近的事件
+// 换区段/换机台后事件列表整体变化，重置回第一页；
+// 同时重建时间戳缓存（test31：解析一次供 jumpTimestamp 定位复用，
+// 替代此前每次 watch 全量遍历逐条 parseTs —— 播放期 cursor 每 100ms
+// 触发一次，2000 条事件 × 每秒 10 次 = 每秒约 2 万次时间解析）
+let evTsCache = []
+let lastJumpIdx = -1
+watch(() => props.events, () => {
+  visibleCount.value = PAGE_SIZE
+  evTsCache = props.events.map(e => parseTs(e.timestamp))
+  lastJumpIdx = -1
+}, { immediate: true })
+
+// 二分找最接近 targetMs 的事件下标（evTsCache 随事件列表升序）
+function closestEventIdx(targetMs) {
+  let low = 0, high = evTsCache.length - 1
+  if (high < 0) return -1
+  while (low < high) {
+    const mid = (low + high) >> 1
+    if (evTsCache[mid] < targetMs) low = mid + 1
+    else high = mid
+  }
+  if (low > 0 && Math.abs(evTsCache[low - 1] - targetMs) <= Math.abs(evTsCache[low] - targetMs)) {
+    return low - 1
+  }
+  return low
+}
+
+// 滚动限流：播放期 10 次/秒的定位只有跨过事件边界才有意义，
+// 实际滚动最多 400ms 一次，且用瞬时滚动（smooth 会在高频下排队抖动）
+let scrollThrottleTimer = null
+
+// 当 jumpTimestamp 变化时，定位并滚动事件列表到最接近的事件
 watch(() => props.jumpTimestamp, (ts) => {
-  if (!ts || !props.events.length) return
+  if (!ts || !evTsCache.length) return
   const targetMs = parseTs(ts)
   if (!targetMs) return
-  // 找到时间最接近的事件
-  let bestIdx = 0
-  let bestDiff = Infinity
-  for (let i = 0; i < props.events.length; i++) {
-    const diff = Math.abs(parseTs(props.events[i].timestamp) - targetMs)
-    if (diff < bestDiff) {
-      bestDiff = diff
-      bestIdx = i
-    }
-  }
+
+  const bestIdx = closestEventIdx(targetMs)
+  if (bestIdx < 0 || bestIdx === lastJumpIdx) return
+  lastJumpIdx = bestIdx
+
   const ev = props.events[bestIdx]
-  if (ev) {
-    selectedEventId.value = ev.raw_id
+  if (!ev) return
+  selectedEventId.value = ev.raw_id
+
+  if (scrollThrottleTimer) return
+  scrollThrottleTimer = setTimeout(() => {
+    scrollThrottleTimer = null
+    const curId = selectedEventId.value
+    if (!curId || activeView.value !== 'events') return
     // 列表已倒序且只渲染前 visibleCount 条，索引必须换算成可见序号；
     // 沿用全量索引会滚到无关的事件上（甚至越界不滚动）
-    const visIdx = orderedEvents.value.findIndex(e => e.raw_id === ev.raw_id)
+    const visIdx = orderedEvents.value.findIndex(e => e.raw_id === curId)
     if (visIdx < 0) return
     if (visIdx >= visibleCount.value) visibleCount.value = visIdx + 1
-    // 滚动到对应元素
     nextTick(() => {
-      if (activeView.value !== 'events') return
       const list = document.querySelector('.hr-list')
       if (!list) return
       const items = list.querySelectorAll('.hr-item')
       if (items[visIdx]) {
-        items[visIdx].scrollIntoView({ behavior: 'smooth', block: 'center' })
+        items[visIdx].scrollIntoView({ block: 'center' })
       }
     })
-  }
+  }, 400)
 })
 </script>
 

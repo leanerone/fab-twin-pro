@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { useModelStore } from '../stores/model'
@@ -614,8 +614,12 @@ function tsToMs(ts) {
 }
 let lastProcessedRealtimeTsMs = 0
 let realtimeEventsInitialized = false
-watch(() => appStore.recentEvents, (evs) => {
+// watch 队首元素（test31）：每个新事件 unshift 后队首引用变化，浅比较即触发；
+// 此前 deep:true 每条 WS 事件都要递归遍历 200 个事件对象的全部嵌套属性，
+// 回放模式下 guard 虽会拦下处理，但遍历成本已经付出
+watch(() => appStore.recentEvents[0], () => {
   if (mode.value !== 'realtime') return
+  const evs = appStore.recentEvents
   if (!evs.length) return
   const myEvents = evs.filter(e => e.machine_id === machineId.value)
   if (!myEvents.length) return
@@ -642,7 +646,7 @@ watch(() => appStore.recentEvents, (evs) => {
     const tsMs = tsToMs(ev.timestamp || ev.event_ts_utc)
     if (tsMs > lastProcessedRealtimeTsMs) lastProcessedRealtimeTsMs = tsMs
   })
-}, { deep: true })
+})
 
 // 应用事件数据到模型
 function applyEventData(ev) {
@@ -695,6 +699,15 @@ function mapEventList(resp) {
   return list
 }
 
+// 历史数据取数控制器（test31）：切换机台/日期/区段时取消上一个未完成的请求，
+// 防止慢响应乱序返回覆盖新数据（竞态）
+let historyAbort = null
+function newHistorySignal() {
+  if (historyAbort) historyAbort.abort()
+  historyAbort = new AbortController()
+  return historyAbort.signal
+}
+
 // 拉取当前日期+时间区段的事件（升序）
 async function fetchRangeEvents() {
   const start = `${playbackDate.value}T${playbackStartHM.value}:00`
@@ -703,13 +716,13 @@ async function fetchRangeEvents() {
     start_time: start,
     end_time: end,
     limit: PLAYBACK_EVENT_LIMIT,
-  })
+  }, newHistorySignal())
   return mapEventList(resp)
 }
 
 // 拉取最新 N 条事件（实时模式用，不带时间区段）
 async function fetchLatestEvents() {
-  const resp = await api.getHistory(machineId.value, { limit: REALTIME_EVENT_LIMIT })
+  const resp = await api.getHistory(machineId.value, { limit: REALTIME_EVENT_LIMIT }, newHistorySignal())
   return mapEventList(resp)
 }
 
@@ -748,6 +761,14 @@ async function switchToPlayback() {
       pendingJumpTs.value = ''
       doJump(ts)
     }
+  } catch (e) {
+    // 被新请求取消（切换机台/日期/区段）时保持静默，让新请求接管
+    if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) return
+    console.warn('回放数据加载失败:', e?.message || e)
+    playbackStart.value = 0
+    playbackEnd.value = 0
+    cursor.value = 0
+    replayEvents.value = []
   } finally {
     loading.value = false
   }
@@ -772,6 +793,10 @@ function switchToRealtime() {
   loading.value = true
   fetchLatestEvents()
     .then(list => { replayEvents.value = list })
+    .catch(e => {
+      if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) return
+      console.warn('实时事件加载失败:', e?.message || e)
+    })
     .finally(() => { loading.value = false })
 }
 
@@ -824,9 +849,12 @@ function stopPlayback() {
   }
 }
 
-// 时间轴跳转
+// 时间轴跳转（test31 拖拽重构）：
+// 拖动中只移动游标做轻量预览（进度条 + runState 跟随），mouseup 或静止
+// 200ms 后才做一次全量重放重建 —— 此前 30ms 防抖到期即从第 0 条重放全部
+// 最多 2000 条 applyEventData，拖 1 秒 ≈ 33 次全量重放，是拖拽卡顿主因
 let seekDebounceTimer = null
-function seek(pct) {
+function seek(pct, dragging) {
   if (!historyData.length) return
 
   // 跳转时暂停播放，避免自动开始播放
@@ -835,34 +863,43 @@ function seek(pct) {
     stopPlayback()
   }
 
+  const targetTime = playbackStart.value + pct * (playbackEnd.value - playbackStart.value)
+  // 轻量预览：游标立即跟随
+  cursor.value = targetTime
+
+  if (dragging) {
+    clearTimeout(seekDebounceTimer)
+    seekDebounceTimer = setTimeout(() => commitSeek(targetTime), 200)
+    return
+  }
   clearTimeout(seekDebounceTimer)
-  seekDebounceTimer = setTimeout(() => {
-    const targetTime = playbackStart.value + pct * (playbackEnd.value - playbackStart.value)
-    cursor.value = targetTime
+  commitSeek(targetTime)
+}
 
-    const idx = bisectLeft(historyData, targetTime, (e) => e._ts)
-    playbackIdx = idx >= 0 ? idx : historyData.length
+// 真正的跳转提交：重建目标时间点之前的全部事件状态（一次）
+function commitSeek(targetTime) {
+  const idx = bisectLeft(historyData, targetTime, (e) => e._ts)
+  playbackIdx = idx >= 0 ? idx : historyData.length
 
-    // OXE 看板按「只增不减」的已播游标过滤事件，往回跳时新事件全被滤掉、画面会卡在
-    // 上一批 Lot 的状态；重建事件前先让它重置游标并清空状态，保证跟得上跳转
-    oxeViewRef.value?.resetReplayCursor?.()
-    motion2dRef.value?.resetReplayCursor?.()
+  // OXE 看板按「只增不减」的已播游标过滤事件，往回跳时新事件全被滤掉、画面会卡在
+  // 上一批 Lot 的状态；重建事件前先让它重置游标并清空状态，保证跟得上跳转
+  oxeViewRef.value?.resetReplayCursor?.()
+  motion2dRef.value?.resetReplayCursor?.()
 
-    events.value = []
+  events.value = []
 
-    const batchSize = 50
-    let i = 0
-    while (i < historyData.length && historyData[i]._ts <= targetTime) {
-      applyEventData(historyData[i])
-      events.value.push(historyData[i])
-      i++
-      if (i % batchSize === 0) {
-        if (events.value.length > 200) events.value = events.value.slice(-200)
-      }
+  const batchSize = 50
+  let i = 0
+  while (i < historyData.length && historyData[i]._ts <= targetTime) {
+    applyEventData(historyData[i])
+    events.value.push(historyData[i])
+    i++
+    if (i % batchSize === 0) {
+      if (events.value.length > 200) events.value = events.value.slice(-200)
     }
-    if (events.value.length > 200) events.value = events.value.slice(-200)
-    playbackIdx = i
-  }, 30)
+  }
+  if (events.value.length > 200) events.value = events.value.slice(-200)
+  playbackIdx = i
 }
 
 function bisectLeft(arr, target, getKey) {
@@ -1073,6 +1110,26 @@ onMounted(() => {
     // 处理 AI 跳转（ts 参数）
     await applyAIJump()
   })
+})
+
+// 泄漏修复（test31）：离开详情页停掉动画循环与全部定时器。
+// 此前 rAF 无条件自续且无 onUnmounted —— 每进出一次详情页就多泄漏一个
+// 60fps 循环，多次进出后 CPU 线性上涨（每帧仍执行 calcRunState）。
+onUnmounted(() => {
+  if (runAnimFrame) {
+    cancelAnimationFrame(runAnimFrame)
+    runAnimFrame = null
+  }
+  stopPlayback()
+  if (seekDebounceTimer) {
+    clearTimeout(seekDebounceTimer)
+    seekDebounceTimer = null
+  }
+  // 取消未完成的历史请求，避免卸载后响应回来写已销毁的状态
+  if (historyAbort) {
+    historyAbort.abort()
+    historyAbort = null
+  }
 })
 </script>
 

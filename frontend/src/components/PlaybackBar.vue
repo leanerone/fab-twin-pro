@@ -50,25 +50,28 @@ function onDateChange(e) {
   emit('update:date', e.target.value)
 }
 
-// 时间轴点击跳转
-function onTrackClick(e) {
+// 时间轴点击/拖拽（test31）：拖动中携带 dragging=true，父级只做轻量预览
+// （游标跟随）；mouseup 再发一次 dragging=false 触发真正的跳转提交
+function onTrackClick(e, dragging) {
   const rect = e.currentTarget.getBoundingClientRect()
   const pct = (e.clientX - rect.left) / rect.width
-  emit('seek', pct)
+  emit('seek', pct, !!dragging)
 }
 
 // 时间轴拖拽：仅在按住鼠标键时触发
 let isDragging = false
 function onTrackMouseDown(e) {
   isDragging = true
-  onTrackClick(e)
+  onTrackClick(e, true)
 }
 function onTrackMouseMove(e) {
   if (!isDragging) return
-  onTrackClick(e)
+  onTrackClick(e, true)
 }
-function onTrackMouseUp() {
+function onTrackMouseUp(e) {
+  if (!isDragging) return
   isDragging = false
+  onTrackClick(e, false)
 }
 function onTrackMouseLeave() {
   isDragging = false
