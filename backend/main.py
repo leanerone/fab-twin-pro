@@ -37,7 +37,6 @@ from services.realtime import manager
 from services.simulator import start_simulator
 from services.db_poller import start_db_poller
 from services.cache import cache
-from services.ai_mcp import ai_mcp
 
 # T8：operation_id 统一用函数名（默认会拼路径后缀，如 list_machines_api_machines_get），
 # 让 MCP 工具名保持 list_machines / get_machine 这种干净命名。

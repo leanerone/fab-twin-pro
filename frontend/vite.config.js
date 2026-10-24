@@ -27,6 +27,23 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  // test31 构建优化：
+  // - manualChunks：three（约600KB）/vue 全家桶拆独立长缓存 chunk——业务代码
+  //   改动不再使整个大包缓存失效
+  // - drop console：生产构建剔除 console（路由守卫/高频事件流的日志序列化开销）
+  esbuild: {
+    drop: ['console', 'debugger'],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ['three'],
+          vue: ['vue', 'vue-router', 'pinia'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: proxyConfig,

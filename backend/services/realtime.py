@@ -37,11 +37,16 @@ class ConnectionManager:
             asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
     async def broadcast(self, message: dict):
-        """向所有活跃连接广播 JSON 消息，自动清理失效连接"""
+        """向所有活跃连接广播 JSON 消息，自动清理失效连接
+
+        test31：单连接发送加 3s 超时——此前串行 await 无超时，一个慢客户端
+        （弱网/挂起页）能让广播卡住，进而拖住 db_poller 轮询协程。
+        超时的连接视为失效并清理。
+        """
         dead = []
         for ws in self.active:
             try:
-                await ws.send_json(message)
+                await asyncio.wait_for(ws.send_json(message), timeout=3.0)
             except Exception:
                 dead.append(ws)
         for ws in dead:

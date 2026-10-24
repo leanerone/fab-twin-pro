@@ -121,6 +121,13 @@ engine = create_engine(
     "oracle+oracledb://",
     creator=_oracle_creator,
     pool_pre_ping=True,
+    # test31：显式连接池配置——此前用默认 5+10，无 recycle；db_poller 每秒
+    # 还占用 1 个连接，并发一高就排队超时。长连接也可能被防火墙/DB 空闲杀掉
+    #（有 pre_ping 兜底但每次 checkout 多一次 ping 往返）
+    pool_size=15,
+    max_overflow=10,
+    pool_recycle=1800,
+    pool_timeout=10,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -157,6 +164,15 @@ def init_db():
         _ensure_dt_perf_indexes(engine)
     except Exception as e:
         logger.warning(f"[database] 创建 DT 性能索引时出错（忽略，降级处理）：{e}")
+    # test31: 平台表二级索引幂等补齐——建表 SQL 只有主键，ORM 的 index=True
+    # 对已存在的表不生效；这些表按 machine_id/timestamp 查询全表扫
+    try:
+        _ensure_index(engine, "IDX_MACHINE_EVENTS_MID_TS", "machine_events", "(machine_id, \"TIMESTAMP\")")
+        _ensure_index(engine, "IDX_ALARMS_MID_TS", "alarms", "(machine_id, \"TIMESTAMP\")")
+        _ensure_index(engine, "IDX_OHT_POS_OID_TS", "oht_positions", "(oht_id, \"TIMESTAMP\")")
+        _ensure_index(engine, "IDX_LOTS_MID_STATUS", "lots", "(machine_id, status)")
+    except Exception as e:
+        logger.warning(f"[database] 创建平台表索引时出错（忽略，降级处理）：{e}")
 
 
 def _has_column(conn, table_name: str, column_name: str) -> bool:
