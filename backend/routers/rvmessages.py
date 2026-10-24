@@ -30,8 +30,12 @@ class RVMessageRequest(BaseModel):
 
 
 @router.post("/message")
-async def receive_rv_message(data: RVMessageRequest, db: Session = Depends(get_db)):
-    """接收RV实时消息，写入DT_EVENT_RAW和DT_EVENT_RAW_CUR"""
+def receive_rv_message(data: RVMessageRequest, db: Session = Depends(get_db)):
+    """接收RV实时消息，写入DT_EVENT_RAW和DT_EVENT_RAW_CUR
+
+    普通 def（FastAPI 自动放入线程池执行）：同步DB写入不再阻塞事件循环。
+    广播经 manager.broadcast_from_thread 调度回事件循环。
+    """
     now = datetime.now().isoformat()
     received_ts = data.received_ts_utc or now
     event_ts = data.event_ts_utc or now
@@ -63,7 +67,7 @@ async def receive_rv_message(data: RVMessageRequest, db: Session = Depends(get_d
     db.commit()
 
     payload = json.loads(data.payload_json) if data.payload_json else {}
-    await manager.broadcast({
+    manager.broadcast_from_thread({
         "type": "rv_event",
         "data": {
             "tool_id": data.tool_id,
