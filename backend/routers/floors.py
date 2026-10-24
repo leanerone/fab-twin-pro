@@ -290,10 +290,15 @@ def delete_area(floor_id: int, area_id: int, db: Session = Depends(get_db), _: U
 
 @router.delete("/{floor_id}/machines/{machine_id}")
 def delete_machine(floor_id: int, machine_id: str, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """从楼层删除机台（仅清除楼层关联，不删除机台记录）"""
+    """从楼层删除机台（仅清除楼层关联，不删除机台记录）
+
+    test31：校验机台确属该楼层，防止 URL 里传别的楼层 ID 误删/越权操作
+    """
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
         raise HTTPException(status_code=404, detail="机台不存在")
+    if machine.floor != floor_id:
+        raise HTTPException(status_code=400, detail=f"机台 {machine_id} 不在楼层 {floor_id} 上")
     machine.floor = None
     machine.floor_x = 0
     machine.floor_y = 0
@@ -303,11 +308,17 @@ def delete_machine(floor_id: int, machine_id: str, db: Session = Depends(get_db)
 
 @router.put("/{floor_id}/machines/{machine_id}/position")
 def update_machine_position(floor_id: int, machine_id: str, position: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """更新机台在楼层平面图上的位置"""
+    """更新机台在楼层平面图上的位置
+
+    test31：校验归属；机台未挂到任何楼层时才允许通过本接口挂到 floor_id
+    （原实现会把任意机台静默改挂到 URL 传入的楼层）
+    """
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
         raise HTTPException(status_code=404, detail="机台不存在")
-    
+    if machine.floor is not None and machine.floor != floor_id:
+        raise HTTPException(status_code=400, detail=f"机台 {machine_id} 不在楼层 {floor_id} 上，请先从原楼层移除")
+
     machine.floor_x = position.get("x", machine.floor_x)
     machine.floor_y = position.get("y", machine.floor_y)
     machine.floor = floor_id
@@ -317,10 +328,15 @@ def update_machine_position(floor_id: int, machine_id: str, position: dict, db: 
 
 @router.put("/{floor_id}/machines/{machine_id}")
 def update_machine_info(floor_id: int, machine_id: str, data: dict, db: Session = Depends(get_db), _: User = Depends(require_floor_edit)):
-    """更新机台信息（名称/工艺类型/产线）"""
+    """更新机台信息（名称/工艺类型/产线）
+
+    test31：校验机台确属该楼层
+    """
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
         raise HTTPException(status_code=404, detail="机台不存在")
+    if machine.floor != floor_id:
+        raise HTTPException(status_code=400, detail=f"机台 {machine_id} 不在楼层 {floor_id} 上")
 
     if "name" in data and data["name"]:
         machine.name = data["name"]

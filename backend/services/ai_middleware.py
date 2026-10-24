@@ -585,23 +585,30 @@ class AIMiddleware:
         if config_id and config_id != self.current_config_id:
             self._load_llm_config(config_id)
 
-        # 机台专属 Dify 路由：未指定 config_id 时，按机台型号查专属 Dify 配置
+        # 机台专属 Dify 路由（test31 重构：请求级配置，不再就地改写 self.* ——
+        # 原实现两个用户对不同机台同时提问会互相覆盖 provider/base_url/key，
+        # 且命中后的状态会"粘"在单例上影响后续请求）
+        machine_dify = None
         if not config_id and machine_id:
             machine_dify = self._get_machine_dify_config(machine_id)
-            if machine_dify:
-                self.provider = "dify"
-                self.dify_enabled = True  # 【关键修复】命中专属Dify必须显式启用，否则_call_dify守卫失败
-                self.dify_base_url = machine_dify.get("dify_base_url", "")
-                self.dify_api_key = machine_dify.get("dify_api_key", "")
-                self.model = f"dify-{machine_dify.get('config_name', '')}"
-                self.provider_name = machine_dify.get("config_name", "Dify")
-                self.current_config_id = None  # 机台专属配置不走 provider_configs 表
-                print(f"[AI] 机台 {machine_id} 命中专属 Dify: {machine_dify.get('config_name')}, "
-                      f"url={self.dify_base_url!r}, key_len={len(self.dify_api_key or '')}")
-            else:
-                # 没有专属配置，确保用默认配置
-                if not self.current_config_id:
-                    self._load_default_config()
+        if machine_dify:
+            dify_cfg = {
+                "enabled": True,  # 命中专属Dify必须显式启用，否则_call_dify守卫失败
+                "base_url": machine_dify.get("dify_base_url", ""),
+                "api_key": machine_dify.get("dify_api_key", ""),
+                "provider_name": machine_dify.get("config_name", "Dify"),
+                "model": f"dify-{machine_dify.get('config_name', '')}",
+            }
+            route_provider = "dify"
+            print(f"[AI] 机台 {machine_id} 命中专属 Dify: {dify_cfg['provider_name']}, "
+                  f"url={dify_cfg['base_url']!r}, key_len={len(dify_cfg['api_key'] or '')}")
+        else:
+            dify_cfg = None
+            route_provider = self.provider
+            # 没有专属配置，确保用默认配置
+            if not config_id and not self.current_config_id:
+                self._load_default_config()
+                route_provider = self.provider
 
         # 获取或创建会话
         if session_id not in self.sessions:
@@ -629,44 +636,46 @@ class AIMiddleware:
         success = True
         error_msg = None
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        
+
         # 执行日志追踪
         execution_log = []
         tool_calls_record = []
-        execution_log.append({"step": "start", "provider": self.provider, "timestamp": datetime.now().isoformat()})
+        execution_log.append({"step": "start", "provider": route_provider, "timestamp": datetime.now().isoformat()})
 
         # 记录路由决策
-        if self.provider in openai_compatible_providers and self.base_url and self.api_key:
-            execution_log.append({"step": "route", "decision": "llm", "provider": self.provider, "model": self.model})
-        elif self.provider in openai_compatible_providers:
+        if route_provider in openai_compatible_providers and self.base_url and self.api_key:
+            execution_log.append({"step": "route", "decision": "llm", "provider": route_provider, "model": self.model})
+        elif route_provider in openai_compatible_providers:
             execution_log.append({"step": "route", "decision": "fallback_local", "reason": "缺少 base_url 或 api_key"})
         else:
-            execution_log.append({"step": "route", "decision": "local_rule_engine", "provider": self.provider})
+            execution_log.append({"step": "route", "decision": "local_rule_engine", "provider": route_provider})
 
         try:
-            if self.provider in openai_compatible_providers and self.base_url and self.api_key:
+            if route_provider in openai_compatible_providers and self.base_url and self.api_key:
                 execution_log.append({"step": "call_llm", "url": self._build_chat_url(self.base_url)})
                 result = self._call_openai_compatible(
                     question, system_prompt, session["messages"], machine_id,
                     usage_tracker=usage, tool_calls_recorder=tool_calls_record
                 )
                 execution_log.append({"step": "llm_done", "tool_calls_count": len(tool_calls_record)})
-            elif self.provider in openai_compatible_providers:
-                print(f"[AI] provider={self.provider} 但未配置 base_url 或 api_key，回退本地规则")
+            elif route_provider in openai_compatible_providers:
+                print(f"[AI] provider={route_provider} 但未配置 base_url 或 api_key，回退本地规则")
                 execution_log.append({"step": "fallback", "reason": "缺少 base_url 或 api_key"})
                 result = self._local_rule_engine(question, machine_id, user_role, execution_log=execution_log, tool_calls_record=tool_calls_record, usage_tracker=usage)
-            elif self.provider == "dify":
+            elif route_provider == "dify":
                 execution_log.append({"step": "call_dify"})
                 result = self._call_dify(
                     question, session_id, machine_id, user_role,
                     usage_tracker=usage, tool_calls_recorder=tool_calls_record,
+                    dify_cfg=dify_cfg,
                 )
-            elif self.provider == "hybrid":
+            elif route_provider == "hybrid":
                 try:
                     execution_log.append({"step": "call_dify_hybrid"})
                     result = self._call_dify(
                         question, session_id, machine_id, user_role,
                         usage_tracker=usage, tool_calls_recorder=tool_calls_record,
+                        dify_cfg=dify_cfg,
                     )
                 except Exception as e:
                     print(f"[AI] Dify调用失败，回退本地规则: {e}")
@@ -683,7 +692,7 @@ class AIMiddleware:
             success = False
             error_msg = str(e)
             # 纯 Dify 模式：不做本地规则兜底，直接返回错误，便于调试真实 Dify 响应
-            if self.provider == "dify":
+            if route_provider == "dify":
                 result = {
                     "answer": (
                         f"❌ Dify 调用失败，未做本地兜底。\n"
@@ -708,11 +717,11 @@ class AIMiddleware:
         # 确保返回格式统一
         result = self._normalize_response(result)
 
-        # 注入当前Provider信息到响应
-        result["provider"] = self.provider
-        result["provider_name"] = self.provider_name or self._infer_provider_name()
-        result["model"] = self.model
-        result["config_id"] = self.current_config_id
+        # 注入当前Provider信息到响应（机台专属路由用请求级配置，其余用单例当前值）
+        result["provider"] = route_provider
+        result["provider_name"] = (dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name()
+        result["model"] = (dify_cfg or {}).get("model") or self.model
+        result["config_id"] = None if machine_dify else self.current_config_id
         result["usage"] = usage
         result["tool_calls"] = tool_calls_record
 
@@ -734,10 +743,10 @@ class AIMiddleware:
         try:
             self._log_usage(
                 session_id=session_id,
-                config_id=self.current_config_id,
-                provider=self.provider,
-                provider_name=self.provider_name or self._infer_provider_name(),
-                model=self.model,
+                config_id=None if machine_dify else self.current_config_id,
+                provider=route_provider,
+                provider_name=(dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name(),
+                model=(dify_cfg or {}).get("model") or self.model,
                 prompt_tokens=usage.get("prompt_tokens", 0),
                 completion_tokens=usage.get("completion_tokens", 0),
                 total_tokens=usage.get("total_tokens", 0),
@@ -882,17 +891,21 @@ class AIMiddleware:
         success = True
         error_msg = None
 
-        # 路由切换（与 chat() 一致）：机台专属 Dify 命中时改写运行时配置
+        # 路由配置（test31：请求级，不再改写 self —— 见 chat() 同名注释）
         if machine_dify:
-            self.provider = "dify"
-            self.dify_enabled = True  # 命中专属Dify必须显式启用，否则守卫失败
-            self.dify_base_url = machine_dify.get("dify_base_url", "")
-            self.dify_api_key = machine_dify.get("dify_api_key", "")
-            self.model = f"dify-{machine_dify.get('config_name', '')}"
-            self.provider_name = machine_dify.get("config_name", "Dify")
-            self.current_config_id = None
-            execution_log.append({"step": "route", "decision": "machine_dify", "config": self.provider_name})
-            print(f"[AI-stream] 机台 {machine_id} 命中专属 Dify: {self.provider_name}")
+            dify_cfg = {
+                "enabled": True,
+                "base_url": machine_dify.get("dify_base_url", ""),
+                "api_key": machine_dify.get("dify_api_key", ""),
+                "provider_name": machine_dify.get("config_name", "Dify"),
+                "model": f"dify-{machine_dify.get('config_name', '')}",
+            }
+            route_provider = "dify"
+            execution_log.append({"step": "route", "decision": "machine_dify", "config": dify_cfg["provider_name"]})
+            print(f"[AI-stream] 机台 {machine_id} 命中专属 Dify: {dify_cfg['provider_name']}")
+        else:
+            dify_cfg = None
+            route_provider = self.provider  # dify / hybrid
 
         # 会话：保存用户消息
         if session_id not in self.sessions:
@@ -913,6 +926,7 @@ class AIMiddleware:
             for evt in self._stream_dify(
                 question, session_id, machine_id, user_role,
                 stream_result=stream_result,
+                dify_cfg=dify_cfg,
             ):
                 yield self._sse_line(evt)
         except Exception as e:
@@ -920,7 +934,7 @@ class AIMiddleware:
             execution_log.append({"step": "error", "error": str(e)[:200]})
             success = False
             error_msg = str(e)
-            if self.provider == "hybrid":
+            if route_provider == "hybrid":
                 # hybrid：回退本地规则（与 chat() 一致）
                 execution_log.append({"step": "fallback", "reason": f"Dify失败: {str(e)[:100]}"})
                 try:
@@ -1029,10 +1043,10 @@ class AIMiddleware:
             try:
                 self._log_usage(
                     session_id=session_id,
-                    config_id=self.current_config_id,
-                    provider=self.provider,
-                    provider_name=self.provider_name or self._infer_provider_name(),
-                    model=self.model,
+                    config_id=None if machine_dify else self.current_config_id,
+                    provider=route_provider,
+                    provider_name=(dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name(),
+                    model=(dify_cfg or {}).get("model") or self.model,
                     prompt_tokens=usage.get("prompt_tokens", 0),
                     completion_tokens=usage.get("completion_tokens", 0),
                     total_tokens=usage.get("total_tokens", 0),
@@ -1063,10 +1077,10 @@ class AIMiddleware:
             "tool_calls": tool_calls_record,
             "sources": sources,
             "usage": usage,
-            "provider": self.provider,
-            "provider_name": self.provider_name or self._infer_provider_name(),
-            "model": self.model,
-            "config_id": self.current_config_id,
+            "provider": route_provider,
+            "provider_name": (dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name(),
+            "model": (dify_cfg or {}).get("model") or self.model,
+            "config_id": None if machine_dify else self.current_config_id,
             "success": success,
         })
         yield "data: [DONE]\n\n"
@@ -1621,7 +1635,8 @@ Lot ID 格式说明：
         }
 
     def _stream_dify(self, question: str, session_id: str, machine_id: str = None,
-                     user_role: str = "user", stream_result: Dict = None):
+                     user_role: str = "user", stream_result: Dict = None,
+                     dify_cfg: Dict = None):
         """流式调用 Dify，逐事件 yield（透传帧，dict 形态）。
 
         与 _call_dify 的差异：
@@ -1640,17 +1655,23 @@ Lot ID 格式说明：
             "rag_records": [], "fab_text": "", "thoughts_count": 0,
         })
 
-        if not self.dify_enabled or not self.dify_base_url or not self.dify_api_key:
+        # test31：请求级配置（机台专属 Dify 传入 dify_cfg；未传时读全局单例）
+        cfg = dify_cfg or {
+            "enabled": self.dify_enabled,
+            "base_url": self.dify_base_url,
+            "api_key": self.dify_api_key,
+        }
+        if not cfg.get("enabled") or not cfg.get("base_url") or not cfg.get("api_key"):
             raise RuntimeError(
                 "Dify 未启用或缺少配置（dify_base_url/dify_api_key 为空），未做本地兜底。"
                 "请检查全局 Dify 配置或机台专属 Dify 配置。"
             )
 
-        base = self.dify_base_url.rstrip('/')
+        base = cfg["base_url"].rstrip('/')
         url = f"{base}/chat-messages" if base.endswith('/v1') else f"{base}/v1/chat-messages"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.dify_api_key}",
+            "Authorization": f"Bearer {cfg['api_key']}",
         }
         meta = self._get_machine_metadata(machine_id)
         inputs = {
@@ -1808,14 +1829,21 @@ Lot ID 格式说明：
     def _call_dify(self, question: str, session_id: str, machine_id: str = None,
                    user_role: str = "user",
                    usage_tracker: Dict = None,
-                   tool_calls_recorder: List = None) -> Dict[str, Any]:
+                   tool_calls_recorder: List = None,
+                   dify_cfg: Dict = None) -> Dict[str, Any]:
         """调用Dify应用
         - 解析 Dify 返回的 metadata.usage 写回 usage_tracker（用于日志计费）
         - 解析 retriever_resources（RAG 知识库引用片段）放入 sources 字段
         - 支持 workflow 模式、chatbot 模式、agent 智能体模式
         - 统一使用 streaming(SSE) 模式（Agent 应用不支持 blocking）
         """
-        if not self.dify_enabled or not self.dify_base_url or not self.dify_api_key:
+        # test31：请求级配置（机台专属 Dify 传入 dify_cfg；未传时读全局单例）
+        cfg = dify_cfg or {
+            "enabled": self.dify_enabled,
+            "base_url": self.dify_base_url,
+            "api_key": self.dify_api_key,
+        }
+        if not cfg.get("enabled") or not cfg.get("base_url") or not cfg.get("api_key"):
             # 纯 Dify 模式：不做本地规则兜底，直接抛错以便调试真实 Dify 链路
             if tool_calls_recorder is not None:
                 tool_calls_recorder.append({
@@ -1828,12 +1856,12 @@ Lot ID 格式说明：
             )
 
         try:
-            base = self.dify_base_url.rstrip('/')
+            base = cfg["base_url"].rstrip('/')
             # 若用户填写的是 /v4 结尾的 URL，自动保留版本前缀不重复
             url = f"{base}/chat-messages" if base.endswith('/v1') else f"{base}/v1/chat-messages"
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.dify_api_key}",
+                "Authorization": f"Bearer {cfg['api_key']}",
             }
             # ============ Dify payload 兼容构造 ============
             # 1) conversation_id: 只在"有效非空"时发送，空串省略（Dify 对空串 conversation_id 经常 400）

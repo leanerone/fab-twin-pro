@@ -228,6 +228,10 @@ def duplicate_model(model_id: str, payload: dict, db: Session = Depends(get_db),
         parts_config_json=m.parts_config_json,
         state_mapping_json=m.state_mapping_json,
         hotspots_config_json=m.hotspots_config_json,
+        # test31 修复：复制机型漏拷 v2.0 的动画配置与上传文件清单——
+        # 此前"复制机型"得到的新机型丢掉全部动画（copy-paste 遗漏）
+        animation_config_json=m.animation_config_json,
+        source_files_json=m.source_files_json,
         created_at=now,
         updated_at=now,
     )

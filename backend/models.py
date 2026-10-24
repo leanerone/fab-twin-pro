@@ -314,6 +314,9 @@ class User(Base):
     last_login_at = Column(String(255))
     created_at = Column(String(255))
     updated_at = Column(String(255))
+    # test31：PBKDF2 哈希存储（pbkdf2_sha256$iter$salt$hash）；为空表示尚未设置，
+    # 登录回退旧规则（用户名+"123"）并透明升级。列由 init_db 幂等补齐。
+    password_hash = Column(String(255), nullable=True)
 
 
 class Role(Base):

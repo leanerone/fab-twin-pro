@@ -7,6 +7,7 @@ import os
 import io
 import logging
 import tempfile
+import threading
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -31,27 +32,45 @@ _model = None
 _model_size = os.getenv("WHISPER_MODEL_SIZE", "tiny")  # tiny / base / small / medium / large-v3
 _device = os.getenv("WHISPER_DEVICE", "cpu")            # cpu / cuda
 _compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")  # int8 / int8_float16 / float16 / float32
+# test31：加载锁——原实现是 check-then-act，两个并发首次调用会重复下载/加载
+# 两份模型（双倍内存且后写覆盖）
+_model_lock = threading.Lock()
 
 
 def get_model():
-    """懒加载 whisper 模型（首次调用时加载，之后复用）"""
+    """懒加载 whisper 模型（首次调用时加载，之后复用；加锁防并发双加载）"""
     global _model
     if _model is not None:
         return _model
-    try:
-        from faster_whisper import WhisperModel
-        logger.info(f"[ASR] 加载 whisper 模型: size={_model_size}, device={_device}, compute={_compute_type}")
-        _model = WhisperModel(
-            _model_size,
-            device=_device,
-            compute_type=_compute_type,
-            download_root=os.path.join(tempfile.gettempdir(), "whisper_models"),
-        )
-        logger.info("[ASR] 模型加载完成")
-        return _model
-    except Exception as e:
-        logger.error(f"[ASR] 模型加载失败: {e}")
-        raise
+    with _model_lock:
+        if _model is not None:  # 双重检查：等锁期间别人可能已加载完
+            return _model
+        try:
+            from faster_whisper import WhisperModel
+            logger.info(f"[ASR] 加载 whisper 模型: size={_model_size}, device={_device}, compute={_compute_type}")
+            _model = WhisperModel(
+                _model_size,
+                device=_device,
+                compute_type=_compute_type,
+                download_root=os.path.join(tempfile.gettempdir(), "whisper_models"),
+            )
+            logger.info("[ASR] 模型加载完成")
+            return _model
+        except Exception as e:
+            logger.error(f"[ASR] 模型加载失败: {e}")
+            raise
+
+
+def preload_in_background():
+    """后台线程预载模型（test31：避免首次语音请求才触发 75MB 下载 + 数秒加载）"""
+    def _load():
+        try:
+            get_model()
+        except Exception as e:
+            logger.warning(f"[ASR] 预载失败（将在首次请求时重试）: {e}")
+    t = threading.Thread(target=_load, name="whisper-preload", daemon=True)
+    t.start()
+    return t
 
 
 def transcribe(audio_bytes: bytes, language: str = "zh") -> str:

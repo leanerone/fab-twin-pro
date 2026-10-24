@@ -26,6 +26,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import MachineModelConfig, User
 from routers.auth import get_current_user, check_permission
+from services.html_parser import parse_html_file as _parse_html_lib
+from xml.sax.saxutils import escape as _xml_escape
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -34,6 +36,23 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".svg", ".glb", ".gltf", ".json", ".html"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_HTML_SIZE = 10 * 1024 * 1024  # parse-html 上限 10MB（test31）
+
+# 文件槽位 key（test31 提为模块常量，消除三处硬编码重复）
+SLOT_KEYS = ["current_svg", "current_json", "current_glb", "current_html", "current_other", "current_file"]
+
+# model_id 白名单（test31）：model_id 会拼进落盘文件名，禁止路径分隔符等字符，
+# 防止路径穿越写文件
+_MODEL_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _validate_model_id(model_id: str) -> str:
+    if not model_id or not _MODEL_ID_RE.match(model_id):
+        raise HTTPException(
+            status_code=400,
+            detail="model_id 只允许字母/数字/下划线/中划线（防路径穿越）",
+        )
+    return model_id
 
 
 def require_model_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -323,6 +342,9 @@ async def upload_model_file(
             detail=f"不支持的文件类型: {ext}。支持的类型: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
+    # test31：model_id 白名单校验（拼落盘文件名，防路径穿越）
+    _validate_model_id(model_id)
+
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -364,10 +386,17 @@ async def upload_model_file(
                       ext, file_size, version, uploaded_by)
 
     # Motion JSON 校验通过，存入 animation_config_json
+    # test31 修复：写配置后失效 /api/models 的 300s 缓存——此前上传后机台页
+    # 最长 10 分钟（后端300s+前端300s）仍跑旧动画配置（失效链断裂点）
     if motion_data is not None:
         model.animation_config_json = json.dumps(motion_data, ensure_ascii=False)
         model.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         db.commit()
+        try:
+            from routers.models import models_config_ttl
+            models_config_ttl.invalidate()
+        except ImportError:
+            pass
 
     return ModelFileResponse(
         file_id=file_id,
@@ -387,27 +416,28 @@ async def upload_model_file(
 async def list_model_files(
     model_id: Optional[str] = None,
     db: Session = Depends(get_db),
+    _: User = Depends(require_model_edit),
 ):
     """查询模型文件列表
 
     v2.5.3: 遍历 source_files_json 中所有 file_type 槽位（current_svg/current_json/...），
             支持一个机型同时存在多个文件（SVG + JSON + GLB ...）
             旧版只有 current_file，向后兼容
+    test31: 补 require_model_edit 认证（此前无认证）
     """
+    if model_id:
+        _validate_model_id(model_id)
     query = db.query(MachineModelConfig)
     if model_id:
         query = query.filter(MachineModelConfig.model_id == model_id)
     models = query.all()
-
-    # 所有可能的文件槽位 key
-    slot_keys = ["current_svg", "current_json", "current_glb", "current_html", "current_other", "current_file"]
 
     files = []
     seen_file_ids = set()  # current_file 与具体槽位可能重复，去重
     for m in models:
         try:
             source_files = json.loads(m.source_files_json) if m.source_files_json else {}
-            for key in slot_keys:
+            for key in SLOT_KEYS:
                 current = source_files.get(key)
                 if not current or not current.get("file_id"):
                     continue
@@ -445,6 +475,7 @@ async def delete_model_file(
     """
     if not model_id:
         raise HTTPException(status_code=400, detail="需要提供 model_id 参数")
+    _validate_model_id(model_id)
 
     model = db.query(MachineModelConfig).filter(
         MachineModelConfig.model_id == model_id
@@ -452,26 +483,21 @@ async def delete_model_file(
     if not model:
         raise HTTPException(status_code=404, detail=f"机型 {model_id} 不存在")
 
-    # 从 source_files_json 获取文件路径并删除磁盘文件
+    # 从 source_files_json 获取文件路径
     # v2.5.3: 遍历所有 file_type 槽位找到匹配 file_id 的记录，只清理对应槽，不影响其他文件
+    # test31: 改为先改库后删盘（原顺序 DB 失败会产生悬空引用；现在删盘失败仅留下孤儿文件并记日志）
     deleted_slot = None
     deleted_file_url = ""
     try:
         source_files = json.loads(model.source_files_json) if model.source_files_json else {}
-        slot_keys = ["current_svg", "current_json", "current_glb", "current_html", "current_other", "current_file"]
-        for key in slot_keys:
+        for key in SLOT_KEYS:
             entry = source_files.get(key)
             if entry and entry.get("file_id") == file_id:
                 deleted_slot = key
                 deleted_file_url = entry.get("file_url", "")
                 break
-        if deleted_file_url:
-            file_name = os.path.basename(deleted_file_url)
-            abs_path = os.path.join(UPLOAD_DIR, file_name)
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
-    except Exception:
-        pass
+    except (json.JSONDecodeError, TypeError):
+        source_files = {}
 
     # 只清理命中的槽位，保留其他文件；同时清理 current_file 兼容字段（若指向同一文件）
     try:
@@ -498,6 +524,16 @@ async def delete_model_file(
 
     model.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.commit()
+
+    # DB 已提交，再删磁盘文件；失败只留孤儿文件（下次上传同槽位会覆盖），不影响一致性
+    if deleted_file_url:
+        try:
+            file_name = os.path.basename(deleted_file_url)
+            abs_path = os.path.join(UPLOAD_DIR, file_name)
+            if os.path.exists(abs_path):
+                os.remove(abs_path)
+        except OSError as e:
+            print(f"[uploads] 删除磁盘文件失败（忽略，孤儿文件）: {deleted_file_url}: {e}", flush=True)
 
     return {"status": "success", "message": f"文件 {file_id} 已删除（槽位 {deleted_slot}）"}
 
@@ -580,6 +616,7 @@ async def extract_svg_parts(
 @router.post("/parse-html")
 async def parse_html_file(
     file: UploadFile = File(...),
+    _: User = Depends(require_model_edit),
 ):
     """解析 HTML 文件，提取 UNITS 定义和部件配置
 
@@ -588,20 +625,18 @@ async def parse_html_file(
     - 自动提取 UNITS 定义（部件坐标/尺寸）
     - 生成 parts_config_json 初稿
     - 兼容 OXE_2D.html 风格
+    test31: 补 require_model_edit 认证 + 10MB 大小限制，删除 sys.path hack
     """
     if not file.filename.endswith('.html'):
         raise HTTPException(status_code=400, detail="只支持 .html 文件")
 
     try:
         content = await file.read()
+        if len(content) > MAX_HTML_SIZE:
+            raise HTTPException(status_code=400, detail=f"文件过大（>{MAX_HTML_SIZE // 1024 // 1024}MB）")
         html_content = content.decode('utf-8', errors='ignore')
 
-        # 导入解析器
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from services.html_parser import parse_html_file as parse_html
-
-        result = parse_html(html_content, model_id='PARSED')
+        result = _parse_html_lib(html_content, model_id='PARSED')
 
         return {
             "status": "success",
@@ -612,6 +647,8 @@ async def parse_html_file(
             "api_calls": result.get('api_calls', []),
             "functions": result.get('functions', []),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
 
@@ -620,6 +657,7 @@ async def parse_html_file(
 async def export_svg_config(
     model_id: str,
     db: Session = Depends(get_db),
+    _: User = Depends(require_model_edit),
 ):
     """导出 SVG 配置文件
 
@@ -627,7 +665,9 @@ async def export_svg_config(
     - 根据机型配置生成 SVG 文件
     - 用于导入 Inkscape 进行精修
     - 每个部件带 id 属性，与 part_id 一致
+    test31: 补认证 + XML 转义（part_id/part_name 原样拼入 XML 存在注入）
     """
+    _validate_model_id(model_id)
     model = db.query(MachineModelConfig).filter(
         MachineModelConfig.model_id == model_id
     ).first()
@@ -640,7 +680,7 @@ async def export_svg_config(
     except (json.JSONDecodeError, TypeError):
         parts_config = []
 
-    # 生成 SVG 内容
+    # 生成 SVG 内容（文本节点/属性统一 XML 转义）
     svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
   <style>
@@ -649,15 +689,15 @@ async def export_svg_config(
   </style>
 
   <!-- 标题 -->
-  <text x="20" y="30" style="font-size: 16px; font-weight: bold;">{model.model_name}</text>
-  <text x="20" y="50" style="font-size: 12px; fill: #6b7280;">Model ID: {model_id}</text>
+  <text x="20" y="30" style="font-size: 16px; font-weight: bold;">{_xml_escape(model.model_name or "")}</text>
+  <text x="20" y="50" style="font-size: 12px; fill: #6b7280;">Model ID: {_xml_escape(model_id)}</text>
 
   <!-- 部件（从 parts_config 生成） -->
 '''
 
     for part in parts_config:
-        part_id = part.get('part_id', 'unknown')
-        part_name = part.get('part_name', part_id)
+        part_id = _xml_escape(str(part.get('part_id', 'unknown')))
+        part_name = _xml_escape(str(part.get('part_name', part.get('part_id', 'unknown'))))
         view_2d = part.get('view_2d_iso', part.get('view_2d', {}))
 
         x = view_2d.get('x', 500)

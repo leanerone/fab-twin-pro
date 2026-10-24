@@ -8,6 +8,7 @@ import uuid
 from database import get_db
 from models import User, Role, Permission, RolePermission
 from routers.auth import get_current_user, check_permission
+from services.security import hash_password, legacy_password_for
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -202,18 +203,27 @@ def reset_password(
 ):
     """重置用户密码
 
-    说明：当前系统密码规则为 username + "123"，自定义密码暂未启用 hash
-    生产环境建议引入 passlib + bcrypt
+    test31：真正落地——密码以 PBKDF2 哈希写入 users.password_hash。
+    新密码取请求参数；未传时重置为默认规则（用户名+"123"）的哈希。
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    # TODO: 引入 password_hash 字段后，存储 hash 而非明文
-    # 当前仅记录操作，密码规则保持原样
+    new_password = (getattr(data, "new_password", "") or "").strip()
+    is_default = not new_password
+    if is_default:
+        new_password = legacy_password_for(user.username)
+
+    user.password_hash = hash_password(new_password)
     user.updated_at = datetime.now().isoformat()
     db.commit()
-    return {"message": f"用户 {user.username} 密码已重置（新密码规则：用户名+123）"}
+    return {
+        "message": (
+            f"用户 {user.username} 密码已重置为默认规则（用户名+123）"
+            if is_default else f"用户 {user.username} 密码已重置"
+        )
+    }
 
 
 # ============================================

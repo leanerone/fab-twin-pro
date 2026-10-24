@@ -145,6 +145,15 @@ def on_startup():
     print(f"[DB Config] ORACLE_DSN_TYPE={ORACLE_DSN_TYPE}")
     print(f"[DB Config] ORACLE_CLIENT_DIR={ORACLE_CLIENT_DIR}")
 
+    # test31：后台预载 whisper 语音模型（不依赖 DB，避免首次语音请求
+    # 触发 75MB 下载 + 数秒加载）
+    try:
+        from services.speech_service import preload_in_background
+        preload_in_background()
+        print("[ASR] whisper 模型后台预载已启动")
+    except Exception as _asr_err:
+        print(f"[ASR] 预载启动失败（忽略，首次请求时会再试）: {_asr_err}")
+
     try:
         init_db()
         from database import engine

@@ -175,11 +175,12 @@ def _has_column(conn, table_name: str, column_name: str) -> bool:
 
 
 def _ensure_missing_columns(eng):
-    """对 D 批新增的 display_order 做幂等列补齐（Oracle + SQLite）。"""
+    """幂等列补齐（Oracle + SQLite）：D 批 display_order + test31 用户密码哈希列。"""
     specs = [
         # (table, column, oracle_ddl_type, sqlite_ddl_type, default_value_sql_oracle_for_existing_rows)
         ("machines",      "display_order", "NUMBER(10)",  "INTEGER DEFAULT 0", "DEFAULT 0"),
         ("floor_areas",   "display_order", "NUMBER(10)",  "INTEGER DEFAULT 0", "DEFAULT 0"),
+        ("users",         "password_hash", "VARCHAR2(255)", "TEXT",             ""),
     ]
     with eng.connect() as conn:
         for table, column, ora_dtype, lite_dtype, ora_default in specs:

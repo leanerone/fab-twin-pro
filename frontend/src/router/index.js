@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 function isLoggedIn() {
   return !!localStorage.getItem('fabtwin_token')
@@ -56,24 +57,23 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const loggedIn = isLoggedIn()
-  const token = localStorage.getItem('fabtwin_token')
-  console.log('[Router Guard] to:', to.path, 'from:', from.path, 'loggedIn:', loggedIn, 'token:', token ? 'exists' : 'null')
 
   if (to.meta.requiresAuth && !loggedIn) {
-    console.log('[Router Guard] Requires auth but not logged in, redirecting to /login')
     next('/login')
     return
   }
 
   if (to.path === '/login' && loggedIn) {
-    console.log('[Router Guard] Already logged in, redirecting to /')
     next('/')
     return
   }
 
+  // test31：权限判定统一走 auth store 的 hasPermission（含 admin 角色免检与
+  // '*' 通配），消除与 store 的规则分叉——此前 router 只查 permissions 数组，
+  // admin 用户若 permissions 为空数组会被路由误拒
   if (to.meta.requirePermission && loggedIn) {
-    const perms = JSON.parse(localStorage.getItem('fabtwin_permissions') || '[]')
-    if (!perms.includes('*') && !perms.includes(to.meta.requirePermission)) {
+    const authStore = useAuthStore()
+    if (!authStore.hasPermission(to.meta.requirePermission)) {
       next('/')
       return
     }

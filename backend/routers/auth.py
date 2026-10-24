@@ -1,4 +1,12 @@
-"""认证API：Windows NT认证、角色权限"""
+"""认证API：Windows NT认证、角色权限
+
+test31 安全加固：
+- 密码改 PBKDF2 哈希存储（users.password_hash），旧规则（用户名+"123"）登录时透明升级
+- token 改 HMAC 签名 + 7 天过期；旧 token（裸 user.id）过渡期内仍接受
+- 删除直连模式下的 PowerShell 反查（存在命令注入面 + 阻塞最多 10s），改走密码登录
+- 数据库故障不再签发 fallback/default 匿名会话，返回 503
+- 修复 /machine/{id} 查错表（User→Machine）的 copy-paste bug
+"""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -8,10 +16,41 @@ import json
 import uuid
 
 from database import get_db
-from models import User, Role, Permission, RolePermission, MachineToolMapping
+from models import User, Role, Permission, RolePermission, MachineToolMapping, Machine
+from services.security import (
+    hash_password, verify_password, legacy_password_for, issue_token, parse_token,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 security = HTTPBearer()
+
+
+def _user_payload(user: User, db: Session) -> dict:
+    permissions = get_user_permissions(user, db)
+    return {
+        "token": issue_token(user.id),
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "display_name": user.display_name,
+            "role": user.role,
+            "department": user.department,
+        },
+        "permissions": permissions,
+    }
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """获取当前用户：优先校验签名 token；旧版裸 user.id token 过渡期兼容"""
+    token = credentials.credentials
+    user_id = parse_token(token)
+    if user_id is None:
+        # 旧版 token（裸 user.id）：仍按原逻辑查库，保证升级后已登录用户不掉线
+        user_id = token
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return user
 
 class LoginPasswordRequest(BaseModel):
     username: str
@@ -19,15 +58,6 @@ class LoginPasswordRequest(BaseModel):
 
 class LoginWindowsRequest(BaseModel):
     username: str
-
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    """获取当前用户"""
-    token = credentials.credentials
-    user = db.query(User).filter(User.id == token).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return user
 
 
 def get_user_permissions(user: User, db: Session) -> list:
@@ -59,52 +89,28 @@ def check_permission(user: User, permission_id: str, db: Session) -> bool:
 def login(request: Request, db: Session = Depends(get_db)):
     """Windows NT自动登录（获取客户端Windows用户名）
 
-    注意：在IIS反向代理环境下，无法获取真实的客户端Windows用户名，
-    此时返回 need_password_login=True，引导用户使用账号密码登录。
+    - IIS 反代模式：信任 X-Forwarded-User（由 IIS Windows 认证注入）
+    - 其他情况（含直连模式）：返回 need_password_login=True 走密码登录。
+      test31：删除了直连模式下用 PowerShell 反查客户端主机名的逻辑——
+      反查命令拼接了可控的 X-Forwarded-For（命令注入面），且 subprocess
+      最多阻塞 10s；直连场景本就只用于开发，密码登录足够。
     """
+    client_ip = request.client.host
+    forwarded_user = request.headers.get("X-Forwarded-User", "")
+
+    if forwarded_user:
+        # IIS Windows 认证传递的用户名（格式: DOMAIN\username）
+        windows_user = forwarded_user.split("\\")[-1] if "\\" in forwarded_user else forwarded_user
+        hostname = request.headers.get("X-Forwarded-Host", client_ip)
+    else:
+        return {
+            "need_password_login": True,
+            "message": "无法自动获取Windows用户名，请使用账号密码登录",
+        }
+
+    username = f"{hostname}\\{windows_user}"
+
     try:
-        client_ip = request.client.host
-        forwarded_user = request.headers.get("X-Forwarded-User", "")
-        forwarded_for = request.headers.get("X-Forwarded-For", "")
-
-        # 真实的客户端 IP（优先使用 X-Forwarded-For）
-        real_client_ip = forwarded_for.split(',')[0].strip() if forwarded_for else client_ip
-
-        # 检查是否在 IIS 反向代理环境下
-        # IIS 代理下 client_ip 是 127.0.0.1，或者有 X-Forwarded-For 头
-        is_proxy = client_ip in ("127.0.0.1", "::1", "localhost") or bool(forwarded_for)
-
-        if forwarded_user:
-            # IIS Windows 认证传递的用户名（格式: DOMAIN\username）
-            windows_user = forwarded_user.split("\\")[-1] if "\\" in forwarded_user else forwarded_user
-            hostname = real_client_ip
-        elif is_proxy:
-            # 代理环境下无法获取真实客户端Windows用户名
-            # 返回提示让用户使用密码登录
-            return {
-                "need_password_login": True,
-                "message": "代理环境下无法自动获取Windows用户名，请使用账号密码登录"
-            }
-        else:
-            # 直连模式（开发环境）：尝试获取本地Windows用户名
-            from subprocess import check_output, CalledProcessError
-            try:
-                result = check_output(["powershell", "-Command",
-                    f"([System.Net.Dns]::GetHostEntry('{real_client_ip}')).HostName"],
-                    timeout=5).decode('utf-8').strip()
-                hostname = result.split('.')[0]
-            except (CalledProcessError, TimeoutError):
-                hostname = "UNKNOWN"
-
-            try:
-                result = check_output(["powershell", "-Command",
-                    "$env:USERNAME"], timeout=5).decode('utf-8').strip()
-                windows_user = result
-            except (CalledProcessError, TimeoutError):
-                windows_user = "guest"
-
-        username = f"{hostname}\\{windows_user}"
-
         user = db.query(User).filter(User.username == username).first()
         if not user:
             user = db.query(User).filter(User.username == windows_user).first()
@@ -128,51 +134,14 @@ def login(request: Request, db: Session = Depends(get_db)):
         user.last_login_at = datetime.now().isoformat()
         db.commit()
 
-        permissions = get_user_permissions(user, db)
-
-        return {
-            "token": user.id,
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "display_name": user.display_name,
-                "role": user.role,
-                "department": user.department,
-            },
-            "permissions": permissions,
-        }
+        return _user_payload(user, db)
+    except HTTPException:
+        raise
     except Exception as e:
+        # test31：数据库故障不再签发 default/fallback 匿名会话
         import traceback
         traceback.print_exc()
-        try:
-            user = db.query(User).filter(User.username == "default").first()
-            if user:
-                permissions = get_user_permissions(user, db)
-                return {
-                    "token": user.id,
-                    "user": {
-                        "id": user.id,
-                        "username": user.username,
-                        "display_name": user.display_name,
-                        "role": user.role,
-                        "department": user.department,
-                    },
-                    "permissions": permissions,
-                }
-        except Exception:
-            pass
-        return {
-            "token": "fallback-anon",
-            "user": {
-                "id": "fallback-anon",
-                "username": "anonymous",
-                "display_name": "Anonymous User",
-                "role": "user",
-                "department": "",
-            },
-            "permissions": [],
-            "warning": "Database unavailable, using fallback mode",
-        }
+        raise HTTPException(status_code=503, detail=f"认证服务暂不可用，请稍后再试（{e}）")
 
 
 @router.get("/user")
@@ -208,67 +177,49 @@ def check_user_permission(permission_id: str, user: User = Depends(get_current_u
 
 @router.post("/login-password")
 def login_with_password(data: LoginPasswordRequest, db: Session = Depends(get_db)):
-    """用户名密码登录"""
-    try:
-        user = db.query(User).filter(User.username == data.username).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        
-        expected_password = data.username + "123"
-        if data.password != expected_password:
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        
-        user.last_login_at = datetime.now().isoformat()
-        db.commit()
-        
-        permissions = get_user_permissions(user, db)
-        
-        return {
-            "token": user.id,
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "display_name": user.display_name,
-                "role": user.role,
-                "department": user.department,
-            },
-            "permissions": permissions,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        return {
-            "token": "fallback-" + data.username,
-            "user": {
-                "id": "fallback",
-                "username": data.username,
-                "display_name": data.username,
-                "role": "user",
-                "department": "",
-            },
-            "permissions": [],
-            "warning": "Database unavailable, using fallback mode",
-        }
+    """用户名密码登录
+
+    test31：优先校验 PBKDF2 哈希；无哈希的存量用户回退旧规则（用户名+"123"）
+    并在成功后透明升级为哈希存储。
+    """
+    user = db.query(User).filter(User.username == data.username).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    if user.password_hash:
+        ok = verify_password(data.password, user.password_hash)
+    else:
+        # 存量用户：旧规则校验 + 透明升级
+        ok = data.password == legacy_password_for(data.username)
+        if ok:
+            user.password_hash = hash_password(data.password)
+    if not ok:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    user.last_login_at = datetime.now().isoformat()
+    db.commit()
+
+    return _user_payload(user, db)
 
 
 @router.post("/login-windows")
 def login_windows(data: LoginWindowsRequest, db: Session = Depends(get_db)):
     """Windows NT登录（前端通过ASP获取用户名后发送过来）"""
     windows_user = data.username
-    
+
     if not windows_user:
         raise HTTPException(status_code=401, detail="未获取到Windows用户名")
-    
+
     if "\\" in windows_user:
         windows_user = windows_user.split("\\")[-1]
-    
+
     username = windows_user
-    
+
     try:
         user = db.query(User).filter(User.username == username).first()
         if not user:
             user = db.query(User).filter(User.display_name == username).first()
-        
+
         if not user:
             user = User(
                 id=str(uuid.uuid4()),
@@ -284,54 +235,40 @@ def login_windows(data: LoginWindowsRequest, db: Session = Depends(get_db)):
             db.add(user)
             db.commit()
             db.refresh(user)
-        
+
         user.last_login_at = datetime.now().isoformat()
         db.commit()
-        
-        permissions = get_user_permissions(user, db)
-        
-        return {
-            "token": user.id,
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "display_name": user.display_name,
-                "role": user.role,
-                "department": user.department,
-            },
-            "permissions": permissions,
-        }
+
+        return _user_payload(user, db)
+    except HTTPException:
+        raise
     except Exception:
-        return {
-            "token": "fallback-" + username,
-            "user": {
-                "id": "fallback",
-                "username": username,
-                "display_name": username,
-                "role": "user",
-                "department": "",
-            },
-            "permissions": [],
-            "warning": "Database unavailable, using fallback mode",
-        }
+        # test31：数据库故障不再签发 fallback 会话
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=503, detail="认证服务暂不可用，请稍后再试")
 
 
 @router.get("/machine/{machine_id}")
 def get_machine_by_tool_id(machine_id: str, db: Session = Depends(get_db)):
-    """通过machine_id或tool_id获取机台信息（支持PODOPENER映射）"""
-    machine = db.query(User).filter(User.id == machine_id).first()
+    """通过machine_id或tool_id获取机台信息（支持PODOPENER映射）
+
+    test31：修复首查查错表的 bug——原来查的是 User 表（copy-paste 错误），
+    现在按机台表查询。
+    """
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if machine:
         return {"machine_id": machine.id, "tool_id": machine_id}
-    
+
     mapping = db.query(MachineToolMapping).filter(
-        (MachineToolMapping.machine_id == machine_id) | 
+        (MachineToolMapping.machine_id == machine_id) |
         (MachineToolMapping.tool_id == machine_id)
     ).first()
-    
+
     if mapping:
         if mapping.machine_id == machine_id:
             return {"machine_id": machine_id, "tool_id": mapping.tool_id}
         else:
             return {"machine_id": mapping.machine_id, "tool_id": machine_id}
-    
+
     return {"machine_id": machine_id, "tool_id": machine_id}

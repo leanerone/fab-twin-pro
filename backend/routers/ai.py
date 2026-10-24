@@ -13,6 +13,7 @@
 - /api/ai/sessions - 会话管理
 """
 from typing import Optional
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -378,7 +379,11 @@ async def speech_to_text(
     语音转文字 - 基于本地 faster-whisper，无需网络
 
     接收前端上传的音频文件（webm/wav/mp3 等），返回识别文本。
-    首次调用会自动下载模型（tiny 约 75MB），之后离线可用。
+    模型在服务启动时后台预载（tiny 约 75MB），首次调用不再有下载等待。
+
+    test31 修复 P0：transcribe 是 CPU 密集同步调用（ffmpeg 解码 + 推理数秒），
+    原实现直接跑在 async 路由里，识别期间整个后端（所有 HTTP/WS/SSE）停摆；
+    现在经 asyncio.to_thread 放入工作线程执行。
     """
     try:
         audio_bytes = await audio.read()
@@ -389,7 +394,9 @@ async def speech_to_text(
         if len(audio_bytes) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="音频文件过大（>10MB）")
 
-        text = speech_service.transcribe(audio_bytes, language=language or "zh")
+        text = await asyncio.to_thread(
+            speech_service.transcribe, audio_bytes, language=language or "zh"
+        )
         return {
             "success": True,
             "text": text,
