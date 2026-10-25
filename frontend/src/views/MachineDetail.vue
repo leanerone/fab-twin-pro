@@ -742,6 +742,9 @@ async function switchToPlayback() {
   stopPlayback()
   playing.value = false
   events.value = []
+  // test31：加载前先清上一台机台/上一区段的事件列表，
+  // 避免请求期间残留显示旧数据（切换机台时旧列表一直挂到新数据返回）
+  replayEvents.value = []
   loading.value = true
   try {
     // 按所选日期+时间区段加载该区间历史事件
@@ -789,6 +792,8 @@ function switchToRealtime() {
   stopPlayback()
   playing.value = false
   events.value = []
+  // test31：同 switchToPlayback——加载前清残留，避免显示上一台机台的事件
+  replayEvents.value = []
   // 重置回放状态
   cursor.value = 0
   playbackStart.value = 0
