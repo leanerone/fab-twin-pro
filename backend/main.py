@@ -144,14 +144,18 @@ def on_startup():
     print(f"[DB Config] ORACLE_DSN_TYPE={ORACLE_DSN_TYPE}")
     print(f"[DB Config] ORACLE_CLIENT_DIR={ORACLE_CLIENT_DIR}")
 
-    # test31：后台预载 whisper 语音模型（不依赖 DB，避免首次语音请求
-    # 触发 75MB 下载 + 数秒加载）
-    try:
-        from services.speech_service import preload_in_background
-        preload_in_background()
-        print("[ASR] whisper 模型后台预载已启动")
-    except Exception as _asr_err:
-        print(f"[ASR] 预载启动失败（忽略，首次请求时会再试）: {_asr_err}")
+    # test31：whisper 预载改为环境变量开关（WHISPER_PRELOAD=1 显式开启）。
+    # 实测本机在服务运行中并发预载 ctranslate2 会触发进程段错误（独立进程加载正常，
+    # 疑似多 DLL 线程竞态）；默认关闭保稳定，首次语音请求时在工作线程内加载。
+    if os.getenv("WHISPER_PRELOAD", "").strip().lower() in ("1", "true", "yes"):
+        try:
+            from services.speech_service import preload_in_background
+            preload_in_background()
+            print("[ASR] whisper 模型后台预载已启动")
+        except Exception as _asr_err:
+            print(f"[ASR] 预载启动失败（忽略，首次请求时会再试）: {_asr_err}")
+    else:
+        print("[ASR] whisper 预载未开启（设置 WHISPER_PRELOAD=1 可开启）")
 
     try:
         init_db()

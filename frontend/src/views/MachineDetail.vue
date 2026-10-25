@@ -126,6 +126,7 @@ function setRangeAround(targetMs) {
 const viewMode = ref('loading')           // loading / 3d / 2d / iso / vpo / vpo3d
 const currentModelConfig = ref(null)
 const modelConfigReady = ref(false)
+const loadErrorMsg = ref('')
 
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
@@ -575,7 +576,15 @@ async function loadMachine() {
   currentModelConfig.value = null
   viewMode.value = 'loading'
 
-  machine.value = await api.getMachine(machineId.value)
+  try {
+    machine.value = await api.getMachine(machineId.value)
+  } catch (e) {
+    // 机台不存在/接口失败：给出明确错误态，不再无限转圈
+    viewMode.value = 'error'
+    modelConfigReady.value = true
+    loadErrorMsg.value = e?.message || '机台数据加载失败'
+    return
+  }
   if (machine.value) {
     currentState.value = machine.value.state
     processStep.value = `步骤 ${machine.value.process_step}/6`
@@ -1159,6 +1168,12 @@ onUnmounted(() => {
       <div v-else-if="!modelConfigReady" class="model-loading">
         <div class="loading-spinner"></div>
         <div class="loading-text">加载机台模型配置...</div>
+      </div>
+
+      <!-- 加载失败/机台不存在（test31：不再无限转圈） -->
+      <div v-else-if="viewMode === 'error'" class="model-loading">
+        <div class="loading-text">⚠ {{ loadErrorMsg }}</div>
+        <div class="loading-text" style="opacity:.6">该机台可能不存在于当前数据库，请返回看板选择其他机台</div>
       </div>
 
       <!-- 3D模型视图 -->
