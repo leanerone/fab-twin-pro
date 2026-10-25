@@ -154,10 +154,11 @@ const availableViews = computed(() => {
   if (!cfg) return []
   const views = []
   // OXE 看板：由机型配置决定（view_mode=oxe 或 view_2d.type=oxe），不再按机台号前缀判断
+  // test31：不再提前 return——views_config 里声明的 3D/等角视图继续追加，
+  // OXE 机台同时可见「OXE看板 + 3D模型 + 2.5D等角」，默认仍是看板
   const isOxe = cfg.view_mode === 'oxe' || cfg.views_config?.view_2d?.type === 'oxe'
   if (isOxe) {
     views.push({ key: 'oxe', label: '📊 OXE看板' })
-    return views
   }
   // Motion JSON 2D 动画视图：绑定 animation_config（含 schema_version）的机型
   const hasMotion = cfg.view_mode === 'motion2d' || !!cfg.animation_config?.schema_version
