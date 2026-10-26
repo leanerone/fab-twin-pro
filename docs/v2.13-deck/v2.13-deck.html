@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="navy-formal">
+<head>
+<meta charset="utf-8">
+<meta name="x-content-type" content="presentation">
+<meta name="x-presentation-version" content="1.0">
+<meta name="x-presentation-indicator" content="deck-stage .slide">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fab-twin-pro v2.13 · 数据库变更申请</title>
+<link rel="stylesheet" href="./_shared/fonts.css">
+<link rel="stylesheet" href="./_shared/base.css">
+<link rel="stylesheet" id="theme-link" href="./_shared/themes/navy-formal.css">
+<link rel="stylesheet" href="./_shared/decorations.css">
+<link rel="stylesheet" href="./_shared/animations/animations.css">
+<script src="./_shared/echarts.min.js"></script>
+<script src="./_shared/echarts-theme-sync.js"></script>
+<style>
+/* ============================================================
+   fab-twin-pro v2.13 · deck-specific styles (scoped, do NOT override .slide positioning)
+   ============================================================ */
+.slide h1.cover-h1 { font-size: 96px; font-weight: 900; line-height: 1.05; letter-spacing: -0.03em; }
+.slide h1.gradient-text { background: linear-gradient(135deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* 版本演进时间线 */
+.phase-row { display: grid; grid-template-columns: 100px 1fr; gap: 0; margin-bottom: 20px; }
+.phase-no {
+  background: var(--surface-2); border-radius: 12px 0 0 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 16px 8px; text-align: center; border-right: 3px solid var(--border);
+}
+.phase-no .num { font-size: 40px; font-weight: 900; line-height: 1; font-family: 'JetBrains Mono', monospace; }
+.phase-no .ver { font-size: 11px; margin-top: 6px; opacity: 0.7; }
+.phase-body { background: var(--surface); border: 1px solid var(--border); border-left: none; border-radius: 0 12px 12px 0; padding: 18px 24px; }
+.phase-head { font-size: 20px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.phase-head .pill { font-size: 12px; padding: 3px 12px; border-radius: 999px; }
+.phase-body ul { padding-left: 20px; font-size: 14px; line-height: 1.8; color: var(--text-2); }
+.phase-body ul li::marker { color: var(--border); }
+.phase-body .accent-text { font-weight: 700; color: var(--accent); }
+.phase-body .bad-text { font-weight: 700; color: var(--bad); }
+.phase-body .good-text { font-weight: 700; color: var(--good); }
+
+/* 架构对比 */
+.arch-box { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.arch-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px;
+}
+.arch-card h4 { font-size: 16px; margin-bottom: 14px; font-weight: 700; }
+.arch-node {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-radius: 8px; font-size: 14px; font-weight: 500;
+}
+.arch-node.b { background: var(--surface-2); color: var(--text-2); }
+.arch-node.g { background: color-mix(in srgb, var(--good) 10%, var(--surface)); color: var(--good); }
+.arch-node.w { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); color: var(--warn); }
+.arch-node .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.arch-arrow { text-align: center; color: var(--text-3); font-size: 18px; margin: 4px 0; }
+
+/* pros/cons 分析 */
+.pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+.pros-cons .col { border-radius: 12px; padding: 22px; }
+.pros-cons .pros { background: color-mix(in srgb, var(--good) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 20%, transparent); }
+.pros-cons .cons { background: color-mix(in srgb, var(--bad) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--bad) 20%, transparent); }
+.pros-cons h4 { font-size: 14px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 12px; text-transform: uppercase; }
+.pros-cons .pros h4 { color: var(--good); }
+.pros-cons .cons h4 { color: var(--bad); }
+.pros-cons ul { padding-left: 20px; font-size: 14px; line-height: 1.75; color: var(--text-2); }
+
+/* 部署步骤 */
+.step-list { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.step { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: 13px; }
+.step .step-no { font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; margin-right: 8px; }
+
+/* chart 容器 */
+.chart-wrap { width: 100%; height: 380px; margin-top: 18px; }
+
+/* 事实卡 */
+.row-of-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 18px; }
+.fact-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.fact-card .num { font-size: 36px; font-weight: 900; font-family: 'JetBrains Mono', monospace; line-height: 1.1; }
+.fact-card.bad .num { color: var(--bad); }
+.fact-card.ok .num { color: var(--good); }
+.fact-card .lbl { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+
+/* CTA 卡 */
+.cta-bar {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-radius: 14px; padding: 28px 36px; margin-top: 24px;
+  color: var(--surface);
+}
+.cta-bar .cta-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; color: inherit; }
+.cta-bar .cta-sub { font-size: 14px; opacity: 0.9; }
+
+@media print {
+  .slide { position: relative !important; opacity: 1 !important; }
+}
+</style>
+</head>
+<body data-themes="navy-formal,corporate-clean,terminal-green,arctic-cool,catppuccin-mocha" data-theme-base="./_shared/themes/">
+<deck-stage width="1920" height="1080">
+
+<!-- ============================================================
+     Slide 1 · COVER
+============================================================ -->
+<section class="slide active deco-soft-gradient" data-deck-label="Cover" style="padding: 0">
+  <div style="padding: 56px 72px; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <span class="eyebrow">Change Management · 2026</span>
+      <span class="eyebrow" style="float:right">fab-twin-pro · v2.13</span>
+    </div>
+    <div data-anim-target>
+      <h1 class="cover-h1 anim-fade-up" data-anim="fade-up">让千万级事件查询<br><span class="gradient-text">从 645 秒 到 6 毫秒</span></h1>
+      <p class="lede" style="margin-top:20px;max-width:60ch">数据库结构变更申请——为什么动 DB、动了什么、部署计划、与现有 log 架构方案对比。</p>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;color:var(--text-3);font-size:13px">
+      <span>开发组 · 2026-10-26</span>
+      <span class="slide-number" data-current="1" data-total="13"></span>
+    </div>
+  </div>
+  <div class="notes">封面口播：今天给大家汇报一个数据库变更——我们把千万级事件查询从 645 秒优化到了 6 毫秒，想请各位审批部署。</div>
+</section>
+
+<!-- ============================================================
+     Slide 2 · TOC
+============================================================ -->
+<section class="slide" data-deck-label="Agenda">
+  <p class="kicker">Agenda · 目录</p>
+  <h2 class="h2">我们会讲五件事</h2>
+  <div class="grid g3 mt-l anim-stagger-list" data-anim-target>
+    <div class="card anim-fade-up" data-anim="fade-up">
+      <h4>01 · 问题</h4>
+      <p class="dim">测试报告里发现的两个查询雷区——645 秒超时是什么体验。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up">
+      <h4>02 · 演进</h4>
+      <p class="dim">三阶段：裸奔 → 索引+缓存 → 本次 v2.13。为什么之前加了索引还没解决。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up">
+      <h4>03 · 对比</h4>
+      <p class="dim">同事方案（直接 log 入 DB）vs 本次方案——两种架构的可行性分析。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up">
+      <h4>04 · 方案</h4>
+      <p class="dim">v2.13 改了什么（DDL + 应用），实测性能数据。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up">
+      <h4>05 · 部署</h4>
+      <p class="dim">6 步在线部署计划，风险与回退，未来优化方向。</p>
+    </div>
+  </div>
+  <div class="slide-number" data-current="2" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">目录口播：分五部分，先看问题，再看演进，再对比同事的方案，再讲我们的方案，最后部署和未来。</div>
+</section>
+
+<!-- ============================================================
+     Slide 3 · SECTION DIVIDER · 01 问题背景
+============================================================ -->
+<section class="slide center tc deco-ambient-purple" data-deck-label="Chapter 1 · 问题背景" style="padding:0">
+  <div style="height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center">
+    <p class="kicker anim-fade-down" data-anim="fade-down">Chapter 01</p>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:72px;margin-top:20px">问题背景</h1>
+    <p class="lede anim-fade-up" data-anim="fade-up" style="margin-top:20px">测试报告里藏着两个定时炸弹</p>
+  </div>
+  <div class="slide-number" data-current="3" data-total="13" style="position:absolute;bottom:24px;right:72px;color:var(--text-3)"></div>
+  <div class="notes">章节目播：先看问题是什么。</div>
+</section>
+
+<!-- ============================================================
+     Slide 4 · 问题事实
+============================================================ -->
+<section class="slide" data-deck-label="雷区 A + B">
+  <p class="kicker">Test Report · 2026-10-22</p>
+  <h2 class="h2">千万级事件表的两个雷区</h2>
+
+  <div class="row-of-4 anim-stagger-list" data-anim-target>
+    <div class="fact-card bad anim-fade-up" data-anim="fade-up">
+      <div class="num counter" data-to="645">0</div>
+      <div class="lbl">秒 · Lot 查询 · LIKE 全表扫</div>
+    </div>
+    <div class="fact-card bad anim-fade-up" data-anim="fade-up">
+      <div class="num counter" data-to="490">0</div>
+      <div class="lbl">秒 · Alarm 查询 · LIKE 全表扫</div>
+    </div>
+    <div class="fact-card bad anim-fade-up" data-anim="fade-up">
+      <div class="num counter" data-to="458">0</div>
+      <div class="lbl">秒 · 历史翻页 · 无索引排序</div>
+    </div>
+    <div class="fact-card anim-fade-up" data-anim="fade-up">
+      <div class="num">1,000<span style="font-size:20px">万</span></div>
+      <div class="lbl">DT_EVENT_RAW 当前行数</div>
+    </div>
+  </div>
+
+  <div class="grid g2 mt-l">
+    <div class="card bad anim-fade-left" data-anim="fade-left">
+      <h4>雷区 A · 根因</h4>
+      <p>lot_id / alarm_code 埋在 <code>payload_json</code> CLOB 大文本里。数据库索引只能建在"列"上，建不了 CLOB 内部字段。<span class="bad-text">Oracle 11g 也没有 JSON_VALUE 函数索引</span>。</p>
+    </div>
+    <div class="card warn anim-fade-right" data-anim="fade-right">
+      <h4>雷区 B · 根因</h4>
+      <p>表上缺少 <code>(tool_id, raw_id)</code> 复合索引。翻页查询要 <code>ORDER BY raw_id DESC</code>，没索引就得临时排序 → 全表扫描。</p>
+    </div>
+  </div>
+
+  <div class="slide-number" data-current="4" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">问题口播：三个查询都要 500-600 秒，根因是查询条件在 CLOB 大文本里，索引建不上。</div>
+</section>
+
+<!-- ============================================================
+     Slide 5 · SECTION DIVIDER · 02 三阶段演进
+============================================================ -->
+<section class="slide center tc deco-ambient-purple" data-deck-label="Chapter 2 · 三阶段演进" style="padding:0">
+  <div style="height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center">
+    <p class="kicker anim-fade-down" data-anim="fade-down">Chapter 02</p>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:72px">三阶段演进</h1>
+    <p class="lede anim-fade-up" data-anim="fade-up" style="margin-top:20px">为什么之前加了索引和缓存，这次还要再加</p>
+  </div>
+  <div class="slide-number" data-current="5" data-total="13" style="position:absolute;bottom:24px;right:72px;color:var(--text-3)"></div>
+  <div class="notes">章节目播：回顾三阶段，解释为什么 v2.11.1 的修复没解决根因。</div>
+</section>
+
+<!-- ============================================================
+     Slide 6 · 三阶段时间线
+============================================================ -->
+<section class="slide" data-deck-label="版本演进">
+  <p class="kicker">Timeline · 2026-09 → 10-26</p>
+  <h2 class="h2">三阶段叠加，不是替代</h2>
+
+  <div data-anim-target>
+    <!-- Phase 1 -->
+    <div class="phase-row anim-fade-up" data-anim="fade-up">
+      <div class="phase-no">
+        <div class="num" style="color:var(--bad)">01</div>
+        <div class="ver">v2.9 · 09-10</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-head">
+          <span>最早裸奔版</span>
+          <span class="pill" style="background:var(--surface-2);color:var(--text-2)">啥都没</span>
+        </div>
+        <ul>
+          <li>9-10 量产对齐建 32 张 DT 表，未加任何索引</li>
+          <li><span class="bad-text">所有查询裸打 SQL</span> → 全表扫描，机台状态 7349ms</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="phase-row anim-fade-up" data-anim="fade-up" data-anim-delay="150">
+      <div class="phase-no">
+        <div class="num" style="color:var(--warn)">02</div>
+        <div class="ver">v2.11.1 · 10-21</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-head">
+          <span>现状版 · 索引 + 缓存</span>
+          <span class="pill" style="background:var(--surface-2);color:var(--text-2)">有提升但未根治</span>
+        </div>
+        <ul>
+          <li>加 4 个索引（<code>(tool_id, received_ts_utc)</code> 等）→ <span class="good-text">机台状态 625ms→8ms</span></li>
+          <li>加 3 处 TTLCache 进程内缓存 → 同查询重复打快</li>
+          <li><span class="bad-text">未解决</span>：lot_id / alarm_code 不是列，索引和缓存都碰不到 → 冷启动 / TTL 到期 / 新 Lot 仍然 500+ 秒</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="phase-row anim-fade-up" data-anim="fade-up" data-anim-delay="300">
+      <div class="phase-no">
+        <div class="num" style="color:var(--good)">03</div>
+        <div class="ver">v2.13 · 10-26 本次</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-head">
+          <span>本次 · 物化列 + 索引 + 触发器</span>
+          <span class="pill" style="background:color-mix(in srgb,var(--good)12%,var(--surface));color:var(--good)">根治</span>
+        </div>
+        <ul>
+          <li><span class="accent-text">先造 3 个新列</span>：LOT_ID / EVENT_NAME / ALARM_CODE（之前根本不存在）</li>
+          <li>加 4 个新索引 + 1 个触发器兜底直写路径</li>
+          <li>14 处 LIKE 改写为等值 → <span class="good-text">稳定 10ms 以内</span></li>
+          <li><span style="opacity:0.7">与 v2.11.1 的 4 个索引 + 缓存是</span><span class="accent-text">互补叠加</span><span style="opacity:0.7">，不冲突</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-number" data-current="6" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">演进口播：三阶段是叠加关系。前两次修复了有独立列的查询，但 lot_id 之前根本不是列，所以谁都碰不到。</div>
+</section>
+
+<!-- ============================================================
+     Slide 7 · SECTION DIVIDER · 03 架构对比
+============================================================ -->
+<section class="slide center tc deco-ambient-purple" data-deck-label="Chapter 3 · 架构对比" style="padding:0">
+  <div style="height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center">
+    <p class="kicker anim-fade-down" data-anim="fade-down">Chapter 03</p>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:64px">两种架构的</h1>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:64px;margin-top:8px"><span class="gradient-text">可行性对比</span></h1>
+    <p class="lede anim-fade-up" data-anim="fade-up" style="margin-top:24px">同事方案（直接 log → DB）vs 本次方案（RV → API → DB + 物化列）</p>
+  </div>
+  <div class="slide-number" data-current="7" data-total="13" style="position:absolute;bottom:24px;right:72px;color:var(--text-3)"></div>
+  <div class="notes">章节目播：同事提出另一种方案，把机器 log 直接塞进 DB。我们一起分析下可行性。</div>
+</section>
+
+<!-- ============================================================
+     Slide 8 · 两种架构流程
+============================================================ -->
+<section class="slide" data-deck-label="架构对比">
+  <p class="kicker">Architecture · 两种数据入库路径</p>
+  <h2 class="h2">当前路径 vs 同事方案</h2>
+
+  <div class="arch-box">
+    <!-- 当前路径 -->
+    <div class="arch-card anim-fade-left" data-anim="fade-left">
+      <h4>🔵 当前路径 · 本次优化对象</h4>
+      <div class="arch-node b"><span class="dot"></span>RV 消息总线（工厂标准）</div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-node b"><span class="dot"></span>后端 API /api/rv/message</div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-node g"><span class="dot"></span>DT_EVENT_RAW 表 + payload_json CLOB</div>
+      <div class="arch-arrow" style="color:var(--warn)">↓ 问题：lot_id 埋在 CLOB 里</div>
+      <div class="arch-node w"><span class="dot"></span>查询时 LIKE 全表扫描</div>
+    </div>
+    <!-- 同事方案 -->
+    <div class="arch-card anim-fade-right" data-anim="fade-right">
+      <h4>🟡 同事方案 · 直接 log → DB</h4>
+      <div class="arch-node b"><span class="dot"></span>机台 log 文件（持续追加）</div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-node b"><span class="dot"></span>Python 脚本读文件 + 正则解析</div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-node"><span class="dot" style="background:var(--accent)"></span>直接 INSERT（跳过 RV 和 API）</div>
+      <div class="arch-arrow" style="opacity:0.5">↓</div>
+      <div class="arch-node" style="opacity:0.5"><span class="dot"></span>？后续怎么查（字段怎么拆）</div>
+    </div>
+  </div>
+
+  <div class="slide-number" data-current="8" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">架构口播：左边是当前链路，我们在上面做优化。右边是同事提的新链路——跳过 RV 直接读 log 文件入库。</div>
+</section>
+
+<!-- ============================================================
+     Slide 9 · 可行性分析
+============================================================ -->
+<section class="slide" data-deck-label="同事方案分析">
+  <p class="kicker">Feasibility · 深入分析</p>
+  <h2 class="h2">同事方案（直接 log → DB）的优势与风险</h2>
+
+  <div class="pros-cons">
+    <div class="col pros anim-fade-left" data-anim="fade-left">
+      <h4>✅ 优势</h4>
+      <ul>
+        <li><strong>字段天然就有</strong>——log 文件里 lot_id / recipe_id 就是独立字段，入库时直接拆列，<strong>不需要 payload_json + 物化列这一套</strong></li>
+        <li><strong>不依赖 RV 可用性</strong>——RV 是工厂消息总线，故障时 log 文件还在写</li>
+        <li><strong>写入路径更短</strong>——跳过 RV + API，理论上每事件延迟 < 1s</li>
+        <li><strong>可补历史数据</strong>——用旧 log 文件回填任意时间段数据（RV 消息队列通常只保留最近几天）</li>
+      </ul>
+    </div>
+    <div class="col cons anim-fade-right" data-anim="fade-right">
+      <h4>⚠️ 风险（当前阶段不能做）</h4>
+      <ul>
+        <li><strong>需要机台权限</strong>——要拿到每台设备 log 文件的读取权限和路径，改走 RV → 工厂 MES 团队同意；当前 RV 路径是<strong>已在生产稳定运行的合同方案</strong></li>
+        <li><strong>多机台格式不统一</strong>——不同机台（AMAT / Applied Materials / 自研）log 格式不同，正则脚本要写多套</li>
+        <li><strong>实时性挑战</strong>——要 tail -f / 文件监控，脚本挂了要告警；RV 自带确认机制（ACK / NACK）</li>
+        <li><strong>当前问题在查询侧</strong>——v2.13 不动写入架构、只动查询索引，<strong>改动最小、最快解决问题</strong>。log 方案是未来架构演进，不是本次修复</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cta-bar anim-fade-up" data-anim="fade-up" style="margin-top:24px">
+    <div class="cta-title">结论</div>
+    <div class="cta-sub">同事方案<strong>可行但不在本次范围内</strong>。本次 v2.13 是写入侧不动、查询侧根治的最小成本方案。log 直连方案建议<strong>作为 P2 架构立项</strong>，后续争取机台权限后推进。</div>
+  </div>
+
+  <div class="slide-number" data-current="9" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">可行性口播：同事方案能解决同一根因，但要改写入架构、要机台权限。v2.13 不动写入、只动查询索引，最快见效。log 方案作为后续立项。</div>
+</section>
+
+<!-- ============================================================
+     Slide 10 · SECTION DIVIDER · 04 方案
+============================================================ -->
+<section class="slide center tc deco-ambient-purple" data-deck-label="Chapter 4 · v2.13 方案" style="padding:0">
+  <div style="height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center">
+    <p class="kicker anim-fade-down" data-anim="fade-down">Chapter 04</p>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:72px">本次方案</h1>
+    <p class="lede anim-fade-up" data-anim="fade-up" style="margin-top:20px">4 项 DDL + 11 文件应用改写 + 实测数据</p>
+  </div>
+  <div class="slide-number" data-current="10" data-total="13" style="position:absolute;bottom:24px;right:72px;color:var(--text-3)"></div>
+  <div class="notes">章节目播：进入方案本身。</div>
+</section>
+
+<!-- ============================================================
+     Slide 11 · 改了什么
+============================================================ -->
+<section class="slide" data-deck-label">
+  <p class="kicker">What Changed</p>
+  <h2 class="h2">v2.13 改了什么</h2>
+
+  <div class="grid g2 mt-l">
+    <div class="card anim-fade-left" data-anim="fade-left">
+      <h4>🗄️ 数据库侧（全部 ADD）</h4>
+      <ul style="padding-left:20px;font-size:14px;line-height:1.8;color:var(--text-2)">
+        <li><strong>加 3 列</strong>：<code>LOT_ID</code> / <code>EVENT_NAME</code> / <code>ALARM_CODE</code>（之前根本不存在）</li>
+        <li><strong>加 4 索引</strong>：LOT / ALARM / NAME + 补 <code>(TOOL_ID, RAW_ID)</code></li>
+        <li><strong>加 1 触发器</strong>：<code>TRG_DT_EVENT_RAW_EXTRACT</code>，从 payload_json REGEXP_SUBSTR 提取三列</li>
+        <li><strong>不删不改</strong>任何已有列 / 数据 / payload_json 原文</li>
+        <li>DDL 幂等，<strong>可重复执行</strong>，DBA 工单已准备好</li>
+      </ul>
+    </div>
+    <div class="card anim-fade-right" data-anim="fade-right">
+      <h4>💻 应用侧</h4>
+      <ul style="padding-left:20px;font-size:14px;line-height:1.8;color:var(--text-2)">
+        <li><strong>14 处 LIKE 改等值</strong>（<code>payload_json LIKE '%lot%'</code> → <code>LOT_ID = 'xxx'</code>）</li>
+        <li><strong>ORM before_insert listener</strong> 全覆盖写入点（rvmessages / simulator / ODS / debug）</li>
+        <li><strong>历史回填脚本</strong>（<code>tests/backfill_event_columns.py</code>）：998 万行 906s，支持断点续跑 + verify</li>
+        <li>旧列不存在时代码<strong>自动降级回退</strong>（DBA 脚本未跑也不报错）</li>
+        <li>本地 998 万行开发库<strong>全链路验证通过</strong>（commit 1143801）</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="slide-number" data-current="11" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">改动口播：改了两类——DB 4 项 ADD 操作，应用 14 处改写。全部加操作，无删无改。</div>
+</section>
+
+<!-- ============================================================
+     Slide 12 · 性能 ECharts
+============================================================ -->
+<section class="slide" data-deck-label="性能实测">
+  <p class="kicker">Performance · 本地 998 万行库</p>
+  <h2 class="h2">三阶段查询耗时对比</h2>
+  <div id="chart-perf" class="chart-wrap"></div>
+  <div class="row-of-4">
+    <div class="fact-card ok"><div class="num">0.006s</div><div class="lbl">改后 · Lot 等值查询</div></div>
+    <div class="fact-card ok"><div class="num">0.007s</div><div class="lbl">改后 · Alarm 等值查询</div></div>
+    <div class="fact-card ok"><div class="num">906s</div><div class="lbl">998万行历史回填耗时</div></div>
+    <div class="fact-card"><div class="num">3.8–11.7<span style="font-size:16px">万×</span></div><div class="lbl">相对最早版提速范围</div></div>
+  </div>
+  <div class="slide-number" data-current="12" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">性能口播：图里红色柱子是最早版，橙色是现状版，绿色是本次。三个查询全部降到 10 毫秒以内。</div>
+</section>
+
+<!-- ============================================================
+     Slide 13 · SECTION DIVIDER · 05 部署 & 未来
+============================================================ -->
+<section class="slide center tc deco-ambient-purple" data-deck-label="Chapter 5 · 部署与未来" style="padding:0">
+  <div style="height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center">
+    <p class="kicker anim-fade-down" data-anim="fade-down">Chapter 05</p>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:72px">部署 · 风险 · 未来</h1>
+  </div>
+  <div class="slide-number" data-current="13" data-total="13" style="position:absolute;bottom:24px;right:72px;color:var(--text-3)"></div>
+  <div class="notes">章节目播：最后一部分，部署怎么做、风险多大、未来还能做什么。</div>
+</section>
+
+<!-- ============================================================
+     Slide 14 · 部署 6 步 + 风险
+============================================================ -->
+<section class="slide" data-deck-label="部署计划">
+  <p class="kicker">Deployment Plan · 在线 6 步</p>
+  <h2 class="h2">不停机，DBA 先跑脚本 → 起后端 → 低峰回填</h2>
+
+  <div class="step-list">
+    <div class="step anim-fade-up" data-anim="fade-up"><span class="step-no">①</span>DBA 执行 <code>sql/v2.13_add_event_extract_columns.sql</code>（加列 + 索引 + 触发器）</div>
+    <div class="step anim-fade-up" data-anim="fade-up" data-anim-delay="80"><span class="step-no">②</span><code>git pull origin/test3</code> + 重启后端进程</div>
+    <div class="step anim-fade-up" data-anim="fade-up" data-anim-delay="160"><span class="step-no">③</span>DBA + 开发验证 USER_TAB_COLUMNS / USER_INDEXES / USER_TRIGGERS</div>
+    <div class="step anim-fade-up" data-anim="fade-up" data-anim-delay="240"><span class="step-no">④</span>低峰跑 <code>python backfill_event_columns.py</code>（998 万行 ≈ 15 min）</div>
+    <div class="step anim-fade-up" data-anim="fade-up" data-anim-delay="320"><span class="step-no">⑤</span><code>--verify</code> 校验 + 抽样 SQL 查物化列填充率</div>
+    <div class="step anim-fade-up" data-anim="fade-up" data-anim-delay="400"><span class="step-no">⑥</span>功能验证 checklist（Lot / Alarm / 历史翻页 6 项）</div>
+  </div>
+
+  <div class="grid g2 mt-l">
+    <div class="card anim-fade-left" data-anim="fade-left">
+      <h4>风险 · 最坏情况</h4>
+      <p>回填脚本与写入并发 → 部分行被覆盖？<strong>不会</strong>——ORM listener 和触发器幂等共存，<code>payload_json</code> 原文从未被修改。</p>
+    </div>
+    <div class="card anim-fade-right" data-anim="fade-right">
+      <h4>回退方案</h4>
+      <p>应用 git 回退旧版（旧版不引用新列），DBA 执行 DROP TRIGGER / INDEX / COLUMN 即可。<strong>payload_json 原文从未被修改</strong>。</p>
+    </div>
+  </div>
+
+  <div class="slide-number" data-current="14" data-total="16" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">部署口播：6 步都是常规操作，回填放低峰。最差情况是回填有偏差——没关系，新列是冗余提取字段，旧逻辑能兜住。</div>
+</section>
+
+<!-- ============================================================
+     Slide 15 · 未来 Roadmap
+============================================================ -->
+<section class="slide" data-deck-label="Roadmap · 未来优化">
+  <p class="kicker">Roadmap · 后续</p>
+  <h2 class="h2">4 条未来优化方向</h2>
+  <div class="grid g4 mt-l anim-stagger-list" data-anim-target>
+    <div class="card anim-fade-up" data-anim="fade-up">
+      <span style="color:var(--accent);font-weight:900;font-family:'JetBrains Mono',monospace;font-size:14px">P1 · 已识别</span>
+      <h4>平台表 ORA-01450 缩列宽</h4>
+      <p class="dim">machine_events 等 4 表相关列 VARCHAR2(4000) → 复合索引撞 6398 字节上限。需 DBA 缩列宽。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up" data-anim-delay="120">
+      <span style="color:var(--warn);font-weight:900;font-family:'JetBrains Mono',monospace;font-size:14px">P2 · 架构预留</span>
+      <h4>Garnet 统一缓存层</h4>
+      <p class="dim">当前 TTLCache 单进程内存，多实例部署时不一致。Garnet 就绪后统一切换。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up" data-anim-delay="240">
+      <span style="color:var(--warn);font-weight:900;font-family:'JetBrains Mono',monospace;font-size:14px">P2 · 架构立项</span>
+      <h4>Log 直连方案（同事方案）</h4>
+      <p class="dim">争取机台 log 文件读取权限，替代 RV 消息总线，写入更直接、可补历史数据。</p>
+    </div>
+    <div class="card anim-fade-up" data-anim="fade-up" data-anim-delay="360">
+      <span style="color:var(--text-3);font-weight:900;font-family:'JetBrains Mono',monospace;font-size:14px">P3 · 规划中</span>
+      <h4>更多字段按需物化</h4>
+      <p class="dim">recipe_id / port_id 等字段目前仍在 CLOB，高频查询出现时按 v2.13 模式扩展。</p>
+    </div>
+  </div>
+
+  <div class="slide-number" data-current="15" data-total="16" style="position:absolute;bottom:24px;right:72px"></div>
+  <div class="notes">Roadmap 口播：后续还有 4 条线，其中最值得关注的是 P2——同事的 log 直连方案，需要先拿机台权限。</div>
+</section>
+
+<!-- ============================================================
+     Slide 16 · CTA Close
+============================================================ -->
+<section class="slide center tc deco-soft-gradient" data-deck-label="Conclusion" style="padding:0">
+  <div style="height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center">
+    <div class="anim-fade-down" data-anim="fade-down" style="font-size:18px;color:var(--text-3);margin-bottom:16px">结论</div>
+    <h1 class="h1 anim-rise-in" data-anim="rise-in" style="font-size:56px;text-align:center;max-width:1000px;line-height:1.25">v2.13 数据库变更<br><span class="gradient-text">必要 · 安全 · 收益明确</span></h1>
+    <p class="lede anim-fade-up" data-anim="fade-up" style="margin-top:24px">在不动任何现有数据的前提下，根治千万级事件查询超时</p>
+    <div class="grid g4 mt-l anim-stagger-list" data-anim-target" style="margin-top:28px;max-width:960px">
+      <div class="card anim-fade-up" data-anim="fade-up" style="padding:18px">
+        <div style="font-size:28px;font-weight:900;color:var(--good);font-family:'JetBrains Mono',monospace">10ms</div>
+        <div class="dim" style="font-size:12px">以内查询</div>
+      </div>
+      <div class="card anim-fade-up" data-anim="fade-up" data-anim-delay="100" style="padding:18px">
+        <div style="font-size:28px;font-weight:900;color:var(--good);font-family:'JetBrains Mono',monospace">10万×</div>
+        <div class="dim" style="font-size:12px">平均提速</div>
+      </div>
+      <div class="card anim-fade-up" data-anim="fade-up" data-anim-delay="200" style="padding:18px">
+        <div style="font-size:28px;font-weight:900;color:var(--good);font-family:'JetBrains Mono',monospace">0</div>
+        <div class="dim" style="font-size:12px">数据改动</div>
+      </div>
+      <div class="card anim-fade-up" data-anim="fade-up" data-anim-delay="300" style="padding:18px">
+        <div style="font-size:28px;font-weight:900;color:var(--good);font-family:'JetBrains Mono',monospace">可</div>
+        <div class="dim" style="font-size:12px">回退</div>
+      </div>
+    </div>
+    <p class="anim-fade-up" data-anim="fade-up" style="margin-top:40px;font-size:18px;font-weight:700;color:var(--accent)">请批准 v2.13 上线及配套 DDL 变更</p>
+  </div>
+  <div class="slide-number" data-current="16" data-total="16" style="position:absolute;bottom:24px;right:72px;color:var(--text-3)"></div>
+  <div class="notes">结语口播：请领导审批 v2.13 上线和配套 DDL 变更。谢谢。</div>
+</section>
+
+</deck-stage>
+
+<script src="./_shared/runtime.js"></script>
+<script>
+(function() {
+  var containers = document.querySelectorAll('#chart-perf');
+  if (!containers.length) return;
+  var el = containers[0];
+  var chart = echarts.init(el, null, { renderer: 'svg' });
+  var opt = {
+    animation: false,
+    tooltip: { trigger: 'axis', valueFormatter: function(v){ return v + ' 秒'; }, appendToBody: true },
+    legend: { textStyle: { color: 'currentColor' }, top: 0 },
+    grid: { top: 40, bottom: 60, left: 60, right: 20 },
+    xAxis: {
+      type: 'category',
+      data: ['最早裸奔版', '现状（索引+缓存）', '本次 v2.13'],
+      axisLine: { lineStyle: { color: 'currentColor' } },
+      axisLabel: { fontSize: 13 }
+    },
+    yAxis: {
+      type: 'log', logBase: 10,
+      name: '查询耗时（秒，对数）',
+      nameTextStyle: { fontSize: 12 },
+      axisLine: { show: false }, axisTick: { show: false },
+      splitLine: { lineStyle: { type: 'dashed' } }
+    },
+    series: [
+      { name: 'Lot 查询', type: 'bar', data: [703, 645, 0.006], label: { show: true, position: 'top', fontSize: 11, formatter: '{c}s' } },
+      { name: 'Alarm 查询', type: 'bar', data: [680, 490, 0.007], label: { show: true, position: 'top', fontSize: 11, formatter: '{c}s' } },
+      { name: '历史翻页', type: 'bar', data: [null, 458, 0.012], label: { show: true, position: 'top', fontSize: 11, formatter: function(p){ return p.value == null ? '—' : p.value + 's'; } } }
+    ]
+  };
+  chart.setOption(opt);
+  if (window.__deckECharts) window.__deckECharts.register(chart, function(color){ return { color: color }; });
+  window.addEventListener('resize', function(){ chart.resize(); });
+})();
+</script>
+</body>
+</html>
