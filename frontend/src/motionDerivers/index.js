@@ -5,9 +5,11 @@
  * Motion JSON 的 ext.deriver 填同名即可绑定，前端无需改其他代码。
  */
 import { createAmatMetsputDeriver } from './amatMetsput'
+import { createPodopenerDeriver } from './podopener'
 
 const factories = {
   amat_metsput: createAmatMetsputDeriver,
+  podopener: createPodopenerDeriver,
 }
 
 const instances = new Map()

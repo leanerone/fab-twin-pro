@@ -161,10 +161,10 @@ const availableViews = computed(() => {
     views.push({ key: 'oxe', label: '📊 OXE看板' })
   }
   // Motion JSON 2D 动画视图：绑定 animation_config（含 schema_version）的机型
+  // 不提前 return——views_config 里声明的 3D 视图继续追加（与 OXE 多视图同思路）
   const hasMotion = cfg.view_mode === 'motion2d' || !!cfg.animation_config?.schema_version
   if (hasMotion) {
     views.push({ key: 'motion2d', label: '🎬 Motion动画' })
-    return views
   }
   const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' ||
                  cfg.views_config?.view_2d?.type === 'vpo' || cfg.views_config?.view_3d?.type === 'vpo'

@@ -256,7 +256,7 @@ const debugMsg = ref('')
 const debugSteps = computed(() => (motionConfig.value?.motions || []).map(m => m.step))
 
 // deriver 内部派生参数，不需要用户填
-const DEBUG_INTERNAL_KEYS = new Set(['has_entered_chamber', 'cross_arm'])
+const DEBUG_INTERNAL_KEYS = new Set(['has_entered_chamber', 'cross_arm', 'cycle'])
 // 常用参数示例值（默认值优先取 ext.param_defaults）
 const DEBUG_PARAM_EXAMPLES = {
   SMIFPORTID: '1', PORT: '1', LOT_ID: 'DEMO_LOT01', SLOT: '1', CHAMBER: 'E',

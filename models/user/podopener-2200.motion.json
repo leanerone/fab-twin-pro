@@ -1,0 +1,210 @@
+{
+  "schema_version": "1.1",
+  "document": {
+    "name": "PODOPENER-2200 穿入/脱出流程动画",
+    "src": "models/user/podopener-2200.svg",
+    "coord": {
+      "viewBox": [0, 0, 1000, 1000]
+    }
+  },
+  "motions": [
+    {
+      "step": "POD_PLACED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "pod_hands", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "cassette", "when": "params.cycle != 'PACKING'", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "pod_assembly", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "offset", "offset_x": -400, "offset_y": -200, "duration": 0, "visible": true } ] },
+        { "phase": 1, "target_part_id": "pod_assembly", "when": "params.cycle != 'PACKING'", "actions": [ { "type": "offset", "offset_x": 400, "offset_y": -200, "duration": 0, "visible": true } ] },
+        { "phase": 2, "target_part_id": "pod_assembly", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "offset", "offset_x": 400, "offset_y": 200, "duration": 1600, "easing": "mechanical" } ] },
+        { "phase": 2, "target_part_id": "pod_assembly", "when": "params.cycle != 'PACKING'", "actions": [ { "type": "offset", "offset_x": -400, "offset_y": 200, "duration": 1600, "easing": "mechanical" } ] },
+        { "phase": 3, "target_part_id": "pod_hands", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 3, "target_part_id": "scan_line", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 3, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 3, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 3, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "COMPLETED_PORT_LOCK",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_1_unlocked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_2_unlocked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_3_unlocked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_4_unlocked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_1_locked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_2_locked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_3_locked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_4_locked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "READ_BATTERY",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true } ] },
+        { "phase": 1, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "scan_line", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": -70, "duration": 1920, "easing": "linear" } ] }
+      ]
+    },
+    {
+      "step": "READ_TAG",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true } ] },
+        { "phase": 1, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "scan_line", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": -70, "duration": 1920, "easing": "linear" } ] }
+      ]
+    },
+    {
+      "step": "BATCH_INFO_FROM_ECUI",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "OPEN_POD",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "pod_assembly", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": 430, "duration": 2240, "easing": "mechanical" } ] }
+      ]
+    },
+    {
+      "step": "REACH_STAGE",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "cassette", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true }, { "type": "offset", "offset_x": 0, "offset_y": -300, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "cassette", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": 300, "duration": 1920, "easing": "mechanical" } ] }
+      ]
+    },
+    {
+      "step": "UI_CONFIRM",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "signal_wave", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "effect_rings", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "cassette", "when": "params.cycle != 'PACKING'", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": -300, "duration": 1920, "easing": "mechanical" } ] },
+        { "phase": 2, "target_part_id": "cassette", "when": "params.cycle != 'PACKING'", "actions": [ { "type": "visibility", "to": false, "duration": 0 }, { "type": "snap", "to_part_id": "{home}", "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "CLOSE_POD",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "pod_assembly", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": -430, "duration": 2240, "easing": "mechanical" } ] }
+      ]
+    },
+    {
+      "step": "ACK_UI_DOUBLECHECK",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "REACH_POS",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "WRITE_TAG",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true } ] },
+        { "phase": 1, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "scan_line", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": -70, "duration": 1920, "easing": "linear" } ] }
+      ]
+    },
+    {
+      "step": "COMPLETED_PORT_UNLOCK",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "scan_line", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_1_unlocked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_2_unlocked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_3_unlocked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_4_unlocked", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_1_locked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_2_locked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_3_locked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "latch_4_locked", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+      ]
+    },
+    {
+      "step": "POD_REMOVED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        { "phase": 1, "target_part_id": "pod_hands", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
+        { "phase": 1, "target_part_id": "pod_assembly", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "offset", "offset_x": 400, "offset_y": -200, "duration": 1600, "easing": "mechanical" } ] },
+        { "phase": 1, "target_part_id": "pod_assembly", "when": "params.cycle != 'PACKING'", "actions": [ { "type": "offset", "offset_x": -400, "offset_y": -200, "duration": 1600, "easing": "mechanical" } ] },
+        { "phase": 1, "target_part_id": "cassette", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "offset", "offset_x": 400, "offset_y": -200, "duration": 1600, "easing": "mechanical" } ] },
+        { "phase": 2, "target_part_id": "pod_assembly", "actions": [ { "type": "visibility", "to": false, "duration": 0 }, { "type": "snap", "to_part_id": "{home}", "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "cassette", "when": "params.cycle == 'PACKING'", "actions": [ { "type": "visibility", "to": false, "duration": 0 }, { "type": "snap", "to_part_id": "{home}", "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "pod_hands", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "scan_line", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "scan_beam", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "signal_wave", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
+        { "phase": 2, "target_part_id": "effect_rings", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+      ]
+    }
+  ],
+  "ext": {
+    "machine_type": "PODOPENER",
+    "version": "2.0",
+    "description": "PODOPENER-2200 开盖机 2D 动画（motion2d 统一管线）：穿入=POD从左侧进/晶舟放置/满POD右侧出，脱出=满POD从右侧进/晶舟移走/空POD左侧出",
+    "deriver": "podopener",
+    "param_defaults": {
+      "RunMode": "PACKING",
+      "LOT_ID": "DEMO_LOT01",
+      "PORT": "1",
+      "SLOT": "1"
+    },
+    "part_aliases": {},
+    "viewBox_fallback": [0, 0, 1000, 1000]
+  }
+}
