@@ -428,6 +428,7 @@
 <section class="slide" data-deck-label="性能实测">
   <p class="kicker">Performance · 本地 998 万行库</p>
   <h2 class="h2">三阶段查询耗时对比</h2>
+  <p class="dim" style="margin-bottom:4px;font-size:13px">现状版（v2.11.1）拆成两态：<span style="color:var(--accent);font-weight:700">冷态 MISS</span>（首次查询/TTL 到期，走全表扫）和 <span style="color:var(--good);font-weight:700">缓存 HIT</span>（同查询重复打，命中进程内 TTLCache）。<strong>Lot/Alarm/翻页 3 条路径没接缓存，永远 MISS</strong>——这是现状"看起来快但根治不了"的根因。</p>
   <div id="chart-perf" class="chart-wrap"></div>
   <div class="row-of-4">
     <div class="fact-card ok"><div class="num">0.006s</div><div class="lbl">改后 · Lot 等值查询</div></div>
@@ -558,26 +559,57 @@
   var chart = echarts.init(el, null, { renderer: 'svg' });
   var opt = {
     animation: false,
-    tooltip: { trigger: 'axis', valueFormatter: function(v){ return v + ' 秒'; }, appendToBody: true },
+    tooltip: {
+      trigger: 'axis',
+      appendToBody: true,
+      valueFormatter: function(v){ return v == null ? '—' : (v < 1 ? (v*1000).toFixed(1) + ' ms' : v + ' s'); },
+      axisPointer: { type: 'shadow' }
+    },
     legend: { textStyle: { color: 'currentColor' }, top: 0 },
-    grid: { top: 40, bottom: 60, left: 60, right: 20 },
+    grid: { top: 44, bottom: 70, left: 70, right: 20 },
     xAxis: {
       type: 'category',
-      data: ['最早裸奔版', '现状（索引+缓存）', '本次 v2.13'],
+      data: ['最早裸奔版', '现状·冷态 MISS', '现状·缓存 HIT', '本次 v2.13'],
       axisLine: { lineStyle: { color: 'currentColor' } },
-      axisLabel: { fontSize: 13 }
+      axisLabel: { fontSize: 12, lineHeight: 16, interval: 0 }
     },
     yAxis: {
       type: 'log', logBase: 10,
-      name: '查询耗时（秒，对数）',
+      name: '查询耗时（对数刻度）',
       nameTextStyle: { fontSize: 12 },
       axisLine: { show: false }, axisTick: { show: false },
-      splitLine: { lineStyle: { type: 'dashed' } }
+      splitLine: { lineStyle: { type: 'dashed' } },
+      axisLabel: { formatter: function(v){ return v + 's'; } }
     },
     series: [
-      { name: 'Lot 查询', type: 'bar', data: [703, 645, 0.006], label: { show: true, position: 'top', fontSize: 11, formatter: '{c}s' } },
-      { name: 'Alarm 查询', type: 'bar', data: [680, 490, 0.007], label: { show: true, position: 'top', fontSize: 11, formatter: '{c}s' } },
-      { name: '历史翻页', type: 'bar', data: [null, 458, 0.012], label: { show: true, position: 'top', fontSize: 11, formatter: function(p){ return p.value == null ? '—' : p.value + 's'; } } }
+      {
+        name: 'Lot 查询',
+        type: 'bar',
+        data: [703, 645, null, 0.006],
+        label: { show: true, position: 'top', fontSize: 10,
+                 formatter: function(p){ if(p.value == null) return '未接缓存'; var v = p.value; return v < 1 ? (v*1000).toFixed(0)+'ms' : v+'s'; } }
+      },
+      {
+        name: 'Alarm 查询',
+        type: 'bar',
+        data: [680, 490, null, 0.007],
+        label: { show: true, position: 'top', fontSize: 10,
+                 formatter: function(p){ if(p.value == null) return '未接缓存'; var v = p.value; return v < 1 ? (v*1000).toFixed(0)+'ms' : v+'s'; } }
+      },
+      {
+        name: '历史翻页',
+        type: 'bar',
+        data: [null, 458, null, 0.012],
+        label: { show: true, position: 'top', fontSize: 10,
+                 formatter: function(p){ if(p.value == null) return p.dataIndex === 0 ? '无翻页' : '未接缓存'; var v = p.value; return v < 1 ? (v*1000).toFixed(0)+'ms' : v+'s'; } }
+      },
+      {
+        name: '机台状态 / 首页产量（接了缓存）',
+        type: 'bar',
+        data: [7.3, 0.625, 0.008, 0.005],
+        label: { show: true, position: 'top', fontSize: 10,
+                 formatter: function(p){ if(p.value == null) return '—'; var v = p.value; return (v*1000).toFixed(0)+'ms'; } }
+      }
     ]
   };
   chart.setOption(opt);
