@@ -4,7 +4,12 @@
     "name": "OXE DRM UNITY 顶视图动画",
     "src": "models/user/oxe-drm-topview.svg",
     "coord": {
-      "viewBox": [0, 0, 680, 580]
+      "viewBox": [
+        0,
+        0,
+        760,
+        800
+      ]
     }
   },
   "motions": [
@@ -13,13 +18,92 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{POD}", "when": "params.pod_shell == '1'", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true } ] },
-        { "phase": 1, "target_part_id": "{CST}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true } ] },
-        { "phase": 1, "target_part_id": "{MAP}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{POD_LK}", "when": "params.pod_shell == '1'", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{DOOR}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0 }, { "type": "opacity", "to": 1, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{POD}",
+          "when": "params.pod_shell == '1'",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{POD_LK}",
+          "when": "params.pod_shell == '1'",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{DOOR}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0
+            },
+            {
+              "type": "opacity",
+              "to": 1,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -27,7 +111,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{POD_LK}", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{POD_LK}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -35,7 +129,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{POD_LK}", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{POD_LK}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -43,7 +147,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{POD_LK}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{POD_LK}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -51,7 +165,19 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{POD}", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": 34, "duration": 900, "easing": "mechanical" } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{POD}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 34,
+              "duration": 900,
+              "easing": "mechanical"
+            }
+          ]
+        }
       ]
     },
     {
@@ -59,7 +185,24 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{DOOR}", "actions": [ { "type": "offset", "offset_x": -53, "offset_y": 0, "duration": 700, "easing": "ease-out" }, { "type": "opacity", "to": 0.15, "duration": 700 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{DOOR}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": -53,
+              "offset_y": 0,
+              "duration": 700,
+              "easing": "ease-out"
+            },
+            {
+              "type": "opacity",
+              "to": 0.15,
+              "duration": 700
+            }
+          ]
+        }
       ]
     },
     {
@@ -67,7 +210,24 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{DOOR}", "actions": [ { "type": "offset", "offset_x": 53, "offset_y": 0, "duration": 700, "easing": "ease-in" }, { "type": "opacity", "to": 1, "duration": 700 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{DOOR}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 53,
+              "offset_y": 0,
+              "duration": 700,
+              "easing": "ease-in"
+            },
+            {
+              "type": "opacity",
+              "to": 1,
+              "duration": 700
+            }
+          ]
+        }
       ]
     },
     {
@@ -75,7 +235,18 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{CST}", "actions": [ { "type": "snap", "to_part_id": "{PORT_C}", "duration": 1500, "easing": "mechanical" } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{PORT_C}",
+              "duration": 1500,
+              "easing": "mechanical"
+            }
+          ]
+        }
       ]
     },
     {
@@ -83,7 +254,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{CST}", "actions": [ { "type": "snap", "to_part_id": "{PORT_C}", "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{PORT_C}",
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -91,15 +272,107 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{CST}", "actions": [ { "type": "snap", "to_part_id": "{SMIF_C}", "duration": 1500, "easing": "mechanical" } ] },
-        { "phase": 1, "target_part_id": "{POD}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 800, "easing": "mechanical" } ] },
-        { "phase": 2, "target_part_id": "{WAFER_CH}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CH_RUN}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CH_ALARM}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CH_UNLOAD}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{MAP}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{SMIF_C}",
+              "duration": 1500,
+              "easing": "mechanical"
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{POD}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 800,
+              "easing": "mechanical"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{WAFER_CH}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CH_RUN}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CH_ALARM}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CH_UNLOAD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -107,8 +380,31 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{MAP}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0, "visible": true } ] },
-        { "phase": 2, "target_part_id": "{MAP}", "actions": [ { "type": "offset", "offset_x": 0, "offset_y": -70, "duration": 2600, "easing": "linear" } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": -95,
+              "duration": 2600,
+              "easing": "linear"
+            }
+          ]
+        }
       ]
     },
     {
@@ -116,7 +412,22 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{MAP}", "actions": [ { "type": "visibility", "to": false, "duration": 0 }, { "type": "snap", "to_part_id": "{home}", "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            },
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -124,7 +435,22 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{MAP}", "actions": [ { "type": "visibility", "to": false, "duration": 0 }, { "type": "snap", "to_part_id": "{home}", "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            },
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -132,7 +458,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "title_block", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "title_block",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -140,26 +476,236 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{CH_RUN}", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_UNLOAD}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_PORT_ANGLE}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 1, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "{SLOT_ANCHOR}", "duration": 0, "visible": true } ] },
-        { "phase": 2, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_HOME}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 2, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "ARM_HUB", "duration": 0 } ] },
-        { "phase": 3, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_PA_ANGLE}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 3, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "PA_C", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 4, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 4, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
-        { "phase": 5, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 5, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "PA_C", "duration": 0, "visible": true } ] },
-        { "phase": 5, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_HOME}", "duration": 900, "easing": "linear" } ] },
-        { "phase": 6, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_CH_ANGLE}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 6, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "ARM_HUB", "duration": 0 } ] },
-        { "phase": 7, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "{CH_C}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 8, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 8, "target_part_id": "{WAFER_CH}", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
-        { "phase": 8, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_HOME}", "duration": 800, "easing": "linear" } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_UNLOAD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_PORT_ANGLE}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{SLOT_ANCHOR}",
+              "duration": 0,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_HOME}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "ARM_HUB",
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_PA_ANGLE}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "PA_C",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "PA_C",
+              "duration": 0,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_HOME}",
+              "duration": 900,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 6,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_CH_ANGLE}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 6,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "ARM_HUB",
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 7,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{CH_C}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 8,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 8,
+          "target_part_id": "{WAFER_CH}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 8,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_HOME}",
+              "duration": 800,
+              "easing": "linear"
+            }
+          ]
+        }
       ]
     },
     {
@@ -167,16 +713,122 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{WAFER_CH}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_RUN}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_ALARM}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_CH_ANGLE}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 2, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "{CH_C}", "duration": 0, "visible": true } ] },
-        { "phase": 2, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_HOME}", "duration": 1000, "easing": "linear" } ] },
-        { "phase": 3, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_PORT_ANGLE}", "duration": 1200, "easing": "linear" } ] },
-        { "phase": 3, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "snap", "to_part_id": "{SLOT_ANCHOR}", "duration": 1200, "easing": "linear" } ] },
-        { "phase": 4, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 5, "target_part_id": "ARM_ROBOT", "actions": [ { "type": "rotate", "angle": "{ARM_HOME}", "duration": 800, "easing": "linear" } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{WAFER_CH}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_ALARM}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_CH_ANGLE}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{CH_C}",
+              "duration": 0,
+              "visible": true
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_HOME}",
+              "duration": 1000,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_PORT_ANGLE}",
+              "duration": 1200,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{SLOT_ANCHOR}",
+              "duration": 1200,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 5,
+          "target_part_id": "ARM_ROBOT",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_HOME}",
+              "duration": 800,
+              "easing": "linear"
+            }
+          ]
+        }
       ]
     },
     {
@@ -184,11 +836,61 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{WAFER_CH}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_RUN}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_ALARM}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_UNLOAD}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{WAFER_CH}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_ALARM}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_UNLOAD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -196,7 +898,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{CH_UNLOAD}", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CH_UNLOAD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -204,7 +916,17 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{CH_ALARM}", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CH_ALARM}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -212,8 +934,30 @@
       "enabled": true,
       "when": "params.STATE",
       "rules": [
-        { "phase": 1, "target_part_id": "{CH_RUN}", "when": "params.STATE == 'RUNNING' || params.STATE == 'PROCESS'", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_RUN}", "when": "params.STATE == 'IDLE' || params.STATE == 'READY' || params.STATE == 'HOLD' || params.STATE == 'PAUSE'", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "when": "params.STATE == 'RUNNING' || params.STATE == 'PROCESS'",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "when": "params.STATE == 'IDLE' || params.STATE == 'READY' || params.STATE == 'HOLD' || params.STATE == 'PAUSE'",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -221,9 +965,42 @@
       "enabled": true,
       "when": "params.TRANSFER_STAGE",
       "rules": [
-        { "phase": 1, "target_part_id": "{CH_RUN}", "when": "params.TRANSFER_STAGE == 'PLACE'", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{WAFER_CH}", "when": "params.TRANSFER_STAGE == 'PLACE'", "actions": [ { "type": "visibility", "to": true, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_RUN}", "when": "params.TRANSFER_STAGE == 'PICK'", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "when": "params.TRANSFER_STAGE == 'PLACE'",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{WAFER_CH}",
+          "when": "params.TRANSFER_STAGE == 'PLACE'",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "when": "params.TRANSFER_STAGE == 'PICK'",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -231,11 +1008,61 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{WAFER_CH}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_RUN}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_ALARM}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "{CH_UNLOAD}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 1, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{WAFER_CH}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_RUN}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_ALARM}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CH_UNLOAD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     },
     {
@@ -243,19 +1070,156 @@
       "enabled": true,
       "when": "true",
       "rules": [
-        { "phase": 1, "target_part_id": "{POD}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 1000, "easing": "mechanical" } ] },
-        { "phase": 1, "target_part_id": "{CST}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 1000, "easing": "mechanical" } ] },
-        { "phase": 2, "target_part_id": "{POD}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CST}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{POD_LK}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{DOOR}", "actions": [ { "type": "snap", "to_part_id": "{home}", "duration": 0 }, { "type": "opacity", "to": 1, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{WAFER_CH}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CH_RUN}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CH_ALARM}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{CH_UNLOAD}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "{MAP}", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "WAFER_PA", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] },
-        { "phase": 2, "target_part_id": "WAFER_MOVE", "actions": [ { "type": "visibility", "to": false, "duration": 0 } ] }
+        {
+          "phase": 1,
+          "target_part_id": "{POD}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 1000,
+              "easing": "mechanical"
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 1000,
+              "easing": "mechanical"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{POD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{POD_LK}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{DOOR}",
+          "actions": [
+            {
+              "type": "snap",
+              "to_part_id": "{home}",
+              "duration": 0
+            },
+            {
+              "type": "opacity",
+              "to": 1,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{WAFER_CH}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CH_RUN}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CH_ALARM}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CH_UNLOAD}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "WAFER_PA",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
       ]
     }
   ],
@@ -282,6 +1246,11 @@
       "LOT_ID": "DEMO_LOT01"
     },
     "part_aliases": {},
-    "viewBox_fallback": [0, 0, 680, 580]
+    "viewBox_fallback": [
+      0,
+      0,
+      760,
+      800
+    ]
   }
 }

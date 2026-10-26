@@ -946,6 +946,11 @@ export async function playMotion({
       playedPids.add(pid)
       const state = ensureState(states, pid)
       const g = geom.get(pid)
+      // 纯 visibility/opacity/text 规则不改写 transform：applyState 会 consolidate()
+      // 掉部件的静态 transform 属性并强设 transform-box:fill-box，带静态 rotate 的
+      // 部件（如状态覆盖层）会被错误换算原点而飞出画面
+      const affectsTransform = actions.some(a =>
+        a && ['offset', 'rotate', 'scale', 'snap', 'move_to'].includes(a.type))
       for (const action of actions) {
         if (!action) continue
         const duration = instant ? 0 : (action.duration || 0)
@@ -954,7 +959,7 @@ export async function playMotion({
         if (el) setMotionTransition(el, duration, action.easing, instant)
         applyActionToState(ctx, pid, el, state, action)
       }
-      if (el && g) applyState(el, state, g)
+      if (el && g && affectsTransform) applyState(el, state, g)
     }
 
     // 2) 跟随：算轨道 → 终态写入 state → 逐帧或瞬时应用

@@ -6,17 +6,19 @@
  *   记忆 lastEventPortId（连续事件缺 port 时沿用上一端口）
  * - 腔体归一：CHAMBER_A/B/C → A/B/C；WAFERLOADED/WAFERUNLOADED 等缺 chamber 时按端口默认（1→A，2→B）
  * - MIC（line1 OXE）无 SMIF 外壳：pod_shell='0'，POD_PLACED 只出晶舟不出壳
- * - 机械臂角度：blade 基座朝东（0°），rotate 到目标单元方位角（SVG 顶视图几何）
+ * - 机械臂角度：blade 基座朝东（0°），rotate 到目标单元方位角
+ *   （放射状 cluster 顶视图几何，hub=(380,360)：CH_A=-135 / CH_B=-45 / CH_C=0 /
+ *   PORT1=103.7 / PORT2=74.2 / PA=146.3 / HOME=-90 朝 Gas Box）
  * - 产出占位符 id（POD/CST/DOOR/MAP/SLOT_ANCHOR/CH_*），Motion JSON 用 {param} 引用
  */
 const ARM_ANGLES = {
-  HOME: -45,
-  PORT1: 118.2,
-  PORT2: 61.8,
-  CH_A: -117.4,
-  CH_B: -62.6,
+  HOME: -90,
+  PORT1: 103.7,
+  PORT2: 74.2,
+  CH_A: -135,
+  CH_B: -45,
   CH_C: 0,
-  PA: -90,
+  PA: 146.3,
 }
 
 function normalizeChamber(val) {
