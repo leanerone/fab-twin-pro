@@ -10,20 +10,17 @@
     @font-face {
       font-family: 'WorkSans';
       src: url('./_shared/fonts/WorkSans-Regular.ttf') format('truetype');
-      font-weight: 400;
-      font-style: normal;
+      font-weight: 400; font-style: normal;
     }
     @font-face {
       font-family: 'WorkSans';
       src: url('./_shared/fonts/WorkSans-Bold.ttf') format('truetype');
-      font-weight: 700;
-      font-style: normal;
+      font-weight: 700; font-style: normal;
     }
     @font-face {
       font-family: 'JBM';
       src: url('./_shared/fonts/JetBrainsMono-Regular.ttf') format('truetype');
-      font-weight: 400;
-      font-style: normal;
+      font-weight: 400; font-style: normal;
     }
 
     :root {
@@ -33,9 +30,9 @@
       --ink-soft: #2e3e55;
       --muted: #6b7a90;
       --rule: #e4e8ef;
-      --accent: #1a3d7f;        /* 深蓝主色 · 正式企业风 */
+      --accent: #1a3d7f;
       --accent-soft: #eef2fb;
-      --accent2: #c94f3a;       /* 红 · 用于改前/问题状态 */
+      --accent2: #c94f3a;
       --accent2-soft: #fbeee8;
       --success: #15803d;
       --success-soft: #e7f5ec;
@@ -43,169 +40,77 @@
       --warning-soft: #fef3e3;
       --font: 'WorkSans', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
       --font-mono: 'JBM', ui-monospace, monospace;
-      --max: 900px;
+      --max: 920px;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; scroll-behavior: smooth; }
-    body {
-      font-family: var(--font);
-      color: var(--ink);
-      background: var(--bg);
-      line-height: 1.7;
-      padding: 0;
-    }
-    article.page {
-      max-width: var(--max);
-      margin: 0 auto;
-      padding: 0 2.5rem 4rem;
-    }
+    body { font-family: var(--font); color: var(--ink); background: var(--bg); line-height: 1.7; padding: 0; }
+    article.page { max-width: var(--max); margin: 0 auto; padding: 0 2.5rem 4rem; }
 
-    /* === Cover === */
+    /* Cover */
     .cover {
-      margin: 0 -2.5rem 3rem;
-      padding: 3.5rem 2.5rem 3rem;
-      background: linear-gradient(135deg, var(--accent) 0%, #2856a8 100%);
-      color: #fff;
+      margin: 0 -2.5rem 3rem; padding: 3.5rem 2.5rem 3rem;
+      background: linear-gradient(135deg, var(--accent) 0%, #2856a8 100%); color: #fff;
     }
     .cover .tag {
-      display: inline-block;
-      font-size: 0.78rem;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      background: rgba(255,255,255,0.18);
-      padding: 0.25rem 0.85rem;
-      border-radius: 999px;
-      margin-bottom: 1.2rem;
+      display: inline-block; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; background: rgba(255,255,255,0.18);
+      padding: 0.25rem 0.85rem; border-radius: 999px; margin-bottom: 1.2rem;
     }
-    .cover h1 {
-      font-size: 2.4rem;
-      font-weight: 700;
-      line-height: 1.25;
-      margin-bottom: 0.8rem;
-    }
-    .cover .sub {
-      font-size: 1.05rem;
-      opacity: 0.9;
-      margin-bottom: 2rem;
-    }
-    .cover .meta {
-      display: flex;
-      gap: 2rem;
-      flex-wrap: wrap;
-      font-size: 0.85rem;
-      opacity: 0.85;
-    }
+    .cover h1 { font-size: 2.4rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.8rem; }
+    .cover .sub { font-size: 1.05rem; opacity: 0.9; margin-bottom: 2rem; }
+    .cover .meta { display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.85rem; opacity: 0.85; }
     .cover .meta span b { font-weight: 700; opacity: 1; margin-right: 0.3rem; }
 
-    /* === TOC === */
-    .toc {
-      background: var(--bg2);
-      border-radius: 10px;
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 2.5rem;
-    }
+    /* TOC */
+    .toc { background: var(--bg2); border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
     .toc h3 { font-size: 0.82rem; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 0.75rem; }
     .toc ol { padding-left: 1.4rem; }
     .toc li { font-size: 0.95rem; padding: 0.18rem 0; color: var(--ink-soft); }
     .toc a { color: var(--ink-soft); text-decoration: none; }
     .toc a:hover { color: var(--accent); text-decoration: underline; }
 
-    /* === Section === */
+    /* Sections */
     section { margin-bottom: 3rem; }
     h2 {
-      font-size: 1.45rem;
-      font-weight: 700;
-      color: var(--accent);
-      border-bottom: 2px solid var(--rule);
-      padding-bottom: 0.5rem;
-      margin-bottom: 1.2rem;
+      font-size: 1.45rem; font-weight: 700; color: var(--accent);
+      border-bottom: 2px solid var(--rule); padding-bottom: 0.5rem; margin-bottom: 1.2rem;
     }
-    h3 {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--ink);
-      margin: 1.5rem 0 0.6rem;
-    }
+    h3 { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 1.5rem 0 0.6rem; }
+    h4 { font-size: 0.95rem; font-weight: 700; color: var(--ink); margin: 1rem 0 0.4rem; }
     p { color: var(--ink-soft); margin-bottom: 0.8rem; font-size: 0.97rem; }
     strong { color: var(--ink); font-weight: 700; }
     mark.key { background: none; color: var(--accent); font-weight: 700; }
     mark.warn { background: none; color: var(--accent2); font-weight: 700; }
 
-    /* === 问题警告卡片 === */
+    /* Alert */
     .alert-card {
-      border-left: 4px solid var(--accent2);
-      background: var(--accent2-soft);
-      border-radius: 0 8px 8px 0;
-      padding: 1.1rem 1.3rem;
-      margin: 1rem 0 1.5rem;
+      border-left: 4px solid var(--accent2); background: var(--accent2-soft);
+      border-radius: 0 8px 8px 0; padding: 1.1rem 1.3rem; margin: 1rem 0 1.5rem;
     }
-    .alert-card .label {
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: var(--accent2);
-      letter-spacing: 0.08em;
-      margin-bottom: 0.35rem;
-      text-transform: uppercase;
-    }
+    .alert-card .label { font-size: 0.8rem; font-weight: 700; color: var(--accent2); letter-spacing: 0.08em; margin-bottom: 0.35rem; text-transform: uppercase; }
     .alert-card p { color: #7d2f22; margin-bottom: 0; }
 
-    /* === 事实卡片组 === */
-    .fact-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin: 1.2rem 0 1.8rem;
-    }
-    .fact-card {
-      background: var(--bg2);
-      border-radius: 10px;
-      padding: 1.1rem 1.2rem;
-      border: 1px solid var(--rule);
-    }
-    .fact-card .num {
-      font-size: 1.7rem;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      color: var(--accent);
-      line-height: 1.1;
-      margin-bottom: 0.25rem;
-    }
+    /* Fact grid */
+    .fact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.2rem 0 1.8rem; }
+    .fact-card { background: var(--bg2); border-radius: 10px; padding: 1.1rem 1.2rem; border: 1px solid var(--rule); }
+    .fact-card .num { font-size: 1.7rem; font-weight: 700; font-family: var(--font-mono); color: var(--accent); line-height: 1.1; margin-bottom: 0.25rem; }
     .fact-card.bad .num { color: var(--accent2); }
     .fact-card .lbl { font-size: 0.82rem; color: var(--muted); }
 
-    /* === 表格 === */
+    /* Table */
     .table-wrap { overflow-x: auto; overflow-y: auto; max-height: 640px; margin: 1rem 0 1.5rem; border: 1px solid var(--rule); border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    th {
-      background: var(--bg2);
-      color: var(--ink);
-      font-weight: 700;
-      text-align: left;
-      padding: 0.65rem 0.9rem;
-      border-bottom: 2px solid var(--rule);
-      white-space: nowrap;
-    }
+    th { background: var(--bg2); color: var(--ink); font-weight: 700; text-align: left; padding: 0.65rem 0.9rem; border-bottom: 2px solid var(--rule); white-space: nowrap; }
     td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--rule); color: var(--ink-soft); vertical-align: top; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--bg2); }
-    code {
-      font-family: var(--font-mono);
-      font-size: 0.82rem;
-      background: var(--bg2);
-      padding: 0.1rem 0.4rem;
-      border-radius: 3px;
-      color: var(--ink);
-    }
+    code { font-family: var(--font-mono); font-size: 0.82rem; background: var(--bg2); padding: 0.1rem 0.4rem; border-radius: 3px; color: var(--ink); }
+    td code { white-space: nowrap; }
 
-    /* === Callout === */
-    .callout {
-      border-radius: 10px;
-      padding: 1.1rem 1.3rem;
-      margin: 1rem 0;
-      font-size: 0.93rem;
-    }
+    /* Callout */
+    .callout { border-radius: 10px; padding: 1.1rem 1.3rem; margin: 1rem 0; font-size: 0.93rem; }
     .callout.info { background: var(--accent-soft); border: 1px solid #d4def3; color: var(--ink); }
     .callout.success { background: var(--success-soft); border: 1px solid #b6e5c7; color: #0d5a2b; }
     .callout.warn { background: var(--warning-soft); border: 1px solid #fcd6a0; color: #8a3f07; }
@@ -213,29 +118,46 @@
     .callout li { padding: 0.15rem 0; }
     .callout strong { font-weight: 700; }
 
-    /* === 对比图容器 === */
-    .chart-figure { margin: 1.5rem 0 2rem; }
-    .chart-figure figcaption {
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--muted);
-      letter-spacing: 0.06em;
-      margin-bottom: 0.6rem;
-      text-transform: uppercase;
+    /* 版本演进 Timeline 卡片 */
+    .timeline { margin: 1.5rem 0 2rem; }
+    .tl-phase {
+      display: grid; grid-template-columns: 90px 1fr; gap: 0; margin-bottom: 1.2rem;
     }
+    .tl-phase .tl-bar {
+      background: var(--bg2); border-right: 3px solid var(--rule);
+      padding: 0.8rem 0.5rem 0.8rem 0; display: flex; flex-direction: column;
+      align-items: center; text-align: center; border-radius: 8px 0 0 8px;
+    }
+    .tl-phase.v1 .tl-bar { border-right-color: var(--accent2); background: var(--accent2-soft); }
+    .tl-phase.v2 .tl-bar { border-right-color: var(--warning); background: var(--warning-soft); }
+    .tl-phase.v3 .tl-bar { border-right-color: var(--success); background: var(--success-soft); }
+    .tl-phase .tl-no { font-size: 1.8rem; font-weight: 700; font-family: var(--font-mono); line-height: 1; }
+    .tl-phase.v1 .tl-no { color: var(--accent2); }
+    .tl-phase.v2 .tl-no { color: var(--warning); }
+    .tl-phase.v3 .tl-no { color: var(--success); }
+    .tl-phase .tl-date { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; font-weight: 600; }
+    .tl-phase .tl-body {
+      background: var(--bg); border: 1px solid var(--rule); border-radius: 0 8px 8px 0;
+      padding: 1rem 1.2rem;
+    }
+    .tl-phase.v1 .tl-body { border-left: none; border-color: #e8c6bf; }
+    .tl-phase.v2 .tl-body { border-left: none; border-color: #fcd6a0; }
+    .tl-phase.v3 .tl-body { border-left: none; border-color: #b6e5c7; }
+    .tl-phase .tl-head { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .tl-phase .tl-head .ver { font-size: 0.78rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; }
+    .tl-phase.v1 .ver { background: var(--accent2-soft); color: var(--accent2); }
+    .tl-phase.v2 .ver { background: var(--warning-soft); color: var(--warning); }
+    .tl-phase.v3 .ver { background: var(--success-soft); color: var(--success); }
+    .tl-phase .tl-body ul { margin-left: 1.1rem; font-size: 0.9rem; color: var(--ink-soft); }
+    .tl-phase .tl-body li { padding: 0.18rem 0; }
+    .tl-phase .tl-body li em { font-style: normal; font-weight: 600; }
+    .tl-phase.v1 .tl-body li em { color: var(--accent2); }
+    .tl-phase.v2 .tl-body li em { color: var(--warning); }
+    .tl-phase.v3 .tl-body li em { color: var(--success); }
 
-    /* === 问题/解决方案 两列对照 === */
-    .compare {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-      margin: 1rem 0 1.5rem;
-    }
-    .compare > div {
-      border-radius: 10px;
-      padding: 1.2rem;
-      border: 1px solid var(--rule);
-    }
+    /* Compare card */
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0 1.5rem; }
+    .compare > div { border-radius: 10px; padding: 1.2rem; border: 1px solid var(--rule); }
     .compare .before { background: var(--accent2-soft); border-color: #e8c6bf; }
     .compare .after { background: var(--success-soft); border-color: #b6e5c7; }
     .compare h4 { font-size: 0.82rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.6rem; }
@@ -244,33 +166,45 @@
     .compare p, .compare li { font-size: 0.9rem; color: var(--ink-soft); }
     .compare ul { margin-left: 1.1rem; }
 
-    /* === 结论条 === */
+    /* Chart figure */
+    .chart-figure { margin: 1.5rem 0 2rem; }
+    .chart-figure figcaption { font-size: 0.82rem; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; margin-bottom: 0.6rem; text-transform: uppercase; }
+
+    /* Future roadmap */
+    .roadmap { margin: 1rem 0 1.5rem; }
+    .roadmap-item {
+      display: grid; grid-template-columns: 44px 1fr auto; gap: 1rem;
+      padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 8px; margin-bottom: 0.6rem;
+    }
+    .roadmap-item .ri-no {
+      background: var(--accent-soft); color: var(--accent);
+      font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem;
+      width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    }
+    .roadmap-item .ri-body h4 { margin: 0 0 0.2rem; font-size: 0.95rem; }
+    .roadmap-item .ri-body p { margin: 0; font-size: 0.88rem; }
+    .roadmap-item .ri-tag {
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+      padding: 0.25rem 0.55rem; border-radius: 999px; align-self: center; white-space: nowrap;
+    }
+    .roadmap-item .ri-tag.p1 { background: var(--success-soft); color: var(--success); }
+    .roadmap-item .ri-tag.p2 { background: var(--warning-soft); color: var(--warning); }
+    .roadmap-item .ri-tag.p3 { background: var(--bg2); color: var(--muted); }
+
+    /* Final */
     .final {
       background: linear-gradient(135deg, var(--accent) 0%, #2856a8 100%);
-      color: #fff;
-      border-radius: 12px;
-      padding: 1.8rem 2rem;
-      margin-top: 2.5rem;
+      color: #fff; border-radius: 12px; padding: 1.8rem 2rem; margin-top: 2.5rem;
     }
     .final h3 { color: #fff; margin-top: 0; font-size: 1.25rem; }
     .final p { color: rgba(255,255,255,0.92); }
-    .final .big-nums {
-      display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem;
-    }
+    .final .big-nums { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem; }
     .final .big { font-size: 2.2rem; font-weight: 700; font-family: var(--font-mono); }
     .final .big span { font-size: 1rem; font-weight: 500; opacity: 0.8; margin-left: 0.3rem; }
 
-    /* === Footer === */
     .page-footer {
-      margin-top: 3rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--rule);
-      font-size: 0.82rem;
-      color: var(--muted);
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+      font-size: 0.82rem; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
     }
 
     @media (max-width: 640px) {
@@ -278,6 +212,9 @@
       .cover { margin: 0 -1.1rem 2rem; padding: 2.2rem 1.5rem 2rem; }
       .cover h1 { font-size: 1.75rem; }
       .compare { grid-template-columns: 1fr; }
+      .tl-phase { grid-template-columns: 70px 1fr; }
+      .roadmap-item { grid-template-columns: 36px 1fr; }
+      .roadmap-item .ri-tag { grid-column: 1 / -1; justify-self: end; }
     }
     @media print {
       .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -289,7 +226,7 @@
 <body>
 <article class="page">
 
-  <!-- ================================================== -->
+  <!-- ===== Cover ===== -->
   <header class="cover">
     <div class="tag">变更申请 · 量产部署</div>
     <h1>fab-twin-pro v2.13<br>数据库结构变更说明</h1>
@@ -302,58 +239,134 @@
     </div>
   </header>
 
-  <!-- ================================================== -->
+  <!-- ===== TOC ===== -->
   <nav class="toc">
     <h3>目录</h3>
     <ol>
       <li><a href="#s1">问题背景：测试报告中的两个"雷区"</a></li>
-      <li><a href="#s2">为什么必须动数据库</a></li>
-      <li><a href="#s3">本次变更内容</a></li>
-      <li><a href="#s4">性能对比（本地 998 万行实测）</a></li>
-      <li><a href="#s5">部署计划</a></li>
-      <li><a href="#s6">风险与回退方案</a></li>
-      <li><a href="#s7">结论与审批申请</a></li>
+      <li><a href="#s2">版本演进三阶段（最早版 → 现状 → 本次优化）</a></li>
+      <li><a href="#s3">为什么必须动数据库</a></li>
+      <li><a href="#s4">本次变更内容</a></li>
+      <li><a href="#s5">性能对比（本地 998 万行实测）</a></li>
+      <li><a href="#s6">部署计划</a></li>
+      <li><a href="#s7">风险与回退方案</a></li>
+      <li><a href="#s8">未来优化方向</a></li>
+      <li><a href="#s9">结论与审批申请</a></li>
     </ol>
   </nav>
 
-  <!-- ================================================== -->
+  <!-- ===== 1 背景 ===== -->
   <section id="s1">
     <h2>一、问题背景</h2>
     <p>2026-10-22 完成的 test31 数据读写测试报告（千万级行规模）暴露两个核心瓶颈，直接影响工厂现场使用体验：</p>
-
     <div class="alert-card">
       <div class="label">雷区 A（最严重）</div>
-      <p><strong>DT_EVENT_RAW 表</strong>（事件主表，近 <strong>1000 万行</strong>）的 14 处查询均使用 <code>payload_json LIKE '%lot_id%'</code> 在 CLOB 大文本里搜子串，Oracle 无法对 CLOB 内字段建索引 → <strong>每次查询全表扫描</strong>，耗时 450–650 秒。</p>
+      <p><strong>DT_EVENT_RAW</strong>（事件主表，近 <strong>1000 万行</strong>）的 14 处查询均使用 <code>payload_json LIKE '%lot_id%'</code> 在 CLOB 大文本里搜子串，Oracle 无法对 CLOB 内字段建索引 → <strong>每次查询全表扫描</strong>，耗时 450–700 秒。</p>
     </div>
-
     <div class="alert-card">
       <div class="label">雷区 B</div>
-      <p>同一表缺少 <code>(tool_id, raw_id)</code> 复合索引。历史回放翻页时 <code>WHERE tool_id = ? AND raw_id &lt; ? ORDER BY raw_id DESC</code> 排序需临时建索引 → 翻页 458 秒。</p>
+      <p>同一表缺少 <code>(tool_id, raw_id)</code> 复合索引。历史回放翻页时排序需临时建索引 → 翻页 458 秒。</p>
     </div>
-
     <div class="fact-grid">
-      <div class="fact-card bad">
-        <div class="num">645s</div>
-        <div class="lbl">按 Lot 查事件（改前）</div>
-      </div>
-      <div class="fact-card bad">
-        <div class="num">490s</div>
-        <div class="lbl">按 Alarm 查详情（改前）</div>
-      </div>
-      <div class="fact-card bad">
-        <div class="num">458s</div>
-        <div class="lbl">历史回放翻页（改前）</div>
-      </div>
-      <div class="fact-card">
-        <div class="num">~1000万</div>
-        <div class="lbl">事件表当前行数</div>
-      </div>
+      <div class="fact-card bad"><div class="num">645s</div><div class="lbl">Lot 查询 · 冷态全表扫</div></div>
+      <div class="fact-card bad"><div class="num">490s</div><div class="lbl">Alarm 查询 · 冷态全表扫</div></div>
+      <div class="fact-card bad"><div class="num">458s</div><div class="lbl">历史翻页 · 无索引排序</div></div>
+      <div class="fact-card"><div class="num">~1000万</div><div class="lbl">DT_EVENT_RAW 当前行数</div></div>
     </div>
   </section>
 
-  <!-- ================================================== -->
+  <!-- ===== 2 版本演进 ===== -->
   <section id="s2">
-    <h2>二、为什么必须动数据库</h2>
+    <h2>二、版本演进三阶段</h2>
+    <p>这张图很关键：<strong>三个版本不是互相替代，而是逐层叠加</strong>——之前加的索引和缓存都还在，本次只是补上之前碰不到的那一环。</p>
+
+    <div class="chart-figure">
+      <figcaption>图 1 · 三阶段查询耗时演进（对数刻度）</figcaption>
+      <div id="chart-timeline" style="width:100%;min-height:360px"></div>
+    </div>
+
+    <div class="chart-figure">
+      <figcaption>图 2 · 各加速层对查询路径的覆盖关系</figcaption>
+      <div id="chart-path" style="width:100%;min-height:280px"></div>
+      <p style="margin-top:0.5rem;font-size:0.85rem;color:var(--muted)">
+        ✅ 全覆盖 &nbsp; ⚠️ 部分覆盖（冷启动/TTL到期/新数据必掉） &nbsp; ❌ 完全未覆盖
+      </p>
+    </div>
+
+    <div class="timeline">
+      <!-- Phase 1 -->
+      <div class="tl-phase v1">
+        <div class="tl-bar">
+          <div class="tl-no">01</div>
+          <div class="tl-date">v2.9<br>2026-09</div>
+        </div>
+        <div class="tl-body">
+          <div class="tl-head">
+            <span>阶段一 · 最早裸奔版</span>
+            <span class="ver">v2.9 ~ 10-20</span>
+          </div>
+          <ul>
+            <li><em>查询层</em>：所有查询裸打 SQL，无任何索引优化、无缓存</li>
+            <li><em>DT_EVENT_RAW</em>：9-10 批量建 32 张量产对齐的 DT 表，但未加任何索引</li>
+            <li><em>实际耗时</em>：Lot 703s / Alarm 680s / 机台状态 7349ms</li>
+            <li><em>问题</em>：千万级表上任何查询几乎都是全表扫</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="tl-phase v2">
+        <div class="tl-bar">
+          <div class="tl-no">02</div>
+          <div class="tl-date">v2.11.1<br>2026-10-21</div>
+        </div>
+        <div class="tl-body">
+          <div class="tl-head">
+            <span>阶段二 · 现状版本（索引 + 缓存）</span>
+            <span class="ver">v2.11.1 ~ v2.12</span>
+          </div>
+          <ul>
+            <li><em>索引层</em>：加了 4 个索引——<code>(tool_id, received_ts_utc)</code>（v2.11.1, 10-21）、<code>EVT_TS / SNAPSHOT_TOOL_TS / STD_TOOL_TS</code>（首页优化, 10-22）</li>
+            <li><em>缓存层</em>：3 处 TTLCache 进程内缓存 + Garnet 扩展（10-22），首页机台状态 625ms→8ms</li>
+            <li><em>实际改善</em>：机台状态/首页产量/实时监控 这三条路径明显变快（有独立列可建索引）</li>
+            <li><em>未解决</em>：Lot / Alarm 查询仍然是 <code>payload_json LIKE</code> → 全表扫，缓存"遮住"了问题（同查询重复打时快，冷启动/TTL到期必掉）</li>
+            <li><em>现状耗时</em>：Lot 645s / Alarm 490s / 历史翻页 458s（缓存 hit 时 < 1s，但命中率随查询多样性下降）</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div class="tl-phase v3">
+        <div class="tl-bar">
+          <div class="tl-no">03</div>
+          <div class="tl-date">v2.13<br>2026-10-26</div>
+        </div>
+        <div class="tl-body">
+          <div class="tl-head">
+            <span>阶段三 · 本次优化（物化列 + 索引 + 触发器）</span>
+            <span class="ver">v2.13 · 本次</span>
+          </div>
+          <ul>
+            <li><em>数据模型层</em>：先造 3 个新列 <code>LOT_ID / EVENT_NAME / ALARM_CODE</code>（从 payload_json 抠出来），这三列之前根本不存在，所以之前的索引加得再多也碰不到雷区 A</li>
+            <li><em>索引层</em>：4 个新索引——3 个建在新列上 + 补 1 个之前没加的 <code>(tool_id, raw_id)</code>（雷区 B）</li>
+            <li><em>触发器 + Listener</em>：双保险，新写入自动填物化列（WinForm 直写 SQL 也覆盖，不依赖应用层）</li>
+            <li><em>代码改写</em>：14 处 <code>payload_json LIKE '%lot%'</code> 全部改为 <code>lot_id = 'xxx'</code> 走等值索引</li>
+            <li><em>历史回填</em>：一次性脚本从旧 payload_json 提取补齐（998 万行 906s 完成，可断点续跑）</li>
+            <li><em>预计耗时</em>：全路径稳定 <strong>10 毫秒以内</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <strong>为什么之前加了索引和缓存，这次还要再加？</strong><br>
+      之前加的 4 个索引全部建在<strong>"已有列"</strong>上（tool_id、received_ts_utc 等），缓存也只是让"同一查询重复打"变快。但 <strong>lot_id / alarm_code 这些字段之前压根不是列</strong>，它们埋在 CLOB 大文本内部，数据库索引建不了、缓存命中不了新 Lot。本次改动是<strong>先把它们变成列</strong>——这一步之前谁都做不了，因为列不存在。
+    </div>
+  </section>
+
+  <!-- ===== 3 为什么要动 DB ===== -->
+  <section id="s3">
+    <h2>三、为什么必须动数据库</h2>
     <p>病根在<strong>数据模型</strong>，不在代码。<mark class="key">只要查询条件不成为"列"，代码再怎么优化都没法让数据库走索引。</mark></p>
 
     <div class="compare">
@@ -380,24 +393,24 @@
     </div>
 
     <div class="callout info">
-      <strong>类比：</strong>翻一本 1000 页没有目录的字典，每次找一个词都要从头翻到尾（全表扫）。加上目录（索引）后，翻一下目录直接定位页码（索引 range scan）——<strong>这就是本次变更的本质。</strong>
+      <strong>类比：</strong>翻一本 1000 页没有目录的字典，每次找一个词都要从头翻到尾（全表扫）。加上目录（索引）后，翻一下目录直接定位页码。
     </div>
   </section>
 
-  <!-- ================================================== -->
-  <section id="s3">
-    <h2>三、本次变更内容</h2>
+  <!-- ===== 4 变更内容 ===== -->
+  <section id="s4">
+    <h2>四、本次变更内容</h2>
 
-    <h3>数据库侧（4 项，全部"加"，不删不改）</h3>
+    <h3>数据库侧（4 项，全部 "加"，不删不改）</h3>
     <div class="table-wrap">
       <table>
         <thead>
           <tr><th>#</th><th>变更项</th><th>类型</th><th>作用</th><th>DDL 位置</th></tr>
         </thead>
         <tbody>
-          <tr><td>1</td><td>加 3 列：<code>LOT_ID</code>/<code>EVENT_NAME</code>/<code>ALARM_CODE</code></td><td>ADD COLUMN</td><td>字段从 JSON 中物化出来</td><td>v2.13 SQL 脚本</td></tr>
+          <tr><td>1</td><td>加 3 列：<code>LOT_ID</code> / <code>EVENT_NAME</code> / <code>ALARM_CODE</code></td><td>ADD COLUMN</td><td>字段从 JSON 中物化出来（之前根本不存在）</td><td>v2.13 SQL 脚本</td></tr>
           <tr><td>2</td><td>加索引：<code>IDX_DT_EVENT_RAW_TOOL_RAW</code></td><td>CREATE INDEX</td><td>雷区 B：历史翻页走索引排序</td><td>v2.13 SQL 脚本</td></tr>
-          <tr><td>3</td><td>加索引：<code>IDX_DT_EVENT_RAW_LOT</code>/<code>_ALARM</code>/<code>_NAME</code></td><td>CREATE INDEX ×3</td><td>雷区 A：等值查询走索引</td><td>v2.13 SQL 脚本</td></tr>
+          <tr><td>3</td><td>加索引：<code>IDX_DT_EVENT_RAW_LOT</code> / <code>_ALARM</code> / <code>_NAME</code></td><td>CREATE INDEX ×3</td><td>雷区 A：等值查询走索引</td><td>v2.13 SQL 脚本</td></tr>
           <tr><td>4</td><td>加触发器：<code>TRG_DT_EVENT_RAW_EXTRACT</code></td><td>CREATE TRIGGER</td><td>新写入自动填物化列（WinForm 直写 SQL 也覆盖）</td><td>v2.13 SQL 脚本</td></tr>
         </tbody>
       </table>
@@ -407,54 +420,55 @@
       <strong>⚠️ 重要承诺：</strong>以上 4 项变更 <strong>全部是 ADD（加）操作</strong>，不修改任何已有列定义、不删除任何已有数据、不改 payload_json 原文。DDL 脚本幂等（可重复执行），内置 USER_TAB_COLUMNS / USER_INDEXES 检查防止重复创建。
     </div>
 
+    <h3>和之前版本的关系</h3>
+    <p>本次 4 个新索引 + 3 个新列，与 v2.11.1 / v2.12 已有的 4 个索引 + 3 处缓存是<strong>互补叠加</strong>，不冲突不重复：</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>版本</th><th>改动</th><th>索引/缓存名称</th><th>加速哪条路径</th></tr>
+        </thead>
+        <tbody>
+          <tr><td rowspan="2">v2.11.1</td><td>索引</td><td><code>IDX_DT_EVENT_RAW_TOOL_RECV</code></td><td>机台状态查询</td></tr>
+          <tr><td>缓存</td><td>3 处 TTLCache</td><td>首页机台状态 / 统计 / 模型配置（同查询重复打）</td></tr>
+          <tr><td>v2.12</td><td>索引</td><td><code>EVT_TS</code> / <code>SNAPSHOT_TOOL_TS</code> / <code>STD_TOOL_TS</code></td><td>首页今日产量/告警</td></tr>
+          <tr><td rowspan="3"><strong>v2.13 本次</strong></td><td>3 新列</td><td><code>LOT_ID</code> / <code>EVENT_NAME</code> / <code>ALARM_CODE</code></td><td>之前根本不存在 → 现在可建索引</td></tr>
+          <tr><td>4 新索引</td><td><code>IDX_DT_EVENT_RAW_TOOL_RAW</code> + LOT / ALARM / NAME</td><td>雷区 A + B 根治</td></tr>
+          <tr><td>触发器</td><td><code>TRG_DT_EVENT_RAW_EXTRACT</code></td><td>兜底 WinForm 直写路径</td></tr>
+        </tbody>
+      </table>
+    </div>
+
     <h3>应用侧（11 文件，14 处 LIKE 改等值）</h3>
     <p>将 14 处 <code>payload_json LIKE '%lot%'</code> 改写为 <code>LOT_ID = 'xxx'</code>，配合新索引走等值查询。代码改动集中在 <code>backend/routers/</code>、<code>backend/services/ai_tools.py</code>、<code>services/db_proxy/main.py</code>。</p>
 
-    <h3>历史数据回填（一次性脚本，可选）</h3>
+    <h3>历史数据回填（一次性脚本）</h3>
     <p>新列是 NULL 的老数据，运行 <code>tests/backfill_event_columns.py</code> 从 payload_json 提取补齐。本地 998 万行实测 906 秒完成，支持断点续跑、分批、verify 校验。<strong>回填未跑完时系统可用，只是老数据查不到/慢。</strong></p>
   </section>
 
-  <!-- ================================================== -->
-  <section id="s4">
-    <h2>四、性能对比（本地 998 万行实测）</h2>
+  <!-- ===== 5 性能对比 ===== -->
+  <section id="s5">
+    <h2>五、性能对比（本地 998 万行实测）</h2>
 
-    <figure class="chart-figure">
-      <figcaption>图 1 · 查询耗时对比（对数刻度，秒）</figcaption>
-      <div id="chart-perf" style="width:100%;min-height:380px"></div>
-    </figure>
-
-    <figure class="chart-figure">
-      <figcaption>图 2 · 提速倍数（对数刻度）</figcaption>
-      <div id="chart-gain" style="width:100%;min-height:320px"></div>
-    </figure>
+    <div class="chart-figure">
+      <figcaption>图 3 · 现状 vs 本次优化 · 提速倍数</figcaption>
+      <div id="chart-gain" style="width:100%;min-height:340px"></div>
+    </div>
 
     <div class="fact-grid">
-      <div class="fact-card">
-        <div class="num">0.006s</div>
-        <div class="lbl">改后 · Lot 等值查询</div>
-      </div>
-      <div class="fact-card">
-        <div class="num">0.007s</div>
-        <div class="lbl">改后 · Alarm 等值查询</div>
-      </div>
-      <div class="fact-card">
-        <div class="num">~10万×</div>
-        <div class="lbl">平均提速倍数</div>
-      </div>
-      <div class="fact-card">
-        <div class="num">906s</div>
-        <div class="lbl">998万行回填耗时</div>
-      </div>
+      <div class="fact-card"><div class="num">0.006s</div><div class="lbl">改后 · Lot 等值查询</div></div>
+      <div class="fact-card"><div class="num">0.007s</div><div class="lbl">改后 · Alarm 等值查询</div></div>
+      <div class="fact-card"><div class="num">3.8–11.7万×</div><div class="lbl">相对最早版提速范围</div></div>
+      <div class="fact-card"><div class="num">906s</div><div class="lbl">998 万行回填耗时</div></div>
     </div>
 
     <div class="callout success">
-      <strong>结论：</strong>改后三个查询路径均稳定在 <strong>10 毫秒以内</strong>，比改前快 <strong>3.8 万 ~ 10.8 万倍</strong>。雷区 A 根因消除，雷区 B 完全解决。
+      <strong>结论：</strong>改后三个查询路径均稳定在 <strong>10 毫秒以内</strong>。雷区 A 根因消除（全表扫不再发生），雷区 B 完全解决（历史翻页走 INDEX RANGE SCAN DESCENDING）。
     </div>
   </section>
 
-  <!-- ================================================== -->
-  <section id="s5">
-    <h2>五、部署计划</h2>
+  <!-- ===== 6 部署 ===== -->
+  <section id="s6">
+    <h2>六、部署计划</h2>
     <p>不停机，在线 6 步完成，详细步骤见 <code>docs/V2.13_量产测试部署步骤_20261026.md</code>。</p>
 
     <div class="table-wrap">
@@ -463,28 +477,24 @@
           <tr><th>步骤</th><th>操作</th><th>执行人</th><th>耗时</th><th>停机？</th></tr>
         </thead>
         <tbody>
-          <tr><td>①</td><td>DBA 执行 <code>sql/v2.13_add_event_extract_columns.sql</code>（加列+索引+触发器）</td><td>DBA</td><td>≈ 3–5 min</td><td>否（建列不锁表，EE 版 CREATE INDEX ONLINE）</td></tr>
+          <tr><td>①</td><td>DBA 执行 <code>sql/v2.13_add_event_extract_columns.sql</code>（加列+索引+触发器）</td><td>DBA</td><td>≈ 3–5 min</td><td>否（加列不锁表；千万级建索引建议低峰，EE 版可加 ONLINE）</td></tr>
           <tr><td>②</td><td>git pull origin/test3 并重启后端进程</td><td>运维</td><td>≈ 1 min</td><td>否（应用可滚动重启）</td></tr>
-          <tr><td>③</td><td>验证 DDL：查 USER_TAB_COLUMNS / USER_INDEXES</td><td>DBA + 开发</td><td>2 min</td><td>否</td></tr>
-          <tr><td>④</td><td>低峰跑历史回填 <code>python backfill_event_columns.py</code></td><td>开发</td><td>≈ 15 min / 1000万行</td><td>否（逐批 UPDATE，每批 2 万行）</td></tr>
+          <tr><td>③</td><td>验证 DDL：查 USER_TAB_COLUMNS / USER_INDEXES / USER_TRIGGERS</td><td>DBA + 开发</td><td>2 min</td><td>否</td></tr>
+          <tr><td>④</td><td>低峰跑历史回填 <code>python backfill_event_columns.py</code></td><td>开发</td><td>≈ 15 min / 1000万行</td><td>否（逐批 2 万行 commit，不持有长事务）</td></tr>
           <tr><td>⑤</td><td><code>--verify</code> 校验 + 抽样 SQL 查物化列填充率</td><td>开发</td><td>≈ 1 min</td><td>否</td></tr>
           <tr><td>⑥</td><td>功能验证：Lot 查询 / Alarm 查询 / 历史回放翻页 6 项 checklist</td><td>开发 + 测试</td><td>≈ 10 min</td><td>否</td></tr>
         </tbody>
       </table>
     </div>
-
-    <div class="callout info">
-      <strong>回填窗口说明：</strong>回填 UPDATE 每批 2 万行、逐批 commit，不持有长事务。建议在业务低峰（凌晨或周末）执行；不是硬性要求，可白天跑。
-    </div>
   </section>
 
-  <!-- ================================================== -->
-  <section id="s6">
-    <h2>六、风险与回退方案</h2>
+  <!-- ===== 7 风险 ===== -->
+  <section id="s7">
+    <h2>七、风险与回退方案</h2>
 
     <div class="callout warn">
-      <strong>最坏情况：</strong>新列数据与原 payload_json 不一致？<br>
-      <strong>解答：</strong>新列是 payload_json 的"提取字段"，不是冗余计算。即使回填有偏差，<strong>payload_json 原文原封不动保留</strong>。代码保留了降级逻辑——物化列不存在时自动回退 Python 解析。所以：新列错了 → 走旧逻辑；新列没建 → 走旧逻辑；触发器有 bug → listener 兜底。
+      <strong>最坏情况：新列数据与原 payload_json 不一致？</strong><br>
+      <strong>解答：</strong>新列是 payload_json 的"提取字段"，不是冗余计算。即使回填有偏差，<strong>payload_json 原文原封不动保留</strong>。代码保留降级逻辑——物化列不存在/为 NULL 时自动回退 Python 解析。所以：新列错了 → 走旧逻辑；新列没建 → 走旧逻辑；触发器有 bug → ORM listener 兜底。
     </div>
 
     <div class="callout">
@@ -496,19 +506,62 @@
       </ol>
     </div>
 
-    <p style="margin-top:1rem;font-size:0.9rem;color:var(--muted)">其他已知事项：Oracle 11g 环境 CREATE INDEX 非 ONLINE 会阻塞 DML 数分钟（EE 版可加 ONLINE），建议 DBA 低峰执行 init_db；machine_events 等四表 ORA-01450 缩列宽问题已作为独立任务记录，<strong>不阻塞本版上线</strong>。</p>
+    <p style="margin-top:1rem;font-size:0.9rem;color:var(--muted)">
+      其他已知事项：Oracle 11g CREATE INDEX 非 ONLINE 会阻塞 DML 数分钟（建议 DBA 低峰执行）；machine_events 等四表 ORA-01450 缩列宽问题已作为独立任务记录，<strong>不阻塞本版上线</strong>。
+    </p>
   </section>
 
-  <!-- ================================================== -->
-  <section id="s7">
-    <h2>七、结论与审批申请</h2>
+  <!-- ===== 8 未来 ===== -->
+  <section id="s8">
+    <h2>八、未来优化方向</h2>
+    <p>本次 v2.13 根治了雷区 A+B，但项目仍有 4 个可继续推进的优化方向：</p>
+
+    <div class="roadmap">
+      <div class="roadmap-item">
+        <div class="ri-no">P1</div>
+        <div class="ri-body">
+          <h4>平台表 ORA-01450 缩列宽（阻塞问题）</h4>
+          <p>test31 修正 <code>_ensure_index</code> 参数顺序 bug 后，machine_events / alarms / oht_positions / lots 四表索引首次真正执行，因相关列 VARCHAR2(4000) 导致复合索引超 Oracle 6398 字节上限。需 DBA 将相关列缩至合理宽度或改单列索引。</p>
+        </div>
+        <span class="ri-tag p1">已识别</span>
+      </div>
+      <div class="roadmap-item">
+        <div class="ri-no">P2</div>
+        <div class="ri-body">
+          <h4>Garnet 统一缓存层（多实例就绪）</h4>
+          <p>当前 v2.11.1 的 TTLCache 是单进程内存缓存，多进程/多实例部署时缓存各自失效。Garnet 已作为后端准备就绪，待部署环境稳定后统一切换到"Garnet 优先、内存兜底"模式，消除缓存不一致。</p>
+        </div>
+        <span class="ri-tag p2">架构预留</span>
+      </div>
+      <div class="roadmap-item">
+        <div class="ri-no">P3</div>
+        <div class="ri-body">
+          <h4>DT_EVENT_RAW 历史归档策略</h4>
+          <p>当前 1000 万行全量保留在一张表里，半年内预计破 5000 万。建议将 6 个月前的数据归档到 <code>DT_EVENT_RAW_ARCHIVE</code> 冷表，主表保持在千万级以内以确保索引效率。</p>
+        </div>
+        <span class="ri-tag p3">规划中</span>
+      </div>
+      <div class="roadmap-item">
+        <div class="ri-no">P4</div>
+        <div class="ri-body">
+          <h4>更多字段物化（按需）</h4>
+          <p>recipe_id / port_id / tool_type 等字段目前仍在 payload_json 里。如果未来出现以这些字段为条件的高频查询，可按 v2.13 的同样模式（加列 + 索引 + 触发器 + 回填）扩展。当前未发现高频路径，暂不执行。</p>
+        </div>
+        <span class="ri-tag p3">观察中</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 9 结论 ===== -->
+  <section id="s9">
+    <h2>九、结论与审批申请</h2>
 
     <div class="final">
       <h3>结论：数据库结构变更必要、安全、收益明确。</h3>
-      <p>本次变更在 <strong>不动任何现有数据</strong> 的前提下，通过"加 3 列 + 4 索引 + 1 触发器"解决千万级事件表的查询性能瓶颈，实测查询耗时从 450–650 秒降至 <strong>10 毫秒以内</strong>，提速 <strong>3.8–10.8 万倍</strong>。DDL 幂等、可回退、触发器兜底 WinForm 直写路径，本地 998 万行库已完成全链路验证。</p>
+      <p>本次变更在 <strong>不动任何现有数据</strong> 的前提下，通过"加 3 列 + 4 索引 + 1 触发器"解决千万级事件表的查询性能瓶颈。三阶段演进清晰证明：之前索引+缓存解决了"有独立列的查询"和"同查询重复打"，但 lot_id / alarm_code 这些字段之前不是列，碰不到雷区 A 的根。实测查询耗时从 450–700 秒降至 <strong>10 毫秒以内</strong>，提速 <strong>3.8–11.7 万倍</strong>。DDL 幂等、可回退、触发器兜底 WinForm 直写路径，本地 998 万行库已完成全链路验证。</p>
       <div class="big-nums">
         <div class="big">10ms<span>以内查询</span></div>
-        <div class="big">10万×<span>提速</span></div>
+        <div class="big">10万×<span>平均提速</span></div>
         <div class="big">0 数据<span>改动</span></div>
         <div class="big">可<span>回退</span></div>
       </div>
