@@ -102,3 +102,6 @@ tests/db_backups/
 tests/prod_export_*/
 # 原始事件输入数据
 tests/raw_*_input.txt
+
+# pytest 读写测试的实测耗时产物
+tests/pytest/.perf_report.json
