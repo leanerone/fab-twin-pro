@@ -53,7 +53,23 @@
 .arch-node.g { background: color-mix(in srgb, var(--good) 10%, var(--surface)); color: var(--good); }
 .arch-node.w { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); color: var(--warn); }
 .arch-node .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.arch-arrow { text-align: center; color: var(--text-3); font-size: 18px; margin: 4px 0; }
+.arch-arrow { text-align: center; color: var(--text-3); font-size: 22px; margin: 2px 0; position: relative; height: 28px; overflow: hidden; }
+.arch-arrow.flow::after {
+  content: '';
+  position: absolute; left: 50%; top: -24px;
+  width: 2px; height: 20px;
+  background: linear-gradient(to bottom, transparent, var(--accent));
+  animation: flowArrow 1.8s ease-in-out infinite;
+  transform: translateX(-50%);
+}
+.arch-arrow.flow-good::after { background: linear-gradient(to bottom, transparent, var(--good)); }
+.arch-arrow.flow-bad::after { background: linear-gradient(to bottom, transparent, var(--bad)); }
+@keyframes flowArrow {
+  0%   { transform: translateX(-50%) translateY(-24px); opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateX(-50%) translateY(40px); opacity: 0; }
+}
 
 /* pros/cons 分析 */
 .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
@@ -307,72 +323,104 @@
 ============================================================ -->
 <section class="slide" data-deck-label="架构对比">
   <p class="kicker">Architecture · 两种数据入库路径</p>
-  <h2 class="h2">当前路径 vs 同事方案</h2>
+  <h2 class="h2">当前路径 vs 同事方案（Fluent Bit）</h2>
 
   <div class="arch-box">
     <!-- 当前路径 -->
     <div class="arch-card anim-fade-left" data-anim="fade-left">
       <h4>🔵 当前路径 · 本次优化对象</h4>
-      <div class="arch-node b"><span class="dot"></span>RV 消息总线（工厂标准）</div>
-      <div class="arch-arrow">↓</div>
+      <div class="arch-node b"><span class="dot"></span>机台 → RV 消息总线</div>
+      <div class="arch-arrow flow"></div>
       <div class="arch-node b"><span class="dot"></span>后端 API /api/rv/message</div>
-      <div class="arch-arrow">↓</div>
-      <div class="arch-node g"><span class="dot"></span>DT_EVENT_RAW 表 + payload_json CLOB</div>
-      <div class="arch-arrow" style="color:var(--warn)">↓ 问题：lot_id 埋在 CLOB 里</div>
-      <div class="arch-node w"><span class="dot"></span>查询时 LIKE 全表扫描</div>
+      <div class="arch-arrow flow"></div>
+      <div class="arch-node g"><span class="dot"></span>DT_EVENT_RAW + payload_json CLOB</div>
+      <div class="arch-arrow flow-bad">↓ lot_id 埋在 CLOB 里</div>
+      <div class="arch-node w"><span class="dot"></span>查询 LIKE 全表扫描</div>
     </div>
     <!-- 同事方案 -->
     <div class="arch-card anim-fade-right" data-anim="fade-right">
-      <h4>🟡 同事方案 · 直接 log → DB</h4>
-      <div class="arch-node b"><span class="dot"></span>机台 log 文件（持续追加）</div>
-      <div class="arch-arrow">↓</div>
-      <div class="arch-node b"><span class="dot"></span>Python 脚本读文件 + 正则解析</div>
-      <div class="arch-arrow">↓</div>
-      <div class="arch-node"><span class="dot" style="background:var(--accent)"></span>直接 INSERT（跳过 RV 和 API）</div>
-      <div class="arch-arrow" style="opacity:0.5">↓</div>
-      <div class="arch-node" style="opacity:0.5"><span class="dot"></span>？后续怎么查（字段怎么拆）</div>
+      <h4>🟢 同事方案 · Fluent Bit → DB（可立项）</h4>
+      <div class="arch-node b"><span class="dot"></span>机台 log 文件（已可获取）</div>
+      <div class="arch-arrow flow flow-good"></div>
+      <div class="arch-node g"><span class="dot"></span>Fluent Bit 开源代理<span style="font-size:11px;opacity:0.7">（CPU&lt;1% · 不影响机台）</span></div>
+      <div class="arch-arrow flow flow-good"></div>
+      <div class="arch-node g"><span class="dot"></span>正则解析 + 字段拆列<span style="font-size:11px;opacity:0.7">（lot_id 就是独立列）</span></div>
+      <div class="arch-arrow flow flow-good"></div>
+      <div class="arch-node"><span class="dot" style="background:var(--accent)"></span>直接 INSERT 已拆列的表</div>
+      <div class="arch-arrow flow flow-good"></div>
+      <div class="arch-node g"><span class="dot"></span>查询直接走索引 ✅</div>
     </div>
   </div>
 
+  <div class="cta-bar anim-fade-up" data-anim="fade-up" style="margin-top:20px;padding:14px 22px">
+    <div style="font-size:14px;opacity:0.95"><strong>关键：</strong>同事方案从<strong>源头上就让 lot_id / recipe_id 等成为独立列</strong>，等于 v2.13 的"物化列"在<strong>写入时直接生成</strong>，不需要回填脚本也不需要 CLOB + 触发器。查询路径天然走索引。</div>
+  </div>
+
   <div class="slide-number" data-current="8" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
-  <div class="notes">架构口播：左边是当前链路，我们在上面做优化。右边是同事提的新链路——跳过 RV 直接读 log 文件入库。</div>
+  <div class="notes">架构口播：右边是同事的新方案，核心是 Fluent Bit——工业级日志代理，CPU<1% 不影响机台，字段直接拆列，查询天然走索引。</div>
 </section>
 
 <!-- ============================================================
      Slide 9 · 可行性分析
 ============================================================ -->
 <section class="slide" data-deck-label="同事方案分析">
-  <p class="kicker">Feasibility · 深入分析</p>
-  <h2 class="h2">同事方案（直接 log → DB）的优势与风险</h2>
+  <p class="kicker">Feasibility · Fluent Bit 方案细化</p>
+  <h2 class="h2">同事方案（Fluent Bit → DB）优势 · 待确认点 · 与 v2.13 对比</h2>
 
   <div class="pros-cons">
-    <div class="col pros anim-fade-left" data-anim="fade-left">
-      <h4>✅ 优势</h4>
+    <div class="col pros anim-fade-up" data-anim="fade-up">
+      <h4>✅ 已确认的优势（Fluent Bit 背书）</h4>
       <ul>
-        <li><strong>字段天然就有</strong>——log 文件里 lot_id / recipe_id 就是独立字段，入库时直接拆列，<strong>不需要 payload_json + 物化列这一套</strong></li>
-        <li><strong>不依赖 RV 可用性</strong>——RV 是工厂消息总线，故障时 log 文件还在写</li>
-        <li><strong>写入路径更短</strong>——跳过 RV + API，理论上每事件延迟 < 1s</li>
-        <li><strong>可补历史数据</strong>——用旧 log 文件回填任意时间段数据（RV 消息队列通常只保留最近几天）</li>
+        <li><strong>机台性能无影响</strong>——Fluent Bit 用 <code>inotify</code> 文件监控，<strong>CPU &lt; 1%</strong>、内存几十 MB，工业级已在大量晶圆厂部署；<strong>不会强机台</strong>（之前担心的 tail -f 方案已经淘汰）</li>
+        <li><strong>log 已可获取上传</strong>——同事这边已有成熟的 log 采集链路，不是从 0 开始</li>
+        <li><strong>字段天然独立列</strong>——lot_id / recipe_id / chamber_id 在 log 里就是独立字段，<strong>写入时直接 INSERT 成列</strong>，等于 v2.13 的物化列在源头就解决了</li>
+        <li><strong>不需要 payload_json + 物化列 + 回填脚本</strong>——整条链路都省了</li>
+        <li><strong>写入路径更短</strong>——跳过 RV + 后端 API，每事件延迟 &lt; 1s；RV 故障（总线抖动/断连）时 log 方案不受影响</li>
+        <li><strong>可补历史数据</strong>——旧 log 文件能回填任意时间段，RV 消息队列通常只保留最近 3–7 天</li>
       </ul>
     </div>
-    <div class="col cons anim-fade-right" data-anim="fade-right">
-      <h4>⚠️ 风险（当前阶段不能做）</h4>
+    <div class="col cons anim-fade-up" data-anim="fade-up" data-anim-delay="150">
+      <h4>⚠️ 待确认点（非 blocker）</h4>
       <ul>
-        <li><strong>需要机台权限</strong>——要拿到每台设备 log 文件的读取权限和路径，改走 RV → 工厂 MES 团队同意；当前 RV 路径是<strong>已在生产稳定运行的合同方案</strong></li>
-        <li><strong>多机台格式不统一</strong>——不同机台（AMAT / Applied Materials / 自研）log 格式不同，正则脚本要写多套</li>
-        <li><strong>实时性挑战</strong>——要 tail -f / 文件监控，脚本挂了要告警；RV 自带确认机制（ACK / NACK）</li>
-        <li><strong>当前问题在查询侧</strong>——v2.13 不动写入架构、只动查询索引，<strong>改动最小、最快解决问题</strong>。log 方案是未来架构演进，不是本次修复</li>
+        <li><strong>多机台格式</strong>——AMAT / Applied Materials / 自研机台 log 正则不同，Fluent Bit 配置文件要多套；<strong>已可通过 regex parser + 多 tail 源解决</strong>（非技术难题，需盘点）</li>
+        <li><strong>RV 合同兼容性</strong>——当前 RV 路径是<strong>已在生产稳定运行的合同方案</strong>，新方案不替代，并行部署；写入双轨期间两边数据一致性需确认</li>
+        <li><strong>语义对齐</strong>——log 字段映射到 DT_EVENT_RAW 各列的规则需和当前 RV payload_json 对齐（lot_id / alarm_code / event_name 命名一致）</li>
+        <li><strong>异常处理</strong>——正则解析失败的行要落 error 表并告警；Fluent Bit 本身支持 <code>@ERROR</code> 路由</li>
       </ul>
     </div>
   </div>
 
-  <div class="cta-bar anim-fade-up" data-anim="fade-up" style="margin-top:24px">
-    <div class="cta-title">结论</div>
-    <div class="cta-sub">同事方案<strong>可行但不在本次范围内</strong>。本次 v2.13 是写入侧不动、查询侧根治的最小成本方案。log 直连方案建议<strong>作为 P2 架构立项</strong>，后续争取机台权限后推进。</div>
+  <div style="margin-top:20px">
+    <h4 style="font-size:13px;color:var(--text-3);font-weight:700;letter-spacing:0.05em;margin-bottom:10px;text-transform:uppercase">📊 Fluent Bit vs v2.13 对比</h4>
+    <div class="grid g2">
+      <div class="card anim-fade-left" data-anim="fade-left">
+        <h4>本次 v2.13（已完成）</h4>
+        <ul style="padding-left:18px;font-size:13px;line-height:1.7;color:var(--text-2)">
+          <li>写入架构<strong>不动</strong>（继续 RV），查询侧根治</li>
+          <li>DDL 变更：加 3 列 + 4 索引 + 触发器</li>
+          <li>历史回填 998 万行 ≈ 15 min</li>
+          <li><strong>今天就能部署</strong>，风险可控</li>
+        </ul>
+      </div>
+      <div class="card anim-fade-right" data-anim="fade-right">
+        <h4>同事 Fluent Bit 方案（建议 P2 立项）</h4>
+        <ul style="padding-left:18px;font-size:13px;line-height:1.7;color:var(--text-2)">
+          <li>写入架构<strong>升级</strong>，从源头根除 lot_id 不在列里的问题</li>
+          <li>新表 schema 设计（字段直接拆列）</li>
+          <li>Fluent Bit 配置 + 多机台正则 + error 路由 + 监控</li>
+          <li><strong>需要 2–3 周</strong>（配置 + 测试 + 合同走流程）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="cta-bar anim-fade-up" data-anim="fade-up" style="margin-top:16px">
+    <div class="cta-title">建议：v2.13 今天部署 · Fluent Bit 方案 P2 立项推进</div>
+    <div class="cta-sub">两套方案<strong>不冲突</strong>——v2.13 用最小改动解决当前紧急问题（现场查询 500 秒超时），Fluent Bit 是架构升级，让新写入的事件从源头就是好数据。后续 log 方案上线后，v2.13 的物化列 + 触发器仍可保留用于兼容过渡期数据。</div>
   </div>
 
   <div class="slide-number" data-current="9" data-total="13" style="position:absolute;bottom:24px;right:72px"></div>
-  <div class="notes">可行性口播：同事方案能解决同一根因，但要改写入架构、要机台权限。v2.13 不动写入、只动查询索引，最快见效。log 方案作为后续立项。</div>
+  <div class="notes">可行性口播：同事用的 Fluent Bit 是工业级的，CPU<1% 不影响机台，log 已能拿到，所以可行性比之前判断高很多。两套方案不冲突——v2.13 快、log 方案彻底，建议并行推进。</div>
 </section>
 
 <!-- ============================================================
