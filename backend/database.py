@@ -166,11 +166,12 @@ def init_db():
         logger.warning(f"[database] 创建 DT 性能索引时出错（忽略，降级处理）：{e}")
     # test31: 平台表二级索引幂等补齐——建表 SQL 只有主键，ORM 的 index=True
     # 对已存在的表不生效；这些表按 machine_id/timestamp 查询全表扫
+    # 注：_ensure_index 签名为 (eng, table, index_name, columns)，勿写反
     try:
-        _ensure_index(engine, "IDX_MACHINE_EVENTS_MID_TS", "machine_events", "(machine_id, \"TIMESTAMP\")")
-        _ensure_index(engine, "IDX_ALARMS_MID_TS", "alarms", "(machine_id, \"TIMESTAMP\")")
-        _ensure_index(engine, "IDX_OHT_POS_OID_TS", "oht_positions", "(oht_id, \"TIMESTAMP\")")
-        _ensure_index(engine, "IDX_LOTS_MID_STATUS", "lots", "(machine_id, status)")
+        _ensure_index(engine, "machine_events", "IDX_MACHINE_EVENTS_MID_TS", "(machine_id, \"TIMESTAMP\")")
+        _ensure_index(engine, "alarms", "IDX_ALARMS_MID_TS", "(machine_id, \"TIMESTAMP\")")
+        _ensure_index(engine, "oht_positions", "IDX_OHT_POS_OID_TS", "(oht_id, \"TIMESTAMP\")")
+        _ensure_index(engine, "lots", "IDX_LOTS_MID_STATUS", "(machine_id, status)")
     except Exception as e:
         logger.warning(f"[database] 创建平台表索引时出错（忽略，降级处理）：{e}")
 
@@ -197,6 +198,10 @@ def _ensure_missing_columns(eng):
         ("machines",      "display_order", "NUMBER(10)",  "INTEGER DEFAULT 0", "DEFAULT 0"),
         ("floor_areas",   "display_order", "NUMBER(10)",  "INTEGER DEFAULT 0", "DEFAULT 0"),
         ("users",         "password_hash", "VARCHAR2(255)", "TEXT",             ""),
+        # ver2.13 雷区A：DT_EVENT_RAW 物化列（存量行由 tests/backfill_event_columns.py 回填）
+        ("dt_event_raw",  "lot_id",        "VARCHAR2(64)",  "TEXT",             ""),
+        ("dt_event_raw",  "event_name",    "VARCHAR2(128)", "TEXT",             ""),
+        ("dt_event_raw",  "alarm_code",    "VARCHAR2(64)",  "TEXT",             ""),
     ]
     with eng.connect() as conn:
         for table, column, ora_dtype, lite_dtype, ora_default in specs:
@@ -288,12 +293,24 @@ def _ensure_dt_perf_indexes(eng):
     两列 LIKE OR。machines.py 已把 Q5 拆为 received/event 两分支单列谓词，
     此处补复合索引让主路径（received 分支）全索引命中：
     - DT_EVENT_RAW(PARSE_STATUS, RECEIVED_TS_UTC)  今日产量 received 分支
+
+    ver2.12.2 补（测试报告 test31 雷区B）：tool_id IN (...) ORDER BY raw_id DESC
+    的实时模式/事件详情 prev 查询，(tool_id) 单列索引下要回表排序整机台
+    17 万行（实测 490s）；补 (tool_id, raw_id) 复合索引走降序范围扫直接吐序：
+    - DT_EVENT_RAW(TOOL_ID, RAW_ID)   实时模式 / 详情 prev/next / rvmessages
+    ver2.13 补（测试报告雷区A）：payload_json CLOB LIKE 全表扫治理的物化列索引。
+    Oracle 不收录全 NULL 行，lot/alarm 事件占比低，索引天然稀疏体积小：
+    - DT_EVENT_RAW(LOT_ID)     lots/ai_tools 的 lot 等值查询
+    - DT_EVENT_RAW(ALARM_CODE) ai_tools 告警存在性查询（IS NOT NULL）
     """
     specs = [
         ("dt_event_raw",      "IDX_DT_EVENT_RAW_EVT_TS",      "(event_ts_utc)"),
         ("dt_state_snapshot", "IDX_SNAPSHOT_TOOL_TS",         "(tool_id, snapshot_ts_utc)"),
         ("dt_event_std",      "IDX_STD_TOOL_TS",              "(tool_id, created_ts_utc)"),
         ("dt_event_raw",      "IDX_DT_EVENT_RAW_PARSED_RECV", "(parse_status, received_ts_utc)"),
+        ("dt_event_raw",      "IDX_DT_EVENT_RAW_TOOL_RAW",    "(tool_id, raw_id)"),
+        ("dt_event_raw",      "IDX_DT_EVENT_RAW_LOT",         "(lot_id)"),
+        ("dt_event_raw",      "IDX_DT_EVENT_RAW_ALARM",       "(alarm_code)"),
     ]
     for table, index_name, columns in specs:
         try:

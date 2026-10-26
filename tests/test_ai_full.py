@@ -87,8 +87,9 @@ def diagnose_environment():
         # 4. V3WTG 本地事件检查
         try:
             from models import DT_EVENT_RAW
+            # ver2.13 雷区A：lot_id 已物化列，等值过滤替代 payload_json LIKE 全表扫
             v3wtg_events = db.query(DT_EVENT_RAW).filter(
-                DT_EVENT_RAW.payload_json.like('%V3WTG%')
+                DT_EVENT_RAW.lot_id == 'V3WTG'
             ).count()
             diagnostics["v3wtg_local_events"] = v3wtg_events
             print(f"  V3WTG 本地事件数: {v3wtg_events}")

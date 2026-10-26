@@ -50,9 +50,11 @@ if need <= 0:
 
 now = datetime.datetime.now()
 span_days = 30
+# ver2.13: 直写 SQL 不触发 ORM before_insert 监听器，物化列在此显式填
+#（lot_id 取自 body；event_name/alarm_code 灌库数据本无此键，留 NULL）
 sql = ("insert into dt_event_raw "
-       "(raw_id, tool_id, source_system, source_message_id, received_ts_utc, event_ts_utc, payload_json, parse_status, error_message) "
-       "values (:1, :2, :3, :4, :5, :6, :7, :8, :9)")
+       "(raw_id, tool_id, source_system, source_message_id, received_ts_utc, event_ts_utc, payload_json, parse_status, error_message, lot_id, event_name, alarm_code) "
+       "values (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11, :12)")
 
 EVENT_TYPES = ["STATE", "SENSOR", "TRANSFER", "ALARM"]
 STATES = ["RUN", "IDLE", "DOWN", "PM", "SETUP"]
@@ -79,7 +81,8 @@ def make_row(i):
         payload = json.dumps({"msg_type": "VFEI", "version": "1.0", "data": body}, separators=(",", ":"))
     else:
         payload = json.dumps(body, separators=(",", ":"))
-    return (f"SEED{i:010d}", tool, "MES_SIM", f"MSG{i:010d}", ts_s, evt_ts, payload, "NEW", None)
+    return (f"SEED{i:010d}", tool, "MES_SIM", f"MSG{i:010d}", ts_s, evt_ts, payload, "NEW", None,
+            body.get("lot_id"), body.get("event_name"), body.get("alarm_code"))
 
 t0 = time.time()
 inserted = 0

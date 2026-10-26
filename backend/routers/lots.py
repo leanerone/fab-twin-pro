@@ -200,10 +200,10 @@ def list_lots(
 @router.get("/{lot_id}", response_model=LotOut)
 def get_lot(lot_id: str, db: Session = Depends(get_db)):
     """获取单个 Lot 详情"""
-    # 使用 payload_json LIKE 过滤，避免全表扫描
+    # ver2.13 雷区A：物化列等值过滤（原 payload_json LIKE '%lot%' 千万级全表扫 645s）
     rows = (
         db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.payload_json.like(f'%{lot_id}%'))
+        .filter(DT_EVENT_RAW.lot_id == lot_id)
         .order_by(DT_EVENT_RAW.raw_id.desc())
         .limit(500)
         .all()
@@ -239,10 +239,10 @@ def get_lot(lot_id: str, db: Session = Depends(get_db)):
 @router.get("/{lot_id}/events", response_model=List[EventOut])
 def get_lot_events(lot_id: str, db: Session = Depends(get_db)):
     """获取该 Lot 加工时间段内的事件"""
-    # 使用 payload_json LIKE 过滤，避免全表扫描
+    # ver2.13 雷区A：物化列等值过滤（原 payload_json LIKE '%lot%' 全表扫 568s）
     rows = (
         db.query(DT_EVENT_RAW)
-        .filter(DT_EVENT_RAW.payload_json.like(f'%{lot_id}%'))
+        .filter(DT_EVENT_RAW.lot_id == lot_id)
         .order_by(DT_EVENT_RAW.raw_id.desc())
         .limit(5000)
         .all()

@@ -690,30 +690,33 @@ async def f7_mes_lot(request: Request):
     if not lot_id:
         return fail("lot_id 必填")
     try:
-        # 查该 Lot 相关事件（payload_json 里 lot_id/batch_id 匹配）
-        # payload_json 是 CLOB，按 lot_id 匹配只能扫描，因此靠「窗口 + 行数上限 + 排序方向」三件套压住耗时：
-        #   - 窗口：默认只回溯 F7_DEFAULT_WINDOW_DAYS 天
-        #   - 上限：ROWNUM <= F7_EVENT_LIMIT，同时也是 stopkey 的停止条件
-        #   - 排序方向：必须用 RAW_ID **降序**。升序时 Oracle 得扫完整个范围才知道哪些是最小
-        #     raw_id，无法提前停止（实测读超时 60s）；降序时可用 RAW_ID 主键索引倒序扫描 +
-        #     stopkey，凑够 N 行立刻返回，通常秒级。
-        # 取回后在 Python 侧按 raw_id 升序排回来，保证时间线顺序正确。
+        # 查该 Lot 相关事件
+        # ver2.13 雷区A：lot_id 已物化列（IDX_DT_EVENT_RAW_LOT），主路径走索引等值，
+        # 不再做 payload_json CLOB LIKE 全表扫。前提：DT_EVENT_RAW 已回填 +
+        # DBA 触发器（sql/v2.13_add_event_extract_columns.sql）已就位，否则新行 lot_id 为 NULL。
+        # batch_id 兜底未物化，仍按「窗口 + 降序 + ROWNUM」三件套 LIKE 扫描压住耗时。
         window_days = int(body.get("days") or F7_DEFAULT_WINDOW_DAYS)
         since = (datetime.now() - timedelta(days=window_days)).strftime("%Y-%m-%d %H:%M:%S")
         ts_expr = _event_ts_expr()
-        sql = f"""SELECT * FROM (
+        sql_eq = f"""SELECT * FROM (
+                   SELECT tool_id, raw_id, {ts_expr} AS event_ts, payload_json
+                   FROM dt_event_raw
+                   WHERE {_time_filter_expr()} >= {_since_expr()}
+                     AND lot_id = :lid_eq
+                   ORDER BY raw_id DESC
+                 ) WHERE ROWNUM <= {F7_EVENT_LIMIT}"""
+        cols, rows = exec_query(sql_eq, {"since": since, "lid_eq": lot_id})
+        data = rows_to_list(cols, rows)
+        # 兜底：匹配 batch_id（未物化，保留窗口化 LIKE）
+        if not data:
+            sql = f"""SELECT * FROM (
                    SELECT tool_id, raw_id, {ts_expr} AS event_ts, payload_json
                    FROM dt_event_raw
                    WHERE {_time_filter_expr()} >= {_since_expr()}
                      AND payload_json LIKE :lid
                    ORDER BY raw_id DESC
                  ) WHERE ROWNUM <= {F7_EVENT_LIMIT}"""
-        params = {"since": since, "lid": f"%\"lot_id\": \"{lot_id}\"%"}
-        cols, rows = exec_query(sql, params)
-        data = rows_to_list(cols, rows)
-        # 兜底：也匹配 batch_id
-        if not data:
-            params["lid"] = f"%\"batch_id\": \"{lot_id}\"%"
+            params = {"since": since, "lid": f"%\"batch_id\": \"{lot_id}\"%"}
             cols, rows = exec_query(sql, params)
             data = rows_to_list(cols, rows)
         if not data:

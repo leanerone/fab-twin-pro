@@ -1,7 +1,44 @@
 """数据模型（SQLAlchemy ORM）- 整合用户现有4张表 + 扩展新表"""
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, Identity
+import json
+
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, Identity, event
 
 from database import Base
+
+
+def extract_payload_fields(payload_text):
+    """从 payload JSON 提取物化列字段 (lot_id, event_name, alarm_code)。
+
+    ver2.13 雷区A治理：payload_json 是 CLOB，14 处 LIKE '%...%' 查询在
+    千万级下全表扫描（lot 命中 645s）。物化为普通列后走索引等值查询。
+    兼容 VFEI 信封结构（{"msg_type":"VFEI","data":{...}}）与平铺结构；
+    非 JSON / 缺字段返回 (None, None, None)；超长截断防空列报错。
+    写入路径（ORM before_insert）与回填脚本 tests/backfill_event_columns.py 共用。
+    """
+    if not payload_text:
+        return None, None, None
+    try:
+        p = json.loads(payload_text)
+    except Exception:
+        return None, None, None
+    if not isinstance(p, dict):
+        return None, None, None
+    d = p.get("data") if isinstance(p.get("data"), dict) else p
+
+    def _norm(v, maxlen):
+        """归一：None/空串/'NULL'/'null' → None；其余截断到列宽"""
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s or s.upper() == "NULL":
+            return None
+        return s[:maxlen]
+
+    return (
+        _norm(d.get("lot_id"), 64),
+        _norm(d.get("event_name"), 128),
+        _norm(d.get("alarm_code"), 64),
+    )
 
 
 
@@ -20,6 +57,25 @@ class DT_EVENT_RAW(Base):
     payload_json = Column(Text)
     parse_status = Column(String(255), default="NEW")
     error_message = Column(String(255), nullable=True)
+    # ver2.13: 物化列（雷区A治理）——由 before_insert 监听器从 payload_json 自动提取
+    lot_id = Column(String(64), nullable=True)
+    event_name = Column(String(128), nullable=True)
+    alarm_code = Column(String(64), nullable=True)
+
+
+@event.listens_for(DT_EVENT_RAW, "before_insert")
+def _fill_extracted_columns(mapper, connection, target):
+    """ORM 写入统一入口：插入时自动从 payload_json 提取三列。
+
+    覆盖 rvmessages / simulator / ods / debug / seed_data 等全部 ORM 写入点；
+    直写 SQL 的路径（tests/seed_10m.py、现场 WinForm）由各自脚本填列或
+    DBA 触发器（sql/v2.13_add_event_extract_columns.sql）兜底。
+    """
+    if target.lot_id is None and target.event_name is None and target.alarm_code is None:
+        lot, evt, alarm = extract_payload_fields(target.payload_json)
+        target.lot_id = lot
+        target.event_name = evt
+        target.alarm_code = alarm
 
 
 class DT_EVENT_RAW_CUR(Base):

@@ -201,8 +201,8 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
     """查询告警（从 DT_EVENT_RAW 中 alarm_code IS NOT NULL 的事件提取）"""
     tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
 
-    # 从 DT_EVENT_RAW payload 中查告警事件
-    # 用原生 SQL 提取 JSON 中的 alarm_code（Oracle 12c+ 可用 JSON_VALUE，10g 用 LIKE）
+    # 从 DT_EVENT_RAW 物化列查告警事件
+    # ver2.13 雷区A：alarm_code 已物化（原三重 CLOB LIKE 千万级全表扫；11g/12c/19c 通用）
     try:
         if tool_ids:
             # 查有告警的事件
@@ -210,9 +210,7 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
                 SELECT raw_id, tool_id, received_ts_utc, payload_json
                 FROM dt_event_raw
                 WHERE tool_id IN :tool_ids
-                  AND payload_json LIKE '%"alarm_code":%'
-                  AND payload_json NOT LIKE '%"alarm_code": null%'
-                  AND payload_json NOT LIKE '%"alarm_code":"null"%'
+                  AND alarm_code IS NOT NULL
                   AND rownum <= :limit
                 ORDER BY raw_id DESC
             """)
@@ -222,9 +220,7 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
             sql = text("""
                 SELECT raw_id, tool_id, received_ts_utc, payload_json
                 FROM dt_event_raw
-                WHERE payload_json LIKE '%"alarm_code":%'
-                  AND payload_json NOT LIKE '%"alarm_code": null%'
-                  AND payload_json NOT LIKE '%"alarm_code":"null"%'
+                WHERE alarm_code IS NOT NULL
                   AND rownum <= :limit
                 ORDER BY raw_id DESC
             """)
@@ -282,7 +278,7 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
 
     return {
         "answer": answer,
-        "sql": "SELECT * FROM dt_event_raw WHERE payload_json LIKE '%alarm_code%' ORDER BY raw_id DESC",
+        "sql": "SELECT * FROM dt_event_raw WHERE alarm_code IS NOT NULL ORDER BY raw_id DESC",
         "table_data": table_data,
         "jump_timestamp": alarms[0]["timestamp"] if alarms else None,
         "jump_machine_id": machine_id,
@@ -417,31 +413,28 @@ def get_yield_stats(db: Session, machine_id: str = None) -> dict:
     tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
 
     # 从 DT_EVENT_RAW 提取唯一 lot_id
+    # ver2.13 雷区A：lot_id 已物化为列（原 JSON_VALUE+LIKE 千万级全表扫；物化列 11g/12c/19c 通用）
     try:
         if tool_ids:
             sql = text("""
-                SELECT DISTINCT JSON_VALUE(payload_json, '$.lot_id') as lot_id,
-                       tool_id
+                SELECT DISTINCT lot_id, tool_id
                 FROM dt_event_raw
                 WHERE tool_id IN :tool_ids
-                  AND payload_json LIKE '%"lot_id":%'
-                  AND JSON_VALUE(payload_json, '$.lot_id') IS NOT NULL
-                  AND JSON_VALUE(payload_json, '$.lot_id') NOT IN ('NULL', 'null', '')
+                  AND lot_id IS NOT NULL
             """)
             rows = db.execute(sql, {"tool_ids": tuple(tool_ids) if len(tool_ids) > 1 else tool_ids[0]}).fetchall()
         else:
             sql = text("""
-                SELECT DISTINCT JSON_VALUE(payload_json, '$.lot_id') as lot_id,
-                       tool_id
-                FROM dt_event_raw
-                WHERE payload_json LIKE '%"lot_id":%'
-                  AND JSON_VALUE(payload_json, '$.lot_id') IS NOT NULL
-                  AND JSON_VALUE(payload_json, '$.lot_id') NOT IN ('NULL', 'null', '')
-                  AND rownum <= 10000
+                SELECT DISTINCT lot_id, tool_id
+                FROM (
+                    SELECT lot_id, tool_id FROM dt_event_raw
+                    WHERE lot_id IS NOT NULL
+                )
+                WHERE rownum <= 10000
             """)
             rows = db.execute(sql).fetchall()
-    except Exception as e:
-        # JSON_VALUE 不支持（Oracle 10g），用 Python 解析
+    except Exception:
+        # 物化列不存在（旧库未迁移），回退 Python 解析
         return _get_yield_stats_fallback(db, machine_id)
 
     # 统计唯一 lot_id
@@ -491,7 +484,7 @@ def get_yield_stats(db: Session, machine_id: str = None) -> dict:
 
     return {
         "answer": answer,
-        "sql": "SELECT DISTINCT lot_id FROM dt_event_raw payload_json",
+        "sql": "SELECT DISTINCT lot_id FROM dt_event_raw WHERE lot_id IS NOT NULL",
         "table_data": table_data,
     }
 
@@ -766,8 +759,9 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
         answer_parts.append(f"(跳过 MES 查询)")
 
     # 2. 查 FabTwin 设备事件
+    # ver2.13 雷区A：物化列等值过滤（原 payload_json LIKE '%lot%' 千万级全表扫）
     events = db.query(DT_EVENT_RAW).filter(
-        DT_EVENT_RAW.payload_json.like(f'%{lot_id}%')
+        DT_EVENT_RAW.lot_id == lot_id
     ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(50).all()
 
     if events:
@@ -830,7 +824,7 @@ def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
 
     return {
         "answer": final_answer,
-        "sql": f"SELECT * FROM dt_event_raw WHERE payload_json LIKE '%{lot_id}%' ORDER BY raw_id DESC",
+        "sql": f"SELECT * FROM dt_event_raw WHERE lot_id = '{lot_id}' ORDER BY raw_id DESC",
         "table_data": table_data,
         "jump_timestamp": jump_timestamp if machine_online else None,
         "jump_machine_id": jump_machine_id if machine_online else None,
@@ -892,8 +886,9 @@ def get_wafer_flow(db: Session, machine_id: str, lot_id: str = None) -> dict:
     q = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
 
     # 如果指定了 lot_id，按 lot_id 过滤
+    # ver2.13 雷区A：物化列等值过滤（原 payload_json LIKE '%"lot"%' 全表扫）
     if lot_id:
-        q = q.filter(DT_EVENT_RAW.payload_json.like(f'%"{lot_id}"%'))
+        q = q.filter(DT_EVENT_RAW.lot_id == lot_id)
 
     # 取最近 5000 条事件（足够覆盖一个完整 Lot 的 25 片流程）
     rows = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
@@ -1159,8 +1154,9 @@ def get_oxe_lot_summary(db: Session, machine_id: str, date: str = None, lot_id: 
     q = db.query(DT_EVENT_RAW).filter(DT_EVENT_RAW.tool_id.in_(tool_ids))
 
     # 如果指定了 lot_id，按 lot_id 过滤
+    # ver2.13 雷区A：物化列等值过滤（原 payload_json LIKE '%"lot"%' 全表扫）
     if lot_id:
-        q = q.filter(DT_EVENT_RAW.payload_json.like(f'%"{lot_id}"%'))
+        q = q.filter(DT_EVENT_RAW.lot_id == lot_id)
 
     rows = q.order_by(DT_EVENT_RAW.raw_id.desc()).limit(5000).all()
 
