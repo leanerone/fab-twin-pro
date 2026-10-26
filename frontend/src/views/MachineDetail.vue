@@ -5,17 +5,13 @@ import { useAppStore } from '../stores/app'
 import { useModelStore } from '../stores/model'
 import { api } from '../api'
 import { stateLabels } from '../composables/useThree'
+import { parseEventAction } from '../composables/useEventActionMapping'
 import MachineModel3D from '../components/MachineModel3D.vue'
-import MachineModel2D from '../components/MachineModel2D.vue'
-import MachineIsoView from '../components/MachineIsoView.vue'
-import MachineOxeView from '../components/MachineOxeView.vue'
-import MachineVpoView from '../components/MachineVpoView.vue'
 import MachineVpo3DView from '../components/MachineVpo3DView.vue'
 import MachineMotion2D from '../components/MachineMotion2D.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
 import AiAssistant from '../components/AiAssistant.vue'
 import HistoryReplay from '../components/HistoryReplay.vue'
-import { parseEventAction } from '../composables/useEventActionMapping'
 
 // 时间戳解析：统一处理东八区时间
 // 后端返回的时间戳已去掉Z后缀，但需兼容历史数据可能带Z的情况
@@ -59,7 +55,6 @@ const playbackStart = ref(0)
 const playbackEnd = ref(0)
 const rightTab = ref('replay')
 const aiAssistantRef = ref(null)
-const oxeViewRef = ref(null)  // OXE 看板：回放跳转时需重置其只增不减的已播游标
 const motion2dRef = ref(null) // Motion2D 视图：回放跳转时需清空动画状态重新补放
 const aiPrefillQuestion = ref('')  // 从回放 Tab 传递过来的预填问题
 const currentState = ref('idle')
@@ -123,7 +118,7 @@ function setRangeAround(targetMs) {
 }
 
 // === 视图模式（根据机台型号自动选择） ===
-const viewMode = ref('loading')           // loading / 3d / 2d / iso / vpo / vpo3d
+const viewMode = ref('loading')           // loading / motion2d / 3d / vpo3d / external
 const currentModelConfig = ref(null)
 const modelConfigReady = ref(false)
 const loadErrorMsg = ref('')
@@ -131,21 +126,13 @@ const loadErrorMsg = ref('')
 function resolveViewMode(machineModel) {
   const vm = modelStore.getViewMode(machineModel)
   const cfg = modelStore.getModelById(modelStore.resolveModelId(machineModel))
-  // 视图选择完全由机型配置驱动（view_mode / views_config / animation_config），
-  // 不再按机台号前缀分流；新机型在 machine_model_configs 里绑定对应配置即可
-  // OXE Canvas 看板
-  if (vm === 'oxe' || cfg?.views_config?.view_2d?.type === 'oxe') return 'oxe'
-  // Motion JSON 2D 动画视图（绑定 animation_config 的机型）
+  // 视图选择完全由机型配置驱动（view_mode / views_config / animation_config）；
+  // 2D 已统一为 motion2d 管线，旧 oxe/vpo/iso 2D 组件归档，未知配置回退 3D
   if (vm === 'motion2d' || cfg?.animation_config?.schema_version) return 'motion2d'
-  // PODOPENER机台：如果view_3d.type=vpo则优先显示3D，否则显示2D
   if (vm === 'vpo' || vm === 'svg-vpo' || vm === 'vpo3d' || vm === 'vpo-3d') {
-    // 默认优先展示 3D 视图（更具沉浸感）
     if (cfg?.views_config?.view_3d?.type === 'vpo') return 'vpo3d'
-    return 'vpo'
+    return '3d'
   }
-  if (vm === 'isometric' || vm === 'iso') return 'iso'
-  if (vm === 'hybrid') return '2d'
-  if (vm === 'svg') return '2d'
   return '3d'
 }
 
@@ -153,35 +140,16 @@ const availableViews = computed(() => {
   const cfg = currentModelConfig.value
   if (!cfg) return []
   const views = []
-  // OXE 看板：由机型配置决定（view_mode=oxe 或 view_2d.type=oxe），不再按机台号前缀判断
-  // test31：不再提前 return——views_config 里声明的 3D/等角视图继续追加，
-  // OXE 机台同时可见「OXE看板 + 3D模型 + 2.5D等角」，默认仍是看板
-  const isOxe = cfg.view_mode === 'oxe' || cfg.views_config?.view_2d?.type === 'oxe'
-  if (isOxe) {
-    views.push({ key: 'oxe', label: '📊 OXE看板' })
-  }
   // Motion JSON 2D 动画视图：绑定 animation_config（含 schema_version）的机型
-  // 不提前 return——views_config 里声明的 3D 视图继续追加（与 OXE 多视图同思路）
   const hasMotion = cfg.view_mode === 'motion2d' || !!cfg.animation_config?.schema_version
   if (hasMotion) {
     views.push({ key: 'motion2d', label: '🎬 Motion动画' })
   }
-  const isVpo = cfg.view_mode === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' ||
-                 cfg.views_config?.view_2d?.type === 'vpo' || cfg.views_config?.view_3d?.type === 'vpo'
-  if (!isVpo && (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid')) {
-    views.push({ key: '3d', label: '🎯 3D模型' })
-  }
-  if (cfg.view_mode === 'isometric' || cfg.view_mode === 'iso' || cfg.views_config?.view_2d?.type === 'isometric') {
-    views.push({ key: 'iso', label: '📐 2.5D等角' })
-  }
-  if (cfg.view_mode === 'vpo' || cfg.view_mode === 'svg-vpo' || cfg.views_config?.view_2d?.type === 'vpo') {
-    views.push({ key: 'vpo', label: '📋 PODOPENER 2D' })
-  }
-  if (cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d' || cfg.views_config?.view_3d?.type === 'vpo') {
+  // 3D 视图：vpo 专用 3D 或通用 threejs
+  if (cfg.views_config?.view_3d?.type === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d') {
     views.push({ key: 'vpo3d', label: '🎯 PODOPENER 3D' })
-  }
-  if (!isVpo && (cfg.views_config?.view_2d?.type === 'svg' || cfg.view_mode === 'svg' || cfg.view_mode === 'hybrid')) {
-    views.push({ key: '2d', label: '📋 2D视图' })
+  } else if (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid') {
+    views.push({ key: '3d', label: '🎯 3D模型' })
   }
   if (views.length === 0) views.push({ key: '3d', label: '🎯 3D模型' })
   return views
@@ -896,9 +864,7 @@ function commitSeek(targetTime) {
   const idx = bisectLeft(historyData, targetTime, (e) => e._ts)
   playbackIdx = idx >= 0 ? idx : historyData.length
 
-  // OXE 看板按「只增不减」的已播游标过滤事件，往回跳时新事件全被滤掉、画面会卡在
-  // 上一批 Lot 的状态；重建事件前先让它重置游标并清空状态，保证跟得上跳转
-  oxeViewRef.value?.resetReplayCursor?.()
+  // Motion2D 视图：回放 seek 后按新事件流重建状态
   motion2dRef.value?.resetReplayCursor?.()
 
   events.value = []
@@ -1151,7 +1117,7 @@ onUnmounted(() => {
 <template>
   <div class="detail-page">
     <!-- 左侧视图区 -->
-    <div class="detail-viewer" :class="{ 'is-2d': viewMode === '2d' || viewMode === 'vpo' || viewMode === 'iso' || viewMode === 'motion2d', 'is-vpo': viewMode === 'vpo', 'is-oxe': viewMode === 'oxe' }">
+    <div class="detail-viewer" :class="{ 'is-2d': viewMode === 'motion2d' }">
       <!-- 视图模式切换按钮（多于1个视图时才显示，避免单按钮遮挡内容） -->
       <div v-if="modelConfigReady && availableViews.length > 1" class="view-mode-switcher">
         <button
@@ -1194,41 +1160,6 @@ onUnmounted(() => {
         :current-lot-id="currentLotId"
       />
 
-      <!-- 2D原理图视图 -->
-      <MachineModel2D
-        v-else-if="viewMode === '2d'"
-        :machine="machine"
-        :current-state="currentState"
-        :metrics="metrics"
-        :process-step="processStep"
-        :run-state="runState"
-        :current-lot-id="currentLotId"
-      />
-
-      <!-- 2.5D等角视图（OXE/DRM专用） -->
-      <MachineIsoView
-        v-else-if="viewMode === 'iso'"
-        :machine="machine"
-        :model-config="currentModelConfig"
-        :current-state="currentState"
-        :metrics="metrics"
-        :run-state="runState"
-        :events="displayEvents"
-      />
-
-      <!-- PODOPENER 2D视图 -->
-      <MachineVpoView
-        v-else-if="viewMode === 'vpo'"
-        :machine="machine"
-        :model-config="currentModelConfig"
-        :current-state="currentState"
-        :metrics="metrics"
-        :run-state="runState"
-        :events="displayEvents"
-        :paused="mode === 'playback' && !playing"
-        :mode="mode"
-      />
-
       <!-- PODOPENER 3D视图 -->
       <MachineVpo3DView
         v-else-if="viewMode === 'vpo3d'"
@@ -1240,21 +1171,6 @@ onUnmounted(() => {
         :events="displayEvents"
         :paused="mode === 'playback' && !playing"
         :mode="mode"
-      />
-
-      <!-- OXE Canvas 看板（Vue 组件，支持回放驱动） -->
-      <MachineOxeView
-        v-else-if="viewMode === 'oxe'"
-        ref="oxeViewRef"
-        :machine="machine"
-        :model-config="currentModelConfig"
-        :current-state="currentState"
-        :metrics="metrics"
-        :events="displayEvents"
-        :paused="mode === 'playback' && !playing"
-        :mode="mode"
-        :speed="speed"
-        :current-lot-id="currentLotId"
       />
 
       <!-- Motion JSON 2D 动画视图（新机型：绑定 SVG + Motion JSON） -->
@@ -1457,30 +1373,6 @@ onUnmounted(() => {
   font-size: 11px;
 }
 
-/* VPO视图专用样式：按钮移到顶部两侧，避免遮挡PORT2和机台主体 */
-.detail-viewer.is-vpo .view-mode-switcher {
-  left: 14px;
-  right: auto;
-  transform: none;
-  top: 14px;
-  z-index: 20;
-}
-
-.detail-viewer.is-vpo .vms-btn {
-  padding: 6px 12px;
-  font-size: 11px;
-  background: rgba(13, 20, 36, 0.9);
-}
-
-.detail-viewer.is-vpo .back-btn {
-  top: 14px;
-  right: 14px;
-  padding: 6px 12px;
-  font-size: 11px;
-  z-index: 20;
-  background: rgba(13, 20, 36, 0.9);
-}
-
 .vms-btn {
   padding: 8px 16px;
   border: 1px solid var(--border);
@@ -1520,36 +1412,6 @@ onUnmounted(() => {
   font-weight: 600;
   z-index: 10;
 }
-/* OXE Canvas 模式：为避免遮挡左侧 PORT1 Wafer Map 面板，back-btn 固定右上角；
-   同时为顶部切换按钮区 / 底部播放条预留 padding，确保 Canvas 不画在遮挡区域下 */
-.detail-viewer.is-oxe {
-  padding: 58px 0 84px 0;
-  box-sizing: border-box;
-}
-.detail-viewer.is-oxe .back-btn {
-  left: auto;
-  right: 14px;
-  top: 14px;
-  padding: 6px 12px;
-  font-size: 11px;
-  z-index: 60;
-}
-/* OXE 模式：视图模式切换按钮移到左上角（与返回按钮左右对称，避开顶部中心及左右两侧 Wafer Map 面板） */
-.detail-viewer.is-oxe .view-mode-switcher {
-  left: 14px;
-  top: 14px;
-  right: auto;
-  transform: none;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 60;
-}
-.detail-viewer.is-oxe .vms-btn {
-  padding: 6px 12px;
-  font-size: 11px;
-  background: rgba(13, 20, 36, 0.92);
-}
-
 /* 2D模式下，返回按钮紧凑显示 */
 .detail-viewer.is-2d .back-btn {
   top: 10px;

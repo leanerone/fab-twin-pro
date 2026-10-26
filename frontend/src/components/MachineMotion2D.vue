@@ -244,7 +244,7 @@ watch(() => props.modelConfig?.model_id, () => {
 onMounted(loadAssets)
 onBeforeUnmount(() => { processedCount = 0 })
 
-// 供父组件 seek 时显式重置（与 MachineOxeView.resetReplayCursor 对齐）
+// 供父组件 seek 时显式重置（回放跳转时清空动画状态重新补放）
 defineExpose({
   resetReplayCursor: resetView,
 })
