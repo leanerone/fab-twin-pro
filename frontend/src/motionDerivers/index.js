@@ -6,10 +6,12 @@
  */
 import { createAmatMetsputDeriver } from './amatMetsput'
 import { createPodopenerDeriver } from './podopener'
+import { createOxeDeriver } from './oxe'
 
 const factories = {
   amat_metsput: createAmatMetsputDeriver,
   podopener: createPodopenerDeriver,
+  oxe: createOxeDeriver,
 }
 
 const instances = new Map()

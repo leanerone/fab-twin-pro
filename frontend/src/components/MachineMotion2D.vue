@@ -154,13 +154,17 @@ let processedCount = 0
 async function processEvent(ev, playMode) {
   const cfg = motionConfig.value
   if (!cfg || !svgHost.value) return
-  const stepName = String(ev?.event_name || ev?.event_code || '').toUpperCase()
+  let stepName = String(ev?.event_name || ev?.event_code || '').toUpperCase()
   if (!stepName) return
+  const extCfg = ext.value
+  // 事件名别名（ext.event_aliases）：同一动作的多种上报名（MIC/POD_PLACE/MOC/OPEN_DOOR…）
+  // 映射到 Motion JSON 的规范 step，避免为每个别名复制一份 motion
+  const alias = extCfg.event_aliases?.[stepName]
+  if (alias) stepName = String(alias).toUpperCase()
   const motion = (cfg.motions || []).find(m => String(m.step || '').toUpperCase() === stepName)
   if (!motion) return
 
   const payload = toMotionPayload(ev)
-  const extCfg = ext.value
   const deriver = getMotionDeriver(deriverName.value)
 
   let params = payload
