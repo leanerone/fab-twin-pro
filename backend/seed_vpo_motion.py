@@ -9,6 +9,7 @@ SVG 统一改造（feature/svg-unify 分支）：
 幂等：可重复执行。用法：backend 下 ./venv/Scripts/python.exe seed_vpo_motion.py
 """
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -19,12 +20,18 @@ from database import SessionLocal  # noqa: E402
 from models import MachineModelConfig  # noqa: E402
 
 MODEL_ID = "PODOPENER-2200"
+SVG_SRC = BASE_DIR.parent / "models" / "user" / "podopener-2200.svg"
+SVG_DST = BASE_DIR / "uploads" / "models" / "podopener-2200.svg"
 MOTION_JSON_PATH = BASE_DIR.parent / "models" / "user" / "podopener-2200.motion.json"
 
 
 def main():
     anim_text = MOTION_JSON_PATH.read_text(encoding="utf-8")
     anim = json.loads(anim_text)
+
+    # SVG 资产同步到 uploads（URL 由 views_config 引用）；
+    # 与 seed_oxe_motion.py 对齐，否则改了 models/user 里的源 SVG 副本不会生效。
+    shutil.copyfile(SVG_SRC, SVG_DST)
 
     views_config = {
         "view_3d": {"type": "vpo", "model_source": "/models/podopener-2200-3d.json",

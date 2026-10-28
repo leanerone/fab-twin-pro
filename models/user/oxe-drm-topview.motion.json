@@ -11256,6 +11256,111 @@
       ]
     },
     {
+      "step": "START",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "LOTSTAT_P1",
+          "when": "params.PORT == '1'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "PP-SELECT OK",
+              "fill": "#1f2933",
+              "fontSize": 8.5,
+              "strokeWidth": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "LOTSTAT_P2",
+          "when": "params.PORT == '2'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "PP-SELECT OK",
+              "fill": "#1f2933",
+              "fontSize": 8.5,
+              "strokeWidth": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "PS",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "LOTSTAT_P1",
+          "when": "params.PORT == '1'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "PROCESSING",
+              "fill": "#16a34a",
+              "fontSize": 8.5,
+              "strokeWidth": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "LOTSTAT_P2",
+          "when": "params.PORT == '2'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "PROCESSING",
+              "fill": "#16a34a",
+              "fontSize": 8.5,
+              "strokeWidth": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "MVOU",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "phase": 1,
+          "target_part_id": "LOTSTAT_P1",
+          "when": "params.PORT == '1'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "LOT OUT",
+              "fill": "#1f2933",
+              "fontSize": 8.5,
+              "strokeWidth": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "LOTSTAT_P2",
+          "when": "params.PORT == '2'",
+          "actions": [
+            {
+              "type": "text",
+              "content": "LOT OUT",
+              "fill": "#1f2933",
+              "fontSize": 8.5,
+              "strokeWidth": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
       "step": "PE",
       "enabled": true,
       "when": "true",

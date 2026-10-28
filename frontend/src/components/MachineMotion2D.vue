@@ -332,11 +332,44 @@ async function debugSendOnce() {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
-// 播放完整流程：与 backend/demo_amat_motion.py 相同的事件序列
-async function debugPlayFlow() {
-  if (debugPlaying.value || debugSending.value) return
+/**
+ * 按 deriver 选调试流程——不同机型的 Motion step 完全不同，硬编码一条全机型共用会导致
+ * "播放完整流程"实际只命中首尾 2 步（OXE/PODOPENER 都存在这个现象）。
+ * 各机型序列均来自其 Motion JSON 里实际存在的 step。
+ */
+function pickDebugFlow(deriver) {
   const LOT = 'DEMO_LOT01'
-  const seq = [
+  const PORT = '1'
+  if (deriver === 'oxe') {
+    return [
+      ['POD_PLACED', { PORT }, 3500],
+      ['START', { PORT }, 3000],       // LOTSTAT: PP-SELECT OK
+      ['PS', { PORT }, 3500],           // LOTSTAT: PROCESSING
+      ['PE', { PORT }, 3500],           // LOTSTAT 下一态
+      ['MVOU', { PORT }, 3500],         // LOTSTAT: LOT OUT
+      ['POD_REMOVED', { PORT }, 0],
+    ]
+  }
+  if (deriver === 'podopener') {
+    return [
+      ['POD_PLACED', { port_id: PORT, RunMode: 'PACKING' }, 2200],
+      ['COMPLETED_PORT_LOCK', { port_id: PORT }, 1800],
+      ['READ_BATTERY', { port_id: PORT }, 1800],
+      ['READ_TAG', { port_id: PORT, LOT_ID: LOT }, 1800],
+      ['BATCH_INFO_FROM_ECUI', { BATCH_ID: 'BT_DEMO01', LOT_ID: LOT, Qty: '25', RunMode: 'PACKING', RECIPE1: 'RCP_AU_01', PORT }, 2200],
+      ['OPEN_POD', { port_id: PORT }, 2500],
+      ['REACH_STAGE', { port_id: PORT }, 2000],
+      ['UI_CONFIRM', { port_id: PORT }, 2500],
+      ['CLOSE_POD', { port_id: PORT }, 2500],
+      ['ACK_UI_DOUBLECHECK', { port_id: PORT }, 1500],
+      ['REACH_POS', { port_id: PORT }, 2000],
+      ['WRITE_TAG', { port_id: PORT, LOT_ID: LOT }, 1800],
+      ['COMPLETED_PORT_UNLOCK', { port_id: PORT }, 1800],
+      ['POD_REMOVED', { port_id: PORT }, 0],
+    ]
+  }
+  // AMAT METSPUT 默认流程（与 backend/demo_amat_motion.py 对齐）
+  return [
     ['POD_PLACED', { SMIFPORTID: '1' }, 3500],
     ['BATCH_INFO_FROM_ECUI', { BATCH_ID: 'BT_DEMO01', LOT_ID: LOT, Qty: '25', RunMode: 'PACKING', RECIPE1: 'RCP_AU_01', PORT: '1' }, 3500],
     ['CASSETTE_ARRIVAL', { PORT: '1' }, 3500],
@@ -346,6 +379,11 @@ async function debugPlayFlow() {
     ['WAFER_PROCESS_COMPLETE', { LOT_ID: LOT, SLOT: '2' }, 5500],
     ['POD_REMOVED', { SMIFPORTID: '1' }, 0],
   ]
+}
+
+async function debugPlayFlow() {
+  if (debugPlaying.value || debugSending.value) return
+  const seq = pickDebugFlow(deriverName.value)
   debugPlaying.value = true
   try {
     // 开播前复位：清 deriver 业务状态（waferPosRegistry 等）+ 运动状态，

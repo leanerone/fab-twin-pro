@@ -8,10 +8,11 @@ OXE DRM 顶视图 SVG 资产生成器 v2.2（紧凑真实 cluster + 蛙腿叉形
 - 配色/质感对齐 models/user/amat_metsput.svg（金属渐变/法兰螺栓/彩虹晶圆）
 - 保留 motion 管线全部动画部件 id（与 oxe-drm-topview.motion.json 对应，勿改）
 - 左右材料详情面板（LOT/状态/完成 + 25 行 Wafer Map 三态）、左右告警消息面板、每槽晶圆条
-运行：python gen_oxe_svg.py（覆盖写同目录 oxe-drm-topview.svg）
+运行：python gen_oxe_svg.py（已定稿，默认拒绝覆盖；确需重生成加 --force）
 """
 import math
 import re
+import sys
 from pathlib import Path
 
 # ========== 几何常量（motion JSON / deriver 依赖，改动需同步） ==========
@@ -33,8 +34,9 @@ PA_DIST = 192
 PA_C = (round(HUB[0] + PA_DIST * math.cos(math.radians(PA_ANG)), 1),
         round(HUB[1] + PA_DIST * math.sin(math.radians(PA_ANG)), 1))
 PA_RX, PA_RY = 78, 64
-# load locks：LL1 右下 60°、LL2 左下 120°（严格镜像），同尺寸 74x68
-PORT_ANG = {"1": 60, "2": 120}
+# load locks：定稿布局 LL1(PORT1) 左下 120°、LL2(PORT2) 右下 60°（严格镜像），同尺寸 74x68
+# 必须与 frontend/src/motionDerivers/oxe.js 的 ARM_ANGLES 一致（PORT1=120 / PORT2=60），否则机械臂送错侧
+PORT_ANG = {"1": 120, "2": 60}
 _PORT_DIST = {"1": 205, "2": 205}
 PORT_C = {p: (round(HUB[0] + _PORT_DIST[p] * math.cos(math.radians(a)), 1),
               round(HUB[1] + _PORT_DIST[p] * math.sin(math.radians(a)), 1))
@@ -584,6 +586,12 @@ def main():
 
     out = '\n'.join(S) + '\n'
     dest = Path(__file__).resolve().parent / 'oxe-drm-topview.svg'
+    # 定稿守卫：该 SVG 已由用户在可视化编辑器（models/user/oxe_editor.html）手绘定稿，
+    # 本生成器不再作为它的生成源；直接运行会覆盖手工偏移与端口布局。
+    if dest.exists() and '--force' not in sys.argv:
+        raise SystemExit(
+            f'[ABORT] {dest.name} 已是手绘定稿版，生成器会覆盖用户布局。\n'
+            '        确需重新生成请显式加 --force（手工偏移与定稿布局会丢失）。')
     dest.write_text(out, encoding='utf-8')
     print(f'[OK] 写出 {dest.name} ({len(out)} bytes)')
 

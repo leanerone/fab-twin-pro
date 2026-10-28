@@ -204,6 +204,28 @@
       "PORT": "1",
       "SLOT": "1"
     },
+    "event_aliases": {
+      "_doc": "实机报文事件名 → 本文件 14 个规范 step。映射依据归档 MachineVpoView 的 EVENT_TO_ATTACH_PHASE / EVENT_TO_DETACH_PHASE；缺表即静默不播。",
+      "ATTACH_POD_PLACE": "POD_PLACED",
+      "DETACH_POD_PLACE": "POD_PLACED",
+      "POD_LOCK": "COMPLETED_PORT_LOCK",
+      "LOCK_PORT_COMPLETED": "COMPLETED_PORT_LOCK",
+      "BATCH_START": "BATCH_INFO_FROM_ECUI",
+      "ATTACH_POD_UP": "OPEN_POD",
+      "DETACH_POD_UP": "OPEN_POD",
+      "ATTACH_POD_REACH_STAGE": "REACH_STAGE",
+      "DETACH_POD_REACH_STAGE": "REACH_STAGE",
+      "ATTACH_CST_PLACE": "UI_CONFIRM",
+      "DETACH_CST_REMOVE": "UI_CONFIRM",
+      "ATTACH_POD_DOWN": "CLOSE_POD",
+      "DETACH_POD_DOWN": "CLOSE_POD",
+      "ATTACH_POD_REACH_POS": "REACH_POS",
+      "DETACH_POD_REACH_POS": "REACH_POS",
+      "UI_DOUBLECHECK": "ACK_UI_DOUBLECHECK",
+      "POD_UNLOCK": "COMPLETED_PORT_UNLOCK",
+      "ATTACH_POD_REMOVE": "POD_REMOVED",
+      "DETACH_POD_REMOVE": "POD_REMOVED"
+    },
     "part_aliases": {},
     "viewBox_fallback": [0, 0, 1000, 1000]
   }

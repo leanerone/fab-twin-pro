@@ -18,8 +18,22 @@ export function createPodopenerDeriver() {
     return 'PACKING'
   }
 
+  /** 实机报文用 ATTACH_* / DETACH_* 前缀区分穿入与脱出（旧 MachineVpoView 同样按前缀分流）。 */
+  function cycleFromEventName(name) {
+    const s = String(name ?? '').trim().toUpperCase()
+    if (s.startsWith('DETACH') || s.includes('UNPACK')) return 'UNPACKING'
+    if (s.startsWith('ATTACH') || s.includes('PACK')) return 'PACKING'
+    return null
+  }
+
   return {
     derive(step, payload) {
+      // 批次信息（BATCH_INFO_FROM_ECUI）到达前 cycle 还是上一轮的，POD_PLACED/OPEN_POD
+      // 会按旧方向播错侧；先用事件名前缀定方向，保证穿入/脱出首帧方向正确。
+      // DB 回放事件只有 event_code，WS/调试事件才有 event_name，两者都要看
+      const hinted = cycleFromEventName(
+        payload?.event_name ?? payload?.eventName ?? payload?.event_code)
+      if (hinted) cycle = hinted
       const params = { ...(payload || {}), cycle }
       return { ok: true, params, info: { cycle } }
     },
