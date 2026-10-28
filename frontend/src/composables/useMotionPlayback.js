@@ -490,13 +490,16 @@ function applyState(el, state, g) {
   // root 位移 → 本地 CSS translate（父链含缩放/旋转时换算；纯平移父链时 1:1）
   const lx = state.tx * g.invA + state.ty * g.invC
   const ly = state.tx * g.invB + state.ty * g.invD
-  const parts = [`translate(${lx}px, ${ly}px)`]
-  if (state.rotate) parts.push(`rotate(${state.rotate}deg)`)
-  if (state.scale !== 1 || (state.scaleY ?? 1) !== 1) parts.push(`scale(${state.scale}, ${state.scaleY ?? 1})`)
-  // 保留静态 SVG transform：CSS 内联 style.transform 会覆盖 presentation attribute，
-  // 否则 Group1_CST_TOPVIEW（translate 171.75 -157.75）等带静态 transform 的部件，
-  // 其静态平移会被清掉导致整组子件（晶圆）整体偏移。
-  // 用 consolidate() 把静态 transform 转成 matrix()（SVG/CSS 语法都无单位），规避单位差异。
+  const parts = []
+  // === 关键：静态 matrix 必须**前置**到 dynamic transform 之前 ===
+  // 原因：CSS transform 属性从右往左链式应用，transform-origin 是元素**未变换坐标系**里的 fill-box center。
+  // 用户定稿版 SVG 可能给整个机台加了全局 translate（如 translate(94.5 -11.4)），
+  // 如果把这个 static matrix 拼在 dynamic rotate 右边：先应用 static matrix → origin 跟着平移 →
+  // rotate 就绕 translate 后的 bbox center 转，而 deriver/JSON 里所有 pivot/角度都是按 static translate 前
+  // 的 hub (444, 400) 算的 → 机械臂送错方向、门开在错误位置、晶圆飘走。
+  //
+  // 前置后应用顺序：rotate(本地 hub) → translate(已旋转) → static matrix(整体移到 user space)，
+  // rotate 就绕 deriver 假设的 hub 旋转，与几何管线一致。
   let staticM = null
   try {
     const bv = el.transform?.baseVal
@@ -505,6 +508,9 @@ function applyState(el, state, g) {
   if (staticM && !(staticM.a === 1 && staticM.b === 0 && staticM.c === 0 && staticM.d === 1 && staticM.e === 0 && staticM.f === 0)) {
     parts.push(`matrix(${staticM.a} ${staticM.b} ${staticM.c} ${staticM.d} ${staticM.e} ${staticM.f})`)
   }
+  parts.push(`translate(${lx}px, ${ly}px)`)
+  if (state.rotate) parts.push(`rotate(${state.rotate}deg)`)
+  if (state.scale !== 1 || (state.scaleY ?? 1) !== 1) parts.push(`scale(${state.scale}, ${state.scaleY ?? 1})`)
   el.style.transformBox = 'fill-box'
   el.style.transformOrigin = 'center'
   el.style.transform = parts.join(' ')
