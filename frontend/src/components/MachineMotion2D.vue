@@ -573,7 +573,9 @@ async function debugPlayFlow() {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-  z-index: 5;
+  /* 比 MachineDetail 里的 .view-mode-switcher (z-index:15) 高，
+     确保弹出的面板不被任何绝对定位层挡住 */
+  z-index: 20;
 }
 .motion2d-debug-toggle {
   padding: 4px 12px;

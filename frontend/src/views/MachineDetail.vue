@@ -1357,14 +1357,16 @@ onUnmounted(() => {
   z-index: 15;
 }
 
-/* 2D模式下，切换按钮移到右下角，避免遮挡PORT1/PORT2看板 */
+/* 2D模式下，切换按钮保持顶部右侧横排（和3D/vpo3d同一层级），
+   不再贴底竖排——之前贴底 bottom:14px 会与 motion2d-debug (right:12px bottom:12px)
+   以及回放面板底部控件重叠，用户反馈"挡住时间回放条和调试按钮" */
 .detail-viewer.is-2d .view-mode-switcher {
   left: auto;
   right: 14px;
-  bottom: 14px;
-  top: auto;
+  top: 14px;
+  bottom: auto;
   transform: none;
-  flex-direction: column;
+  flex-direction: row;
   gap: 6px;
 }
 
