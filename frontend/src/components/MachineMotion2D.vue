@@ -341,14 +341,48 @@ function pickDebugFlow(deriver) {
   const LOT = 'DEMO_LOT01'
   const PORT = '1'
   if (deriver === 'oxe') {
-    return [
-      ['POD_PLACED', { PORT }, 3500],
-      ['START', { PORT }, 3000],       // LOTSTAT: PP-SELECT OK
-      ['PS', { PORT }, 3500],           // LOTSTAT: PROCESSING
-      ['PE', { PORT }, 3500],           // LOTSTAT 下一态
-      ['MVOU', { PORT }, 3500],         // LOTSTAT: LOT OUT
-      ['POD_REMOVED', { PORT }, 0],
+    // 完整单侧（PORT1）生产流程：POD 入场 → 锁口 → 门开关 → mapping → 每个槽送取片
+    // （机械臂 phase 0..13 编排，每槽 WAFERLOADED/WAFERUNLOADED 都带真实位移动画）→ PE → MVOU → POD 移出
+    // 挑 3 个代表槽（1/13/25）送 3 个不同工艺腔（A/B/C），保证每个 WAFERLOADED/WAFERUNLOADED 都
+    // 带 PORT+SLOT+CHAMBER 参数，让 deriver 展开 ARM_PORT_ANGLE/ARM_PA_ANGLE/ARM_CH_ANGLE 等
+    const demoLots = [
+      { slot: '1',  chamber: 'A' },
+      { slot: '13', chamber: 'B' },
+      { slot: '25', chamber: 'C' },
     ]
+    const seq = [
+      ['POD_PLACED',             { PORT, pod_shell: '1' }, 2500],
+      ['COMPLETED_PORT_LOCK',    { PORT },  1500],    // CHECK RCMS
+      ['LOCK_PORT_COMPLETED',    { PORT },  1000],    // 同一文案，别名链路覆盖
+      ['MVIN',                   { PORT },  2000],    // LOADING LOT
+      ['DOOR_OPEN',              { PORT },  2500],    // 门打开 offset -30
+      ['STARTMAPPING',           { PORT },  1500],    // MAPPING…
+      ['WAFER_MAPPING',          { PORT, EVENT_VALUE: '2222222222222222222222222' }, 2000],  // 25 槽全亮 R
+      ['ENDMAPPING',             { PORT },  1000],    // 别名 → MAPPING OK
+      ['DOOR_CLOSE',             { PORT },  2500],    // 门关闭 offset +30
+      ['LOAD_CYCLE_STARTED',     { PORT },  1500],    // LOAD START
+      ['LOAD_CYCLE_COMPLETED',   { PORT },  1500],    // LOAD OK
+      ['BATCH_INFO_FROM_ECUI',   { PORT, BATCH_ID: 'BT_DEMO01', LOT_ID: LOT, Qty: '25' }, 1500],
+      ['START',                  { PORT },  2500],    // LOTSTAT: PP-SELECT OK
+      ['PS',                     { PORT },  2500],    // LOTSTAT: PROCESSING
+    ]
+    // 逐槽送片（phase 0..13 机械臂编排）→ 每槽 12s 足够 13 个 phase × 0.65s × 2
+    for (const w of demoLots) {
+      seq.push(['WAFERLOADED',   { PORT, SLOT: w.slot, CHAMBER: w.chamber }, 12000])
+    }
+    // 逐腔 PE（3 个腔都发一遍，覆盖 CH_A/B/C 对应的 state 文字）
+    for (const ch of ['A', 'B', 'C']) {
+      seq.push(['PE', { PORT, CHAMBER: ch }, 2500])
+    }
+    // 逐槽取片回到晶舟
+    for (const w of demoLots) {
+      seq.push(['WAFERUNLOADED', { PORT, SLOT: w.slot, CHAMBER: w.chamber }, 12000])
+    }
+    seq.push(['READYTOUNLOAD',       { PORT }, 2000])   // LOTSTAT: READY UNLOAD
+    seq.push(['UNLOAD_CYCLE_COMPLETED', { PORT }, 2500])   // LOTSTAT: UNLOAD OK
+    seq.push(['MVOU',                { PORT }, 2500])   // LOTSTAT: LOT OUT
+    seq.push(['POD_REMOVED',         { PORT },    0])   // 全面板复位
+    return seq
   }
   if (deriver === 'podopener') {
     return [
