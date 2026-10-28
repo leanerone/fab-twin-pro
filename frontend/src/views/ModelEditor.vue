@@ -2124,10 +2124,8 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="!selectedModel" class="empty-hint">请先选择机型</div>
-        <div v-else-if="!motionPreviewConfig" class="empty-hint">
-          该机型未配置通用 Motion JSON。
-          请到"动画配置" Tab 点击"导入Motion JSON"按钮导入配置文件，
-          或上传带 schema_version 的 .json 文件。
+        <div v-else-if="!motionPreviewSvgUrl" class="empty-hint">
+          该机型未绑定 2D SVG，请到"模型管理" Tab 上传 SVG 后再调试。
         </div>
         <MotionPreview
           v-else

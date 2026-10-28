@@ -11,6 +11,7 @@ SVG 统一改造（feature/svg-unify 分支）：
 import json
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,10 +40,18 @@ def main():
         "view_2d": {"type": "motion2d", "svg_source": "/uploads/models/podopener-2200.svg",
                     "view_label": "PODOPENER 2D 动画"},
     }
-    source_files = {
-        "svg": "models/user/podopener-2200.svg",
-        "motion_json": "models/user/podopener-2200.motion.json",
+    # 按「已上传文件」槽位登记 SVG（模型管理列表可见 + /extract-svg-parts 可提取部件）
+    svg_slot = {
+        "file_id": "seedvposvg",
+        "file_name": SVG_DST.name,
+        "file_url": views_config["view_2d"]["svg_source"],
+        "file_type": ".svg",
+        "file_size": SVG_SRC.stat().st_size,
+        "version": "2.0",
+        "uploaded_by": "seed",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    source_files = {"current_svg": svg_slot, "current_file": svg_slot}
 
     db = SessionLocal()
     try:

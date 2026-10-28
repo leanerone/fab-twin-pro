@@ -11,7 +11,7 @@
  * 6. 重置按钮恢复所有部件到初始状态
  */
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { evalWhen, resolveMotionRule, enrichMotionParams } from '../composables/useExprEval.motion'
+import { evalWhen, resolveMotionRule, enrichMotionParams, extractParamKeys } from '../composables/useExprEval.motion'
 import { computeExtendVec } from '../motionDerivers/amatMetsput'
 // P3-A：调试页与机台详情页统一使用「逐帧同步圆弧」单引擎（原 .motion.js 的事后屏幕测量补偿已废弃）
 import { playMotion, resetMotionState, invalidateMotionGeometry } from '../composables/useMotionPlayback'
@@ -159,6 +159,7 @@ async function loadSvg() {
     invalidateMotionGeometry(svgContainer.value)
     // 默认保持 data-motion-base-visibility="hidden" 的模块隐藏；事件触发显示暂预留
     applyMotionBaseVisibility()
+    refreshSvgIds()
   } catch (e) {
     errorMsg.value = `加载 SVG 失败: ${e.message}`
   } finally {
@@ -209,12 +210,35 @@ const DEFAULT_PARAM_VALUES = {
   SMIFPORTID: '1',
 }
 
-const paramKeys = computed(() => Object.keys(DEFAULT_PARAM_VALUES))
+// 参数面板只显示当前 Motion JSON 真正用到的键：ext.param_defaults + 所有 when 表达式引用的 params.xxx
+// （固定清单会带出别的机型的参数，例如 OXE 没有 CHAMBER/'E'、却需要 SM01~SM25）
+const paramDefaults = computed(() => {
+  const cfg = props.motionConfig || {}
+  return { ...(cfg.param_defaults || {}), ...(cfg.ext?.param_defaults || {}) }
+})
+
+const PARAM_ORDER = ['LOT_ID', 'PORT', 'SLOT', 'CHAMBER', 'BATCH_ID', 'Qty', 'RunMode', 'RECIPE1']
+
+const paramKeys = computed(() => {
+  const whens = []
+  for (const m of motions.value) {
+    if (m.when) whens.push(m.when)
+    for (const r of (m.rules || [])) if (r.when) whens.push(r.when)
+  }
+  const keys = new Set(Object.keys(paramDefaults.value))
+  for (const k of extractParamKeys(whens)) keys.add(k)
+  return Array.from(keys).sort((a, b) => {
+    const ia = PARAM_ORDER.indexOf(a)
+    const ib = PARAM_ORDER.indexOf(b)
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+    return String(a).localeCompare(String(b))
+  })
+})
 
 watch(paramKeys, (keys) => {
   for (const k of keys) {
     if (!(k in paramValues.value)) {
-      paramValues.value[k] = DEFAULT_PARAM_VALUES[k] ?? ''
+      paramValues.value[k] = paramDefaults.value[k] ?? DEFAULT_PARAM_VALUES[k] ?? ''
     }
   }
 }, { immediate: true })
@@ -520,6 +544,99 @@ function logEvent(step, msg, type = 'info') {
   if (eventLog.value.length > 50) eventLog.value.pop()
 }
 
+// === 部件检查（调试用：点选部件，看它叫什么、当前变换、被哪些规则引用） ===
+const inspectOn = ref(false)
+const selectedPartId = ref('')
+const partProbe = ref(null)
+const svgIds = ref([])
+const missingTargets = ref([])
+
+// 规则索引：target_part_id → [{step, phase, when, types}]
+const targetRules = computed(() => {
+  const map = {}
+  for (const m of motions.value) {
+    for (const r of (m.rules || [])) {
+      const tid = r.target_part_id || m.target_part_id
+      if (!tid) continue
+      if (!map[tid]) map[tid] = []
+      map[tid].push({
+        step: m.step,
+        phase: r.phase,
+        when: r.when || '',
+        types: (r.actions || []).map(a => a.type).join('/'),
+      })
+    }
+  }
+  return map
+})
+const targetIds = computed(() => Object.keys(targetRules.value))
+// 部件清单 = 规则引用 ∪ SVG 里有 data-pid 的部件，这样即使机型没配 Motion JSON 也能提取部件
+const inspIds = computed(() => {
+  const set = new Set([...targetIds.value, ...svgIds.value])
+  return Array.from(set).sort()
+})
+const partMeta = computed(() => {
+  const map = {}
+  for (const p of parts.value) if (p?.part_id) map[p.part_id] = p
+  return map
+})
+
+// SVG 实际存在的 id ↔ 规则引用对照，直接暴露"名字写错了"的部件
+function refreshSvgIds() {
+  const root = svgContainer.value?.querySelector('svg')
+  if (!root) { svgIds.value = []; missingTargets.value = []; return }
+  // 只取带 data-pid 的部件（排除渐变/滤镜等绘制资源 id）
+  svgIds.value = [...root.querySelectorAll('[data-pid]')].map(el => el.id).filter(Boolean)
+  const allIds = new Set([...root.querySelectorAll('[id]')].map(el => el.id))
+  missingTargets.value = targetIds.value.filter(t => !t.includes('{') && !allIds.has(t))
+}
+
+function selectInspPart(id) {
+  selectedPartId.value = id
+  partProbe.value = null
+  const root = svgContainer.value?.querySelector('svg')
+  if (!root) return
+  root.querySelectorAll('.mp-inspecting').forEach(el => el.classList.remove('mp-inspecting'))
+  if (id.includes('{')) return
+  const el = root.querySelector(`[id="${String(id).replace(/"/g, '\\"')}"]`)
+  if (!el) return
+  el.classList.add('mp-inspecting')
+  const cs = getComputedStyle(el)
+  // 未施加过变换时 computed transform 是 'none'，直接 new DOMMatrix 会抛错
+  const tf = cs.transform
+  const m = tf && tf !== 'none' ? new DOMMatrix(tf) : null
+  // 名称优先取 parts 元数据，其次 SVG 自身标注（data-name / <title>），最后留空
+  const name = partMeta.value[id]?.part_name
+    || el.getAttribute('data-name')
+    || el.querySelector('title')?.textContent?.trim()
+    || ''
+  // 所属装配：父链上最近的两级带 id 的祖先，便于定位"这是哪个部件的子件"
+  const chain = []
+  let node = el.parentElement
+  while (node && node.tagName && node.tagName.toLowerCase() !== 'svg') {
+    const aid = node.getAttribute?.('id')
+    if (aid) chain.unshift(aid)
+    node = node.parentElement
+  }
+  partProbe.value = {
+    id,
+    name,
+    type: partMeta.value[id]?.part_type || el.tagName.toLowerCase(),
+    family: chain.join(' › ') || '根',
+    visible: cs.visibility,
+    rotate: m ? Math.round((Math.atan2(m.b, m.a) * 180) / Math.PI) : 0,
+    tx: m ? Math.round(m.e) : 0,
+    ty: m ? Math.round(m.f) : 0,
+  }
+}
+
+function onSvgInspectClick(e) {
+  if (!inspectOn.value) return
+  const el = e.target?.closest?.('[id]')
+  if (!el) return
+  selectInspPart(el.id)
+}
+
 // === 监听 ===
 watch(() => props.svgUrl, () => {
   if (props.svgUrl) loadSvg()
@@ -545,7 +662,9 @@ onMounted(() => {
         <div
           ref="svgContainer"
           class="svg-container"
+          :class="{ 'inspect-on': inspectOn }"
           v-html="svgInline"
+          @click="onSvgInspectClick"
         ></div>
         <div v-if="!svgUrl" class="empty-hint">
           请先上传 SVG 文件
@@ -589,8 +708,60 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 右列：事件日志 -->
+      <!-- 右列：部件检查 + 事件日志 -->
       <div class="log-panel">
+        <div class="inspect-section">
+          <h4>
+            部件检查
+            <label class="insp-toggle">
+              <input type="checkbox" v-model="inspectOn" @change="!inspectOn && (selectedPartId = '')" />
+              点选
+            </label>
+          </h4>
+          <div v-if="missingTargets.length" class="miss-box">
+            ⚠ 规则引用但 SVG 中不存在：{{ missingTargets.join('、') }}
+          </div>
+          <div class="insp-list">
+            <div
+              v-for="tid in inspIds"
+              :key="tid"
+              class="insp-item"
+              :class="{
+                active: tid === selectedPartId,
+                miss: missingTargets.includes(tid),
+                tpl: tid.includes('{'),
+              }"
+              @click="selectInspPart(tid)"
+            >
+              <span class="dot"></span>{{ tid }}
+            </div>
+            <div v-if="inspIds.length === 0" class="empty-row">无部件（SVG 未加载或无 data-pid）</div>
+          </div>
+          <div v-if="partProbe" class="insp-detail">
+            <div class="insp-row"><span>名称</span>{{ partProbe.name || '—（无 parts 元数据）' }}</div>
+            <div class="insp-row"><span>类型</span>{{ partProbe.type || '—' }}</div>
+            <div class="insp-row"><span>所属</span>{{ partProbe.family }}</div>
+            <div class="insp-row"><span>可见</span>{{ partProbe.visible === 'visible' ? '是' : '否' }}</div>
+            <div class="insp-row"><span>旋转</span>{{ partProbe.rotate }}°</div>
+            <div class="insp-row"><span>位移</span>x {{ partProbe.tx }} / y {{ partProbe.ty }}</div>
+            <button class="btn-small" @click="selectInspPart(selectedPartId)">刷新状态</button>
+          </div>
+          <div v-else-if="selectedPartId" class="empty-row">
+            模板部件，运行时按参数解析为具体 id
+          </div>
+          <div class="insp-rules-title">
+            命中规则（{{ (targetRules[selectedPartId] || []).length }}）
+          </div>
+          <div class="insp-rules">
+            <div v-for="(r, idx) in (targetRules[selectedPartId] || [])" :key="idx" class="insp-rule">
+              <span class="ir-step">{{ r.step }}</span>
+              <span class="ir-phase">P{{ r.phase }}</span>
+              <span class="ir-actions">{{ r.types }}</span>
+              <span v-if="r.when" class="ir-when">{{ r.when }}</span>
+            </div>
+            <div v-if="!(targetRules[selectedPartId] || []).length" class="empty-row">暂无规则</div>
+          </div>
+        </div>
         <div class="log-section">
           <h4>事件日志 ({{ eventLog.length }})</h4>
           <div v-if="eventLog.length === 0" class="empty-row">暂无事件</div>
@@ -721,6 +892,126 @@ onMounted(() => {
   flex-direction: column;
   border-bottom: none;
 }
+/* === 部件检查 === */
+.inspect-section {
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  max-height: 62%;
+  overflow-y: auto;
+}
+.inspect-section h4 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.insp-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: normal;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.miss-box {
+  margin: 6px 0;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #f87171;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.35);
+}
+.insp-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.insp-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.insp-item:hover { background: var(--panel); }
+.insp-item.active { background: rgba(245, 158, 11, 0.16); color: #fbbf24; }
+.insp-item .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green, #22c55e);
+  flex: none;
+}
+.insp-item.miss { color: #f87171; }
+.insp-item.miss .dot { background: #ef4444; }
+.insp-item.tpl { font-style: italic; }
+.insp-item.tpl .dot { background: var(--text-muted); }
+.insp-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.insp-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text);
+}
+.insp-row span {
+  width: 34px;
+  flex: none;
+  color: var(--text-muted);
+}
+.insp-detail .btn-small { margin-top: 6px; }
+.insp-rules-title {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.insp-rules {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.insp-rule {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--panel);
+}
+.insp-rule .ir-step { color: var(--text); }
+.insp-rule .ir-phase { color: #60a5fa; }
+.insp-rule .ir-when { color: #fbbf24; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svg-container.inspect-on { cursor: crosshair; }
+/* 点选模式下放开 SVG 内 pointer-events="none" 的装饰件，否则很多可见部件点不中；
+   不可见参照框是 fill="none" stroke="none"，visiblePainted 不会命中，不影响遮挡判断 */
+.svg-container.inspect-on :deep(svg *) { pointer-events: visiblePainted; }
+.svg-container :deep(.mp-inspecting) {
+  filter: drop-shadow(0 0 4px #f59e0b);
+}
+
 
 .param-grid {
   display: flex;

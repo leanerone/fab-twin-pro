@@ -487,6 +487,7 @@ export function appendMotionText(svg, action, kind, params = {}, targetEl = null
 // ============================================================
 
 function applyState(el, state, g) {
+  if (!el) return
   // root 位移 → 本地 CSS translate（父链含缩放/旋转时换算；纯平移父链时 1:1）
   const lx = state.tx * g.invA + state.ty * g.invC
   const ly = state.tx * g.invB + state.ty * g.invD
@@ -500,13 +501,14 @@ function applyState(el, state, g) {
   //
   // 前置后应用顺序：rotate(本地 hub) → translate(已旋转) → static matrix(整体移到 user space)，
   // rotate 就绕 deriver 假设的 hub 旋转，与几何管线一致。
+  // === CSS matrix() 参数必须用逗号分隔，否则浏览器忽略整个 transform 声明 ===
   let staticM = null
   try {
     const bv = el.transform?.baseVal
     if (bv && bv.numberOfItems > 0) staticM = bv.consolidate()?.matrix
   } catch (_) { staticM = null }
   if (staticM && !(staticM.a === 1 && staticM.b === 0 && staticM.c === 0 && staticM.d === 1 && staticM.e === 0 && staticM.f === 0)) {
-    parts.push(`matrix(${staticM.a} ${staticM.b} ${staticM.c} ${staticM.d} ${staticM.e} ${staticM.f})`)
+    parts.push(`matrix(${staticM.a}, ${staticM.b}, ${staticM.c}, ${staticM.d}, ${staticM.e}, ${staticM.f})`)
   }
   parts.push(`translate(${lx}px, ${ly}px)`)
   if (state.rotate) parts.push(`rotate(${state.rotate}deg)`)
@@ -611,8 +613,18 @@ function applyActionToState(ctx, pid, el, state, action) {
       return {}
     }
     case 'offset':
-      state.tx += Number(action.offset_x) || 0
-      state.ty += -(Number(action.offset_y) || 0) // y 向上为正
+      // 两种数据约定并存，由 Motion JSON ext.offset_mode 决定（默认 relative）：
+      // - relative（旧约定，PODOPENER 等）：offset 是增量，多次叠加（往返位移靠 +x/-x 抵消）
+      // - absolute（OXE）：offset 是相对静态基准的绝对位置，同一部件反复写 offset(0)
+      //   表示「收回原位」。若按增量算，offset(0) 什么都不改，机械臂/门只进不退，
+      //   位移越累越多（臂越伸越长、门开完关不上）。
+      if (ctx.offsetMode === 'absolute') {
+        state.tx = Number(action.offset_x) || 0
+        state.ty = -(Number(action.offset_y) || 0) // y 向上为正
+      } else {
+        state.tx += Number(action.offset_x) || 0
+        state.ty += -(Number(action.offset_y) || 0) // y 向上为正
+      }
       // 可选 scale_y：伸缩臂杆等单 action 内"平移+纵向缩放"同步补间（绝对赋值，收回时写 1）
       if (action.scale_y != null) state.scaleY = Number(action.scale_y) || 1
       return {}
@@ -882,6 +894,7 @@ export async function playMotion({
   mode = 'animate',
   reset = true,
   partAliases = {},
+  offsetMode = 'relative',
   onWarn,
   onClearTransforms,
 } = {}) {
@@ -916,7 +929,7 @@ export async function playMotion({
     }))
     .sort((a, b) => a.phase - b.phase || a.order - b.order)
 
-  const ctx = { container, geom, states, partAliases, params, onWarn }
+  const ctx = { container, geom, states, partAliases, params, onWarn, offsetMode }
   const playedPids = new Set()
 
   const phases = new Map()

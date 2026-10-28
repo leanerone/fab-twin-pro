@@ -49,10 +49,18 @@ def main():
                 "view_label": "AMAT METSPUT 俯视图",
             }
         }
-        source_files = {
-            "svg": "models/user/amat_metsput.svg",
-            "motion_json": "models/user/amat_metsput_v1.1.json",
+        # 按「已上传文件」槽位登记 SVG（模型管理列表可见 + /extract-svg-parts 可提取部件）
+        svg_slot = {
+            "file_id": "seedamatsvg",
+            "file_name": os.path.basename(SVG_DST),
+            "file_url": views_config["view_2d"]["svg_source"],
+            "file_type": ".svg",
+            "file_size": os.path.getsize(SVG_SRC),
+            "version": "1.1",
+            "uploaded_by": "seed",
+            "created_at": now,
         }
+        source_files = {"current_svg": svg_slot, "current_file": svg_slot}
         db.add(MachineModelConfig(
             model_id=MODEL_ID,
             model_name="AMAT METSPUT PVD 溅射机",

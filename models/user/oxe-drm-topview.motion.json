@@ -93,6 +93,13 @@
           "target_part_id": "{DOOR}",
           "actions": [
             {
+              "type": "offset",
+              "angle": 0,
+              "duration": 0,
+              "offset_x": 0,
+              "offset_y": 0
+            },
+            {
               "type": "snap",
               "to_part_id": "{home}",
               "duration": 0
@@ -2830,7 +2837,44 @@
             {
               "type": "offset",
               "offset_x": 0,
-              "offset_y": 34,
+              "offset_y": -70,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": -70,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{POD}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "duration": 900,
+              "easing": "mechanical"
+            }
+          ]
+        },
+        {
+          "phase": 2,
+          "target_part_id": "{CST}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
               "duration": 900,
               "easing": "mechanical"
             }
@@ -2874,17 +2918,39 @@
         {
           "phase": 1,
           "target_part_id": "{DOOR}",
+          "when": "params.PORT == '1'",
           "actions": [
             {
               "type": "offset",
-              "offset_x": -30,
-              "offset_y": 0,
+              "angle": 90,
               "duration": 700,
-              "easing": "ease-out"
+              "easing": "ease-out",
+              "offset_x": 86,
+              "offset_y": 0
             },
             {
               "type": "opacity",
-              "to": 0.15,
+              "to": 1,
+              "duration": 700
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{DOOR}",
+          "when": "params.PORT == '2'",
+          "actions": [
+            {
+              "type": "offset",
+              "angle": -90,
+              "duration": 700,
+              "easing": "ease-out",
+              "offset_x": -86,
+              "offset_y": 0
+            },
+            {
+              "type": "opacity",
+              "to": 1,
               "duration": 700
             }
           ]
@@ -2927,13 +2993,35 @@
         {
           "phase": 1,
           "target_part_id": "{DOOR}",
+          "when": "params.PORT == '1'",
           "actions": [
             {
               "type": "offset",
-              "offset_x": 30,
-              "offset_y": 0,
+              "angle": 0,
               "duration": 700,
-              "easing": "ease-in"
+              "easing": "ease-in",
+              "offset_x": 0,
+              "offset_y": 0
+            },
+            {
+              "type": "opacity",
+              "to": 1,
+              "duration": 700
+            }
+          ]
+        },
+        {
+          "phase": 1,
+          "target_part_id": "{DOOR}",
+          "when": "params.PORT == '2'",
+          "actions": [
+            {
+              "type": "offset",
+              "angle": 0,
+              "duration": 700,
+              "easing": "ease-in",
+              "offset_x": 0,
+              "offset_y": 0
             },
             {
               "type": "opacity",
@@ -3225,9 +3313,33 @@
             {
               "type": "offset",
               "offset_x": 0,
-              "offset_y": -84,
-              "duration": 2600,
+              "offset_y": -60,
+              "duration": 1400,
               "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 3,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "duration": 1200,
+              "easing": "linear"
+            }
+          ]
+        },
+        {
+          "phase": 4,
+          "target_part_id": "{MAP}",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
             }
           ]
         },
@@ -6416,17 +6528,42 @@
       "rules": [
         {
           "phase": 0,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 0,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 0,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 1,
@@ -6439,21 +6576,46 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 2,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_PORT}",
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": "{ARM_T1_PORT}",
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 2,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T2_PORT}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 2,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T3_PORT}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 3,
@@ -6465,21 +6627,46 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 4,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 4,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 4,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 5,
@@ -6492,21 +6679,46 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 6,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_PA}",
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": "{ARM_T1_PA}",
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 6,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T2_PA}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 6,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T3_PA}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 7,
@@ -6517,8 +6729,7 @@
               "to": true,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 8,
@@ -6530,35 +6741,7 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
-        },
-        {
-          "phase": 9,
-          "target_part_id": "ARM_EXTEND",
-          "actions": [
-            {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
-              "duration": 650,
-              "easing": "linear"
-            }
-          ],
-          "when": "params.PORT == '2'"
-        },
-        {
-          "phase": 10,
-          "target_part_id": "ARM_EXTEND",
-          "actions": [
-            {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_PA}",
-              "offset_y": 0,
-              "duration": 650,
-              "easing": "linear"
-            }
-          ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 11,
@@ -6569,8 +6752,7 @@
               "to": false,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 12,
@@ -6582,21 +6764,46 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 13,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 13,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 13,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 14,
@@ -6609,21 +6816,46 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 15,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_CH}",
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": "{ARM_T1_CH}",
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 15,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T2_CH}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 15,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T3_CH}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 16,
@@ -6634,11 +6866,10 @@
               "to": true,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
-          "phase": 17,
+          "phase": 16,
           "target_part_id": "WAFER_MOVE",
           "actions": [
             {
@@ -6647,10 +6878,10 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
-          "phase": 18,
+          "phase": 17,
           "target_part_id": "{CH_RUN}",
           "actions": [
             {
@@ -6658,22 +6889,46 @@
               "to": true,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 19,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 19,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 19,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 20,
@@ -6686,7 +6941,7 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 1,
@@ -6739,7 +6994,7 @@
           "when": "params.PORT == '1' && params.SLOT == '1'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S1",
           "actions": [
             {
@@ -6787,7 +7042,7 @@
           "when": "params.PORT == '1' && params.SLOT == '2'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S2",
           "actions": [
             {
@@ -6835,7 +7090,7 @@
           "when": "params.PORT == '1' && params.SLOT == '3'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S3",
           "actions": [
             {
@@ -6883,7 +7138,7 @@
           "when": "params.PORT == '1' && params.SLOT == '4'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S4",
           "actions": [
             {
@@ -6931,7 +7186,7 @@
           "when": "params.PORT == '1' && params.SLOT == '5'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S5",
           "actions": [
             {
@@ -6979,7 +7234,7 @@
           "when": "params.PORT == '1' && params.SLOT == '6'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S6",
           "actions": [
             {
@@ -7027,7 +7282,7 @@
           "when": "params.PORT == '1' && params.SLOT == '7'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S7",
           "actions": [
             {
@@ -7075,7 +7330,7 @@
           "when": "params.PORT == '1' && params.SLOT == '8'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S8",
           "actions": [
             {
@@ -7123,7 +7378,7 @@
           "when": "params.PORT == '1' && params.SLOT == '9'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S9",
           "actions": [
             {
@@ -7171,7 +7426,7 @@
           "when": "params.PORT == '1' && params.SLOT == '10'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S10",
           "actions": [
             {
@@ -7219,7 +7474,7 @@
           "when": "params.PORT == '1' && params.SLOT == '11'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S11",
           "actions": [
             {
@@ -7267,7 +7522,7 @@
           "when": "params.PORT == '1' && params.SLOT == '12'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S12",
           "actions": [
             {
@@ -7315,7 +7570,7 @@
           "when": "params.PORT == '1' && params.SLOT == '13'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S13",
           "actions": [
             {
@@ -7363,7 +7618,7 @@
           "when": "params.PORT == '1' && params.SLOT == '14'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S14",
           "actions": [
             {
@@ -7411,7 +7666,7 @@
           "when": "params.PORT == '1' && params.SLOT == '15'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S15",
           "actions": [
             {
@@ -7459,7 +7714,7 @@
           "when": "params.PORT == '1' && params.SLOT == '16'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S16",
           "actions": [
             {
@@ -7507,7 +7762,7 @@
           "when": "params.PORT == '1' && params.SLOT == '17'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S17",
           "actions": [
             {
@@ -7555,7 +7810,7 @@
           "when": "params.PORT == '1' && params.SLOT == '18'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S18",
           "actions": [
             {
@@ -7603,7 +7858,7 @@
           "when": "params.PORT == '1' && params.SLOT == '19'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S19",
           "actions": [
             {
@@ -7651,7 +7906,7 @@
           "when": "params.PORT == '1' && params.SLOT == '20'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S20",
           "actions": [
             {
@@ -7699,7 +7954,7 @@
           "when": "params.PORT == '1' && params.SLOT == '21'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S21",
           "actions": [
             {
@@ -7747,7 +8002,7 @@
           "when": "params.PORT == '1' && params.SLOT == '22'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S22",
           "actions": [
             {
@@ -7795,7 +8050,7 @@
           "when": "params.PORT == '1' && params.SLOT == '23'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S23",
           "actions": [
             {
@@ -7843,7 +8098,7 @@
           "when": "params.PORT == '1' && params.SLOT == '24'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S24",
           "actions": [
             {
@@ -7891,7 +8146,7 @@
           "when": "params.PORT == '1' && params.SLOT == '25'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P1_S25",
           "actions": [
             {
@@ -7953,7 +8208,7 @@
           "when": "params.PORT == '2' && params.SLOT == '1'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S1",
           "actions": [
             {
@@ -8001,7 +8256,7 @@
           "when": "params.PORT == '2' && params.SLOT == '2'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S2",
           "actions": [
             {
@@ -8049,7 +8304,7 @@
           "when": "params.PORT == '2' && params.SLOT == '3'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S3",
           "actions": [
             {
@@ -8097,7 +8352,7 @@
           "when": "params.PORT == '2' && params.SLOT == '4'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S4",
           "actions": [
             {
@@ -8145,7 +8400,7 @@
           "when": "params.PORT == '2' && params.SLOT == '5'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S5",
           "actions": [
             {
@@ -8193,7 +8448,7 @@
           "when": "params.PORT == '2' && params.SLOT == '6'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S6",
           "actions": [
             {
@@ -8241,7 +8496,7 @@
           "when": "params.PORT == '2' && params.SLOT == '7'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S7",
           "actions": [
             {
@@ -8289,7 +8544,7 @@
           "when": "params.PORT == '2' && params.SLOT == '8'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S8",
           "actions": [
             {
@@ -8337,7 +8592,7 @@
           "when": "params.PORT == '2' && params.SLOT == '9'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S9",
           "actions": [
             {
@@ -8385,7 +8640,7 @@
           "when": "params.PORT == '2' && params.SLOT == '10'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S10",
           "actions": [
             {
@@ -8433,7 +8688,7 @@
           "when": "params.PORT == '2' && params.SLOT == '11'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S11",
           "actions": [
             {
@@ -8481,7 +8736,7 @@
           "when": "params.PORT == '2' && params.SLOT == '12'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S12",
           "actions": [
             {
@@ -8529,7 +8784,7 @@
           "when": "params.PORT == '2' && params.SLOT == '13'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S13",
           "actions": [
             {
@@ -8577,7 +8832,7 @@
           "when": "params.PORT == '2' && params.SLOT == '14'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S14",
           "actions": [
             {
@@ -8625,7 +8880,7 @@
           "when": "params.PORT == '2' && params.SLOT == '15'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S15",
           "actions": [
             {
@@ -8673,7 +8928,7 @@
           "when": "params.PORT == '2' && params.SLOT == '16'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S16",
           "actions": [
             {
@@ -8721,7 +8976,7 @@
           "when": "params.PORT == '2' && params.SLOT == '17'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S17",
           "actions": [
             {
@@ -8769,7 +9024,7 @@
           "when": "params.PORT == '2' && params.SLOT == '18'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S18",
           "actions": [
             {
@@ -8817,7 +9072,7 @@
           "when": "params.PORT == '2' && params.SLOT == '19'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S19",
           "actions": [
             {
@@ -8865,7 +9120,7 @@
           "when": "params.PORT == '2' && params.SLOT == '20'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S20",
           "actions": [
             {
@@ -8913,7 +9168,7 @@
           "when": "params.PORT == '2' && params.SLOT == '21'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S21",
           "actions": [
             {
@@ -8961,7 +9216,7 @@
           "when": "params.PORT == '2' && params.SLOT == '22'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S22",
           "actions": [
             {
@@ -9009,7 +9264,7 @@
           "when": "params.PORT == '2' && params.SLOT == '23'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S23",
           "actions": [
             {
@@ -9057,7 +9312,7 @@
           "when": "params.PORT == '2' && params.SLOT == '24'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S24",
           "actions": [
             {
@@ -9105,7 +9360,7 @@
           "when": "params.PORT == '2' && params.SLOT == '25'"
         },
         {
-          "phase": 1,
+          "phase": 3,
           "target_part_id": "WAFER_P2_S25",
           "actions": [
             {
@@ -9125,17 +9380,42 @@
       "rules": [
         {
           "phase": 0,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 0,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 0,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 1,
@@ -9148,21 +9428,46 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 2,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_CH}",
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": "{ARM_T1_CH}",
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 2,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T2_CH}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 2,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T3_CH}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 3,
@@ -9173,8 +9478,7 @@
               "to": false,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 4,
@@ -9185,8 +9489,7 @@
               "to": false,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 5,
@@ -9198,21 +9501,46 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 6,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 6,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 6,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 7,
@@ -9225,21 +9553,46 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 8,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_PA}",
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": "{ARM_T1_PA}",
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 8,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T2_PA}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 8,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T3_PA}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 9,
@@ -9250,8 +9603,7 @@
               "to": true,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 10,
@@ -9263,35 +9615,7 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
-        },
-        {
-          "phase": 11,
-          "target_part_id": "ARM_EXTEND",
-          "actions": [
-            {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
-              "duration": 650,
-              "easing": "linear"
-            }
-          ],
-          "when": "params.PORT == '2'"
-        },
-        {
-          "phase": 12,
-          "target_part_id": "ARM_EXTEND",
-          "actions": [
-            {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_PA}",
-              "offset_y": 0,
-              "duration": 650,
-              "easing": "linear"
-            }
-          ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 13,
@@ -9302,8 +9626,7 @@
               "to": false,
               "duration": 0
             }
-          ],
-          "when": "params.PORT == '2'"
+          ]
         },
         {
           "phase": 14,
@@ -9315,21 +9638,46 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 15,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 15,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 15,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 16,
@@ -9342,21 +9690,46 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 17,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": "{ARM_EXTEND_PORT}",
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": "{ARM_T1_PORT}",
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 17,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T2_PORT}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 17,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": "{ARM_T3_PORT}",
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 18,
@@ -9368,21 +9741,46 @@
               "duration": 0
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 19,
-          "target_part_id": "ARM_EXTEND",
+          "target_part_id": "ARM_UPPER",
           "actions": [
             {
-              "type": "offset",
-              "offset_x": 0,
-              "offset_y": 0,
+              "type": "rotate",
+              "angle": 0,
               "duration": 650,
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
+        },
+        {
+          "phase": 19,
+          "target_part_id": "ARM_FORE",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
+        },
+        {
+          "phase": 19,
+          "target_part_id": "ARM_WRIST",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 650,
+              "easing": "linear"
+            }
+          ],
+          "when": ""
         },
         {
           "phase": 20,
@@ -9395,7 +9793,7 @@
               "easing": "linear"
             }
           ],
-          "when": "params.PORT == '2'"
+          "when": ""
         },
         {
           "phase": 1,
@@ -9450,7 +9848,7 @@
           "when": "params.PORT == '1' && params.SLOT == '1'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S1",
           "actions": [
             {
@@ -9486,7 +9884,7 @@
           "when": "params.PORT == '1' && params.SLOT == '2'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S2",
           "actions": [
             {
@@ -9522,7 +9920,7 @@
           "when": "params.PORT == '1' && params.SLOT == '3'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S3",
           "actions": [
             {
@@ -9558,7 +9956,7 @@
           "when": "params.PORT == '1' && params.SLOT == '4'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S4",
           "actions": [
             {
@@ -9594,7 +9992,7 @@
           "when": "params.PORT == '1' && params.SLOT == '5'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S5",
           "actions": [
             {
@@ -9630,7 +10028,7 @@
           "when": "params.PORT == '1' && params.SLOT == '6'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S6",
           "actions": [
             {
@@ -9666,7 +10064,7 @@
           "when": "params.PORT == '1' && params.SLOT == '7'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S7",
           "actions": [
             {
@@ -9702,7 +10100,7 @@
           "when": "params.PORT == '1' && params.SLOT == '8'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S8",
           "actions": [
             {
@@ -9738,7 +10136,7 @@
           "when": "params.PORT == '1' && params.SLOT == '9'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S9",
           "actions": [
             {
@@ -9774,7 +10172,7 @@
           "when": "params.PORT == '1' && params.SLOT == '10'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S10",
           "actions": [
             {
@@ -9810,7 +10208,7 @@
           "when": "params.PORT == '1' && params.SLOT == '11'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S11",
           "actions": [
             {
@@ -9846,7 +10244,7 @@
           "when": "params.PORT == '1' && params.SLOT == '12'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S12",
           "actions": [
             {
@@ -9882,7 +10280,7 @@
           "when": "params.PORT == '1' && params.SLOT == '13'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S13",
           "actions": [
             {
@@ -9918,7 +10316,7 @@
           "when": "params.PORT == '1' && params.SLOT == '14'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S14",
           "actions": [
             {
@@ -9954,7 +10352,7 @@
           "when": "params.PORT == '1' && params.SLOT == '15'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S15",
           "actions": [
             {
@@ -9990,7 +10388,7 @@
           "when": "params.PORT == '1' && params.SLOT == '16'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S16",
           "actions": [
             {
@@ -10026,7 +10424,7 @@
           "when": "params.PORT == '1' && params.SLOT == '17'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S17",
           "actions": [
             {
@@ -10062,7 +10460,7 @@
           "when": "params.PORT == '1' && params.SLOT == '18'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S18",
           "actions": [
             {
@@ -10098,7 +10496,7 @@
           "when": "params.PORT == '1' && params.SLOT == '19'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S19",
           "actions": [
             {
@@ -10134,7 +10532,7 @@
           "when": "params.PORT == '1' && params.SLOT == '20'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S20",
           "actions": [
             {
@@ -10170,7 +10568,7 @@
           "when": "params.PORT == '1' && params.SLOT == '21'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S21",
           "actions": [
             {
@@ -10206,7 +10604,7 @@
           "when": "params.PORT == '1' && params.SLOT == '22'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S22",
           "actions": [
             {
@@ -10242,7 +10640,7 @@
           "when": "params.PORT == '1' && params.SLOT == '23'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S23",
           "actions": [
             {
@@ -10278,7 +10676,7 @@
           "when": "params.PORT == '1' && params.SLOT == '24'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S24",
           "actions": [
             {
@@ -10314,7 +10712,7 @@
           "when": "params.PORT == '1' && params.SLOT == '25'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P1_S25",
           "actions": [
             {
@@ -10378,7 +10776,7 @@
           "when": "params.PORT == '2' && params.SLOT == '1'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S1",
           "actions": [
             {
@@ -10414,7 +10812,7 @@
           "when": "params.PORT == '2' && params.SLOT == '2'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S2",
           "actions": [
             {
@@ -10450,7 +10848,7 @@
           "when": "params.PORT == '2' && params.SLOT == '3'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S3",
           "actions": [
             {
@@ -10486,7 +10884,7 @@
           "when": "params.PORT == '2' && params.SLOT == '4'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S4",
           "actions": [
             {
@@ -10522,7 +10920,7 @@
           "when": "params.PORT == '2' && params.SLOT == '5'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S5",
           "actions": [
             {
@@ -10558,7 +10956,7 @@
           "when": "params.PORT == '2' && params.SLOT == '6'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S6",
           "actions": [
             {
@@ -10594,7 +10992,7 @@
           "when": "params.PORT == '2' && params.SLOT == '7'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S7",
           "actions": [
             {
@@ -10630,7 +11028,7 @@
           "when": "params.PORT == '2' && params.SLOT == '8'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S8",
           "actions": [
             {
@@ -10666,7 +11064,7 @@
           "when": "params.PORT == '2' && params.SLOT == '9'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S9",
           "actions": [
             {
@@ -10702,7 +11100,7 @@
           "when": "params.PORT == '2' && params.SLOT == '10'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S10",
           "actions": [
             {
@@ -10738,7 +11136,7 @@
           "when": "params.PORT == '2' && params.SLOT == '11'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S11",
           "actions": [
             {
@@ -10774,7 +11172,7 @@
           "when": "params.PORT == '2' && params.SLOT == '12'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S12",
           "actions": [
             {
@@ -10810,7 +11208,7 @@
           "when": "params.PORT == '2' && params.SLOT == '13'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S13",
           "actions": [
             {
@@ -10846,7 +11244,7 @@
           "when": "params.PORT == '2' && params.SLOT == '14'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S14",
           "actions": [
             {
@@ -10882,7 +11280,7 @@
           "when": "params.PORT == '2' && params.SLOT == '15'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S15",
           "actions": [
             {
@@ -10918,7 +11316,7 @@
           "when": "params.PORT == '2' && params.SLOT == '16'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S16",
           "actions": [
             {
@@ -10954,7 +11352,7 @@
           "when": "params.PORT == '2' && params.SLOT == '17'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S17",
           "actions": [
             {
@@ -10990,7 +11388,7 @@
           "when": "params.PORT == '2' && params.SLOT == '18'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S18",
           "actions": [
             {
@@ -11026,7 +11424,7 @@
           "when": "params.PORT == '2' && params.SLOT == '19'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S19",
           "actions": [
             {
@@ -11062,7 +11460,7 @@
           "when": "params.PORT == '2' && params.SLOT == '20'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S20",
           "actions": [
             {
@@ -11098,7 +11496,7 @@
           "when": "params.PORT == '2' && params.SLOT == '21'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S21",
           "actions": [
             {
@@ -11134,7 +11532,7 @@
           "when": "params.PORT == '2' && params.SLOT == '22'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S22",
           "actions": [
             {
@@ -11170,7 +11568,7 @@
           "when": "params.PORT == '2' && params.SLOT == '23'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S23",
           "actions": [
             {
@@ -11206,7 +11604,7 @@
           "when": "params.PORT == '2' && params.SLOT == '24'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S24",
           "actions": [
             {
@@ -11242,7 +11640,7 @@
           "when": "params.PORT == '2' && params.SLOT == '25'"
         },
         {
-          "phase": 1,
+          "phase": 18,
           "target_part_id": "WAFER_P2_S25",
           "actions": [
             {
@@ -11856,6 +12254,13 @@
           "phase": 2,
           "target_part_id": "{DOOR}",
           "actions": [
+            {
+              "type": "offset",
+              "angle": 0,
+              "duration": 0,
+              "offset_x": 0,
+              "offset_y": 0
+            },
             {
               "type": "snap",
               "to_part_id": "{home}",
@@ -14574,6 +14979,7 @@
       "LOT_ID": "DEMO_LOT01"
     },
     "part_aliases": {},
+    "offset_mode": "absolute",
     "viewBox_fallback": [
       0,
       0,

@@ -209,6 +209,21 @@
     <rect x="695" y="387" width="84" height="17" rx="8.5" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.6" opacity="0.96"/>
     <text x="737" y="399" font-size="9.5" font-weight="800" fill="#e2e8f0" text-anchor="middle">CHAMBER_C</text>
   </g>
+  <!-- ===== EFEM 真空传输通道（load lock ↔ transfer module）=====
+       此前 PORT1/PORT2 与 ARM_ZONE（TM 六边形）之间只有空白台面，slit 阀悬空、晶圆传输没有腔体。
+       这里补一段封闭腔道：顶边与 TM 下沿完全贴合（共用腔壁），底边压在两个 port 顶边上，
+       两侧外张成斜面并加螺栓 + 内凹腔道，示意 port → slit 阀 → TM 全程处于真空腔体内 ===== -->
+  <g id="EFEM_CORRIDOR" class="" data-pid="EFEM_CORRIDOR" pointer-events="none">
+    <polygon points="409.9,531.7 444.97,442.6 538.5,496.6 632.03,442.6 669.4,531.7" fill="#e6ebf3" stroke="#6b7686" stroke-width="2.6" stroke-linejoin="round"/>
+    <polygon points="420,524.7 450.4,451.3 538.5,503.6 626.6,451.3 659.4,524.7" fill="#0d1420" fill-opacity="0.1" stroke="#5b6679" stroke-width="1.2" stroke-linejoin="round"/>
+    <circle cx="421.6" cy="505.4" r="2" fill="#39414e"/>
+    <circle cx="429.2" cy="484.1" r="2" fill="#39414e"/>
+    <circle cx="438.2" cy="462.8" r="2" fill="#39414e"/>
+    <circle cx="657.7" cy="505.4" r="2" fill="#39414e"/>
+    <circle cx="650.1" cy="484.1" r="2" fill="#39414e"/>
+    <circle cx="641.1" cy="462.8" r="2" fill="#39414e"/>
+    <text x="538.5" y="515" font-size="6.5" font-weight="700" fill="#94a3b8" text-anchor="middle" letter-spacing="2.5">EFEM</text>
+  </g>
   <g id="ARM_ZONE" class="" data-pid="ARM_ZONE" transform="translate(94.5 -11.4)">
     <ellipse cx="444" cy="414" rx="124" ry="20" fill="url(#groundShadow)"/>
     <polygon points="537.53,454 444,508 350.47,454 350.47,346 444,292 537.53,346" fill="url(#framePlate)" stroke="#2f3a4a" stroke-width="3"/>
@@ -230,34 +245,7 @@
     <circle cx="444" cy="400" r="64" fill="none" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
     <text x="444" y="326" font-size="8" font-weight="600" fill="#94a3b8" text-anchor="middle" letter-spacing="2">ROBOT</text>
   </g>
-  <!-- ===== 嵌套蛙腿真空机械臂（ARM_ROBOT 旋转 > ARM_EXTEND 伸缩 > 叉+晶圆随动） ===== -->
-  <g id="ARM_ROBOT" class="" data-pid="ARM_ROBOT" transform="translate(94.5 -11.4)">
-    <circle id="ARM_ANCHOR" cx="444" cy="400" r="210" fill="none" visibility="hidden" data-motion-base-visibility="hidden" pointer-events="none"/>
-    <circle cx="444" cy="400" r="26" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2.6"/>
-    <circle cx="444" cy="400" r="26" fill="url(#chShade)" pointer-events="none"/>
-    <circle cx="444" cy="400" r="19" fill="none" stroke="url(#chFlange)" stroke-width="3"/>
-    <circle cx="444" cy="400" r="5" fill="#39414e"/>
-    <circle cx="465" cy="400" r="2.2" fill="#39414e"/>
-    <circle cx="454.5" cy="418.19" r="2.2" fill="#39414e"/>
-    <circle cx="433.5" cy="418.19" r="2.2" fill="#39414e"/>
-    <circle cx="423" cy="400" r="2.2" fill="#39414e"/>
-    <circle cx="433.5" cy="381.81" r="2.2" fill="#39414e"/>
-    <circle cx="454.5" cy="381.81" r="2.2" fill="#39414e"/>
-    <line x1="460" y1="387" x2="486" y2="358" stroke="url(#armBlade)" stroke-width="8" stroke-linecap="round"/>
-    <line x1="460" y1="413" x2="486" y2="442" stroke="url(#armBlade)" stroke-width="8" stroke-linecap="round"/>
-    <circle cx="486" cy="358" r="7.5" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
-    <circle cx="486" cy="442" r="7.5" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
-    <g id="ARM_EXTEND">
-      <line x1="486" y1="358" x2="488" y2="388" stroke="url(#armBlade)" stroke-width="7" stroke-linecap="round"/>
-      <line x1="486" y1="442" x2="488" y2="412" stroke="url(#armBlade)" stroke-width="7" stroke-linecap="round"/>
-      <rect x="483" y="386" width="13" height="28" rx="4" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
-      <path d="M508,395 L482,395 L482,387 L554,387 L554,391 L494,391 L494,409 L554,409 L554,413 L482,413 L482,405 L508,405 Z" fill="url(#armBlade)" stroke="#3a4250" stroke-width="2" stroke-linejoin="round"/>
-      <line x1="508" y1="400" x2="490" y2="400" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1.4" stroke-linecap="round"/>
-      <g id="WAFER_MOVE" data-motion-base-visibility="hidden"><circle cx="514" cy="400" r="30" fill="url(#waferPattern)" stroke="#2f3a4d" stroke-width="1.2"/><circle cx="514" cy="400" r="30" fill="url(#waferShade)" pointer-events="none"/><circle cx="514" cy="400" r="29.4" fill="none" stroke="url(#edgeMetal)" stroke-width="1.2" pointer-events="none"/><path d="M492.4,382 A28.2,28.2 0 0 1 515.5,371.8" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="1.5" stroke-linecap="round" pointer-events="none"/><path d="M510.8,374.2 L517.2,374.2 L514,378.2 Z" fill="#0d1117" pointer-events="none"/></g>
-      <circle id="ARM_TIP" cx="514" cy="400" r="1.2" fill="#000" fill-opacity="0.01"/>
-    </g>
-    <circle id="ARM_HUB" cx="444" cy="400" r="1.2" fill="#000" fill-opacity="0.01"/>
-  </g>
+  <!-- ARM_ROBOT 已移至 POD/门/卡匣之后绘制，保证机械臂与手上晶圆始终在最上层（见 WAFER_CH_A 之前） -->
   <g id="PA_SLIT" class="" data-pid="PA_SLIT" transform="translate(94.5 -11.4)">
         <rect x="0" y="-37.0" width="16" height="74" rx="5" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="2.4" transform="translate(338 400) rotate(180)"/>
         <rect x="2" y="-32.0" width="12" height="64" rx="3" fill="#0d1420" opacity="0.92" transform="translate(338 400) rotate(180)"/>
@@ -273,188 +261,241 @@
   </g>
   <!-- ===== load lock LL1（slit 宽 79） ===== -->
   <g id="PORT1_SLIT" class="" data-pid="PORT1_SLIT" transform="translate(94.6 -10.6)">
-        <rect x="0" y="-44.5" width="53.70" height="89" rx="5" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="2.4" transform="translate(390.99 491.79) rotate(120)"/>
-        <rect x="2.00" y="-39.5" width="49.70" height="79" rx="3" fill="#0d1420" opacity="0.92" transform="translate(390.99 491.79) rotate(120)"/>
+    <!-- 横向滑轨：与 port2 的滑轨在 x=540 处对接成一根通长压条，下沿包住 port 上沿 -->
+    <rect x="315.4" y="528.6" width="130" height="11" rx="2.5" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="1.6"/>
+    <rect x="318.4" y="531.6" width="124" height="4" rx="2" fill="#0d1420" opacity="0.55"/>
+    <!-- 两侧向下包口（贴着 port 箱体的左右边） -->
+    <rect x="321.3" y="539.6" width="4" height="18" rx="1" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="0.9"/>
+    <rect x="395.3" y="539.6" width="4" height="18" rx="1" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="0.9"/>
   </g>
   <g id="PORT1" class="" data-pid="PORT1" transform="translate(111.4 -15.8)">
     <ellipse cx="341.5" cy="621.5" rx="43.0" ry="11" fill="url(#groundShadow)"/>
     <rect x="304.5" y="543.5" width="74" height="68" rx="9" class="shape"/>
     <rect x="312.5" y="551.5" width="58" height="52" rx="5" fill="url(#deckPlate)" stroke="#8a94a4" stroke-width="1"/>
-    <g transform="translate(324 605.21)">
+    <g transform="translate(324 597)">
       <rect x="-20" y="-9" width="40" height="16" rx="8" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.6"/>
       <text x="0" y="3" font-size="9" font-weight="800" fill="#e2e8f0" text-anchor="middle">LL2</text>
     </g>
-    <circle id="PORT2_C" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_1" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_2" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_3" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_4" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_5" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_6" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_7" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_8" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_9" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_10" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_11" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_12" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_13" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_14" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_15" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_16" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_17" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_18" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_19" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_20" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_21" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_22" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_23" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_24" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P2_SLOT_25" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="PORT1_C" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_1" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_2" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_3" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_4" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_5" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_6" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_7" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_8" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_9" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_10" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_11" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_12" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_13" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_14" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_15" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_16" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_17" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_18" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_19" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_20" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_21" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_22" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_23" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_24" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P1_SLOT_25" cx="341.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
   </g>
   <!-- ===== load lock LL2（slit 宽 79） ===== -->
   <g id="PORT2_SLIT" class="" data-pid="PORT2_SLIT" transform="translate(95.7 -13.8)">
-        <rect x="0" y="-44.5" width="56.20" height="89" rx="5" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="2.4" transform="translate(497.01 491.79) rotate(60)"/>
-        <rect x="2.00" y="-39.5" width="52.20" height="79" rx="3" fill="#0d1420" opacity="0.92" transform="translate(497.01 491.79) rotate(60)"/>
+    <rect x="444.3" y="531.8" width="130" height="11" rx="2.5" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="1.6"/>
+    <rect x="447.3" y="534.8" width="124" height="4" rx="2" fill="#0d1420" opacity="0.55"/>
+    <rect x="493.7" y="542.8" width="4" height="18" rx="1" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="0.9"/>
+    <rect x="567.7" y="542.8" width="4" height="18" rx="1" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="0.9"/>
   </g>
   <g id="PORT2" class="" data-pid="PORT2" transform="translate(79.9 -16.8)">
     <ellipse cx="546.5" cy="621.5" rx="43.0" ry="11" fill="url(#groundShadow)"/>
     <rect x="509.5" y="543.5" width="74" height="68" rx="9" class="shape"/>
     <rect x="517.5" y="551.5" width="58" height="52" rx="5" fill="url(#deckPlate)" stroke="#8a94a4" stroke-width="1"/>
-    <g transform="translate(564 605.21)">
+    <g transform="translate(564 597)">
       <rect x="-20" y="-9" width="40" height="16" rx="8" fill="url(#badgeMetal)" stroke="#93a3ba" stroke-width="0.6"/>
       <text x="0" y="3" font-size="9" font-weight="800" fill="#e2e8f0" text-anchor="middle">LL1</text>
     </g>
-    <circle id="PORT1_C" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_1" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_2" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_3" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_4" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_5" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_6" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_7" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_8" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_9" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_10" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_11" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_12" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_13" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_14" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_15" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_16" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_17" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_18" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_19" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_20" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_21" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_22" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_23" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_24" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
-    <circle id="P1_SLOT_25" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="PORT2_C" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_1" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_2" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_3" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_4" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_5" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_6" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_7" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_8" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_9" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_10" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_11" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_12" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_13" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_14" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_15" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_16" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_17" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_18" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_19" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_20" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_21" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_22" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_23" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_24" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="P2_SLOT_25" cx="546.5" cy="577.5" r="1.2" fill="#000" fill-opacity="0.01"/>
   </g>
-  <g id="DOOR_P1" class="" data-pid="DOOR_P1" transform="translate(94.6 -10.6)"><rect x="-4" y="-16" width="8" height="32" rx="2" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="1" transform="translate(378.99 512.58) rotate(120)"/></g>
-  <g id="MAP_P1" data-motion-base-visibility="hidden" class="" data-pid="MAP_P1" transform="translate(94.6 -10.6)"><line x1="-16" y1="0" x2="16" y2="0" stroke="#dc2626" stroke-width="2.5" transform="translate(369.99 528.17) rotate(120)"/></g>
-  <g id="DOOR_P2" class="" data-pid="DOOR_P2" transform="translate(91.6 -17.0)"><rect x="-4" y="-16" width="8" height="32" rx="2" fill="url(#valveMetal)" stroke="#3a4250" stroke-width="1" transform="translate(509.01 512.58) rotate(60)"/></g>
-  <g id="MAP_P2" data-motion-base-visibility="hidden" class="" data-pid="MAP_P2" transform="translate(91.7 -14.3)"><line x1="-16" y1="0" x2="16" y2="0" stroke="#dc2626" stroke-width="2.5" transform="translate(518.01 528.17) rotate(60)"/></g>
+  <!-- ===== load port 入口整体件：共用前框 + 每个 port 一块长条挡板（门）=====
+       挡板嵌在 port 箱体前沿的开口上（与 port 同宽），开门时沿长轴侧滑让出开口，
+       不再是从前那种贴在 slit 阀门上的小方块 ===== -->
+  <g id="LP_FRONT" class="" data-pid="LP_FRONT" pointer-events="none">
+    <rect x="402" y="596" width="278" height="8" rx="2" fill="url(#deckPlate)" stroke="#8a94a4" stroke-width="1"/>
+    <rect x="410" y="600" width="262" height="2.4" fill="#0d1420" opacity="0.45"/>
+  </g>
+  <g id="DOOR_P1" class="" data-pid="DOOR_P1" transform="translate(94.6 -10.6)"><rect x="327.3" y="598.6" width="62" height="7.5" rx="2" fill="#6b7484" stroke="#2f3640" stroke-width="1.1"/><rect x="351.3" y="600.6" width="14" height="3.4" rx="1.7" fill="#0d1420" opacity="0.6"/><line x1="330.3" y1="602.3" x2="338.3" y2="602.3" stroke="#93a3ba" stroke-width="1.1" stroke-linecap="round"/></g>
+  <g id="DOOR_P2" class="" data-pid="DOOR_P2" transform="translate(91.6 -17.0)"><rect x="503.8" y="604" width="62" height="7.5" rx="2" fill="#6b7484" stroke="#2f3640" stroke-width="1.1"/><rect x="527.8" y="606" width="14" height="3.4" rx="1.7" fill="#0d1420" opacity="0.6"/><line x1="506.8" y1="607.7" x2="514.8" y2="607.7" stroke="#93a3ba" stroke-width="1.1" stroke-linecap="round"/></g>
   <g id="SMIF1" class="" data-pid="SMIF1" transform="translate(158.5 -7.0)">
-    <ellipse cx="295.5" cy="706.2" rx="37" ry="7" fill="url(#groundShadow)"/>
-    <rect x="264.5" y="611.2" width="62" height="92" rx="3" fill="url(#smifShell)" stroke="#3a4250" stroke-width="1.8"/>
-    <rect x="268.5" y="615.2" width="54" height="84" rx="2" fill="url(#smifInner)" stroke="#3a4250" stroke-width="1.2"/>
+    <ellipse cx="295.5" cy="680.2" rx="37" ry="6" fill="url(#groundShadow)"/>
+    <rect x="264.5" y="611.2" width="62" height="66" rx="3" fill="url(#smifShell)" stroke="#3a4250" stroke-width="1.8"/>
+    <rect x="268.5" y="615.2" width="54" height="58" rx="2" fill="url(#smifInner)" stroke="#3a4250" stroke-width="1.2"/>
     <rect x="268.5" y="615.2" width="54" height="22" fill="url(#panelMetal)" opacity="0.92"/>
-    <text x="295.5" y="630.2" font-size="9" font-weight="700" fill="#cbd5e1" text-anchor="middle" letter-spacing="1">SMIF2</text>
-    <rect x="274.5" y="651.2" width="42" height="30" fill="url(#boardMetal)" opacity="0.95" stroke="#3a4250" stroke-width="0.8"/>
-    <rect x="271.5" y="681.2" width="48" height="12" fill="url(#glassDark)" opacity="0.85"/>
+    <text x="295.5" y="630.2" font-size="9" font-weight="700" fill="#cbd5e1" text-anchor="middle" letter-spacing="1">SMIF1</text>
+    <rect x="274.5" y="643.2" width="42" height="20" fill="url(#boardMetal)" opacity="0.95" stroke="#3a4250" stroke-width="0.8"/>
+    <rect x="271.5" y="663.2" width="48" height="8" fill="url(#glassDark)" opacity="0.85"/>
     <circle cx="275.5" cy="622.2" r="2.4" fill="#4b1113" stroke="#111827" stroke-width="0.5"/>
     <circle cx="283.5" cy="622.2" r="2.4" fill="#123524" stroke="#111827" stroke-width="0.5"/>
-    <circle id="SMIF2_C" cx="295.5" cy="657.2" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="SMIF1_C" cx="295.5" cy="644.2" r="1.2" fill="#000" fill-opacity="0.01"/>
   </g>
   <g id="SMIF2" class="" data-pid="SMIF2" transform="translate(35.7 -8.9)">
-    <ellipse cx="592.5" cy="706.2" rx="37" ry="7" fill="url(#groundShadow)"/>
-    <rect x="561.5" y="611.2" width="62" height="92" rx="3" fill="url(#smifShell)" stroke="#3a4250" stroke-width="1.8"/>
-    <rect x="565.5" y="615.2" width="54" height="84" rx="2" fill="url(#smifInner)" stroke="#3a4250" stroke-width="1.2"/>
+    <ellipse cx="592.5" cy="680.2" rx="37" ry="6" fill="url(#groundShadow)"/>
+    <rect x="561.5" y="611.2" width="62" height="66" rx="3" fill="url(#smifShell)" stroke="#3a4250" stroke-width="1.8"/>
+    <rect x="565.5" y="615.2" width="54" height="58" rx="2" fill="url(#smifInner)" stroke="#3a4250" stroke-width="1.2"/>
     <rect x="565.5" y="615.2" width="54" height="22" fill="url(#panelMetal)" opacity="0.92"/>
-    <text x="592.5" y="630.2" font-size="9" font-weight="700" fill="#cbd5e1" text-anchor="middle" letter-spacing="1">SMIF1</text>
-    <rect x="571.5" y="651.2" width="42" height="30" fill="url(#boardMetal)" opacity="0.95" stroke="#3a4250" stroke-width="0.8"/>
-    <rect x="568.5" y="681.2" width="48" height="12" fill="url(#glassDark)" opacity="0.85"/>
+    <text x="592.5" y="630.2" font-size="9" font-weight="700" fill="#cbd5e1" text-anchor="middle" letter-spacing="1">SMIF2</text>
+    <rect x="571.5" y="643.2" width="42" height="20" fill="url(#boardMetal)" opacity="0.95" stroke="#3a4250" stroke-width="0.8"/>
+    <rect x="568.5" y="663.2" width="48" height="8" fill="url(#glassDark)" opacity="0.85"/>
     <circle cx="572.5" cy="622.2" r="2.4" fill="#4b1113" stroke="#111827" stroke-width="0.5"/>
     <circle cx="580.5" cy="622.2" r="2.4" fill="#123524" stroke="#111827" stroke-width="0.5"/>
-    <circle id="SMIF1_C" cx="592.5" cy="657.2" r="1.2" fill="#000" fill-opacity="0.01"/>
+    <circle id="SMIF2_C" cx="592.5" cy="644.2" r="1.2" fill="#000" fill-opacity="0.01"/>
   </g>
   <g id="CST_P1" data-motion-base-visibility="hidden" class="" data-pid="CST_P1" transform="translate(158.5 -7.0)">
-    <rect x="272.5" y="617.2" width="46" height="80" rx="3" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1" opacity="0.95"/>
-    <rect x="278.5" y="623.2" width="34" height="68" rx="2" fill="#0f172a" opacity="0.4"/>
-    <rect id="WAFER_P2_S1" x="281.5" y="626.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S2" x="281.5" y="628.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S3" x="281.5" y="631.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S4" x="281.5" y="633.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S5" x="281.5" y="636.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S6" x="281.5" y="638.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S7" x="281.5" y="641.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S8" x="281.5" y="643.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S9" x="281.5" y="646.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S10" x="281.5" y="648.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S11" x="281.5" y="651.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S12" x="281.5" y="653.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S13" x="281.5" y="656.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S14" x="281.5" y="658.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S15" x="281.5" y="661.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S16" x="281.5" y="663.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S17" x="281.5" y="666.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S18" x="281.5" y="668.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S19" x="281.5" y="671.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S20" x="281.5" y="673.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S21" x="281.5" y="676.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S22" x="281.5" y="678.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S23" x="281.5" y="681.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S24" x="281.5" y="683.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P2_S25" x="281.5" y="686.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect x="272.5" y="617.2" width="46" height="56" rx="3" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1" opacity="0.95"/>
+    <rect x="278.5" y="621.2" width="34" height="48" rx="2" fill="#0f172a" opacity="0.4"/>
+    <rect id="WAFER_P1_S1" x="281.5" y="623.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S2" x="281.5" y="625.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S3" x="281.5" y="626.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S4" x="281.5" y="628.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S5" x="281.5" y="630.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S6" x="281.5" y="632.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S7" x="281.5" y="633.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S8" x="281.5" y="635.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S9" x="281.5" y="637.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S10" x="281.5" y="639.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S11" x="281.5" y="640.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S12" x="281.5" y="642.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S13" x="281.5" y="644.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S14" x="281.5" y="646.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S15" x="281.5" y="647.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S16" x="281.5" y="649.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S17" x="281.5" y="651.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S18" x="281.5" y="653.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S19" x="281.5" y="654.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S20" x="281.5" y="656.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S21" x="281.5" y="658.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S22" x="281.5" y="660.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S23" x="281.5" y="661.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S24" x="281.5" y="663.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P1_S25" x="281.5" y="665.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
   </g>
   <g id="CST_P2" data-motion-base-visibility="hidden" class="" data-pid="CST_P2" transform="translate(35.7 -8.9)">
-    <rect x="569.5" y="617.2" width="46" height="80" rx="3" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1" opacity="0.95"/>
-    <rect x="575.5" y="623.2" width="34" height="68" rx="2" fill="#0f172a" opacity="0.4"/>
-    <rect id="WAFER_P1_S1" x="578.5" y="626.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S2" x="578.5" y="628.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S3" x="578.5" y="631.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S4" x="578.5" y="633.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S5" x="578.5" y="636.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S6" x="578.5" y="638.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S7" x="578.5" y="641.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S8" x="578.5" y="643.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S9" x="578.5" y="646.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S10" x="578.5" y="648.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S11" x="578.5" y="651.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S12" x="578.5" y="653.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S13" x="578.5" y="656.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S14" x="578.5" y="658.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S15" x="578.5" y="661.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S16" x="578.5" y="663.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S17" x="578.5" y="666.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S18" x="578.5" y="668.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S19" x="578.5" y="671.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S20" x="578.5" y="673.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S21" x="578.5" y="676.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S22" x="578.5" y="678.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S23" x="578.5" y="681.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S24" x="578.5" y="683.9" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
-    <rect id="WAFER_P1_S25" x="578.5" y="686.4" width="28" height="1.6" rx="0.8" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect x="569.5" y="617.2" width="46" height="56" rx="3" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1" opacity="0.95"/>
+    <rect x="575.5" y="621.2" width="34" height="48" rx="2" fill="#0f172a" opacity="0.4"/>
+    <rect id="WAFER_P2_S1" x="578.5" y="623.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S2" x="578.5" y="625.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S3" x="578.5" y="626.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S4" x="578.5" y="628.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S5" x="578.5" y="630.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S6" x="578.5" y="632.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S7" x="578.5" y="633.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S8" x="578.5" y="635.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S9" x="578.5" y="637.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S10" x="578.5" y="639.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S11" x="578.5" y="640.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S12" x="578.5" y="642.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S13" x="578.5" y="644.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S14" x="578.5" y="646.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S15" x="578.5" y="647.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S16" x="578.5" y="649.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S17" x="578.5" y="651.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S18" x="578.5" y="653.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S19" x="578.5" y="654.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S20" x="578.5" y="656.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S21" x="578.5" y="658.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S22" x="578.5" y="660.15" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S23" x="578.5" y="661.90" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S24" x="578.5" y="663.65" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
+    <rect id="WAFER_P2_S25" x="578.5" y="665.40" width="28" height="1.3" rx="0.65" fill="url(#slotMetal)" stroke="#10141a" stroke-width="0.15"/>
   </g>
   <g id="POD_P1" data-motion-base-visibility="hidden" class="" data-pid="POD_P1" transform="translate(158.5 -7.0)">
-    <rect x="261.5" y="607.2" width="68" height="100" rx="10" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1.3"/>
+    <rect x="261.5" y="607.2" width="68" height="72" rx="10" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1.3"/>
     <rect x="283.5" y="634.2" width="24" height="11" rx="2" fill="rgba(96,165,250,0.45)"/>
-    <rect x="272.5" y="653.2" width="46" height="36" rx="4" fill="none" stroke="rgba(148,163,184,0.4)" stroke-width="1"/>
+    <rect x="272.5" y="645.2" width="46" height="26" rx="4" fill="none" stroke="rgba(148,163,184,0.4)" stroke-width="1"/>
   </g>
   <g id="POD_P1_LK" data-motion-base-visibility="hidden" class="" data-pid="POD_P1_LK" transform="translate(158.5 -7.0)">
-    <rect x="267.5" y="696.2" width="6" height="6" fill="#dc2626"/>
-    <rect x="317.5" y="696.2" width="6" height="6" fill="#dc2626"/>
+    <rect x="267.5" y="669.2" width="6" height="4" fill="#dc2626"/>
+    <rect x="317.5" y="669.2" width="6" height="4" fill="#dc2626"/>
   </g>
   <g id="POD_P2" data-motion-base-visibility="hidden" class="" data-pid="POD_P2" transform="translate(35.7 -8.9)">
-    <rect x="558.5" y="607.2" width="68" height="100" rx="10" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1.3"/>
+    <rect x="558.5" y="607.2" width="68" height="72" rx="10" fill="url(#cassetteMetal)" stroke="#4b5563" stroke-width="1.3"/>
     <rect x="580.5" y="634.2" width="24" height="11" rx="2" fill="rgba(96,165,250,0.45)"/>
-    <rect x="569.5" y="653.2" width="46" height="36" rx="4" fill="none" stroke="rgba(148,163,184,0.4)" stroke-width="1"/>
+    <rect x="569.5" y="645.2" width="46" height="26" rx="4" fill="none" stroke="rgba(148,163,184,0.4)" stroke-width="1"/>
   </g>
   <g id="POD_P2_LK" data-motion-base-visibility="hidden" class="" data-pid="POD_P2_LK" transform="translate(35.7 -8.9)">
-    <rect x="564.5" y="696.2" width="6" height="6" fill="#dc2626"/>
-    <rect x="614.5" y="696.2" width="6" height="6" fill="#dc2626"/>
+    <rect x="564.5" y="669.2" width="6" height="4" fill="#dc2626"/>
+    <rect x="614.5" y="669.2" width="6" height="4" fill="#dc2626"/>
   </g>
+  <!-- ===== 三段连杆真空机械臂 =====
+       关节链：ARM_ROBOT(整体方位旋转，绕 hub) > ARM_UPPER(肩关节) > ARM_FORE(肘关节) > ARM_WRIST(腕关节 + 叉 + 晶圆)
+       每个关节组内含一块 fill="none" 的不可见参照框，使本组 bbox 中心恰好落在关节上，
+       因此 Motion 里只需要对该组做 rotate（等价于「绕关节转动」），不需要外部 pivot；
+       Motion JSON 由 deriver 输出 ARM_T1/T2/T3 三段角度（折臂 → 伸直即向外伸出）。
+       置于 POD / SMIF / 门 / 卡匣之后，保证机械臂与手上晶圆始终绘制在最上层 ===== -->
+  <g id="ARM_ROBOT" class="" data-pid="ARM_ROBOT" transform="translate(94.5 -11.4)">
+    <circle id="ARM_ANCHOR" cx="444" cy="400" r="210" fill="none" visibility="hidden" data-motion-base-visibility="hidden" pointer-events="none"/>
+    <circle cx="444" cy="400" r="26" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2.6"/>
+    <circle cx="444" cy="400" r="26" fill="url(#chShade)" pointer-events="none"/>
+    <circle cx="444" cy="400" r="19" fill="none" stroke="url(#chFlange)" stroke-width="3"/>
+    <circle cx="444" cy="400" r="5" fill="#39414e"/>
+    <circle cx="465" cy="400" r="2.2" fill="#39414e"/>
+    <circle cx="454.5" cy="418.19" r="2.2" fill="#39414e"/>
+    <circle cx="433.5" cy="418.19" r="2.2" fill="#39414e"/>
+    <circle cx="423" cy="400" r="2.2" fill="#39414e"/>
+    <circle cx="433.5" cy="381.81" r="2.2" fill="#39414e"/>
+    <circle cx="454.5" cy="381.81" r="2.2" fill="#39414e"/>
+    <g id="ARM_UPPER">
+      <rect x="184" y="140" width="520" height="520" fill="none" stroke="none" pointer-events="none"/>
+      <line x1="450.83" y1="401.56" x2="470.83" y2="313.81" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
+      <line x1="437.17" y1="398.44" x2="457.17" y2="310.69" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="444" cy="400" r="9" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+      <circle cx="464" cy="312.25" r="8" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+      <g id="ARM_FORE">
+        <rect x="294" y="142.25" width="340" height="340" fill="none" stroke="none" pointer-events="none"/>
+        <line x1="470.83" y1="310.69" x2="490.83" y2="398.44" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
+        <line x1="457.17" y1="313.81" x2="477.17" y2="401.56" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="484" cy="400" r="7" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+        <g id="ARM_WRIST">
+          <rect x="414" y="330" width="140" height="140" fill="none" stroke="none" pointer-events="none"/>
+          <path d="M486,368 L540,368 M486,432 L540,432 M486,368 L486,432" fill="none" stroke="url(#armBlade)" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+          <g id="WAFER_MOVE" data-motion-base-visibility="hidden"><circle cx="514" cy="400" r="30" fill="url(#waferPattern)" stroke="#2f3a4d" stroke-width="1.2"/><circle cx="514" cy="400" r="30" fill="url(#waferShade)" pointer-events="none"/><circle cx="514" cy="400" r="29.4" fill="none" stroke="url(#edgeMetal)" stroke-width="1.2" pointer-events="none"/><path d="M492.4,382 A28.2,28.2 0 0 1 515.5,371.8" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="1.5" stroke-linecap="round" pointer-events="none"/><path d="M510.8,374.2 L517.2,374.2 L514,378.2 Z" fill="#0d1117" pointer-events="none"/></g>
+          <circle id="ARM_TIP" cx="514" cy="400" r="1.2" fill="#000" fill-opacity="0.01"/>
+        </g>
+      </g>
+    </g>
+    <circle id="ARM_HUB" cx="444" cy="400" r="1.2" fill="#000" fill-opacity="0.01"/>
+  </g>
+  <!-- ===== 映射扫描光束：落在卡匣槽位列上（S1 顶部 → S25 底部）===== -->
+  <g id="MAP_P1" data-motion-base-visibility="hidden" class="" data-pid="MAP_P1" transform="translate(94.6 -10.6)"><line x1="-22" y1="0" x2="22" y2="0" stroke="#dc2626" stroke-width="7" stroke-opacity="0.22" stroke-linecap="round" transform="translate(359.4 630.0)"/><line x1="-20" y1="0" x2="20" y2="0" stroke="#ef4444" stroke-width="2" stroke-linecap="round" transform="translate(359.4 630.0)"/></g>
+  <g id="MAP_P2" data-motion-base-visibility="hidden" class="" data-pid="MAP_P2" transform="translate(91.7 -14.3)"><line x1="-22" y1="0" x2="22" y2="0" stroke="#dc2626" stroke-width="7" stroke-opacity="0.22" stroke-linecap="round" transform="translate(536.5 631.8)"/><line x1="-20" y1="0" x2="20" y2="0" stroke="#ef4444" stroke-width="2" stroke-linecap="round" transform="translate(536.5 631.8)"/></g>
   <g id="WAFER_CH_A" data-motion-base-visibility="hidden" class="" data-pid="WAFER_CH_A" transform="translate(94.5 -11.4)">
     <circle cx="349.0" cy="235.5" r="30" fill="url(#waferPattern)" stroke="#2f3a4d" stroke-width="1.2"/>
     <circle cx="349.0" cy="235.5" r="30" fill="url(#waferShade)" pointer-events="none"/>

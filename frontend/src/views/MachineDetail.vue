@@ -601,15 +601,17 @@ watch(() => appStore.recentEvents[0], () => {
   if (!evs.length) return
   const myEvents = evs.filter(e => e.machine_id === machineId.value)
   if (!myEvents.length) return
-  // 首次接收事件时，只初始化时间戳，不处理历史事件
+  // 首次接收实时事件：用水线 = max(已加载历史最后一条, 本次事件) 初始化，
+  // 历史里已经播过的事件不重复播，但**这条新事件本身要照常处理**。
+  // 旧实现直接 return 丢掉第一条实时事件，导致进页面后注入/上送的第一个事件
+  // 完全不播（表现为「第一次动作没有任何动画」）。
   if (!realtimeEventsInitialized) {
     realtimeEventsInitialized = true
-    const latestTsMs = tsToMs(myEvents[0]?.timestamp || myEvents[0]?.event_ts_utc)
-    if (latestTsMs > lastProcessedRealtimeTsMs) {
-      lastProcessedRealtimeTsMs = latestTsMs
-    }
+    const histLastTsMs = events.value.length
+      ? tsToMs(events.value[events.value.length - 1].timestamp || events.value[events.value.length - 1].event_ts_utc)
+      : 0
+    lastProcessedRealtimeTsMs = Math.max(lastProcessedRealtimeTsMs, histLastTsMs)
     console.log('[MachineDetail] 实时事件初始化, lastProcessedRealtimeTsMs=', lastProcessedRealtimeTsMs)
-    return
   }
   // 只处理比上次更新的事件
   const newEvents = myEvents.filter(e => {

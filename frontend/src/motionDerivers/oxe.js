@@ -37,6 +37,30 @@ function reachFor(unitKey) {
   return Math.round((UNIT_DIST[unitKey] ?? 200) - ARM_REACH_IN)
 }
 
+// 三段连杆几何（与 oxe-drm-topview.svg 的 ARM_UPPER / ARM_FORE / ARM_WRIST 一致）：
+// 肩、肘各 90，腕关节收回时半径 40，叉端晶圆中心再外伸 30（= ARM_REACH_IN 70）。
+// 折臂基态 α₀ = acos(40/180) ≈ 77.16°，伸直（α=0）即完全伸出（腕 180，晶圆 210）。
+const LINK_LEN = 90
+const WRIST_BASE_R = 40
+const FORK_REACH = 30
+const ALPHA_BASE = (Math.acos(WRIST_BASE_R / (LINK_LEN * 2)) * 180) / Math.PI
+
+/**
+ * 目标单元的三段关节角度（相对折臂基态的增量，单位 deg）
+ * t1 肩、t2 肘（相对肩的两倍反向）、t3 腕（回正，保证叉始终朝径向）
+ */
+function linkAngles(unitKey, aliasKey = unitKey) {
+  const dist = UNIT_DIST[unitKey] ?? 200
+  const wristR = Math.min(LINK_LEN * 2, Math.max(WRIST_BASE_R, dist - FORK_REACH))
+  const alpha = (Math.acos(wristR / (LINK_LEN * 2)) * 180) / Math.PI
+  const t1 = ALPHA_BASE - alpha
+  return {
+    [`ARM_T1_${aliasKey}`]: t1.toFixed(2),
+    [`ARM_T2_${aliasKey}`]: (2 * (alpha - ALPHA_BASE)).toFixed(2),
+    [`ARM_T3_${aliasKey}`]: t1.toFixed(2),
+  }
+}
+
 // 量产告警：bridge 会把描述词错填进 port_id/chamber_id（AGC / Light / Time / Out / Error…），
 // 这些不是合法端口，端口归一必须拒绝并回退，否则一条告警会把后续事件的 lastPort 带偏
 const VALID_PORT_RE = /^(PORT)?[12]$|^SMIF[_-]?[12]$/
@@ -237,6 +261,10 @@ export function createOxeDeriver() {
         ARM_EXTEND_CH: String(reachFor(`CH_${ch}`)),
         // 兼容旧引用（默认伸出量）
         ARM_EXTEND_OUT: String(reachFor(`CH_${ch}`)),
+        // 三段连杆关节角（ARM_UPPER / ARM_FORE / ARM_WRIST 的 rotate 目标角）
+        ...linkAngles(`PORT${port}`, 'PORT'),
+        ...linkAngles('PA'),
+        ...linkAngles(`CH_${ch}`, 'CH'),
         // 面板：完成计数（{DONE_COUNT} 文本模板）
         DONE_COUNT: `${doneCount[port]}/25`,
         // 面板：告警归属 + 计数 + 最近 3 行

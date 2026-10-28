@@ -203,6 +203,7 @@ async function processEvent(ev, playMode) {
     mode: playMode,
     reset: false,
     partAliases: extCfg.part_aliases || {},
+    offsetMode: extCfg.offset_mode === 'absolute' ? 'absolute' : 'relative',
     onWarn: pushWarn,
   })
   if (!result.ok) {
