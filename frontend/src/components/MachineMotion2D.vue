@@ -83,8 +83,10 @@ async function loadAssets() {
     loadError.value = '该机型未绑定 2D SVG（views_config.view_2d.model_source 为空）'
     return
   }
+  // 强制破缓存：静态 SVG 经 vite/后端静态挂载会带 etag，开发期改图后需确保拿到最新版
+  const bustUrl = svgUrl + (svgUrl.includes('?') ? '&' : '?') + '_v=' + Date.now()
   try {
-    const resp = await fetch(svgUrl, { cache: 'no-store' })
+    const resp = await fetch(bustUrl, { cache: 'no-store' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     svgMarkup.value = scopeSvgPaintIds(await resp.text())
   } catch (e) {
@@ -260,7 +262,13 @@ const debugMsg = ref('')
 const debugSteps = computed(() => (motionConfig.value?.motions || []).map(m => m.step))
 
 // deriver 内部派生参数，不需要用户填
-const DEBUG_INTERNAL_KEYS = new Set(['has_entered_chamber', 'cross_arm', 'cycle'])
+const DEBUG_INTERNAL_KEYS = new Set(['has_entered_chamber', 'cross_arm', 'cycle',
+  'pod_shell', 'POD', 'POD_LK', 'CST', 'DOOR', 'MAP', 'SMIF_C', 'PORT_C', 'SLOT_ANCHOR',
+  'CH_C', 'WAFER_CH', 'CH_RUN', 'CH_ALARM', 'CH_UNLOAD', 'ARM_HOME', 'ARM_PORT_ANGLE',
+  'ARM_CH_ANGLE', 'ARM_PA_ANGLE', 'ARM_EXTEND_OUT',
+  'DONE_COUNT', 'ALARM_PORT', 'ALARM_COUNT', 'AL1', 'AL2', 'AL3'])
+// SM01..SM25 为 deriver 展开的逐槽 mapping 字符（when 用），同样不展示
+const DEBUG_INTERNAL_RE = /^SM\d{2}$/
 // 常用参数示例值（默认值优先取 ext.param_defaults）
 const DEBUG_PARAM_EXAMPLES = {
   SMIFPORTID: '1', PORT: '1', LOT_ID: 'DEMO_LOT01', SLOT: '1', CHAMBER: 'E',
@@ -275,7 +283,8 @@ watch(debugStep, (step) => {
     return
   }
   const whens = [motion.when, ...(motion.rules || []).map(r => r.when)]
-  const keys = extractParamKeys(whens).filter(k => !DEBUG_INTERNAL_KEYS.has(k))
+  const keys = extractParamKeys(whens).filter(k =>
+    !DEBUG_INTERNAL_KEYS.has(k) && !DEBUG_INTERNAL_RE.test(k))
   const defaults = ext.value.param_defaults || {}
   debugParams.value = keys.map(k => ({
     key: k,

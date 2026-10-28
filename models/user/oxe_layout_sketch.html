@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>OXE Cluster 布局草图 · 可拖拽/缩放/旋转/拉宽管道</title>
+<style>
+  html,body{margin:0;height:100%;background:#eef2f7;font-family:Arial,'Microsoft YaHei',sans-serif;overflow:hidden}
+  #wrap{display:flex;height:100%}
+  #stage{flex:1;position:relative}
+  svg{width:100%;height:100%;display:block;background:#f8fafc}
+  .unit{cursor:grab}
+  .unit:active{cursor:grabbing}
+  .unit.dragging .shape{stroke:#2563eb!important;stroke-width:4!important}
+  .unit.sel .shape{stroke:#dc2626!important;stroke-width:3.5!important}
+  .slit{fill:#0d1420;stroke:#56606e;stroke-width:2}
+  .label{font-size:14px;font-weight:700;fill:#1f2937;text-anchor:middle;pointer-events:none;user-select:none}
+  .sub{font-size:10px;fill:#64748b;text-anchor:middle;pointer-events:none;user-select:none}
+  .tlabel{font-size:13px;font-weight:800;fill:#1f2937;text-anchor:middle;pointer-events:none;user-select:none}
+  .tsub{font-size:9.5px;fill:#64748b;text-anchor:middle;pointer-events:none;user-select:none}
+  .panel{width:282px;background:#0f172a;color:#e2e8f0;padding:16px;box-sizing:border-box;overflow-y:auto;font-size:12px}
+  .panel h2{font-size:15px;margin:0 0 4px}
+  .panel p{color:#94a3b8;margin:0 0 10px;font-size:11px;line-height:1.55}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;margin:2px 0;background:#1e293b;cursor:pointer}
+  .row.sel{outline:2px solid #dc2626}
+  .row b{color:#7dd3fc;font-weight:600}
+  .coord{font-variant-numeric:tabular-nums;color:#fbbf24!important;font-size:10.5px}
+  button{width:100%;margin-top:6px;padding:9px;border:0;border-radius:7px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;font-size:12px}
+  button:hover{background:#1d4ed8}
+  button.ghost{background:#334155}
+  button.ghost:hover{background:#475569}
+  #out{width:100%;height:118px;box-sizing:border-box;background:#020617;color:#86efac;border:1px solid #1e293b;border-radius:6px;
+       font-family:Consolas,monospace;font-size:9.5px;margin-top:8px;padding:8px;resize:none}
+  .hint{position:absolute;left:14px;top:12px;background:rgba(15,23,42,.86);color:#fff;padding:9px 12px;border-radius:7px;font-size:11.5px;line-height:1.6;max-width:360px}
+  kbd{background:#334155;border-radius:4px;padding:1px 6px;color:#fff;font-family:Consolas;font-size:10.5px}
+  .keys{position:absolute;left:14px;bottom:12px;background:rgba(15,23,42,.82);color:#cbd5e1;padding:9px 13px;border-radius:7px;font-size:11px;line-height:1.75}
+  #angleInfo{position:absolute;right:14px;top:12px;background:rgba(37,99,235,.95);color:#fff;padding:9px 13px;border-radius:8px;font-size:12px;font-variant-numeric:tabular-nums;min-width:170px;line-height:1.5}
+  .pipeHandle{cursor:ew-resize}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <div class="hint"><b>布局编辑器</b>（中间正六边形）<br>拖动=移动 · <kbd>滚轮</kbd>=部件大小 · <kbd>Shift+滚轮</kbd>=旋转 · <kbd>Ctrl+滚轮</kbd>=管道宽窄 · <kbd>双击</kbd>=复位</div>
+    <div id="angleInfo">选中部件后在此操作</div>
+    <div class="keys">
+      <kbd>拖动</kbd>移动 · <kbd>滚轮</kbd>缩放大小 · <kbd>Shift+滚轮</kbd>旋转 · <kbd>Ctrl+滚轮</kbd>拉宽/收窄连接管道<br>
+      拖动 hub=整组平移 · <kbd>双击</kbd>复位该部件 · LL1/LL2 大小与管道始终一致
+    </div>
+    <svg id="svg" viewBox="0 0 900 760" preserveAspectRatio="xMidYMid meet">
+      <g id="links"></g>
+      <g id="guides"></g>
+      <g id="hubG" class="unit"></g>
+      <g id="units"></g>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <h2>布局坐标（实时）</h2>
+    <p>极坐标=机械臂角度(0°=右,顺时针)/半径；“管宽”=该部件连接六边形的 slit 通道宽度。</p>
+    <div id="list"></div>
+    <button id="exportBtn">导出 Python 几何常量</button>
+    <button id="resetBtn" class="ghost">恢复默认布局</button>
+    <textarea id="out" readonly placeholder="点“导出”后这里出现可粘给 ZCode 的几何参数…"></textarea>
+  </div>
+</div>
+
+<script>
+const NS="http://www.w3.org/2000/svg";
+const hub0={x:450,y:380,r:108,rot:0,sw:86};
+
+// 每个 unit 带 sw（连接管道宽）。LL1/LL2 通过 LINKED 组保持大小+管宽一致
+// —— 以下坐标/角度/尺寸/管宽由用户在草图中拖动导出确认（2026-10-27）——
+const DEFAULTS=[
+  {id:'CH_C',name:'CH_C',cn:'工艺腔 C',type:'circle', r:70, ang:1,    dist:201, rot:0, sw:72, slit:true},
+  {id:'CH_A',name:'CH_A',cn:'工艺腔 A',type:'circle', r:70, ang:-121, dist:190, rot:0, sw:72, slit:true},
+  {id:'CH_B',name:'CH_B',cn:'工艺腔 B',type:'circle', r:70, ang:-58,  dist:195, rot:0, sw:72, slit:true},
+  {id:'PA',  name:'PA',  cn:'预对准器',type:'ellipse',rx:78,ry:64, ang:-180, dist:192, rot:0, sw:64, slit:true},
+  {id:'LL1',name:'LL1',cn:'Loadlock 1',type:'rect',w:74,h:68,ang:61, dist:210,dx:0,rot:0,sw:79,slit:true,group:'LL'},
+  {id:'LL2',name:'LL2',cn:'Loadlock 2',type:'rect',w:74,h:68,ang:119,dist:205,dx:0,rot:0,sw:79,slit:true,group:'LL'},
+];
+
+let hub={...hub0};
+let units=DEFAULTS.map(d=>({...d}));
+let selId='hub';
+const $=id=>document.getElementById(id);
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+function polar(ang,dist,cx=hub.x,cy=hub.y){const r=ang*Math.PI/180;return{x:cx+dist*Math.cos(r),y:cy+dist*Math.sin(r)};}
+function relAng(x,y){return Math.atan2(y-hub.y,x-hub.x)*180/Math.PI;}
+function relDist(x,y){return Math.hypot(x-hub.x,y-hub.y);}
+function norm(a){return Math.round((((Math.round(a)+180)%360)+360)%360-180);}
+function pos(u){
+  const main=polar(u.ang,u.dist);
+  if(u.type==='rect'&&u.dx!=null){
+    const r=u.ang*Math.PI/180;
+    return{x:main.x+Math.cos(r+Math.PI/2)*u.dx,y:main.y+Math.sin(r+Math.PI/2)*u.dx};
+  }
+  return main;
+}
+function sizeOf(u){return u.type==='circle'?u.r:u.type==='ellipse'?Math.max(u.rx,u.ry):Math.max(u.w,u.h)/2;}
+// 同组（LL）联动：取组内任一成员做缩放/管宽时同步
+function linked(u){return u.group?units.filter(x=>x.group===u.group):[u];}
+
+function drawGuides(){
+  const g=$('guides');g.innerHTML='';
+  g.appendChild(el('circle',{cx:hub.x,cy:hub.y,r:hub.r,fill:'none',stroke:'#2563eb','stroke-width':1,'stroke-dasharray':'5,5',opacity:.4}));
+  [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dx,dy])=>{
+    g.appendChild(el('line',{x1:hub.x+dx*120,y1:hub.y+dy*120,x2:hub.x+dx*340,y2:hub.y+dy*340,
+      stroke:'#93c5fd','stroke-width':1,'stroke-dasharray':'5,5',opacity:.5}));
+  });
+}
+
+function drawLinks(){
+  const lg=$('links');lg.innerHTML='';
+  units.forEach(u=>{
+    if(!u.slit)return;
+    const p=pos(u);const ang=relAng(p.x,p.y);
+    const r1=relDist(p.x,p.y)-sizeOf(u)+6;
+    const g0=polar(ang,hub.r-2),g1=polar(ang,r1);
+    const len=Math.hypot(g1.x-g0.x,g1.y-g0.y);
+    if(len<8)return;
+    const w=u.sw;
+    const grp=el('g',{transform:`translate(${g0.x} ${g0.y}) rotate(${ang})`,'data-link':u.id});
+    grp.appendChild(el('rect',{x:-3,y:-w/2-5,width:len+6,height:w+10,fill:'#56606e',rx:5}));
+    grp.appendChild(el('rect',{x:0,y:-w/2,width:len,height:w,class:'slit',rx:4}));
+    // 选中部件的管道加红框，便于辨认
+    if(selId===u.id)grp.appendChild(el('rect',{x:-3,y:-w/2-5,width:len+6,height:w+10,fill:'none',stroke:'#dc2626','stroke-width':2,rx:5}));
+    lg.appendChild(grp);
+  });
+}
+
+function shapeFor(u){
+  if(u.type==='circle')return el('circle',{class:'shape',r:u.r,fill:'#fff',stroke:'#2f3a4a','stroke-width':2.5});
+  if(u.type==='ellipse')return el('ellipse',{class:'shape',rx:u.rx,ry:u.ry,fill:'#fff',stroke:'#2f3a4a','stroke-width':2.5});
+  return el('rect',{class:'shape',x:-u.w/2,y:-u.h/2,width:u.w,height:u.h,rx:10,fill:'#e9edf3',stroke:'#3a4250','stroke-width':2.5});
+}
+
+function drawHub(){
+  const g=$('hubG');g.innerHTML='';
+  g.setAttribute('class','unit'+(selId==='hub'?' sel':''));
+  g.setAttribute('transform',`translate(${hub.x} ${hub.y}) rotate(${hub.rot})`);
+  const R=hub.r,pts=[];
+  for(let i=0;i<6;i++){const a=(30+i*60)*Math.PI/180;pts.push(`${(R*Math.cos(a)).toFixed(1)},${(R*Math.sin(a)).toFixed(1)}`);}
+  g.appendChild(el('polygon',{class:'shape',points:pts.join(' '),fill:'#dfe6ef',stroke:'#2f3a4a','stroke-width':3}));
+  g.appendChild(el('circle',{cx:0,cy:0,r:R*0.55,fill:'none',stroke:'#94a3b8','stroke-width':1,'stroke-dasharray':'3,4'}));
+  g.appendChild(el('circle',{cx:0,cy:0,r:6,fill:'#dc2626'}));
+  const t=el('text',{class:'tlabel',y:-3});t.textContent='TM';g.appendChild(t);
+  const t2=el('text',{class:'tsub',y:14});t2.textContent='hub 正六边形';g.appendChild(t2);
+  bindDrag(g,()=>hub,(v)=>{hub=v;});
+}
+
+function drawUnits(){
+  const ug=$('units');ug.innerHTML='';
+  units.forEach(u=>{
+    const p=pos(u);
+    const g=el('g',{class:'unit'+(selId===u.id?' sel':''),transform:`translate(${p.x} ${p.y}) rotate(${u.rot})`});
+    g.appendChild(shapeFor(u));
+    const t=el('text',{class:'label',y:u.type==='rect'?-2:4});t.textContent=u.name;g.appendChild(t);
+    const t2=el('text',{class:'sub',y:u.type==='rect'?15:20});t2.textContent=u.cn;g.appendChild(t2);
+    ug.appendChild(g);
+    bindDrag(g,u);
+  });
+}
+
+function build(){drawGuides();drawLinks();drawHub();drawUnits();renderList();}
+
+// ============ 交互 ============
+let drag=null;
+function svgPoint(ev){const pt=$('svg').createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform($('svg').getScreenCTM().inverse());}
+
+function bindDrag(g,u){
+  const isHub=!u.id;
+  g.addEventListener('pointerdown',ev=>{
+    if(ev.button!==0)return;
+    ev.preventDefault();ev.stopPropagation();
+    selId=isHub?'hub':u.id;
+    drag={target:u,isHub,start:svgPoint(ev)};
+    g.classList.add('dragging');g.setPointerCapture(ev.pointerId);
+    build();
+  });
+  g.addEventListener('dblclick',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    if(isHub){Object.assign(hub,hub0);}
+    else linked(u).forEach(x=>Object.assign(x,DEFAULTS.find(d=>d.id===x.id)));
+    build();
+  });
+  g.addEventListener('wheel',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    selId=isHub?'hub':u.id;
+    const k=ev.deltaY<0?1.06:1/1.06;
+    if(ev.ctrlKey||ev.metaKey){ // 管道宽窄（LL 联动）
+      const setW=x=>{x.sw=Math.max(36,Math.min(150,x.sw*k));};
+      if(isHub)hub.sw=Math.max(50,Math.min(180,hub.sw*k)); else linked(u).forEach(setW);
+    }else if(ev.shiftKey){ // 旋转
+      const d=ev.deltaY<0?5:-5;
+      if(isHub)hub.rot=Math.round((hub.rot+d)*10)/10; else u.rot=Math.round((u.rot+d)*10)/10;
+    }else{ // 缩放（LL 联动等比）
+      if(isHub)hub.r=Math.max(70,Math.min(170,hub.r*k));
+      else linked(u).forEach(x=>scaleUnit(x,k));
+    }
+    build();showInfo(isHub?hub:u);
+  },{passive:false});
+}
+
+function scaleUnit(u,k){
+  if(u.type==='circle')u.r=Math.max(36,Math.min(130,u.r*k));
+  else if(u.type==='ellipse'){u.rx=Math.max(26,Math.min(90,u.rx*k));u.ry=Math.max(22,Math.min(80,u.ry*k));}
+  else{u.w=Math.max(70,Math.min(200,u.w*k));u.h=Math.max(62,Math.min(170,u.h*k));}
+}
+
+window.addEventListener('pointermove',ev=>{
+  if(!drag)return;
+  const p=svgPoint(ev);
+  if(drag.isHub){hub.x=p.x;hub.y=p.y;}
+  else{const u=drag.target;u.ang=norm(relAng(p.x,p.y));u.dist=Math.round(relDist(p.x,p.y));}
+  build();showInfo(drag.isHub?hub:drag.target);
+});
+window.addEventListener('pointerup',()=>{
+  document.querySelectorAll('.unit.dragging').forEach(e=>e.classList.remove('dragging'));
+  drag=null;
+});
+
+function showInfo(u){
+  if(!u)return;
+  if(u.id){const p=pos(u);
+    $('angleInfo').innerHTML=`<b>${u.id}</b><br>角 ${norm(relAng(p.x,p.y))}° · r ${Math.round(relDist(p.x,p.y))}<br>尺寸 ${Math.round(sizeOf(u))} · 管宽 ${Math.round(u.sw)} · 自转 ${u.rot}°`;
+  }else $('angleInfo').innerHTML=`<b>hub / TM 正六边形</b><br>(${Math.round(hub.x)},${Math.round(hub.y)})<br>外接R ${Math.round(hub.r)} · 管口宽 ${Math.round(hub.sw)} · 自转 ${hub.rot}°`;
+}
+
+$('svg').addEventListener('pointerdown',ev=>{if(ev.target.tagName==='svg'||ev.target.closest('#guides')){selId='hub';build();}});
+
+function renderList(){
+  const list=$('list');list.innerHTML='';
+  units.forEach(u=>{
+    const p=pos(u);const a=norm(relAng(p.x,p.y)),d=Math.round(relDist(p.x,p.y));
+    const r=document.createElement('div');r.className='row'+(selId===u.id?' sel':'');
+    r.innerHTML=`<span><b>${u.id}</b> ${u.cn}${u.group?' 🔗':''}</span><span class="coord">${a}° r${d}<br>管${Math.round(u.sw)} 大${Math.round(sizeOf(u))}</span>`;
+    r.onclick=()=>{selId=u.id;build();showInfo(u);};
+    list.appendChild(r);
+  });
+  const hr=document.createElement('div');hr.className='row'+(selId==='hub'?' sel':'');
+  hr.innerHTML=`<span><b>hub/TM</b> 正六边形</span><span class="coord">R${Math.round(hub.r)} 管口${Math.round(hub.sw)}<br>${hub.rot}°</span>`;
+  hr.onclick=()=>{selId='hub';build();};
+  list.appendChild(hr);
+}
+
+$('resetBtn').onclick=()=>{hub={...hub0};units=DEFAULTS.map(d=>({...d}));selId='hub';$('out').value='';build();};
+$('exportBtn').onclick=()=>{
+  const L=[];
+  L.push(`HUB = (${Math.round(hub.x)}, ${Math.round(hub.y)})  # 正六边形外接 R=${Math.round(hub.r)}, 管口参考宽 ${Math.round(hub.sw)}`);
+  L.push('TRANSFER_R = '+Math.round(hub.r));
+  L.push('');
+  units.forEach(u=>{
+    const p=pos(u);const a=norm(relAng(p.x,p.y)),d=Math.round(relDist(p.x,p.y));
+    const sz=u.type==='circle'?`r=${Math.round(u.r)}`:u.type==='ellipse'?`rx=${Math.round(u.rx)},ry=${Math.round(u.ry)}`:`w=${Math.round(u.w)},h=${Math.round(u.h)}`;
+    L.push(`# ${u.id} ${u.cn} center=(${Math.round(p.x)},${Math.round(p.y)}) angle=${a} dist=${d} ${sz} slit_w=${Math.round(u.sw)} rot=${u.rot}${u.group?' LINKED':''}`);
+  });
+  L.push('');
+  L.push('# deriver ARM_ANGLES（0=东，顺时针，负=上）');
+  const map={CH_A:'CH_A',CH_B:'CH_B',CH_C:'CH_C',PA:'PA',LL1:'PORT1',LL2:'PORT2'};
+  units.forEach(u=>{const p=pos(u);L.push(`  ${map[u.id]||u.id}: ${norm(relAng(p.x,p.y))},`);});
+  L.push('');
+  L.push('# 各单元 slit 通道宽 SLIT_W_*');
+  units.forEach(u=>{L.push(`  ${u.id}: ${Math.round(u.sw)},`);});
+  $('out').value=L.join('\n');
+};
+
+build();
+</script>
+</body>
+</html>

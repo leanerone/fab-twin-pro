@@ -1,16 +1,18 @@
 # FabTwin Pro 项目进度文档
 
 > 更新日期：2026-10-27
-> 当前版本：ver2.14（feature/svg-unify 分支）
-> 分支：**feature/svg-unify**（自 test3 切出；2D 视图统一 SVG 改造）
+> 当前版本：ver2.14.2（test31 分支）
+> 分支：**test31**
 
 ---
 
 ## 〇、当前状态速览（2026-10-27）
 
+> **2026-10-27 ver2.14.2**：**OXE 2D 视图 AMAT 金属风格重绘 + 旧 Canvas 看板两块面板迁移落地**——顶视图改 amat_metsput 同款金属质感（法兰螺栓/彩虹晶圆/金属片槽/SMIF 金属壳），并把随归档丢失的**左右「材料详情」25 槽 Wafer Map**（等待灰/加工绿/完成黄三态 + LOT/状态/完成徽章）与**左右「告警消息」面板**（计数 + 最近 3 行）以 SVG 部件 + Motion JSON 规则形式做进统一管线；晶舟片条随取放片逐槽亮灭，deriver 维护 25 槽状态机/告警队列/完成计数，mapping 值（25 位 0/1/2/3）直接驱动。端到端 debug 注入实测通过，零告警。生成器：`models/user/gen_oxe_svg.py`、`build_oxe_motion.py`（幂等，从 git 基线重建）。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部 ver2.14.2。
+>
 > **2026-10-27 ver2.14**：**2D 视图统一 SVG 完成**——PODOPENER（开盖机）与 OXE DRM（刻蚀机）2D 视图全部迁入 motion2d 统一管线（静态 SVG 资产 + Motion JSON v1.1 + deriver），MachineMotion2D 成为唯一 2D 组件；旧 MachineVpoView/MachineOxeView/MachineModel2D/MachineIsoView 归档至 `archive/2026-10-27-svg-unify/`。SVG 外观参考 TEL 真机样式（浅灰钣金+TEL蓝+三色塔灯/DRM cluster 顶视布局）。全 14+20 事件语义经浏览器端到端实测（debug 注入→DB→轮询→WS→deriver→动画）通过。机型接入成本降为「SVG 资产 + Motion JSON + deriver 三件套，零组件开发」。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部 ver2.14。
 >
-> **当前开发主线**：①OXE Wafer Map/告警侧栏 HTML 浮层组件化（旧 Canvas 面板未迁移）②DB 性能三步走落地 ③Dify MCP 形态 A 接入。
+> **当前开发主线**：①DB 性能三步走落地 ②Dify MCP 形态 A 接入。
 >
 > **2026-10-20 ver2.11.1**：AMAT METSPUT 动画修复轮收尾（ARM_2 下层杆镜像方案推翻→恢复单边出片 + z-order 修正，DB 配置已同步 16604→19835 chars）；文档同步刷新（系统架构说明书 ver2.6.1→ver2.11.1）；两项架构规划定案：**DB 查询卡顿三步走**（DBA 复合索引/SQL 改写 → cachetools 进程内缓存 → Garnet xcopy 免安装部署，见系统架构说明书 §7.10）、**AI Agent 标准化两步走**（形态 A：Dify 1.6+ 双向 MCP 薄接入 + 前端 SSE 多轮 → 形态 B：独立 Fab MCP 工具网关，见 §7.11）。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部。
 >

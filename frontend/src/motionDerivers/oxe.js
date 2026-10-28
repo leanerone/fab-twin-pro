@@ -7,19 +7,39 @@
  * - 腔体归一：CHAMBER_A/B/C → A/B/C；WAFERLOADED/WAFERUNLOADED 等缺 chamber 时按端口默认（1→A，2→B）
  * - MIC（line1 OXE）无 SMIF 外壳：pod_shell='0'，POD_PLACED 只出晶舟不出壳
  * - 机械臂角度：blade 基座朝东（0°），rotate 到目标单元方位角
- *   （放射状 cluster 顶视图几何，hub=(380,360)：CH_A=-135 / CH_B=-45 / CH_C=0 /
- *   PORT1=103.7 / PORT2=74.2 / PA=146.3 / HOME=-90 朝 Gas Box）
- * - 产出占位符 id（POD/CST/DOOR/MAP/SLOT_ANCHOR/CH_*），Motion JSON 用 {param} 引用
+ *   （v2.5 镜像对称居中布局，hub=(444,400)：CH_A=-120 / CH_B=-60 / CH_C=0 /
+ *   LL1=60 / LL2=120 / PA=180 / HOME=-90 朝 Gas Box）
+ *   动作模型：收回(ARM_EXTEND offset 0)状态下 rotate → 伸出(offset +80)取/放 → 收回，
+ *   晶圆(WAFER_MOVE)是叉端子件，随臂一起转/伸缩，不独立 snap，不会空中飞
+ * - Wafer Map 状态机（每端口 25 槽）：0 空 / 1 等待 / 2 加工中 / 3 完成
+ *   · POD_PLACED 初始化为全 1；WAFER_MAPPING 以事件值覆盖（25 位 0/1/2/3）
+ *   · WAFERLOADED 本槽 1→2；WAFERUNLOADED 本槽 2→3 并累加完成计数
+ * - 产出占位符 id（POD/CST/DOOR/MAP/SLOT_ANCHOR/CH_x/面板徽章/WM 三态条），
+ *   Motion JSON 用 {param} / when 引用
  */
 const ARM_ANGLES = {
   HOME: -90,
-  PORT1: 103.7,
-  PORT2: 74.2,
-  CH_A: -135,
-  CH_B: -45,
+  PORT1: 120,
+  PORT2: 60,
+  CH_A: -120,
+  CH_B: -60,
   CH_C: 0,
-  PA: 146.3,
+  PA: 180,
 }
+// 各单元中心到 hub 的距离（v2.5 镜像对称布局，SVG 坐标）
+// 机械臂收回叉托在局部 r=70；伸出 offset = 单元距离 - 70，使叉托精确到单元中心
+const UNIT_DIST = {
+  CH_A: 190, CH_B: 190, CH_C: 201, PA: 192, PORT1: 205, PORT2: 205,
+}
+const ARM_REACH_IN = 70
+const ARM_EXTEND_OUT = UNIT_DIST.CH_C - ARM_REACH_IN   // 兜底默认（CH_C）
+function reachFor(unitKey) {
+  return Math.round((UNIT_DIST[unitKey] ?? 200) - ARM_REACH_IN)
+}
+
+// 量产告警：bridge 会把描述词错填进 port_id/chamber_id（AGC / Light / Time / Out / Error…），
+// 这些不是合法端口，端口归一必须拒绝并回退，否则一条告警会把后续事件的 lastPort 带偏
+const VALID_PORT_RE = /^(PORT)?[12]$|^SMIF[_-]?[12]$/
 
 function normalizeChamber(val) {
   const s = String(val ?? '').trim().toUpperCase()
@@ -31,9 +51,9 @@ function normalizeChamber(val) {
 
 function normalizePort(val) {
   const s = String(val ?? '').trim().toUpperCase()
-  if (/^(PORT)?1$/.test(s) || s === 'SMIF1' || s === 'SMIF_1') return '1'
-  if (/^(PORT)?2$/.test(s) || s === 'SMIF2' || s === 'SMIF_2') return '2'
-  return ''
+  if (!VALID_PORT_RE.test(s)) return ''
+  if (s.includes('2')) return '2'
+  return '1'
 }
 
 function pick(src, ...keys) {
@@ -44,12 +64,33 @@ function pick(src, ...keys) {
   return ''
 }
 
+/** mapping 值 → 25 位 0/1/2/3 串（只保留这些字符，缺补 0），无值返回 '' */
+function parseSlotMap(raw) {
+  const s = String(raw ?? '').replace(/[^0-3]/g, '')
+  if (!s) return ''
+  return (s + '0'.repeat(25)).slice(0, 25)
+}
+
+/** mapping 事件值的取值键（移植旧 Canvas 看板 getWaferMappingValue） */
+function mappingValueOf(src) {
+  return pick(src, 'EVENT_VALUE', 'event_value', 'EVENTVALUE', 'eventvalue',
+    'EventValue', 'mapping_value', 'MAPPING_VALUE', 'alarm_text', 'ALARM_TEXT', 'ALTX')
+}
+
 export function createOxeDeriver() {
   let lastPort = '1'
+  // 每端口槽位状态：0 空 / 1 等待 / 2 加工 / 3 完成
+  const slotState = { 1: new Array(25).fill(0), 2: new Array(25).fill(0) }
+  // 每端口告警消息队列（最近 3 条，Motion JSON 写 ALARM_Px_L1..L3）与计数
+  const alarms = { 1: [], 2: [] }
+  const alarmCount = { 1: 0, 2: 0 }
+  const doneCount = { 1: 0, 2: 0 }
+  // 每端口当前 LOT（POD_REMOVED 清空）
+  const lotOf = { 1: '', 2: '' }
 
   function resolvePort(payload, eventName) {
-    // STARTMAPPING_LEFT/RIGHT 显式指定映射端口
     const name = String(eventName || '').toUpperCase()
+    // STARTMAPPING_LEFT/RIGHT 显式指定映射端口
     if (name === 'STARTMAPPING_LEFT') return '1'
     if (name === 'STARTMAPPING_RIGHT') return '2'
     const direct = normalizePort(pick(payload, 'PORT', 'port_id', 'portid', 'PORTID', 'port_no'))
@@ -57,7 +98,7 @@ export function createOxeDeriver() {
     const smif = normalizePort(pick(payload, 'SMIF_ID', 'smif_id', 'SMIFPORTID'))
     if (smif) return smif
     const ch = normalizeChamber(pick(payload, 'CHAMBER', 'chamber_id', 'chamber'))
-    if (ch === 'A') return '1'
+    if (ch === 'A' || ch === 'C') return '1'
     if (ch === 'B') return '2'
     return lastPort
   }
@@ -65,7 +106,41 @@ export function createOxeDeriver() {
   function resolveChamber(payload, port) {
     const ch = normalizeChamber(pick(payload, 'CHAMBER', 'chamber_id', 'chamber'))
     if (ch) return ch
+    // 缺腔时按端口默认（移植旧看板：1→A，2→B）
     return port === '2' ? 'B' : 'A'
+  }
+
+  /** 告警归属端口：显式端口优先；LOT 归属次之；告警描述词 P1/P2；否则沿用上一端口 */
+  function resolveAlarmPort(src) {
+    const direct = normalizePort(pick(src, 'PORT', 'port_id', 'portid', 'PORTID',
+      'SMIF_ID', 'smif_id', 'SMIFPORTID'))
+    if (direct) return direct
+    const lot = String(pick(src, 'LOT_ID', 'lot_id', 'lot') || '').trim().toUpperCase()
+    if (lot && lot === lotOf[1].toUpperCase()) return '1'
+    if (lot && lot === lotOf[2].toUpperCase()) return '2'
+    const txt = String(mappingValueOf(src) || '').toUpperCase()
+    if (txt === 'P2') return '2'
+    if (txt === 'P1') return '1'
+    return lastPort
+  }
+
+  function slotNo(src) {
+    const raw = Number(pick(src, 'SLOT', 'slot', 'slot_id', 'wafer_id') || 1)
+    return Math.min(25, Math.max(1, Number.isFinite(raw) ? Math.floor(raw) : 1))
+  }
+
+  function reset() {
+    lastPort = '1'
+    slotState[1] = new Array(25).fill(0)
+    slotState[2] = new Array(25).fill(0)
+    alarms[1] = []
+    alarms[2] = []
+    alarmCount[1] = 0
+    alarmCount[2] = 0
+    doneCount[1] = 0
+    doneCount[2] = 0
+    lotOf[1] = ''
+    lotOf[2] = ''
   }
 
   return {
@@ -74,11 +149,59 @@ export function createOxeDeriver() {
       const eventName = String(pick(src, 'event_name', 'event_code') || step || '').toUpperCase()
       const port = resolvePort(src, eventName)
       const ch = resolveChamber(src, port)
-      const slotRaw = Number(pick(src, 'SLOT', 'slot', 'slot_id', 'wafer_id') || 1)
-      const slot = Math.min(25, Math.max(1, Number.isFinite(slotRaw) ? Math.floor(slotRaw) : 1))
+      const slot = slotNo(src)
       const stateVal = String(pick(src, 'state', 'machine_state') || '').toUpperCase()
       const transferStage = String(pick(src, 'transfer_stage', 'action') || '').toUpperCase()
 
+      // ===== 状态机推进（derive 即事件处理点；commit 只做 lastPort 记忆） =====
+      if (eventName === 'POD_PLACED') {
+        slotState[port] = new Array(25).fill(1)
+        alarms[port] = []
+        alarmCount[port] = 0
+        doneCount[port] = 0
+        lotOf[port] = ''
+      } else if (eventName === 'WAFER_MAPPING' || eventName === 'ENDMAPPING') {
+        const smap = parseSlotMap(mappingValueOf(src))
+        if (smap) {
+          slotState[port] = smap.split('').map(c => Number(c))
+          // mapping 后完成计数与映射串对齐（可能携带历史 3 态）
+          doneCount[port] = slotState[port].filter(v => v === 3).length
+        }
+      } else if (eventName === 'BATCH_INFO_FROM_ECUI') {
+        const lot = String(pick(src, 'LOT_ID', 'lot_id', 'lot') || '').trim()
+        if (lot) lotOf[port] = lot
+      } else if (eventName === 'WAFERLOADED') {
+        slotState[port][slot - 1] = 2
+      } else if (eventName === 'WAFERUNLOADED') {
+        if (slotState[port][slot - 1] !== 3) {
+          slotState[port][slot - 1] = 3
+          doneCount[port] += 1
+        }
+      } else if (eventName === 'POD_REMOVED' || eventName === 'MOC') {
+        slotState[port] = new Array(25).fill(0)
+        alarms[port] = []
+        alarmCount[port] = 0
+        doneCount[port] = 0
+        lotOf[port] = ''
+      }
+
+      // 告警队列（ALARM/EC_ALARM_REPORT 经别名统一到 ALARM_REPORT；裸 ALARM 事件同样处理）
+      let alarmPort = ''
+      if (eventName === 'ALARM_REPORT' || eventName === 'ALARM' || eventName === 'EC_ALARM_REPORT') {
+        alarmPort = resolveAlarmPort(src)
+        alarmCount[alarmPort] += 1
+        const text = String(pick(src, 'alarm_text', 'ALARM_TEXT', 'alarm_id', 'ALID',
+          'EVENT_VALUE', 'event_value') || 'ALARM').slice(0, 22)
+        const hhmm = (() => {
+          const ts = pick(src, 'timestamp', 'event_ts_utc', 'TIMESTAMP')
+          const m = String(ts || '').match(/(\d{2}:\d{2})(?::\d{2})?/)
+          return m ? m[1] : ''
+        })()
+        alarms[alarmPort].unshift(`${hhmm ? hhmm + ' ' : ''}${text}`)
+        if (alarms[alarmPort].length > 3) alarms[alarmPort].length = 3
+      }
+
+      // ===== 参数产出 =====
       const params = {
         ...src,
         // 归一化业务参数
@@ -108,6 +231,25 @@ export function createOxeDeriver() {
         ARM_PORT_ANGLE: String(port === '2' ? ARM_ANGLES.PORT2 : ARM_ANGLES.PORT1),
         ARM_CH_ANGLE: String(ARM_ANGLES[`CH_${ch}`] ?? ARM_ANGLES.HOME),
         ARM_PA_ANGLE: String(ARM_ANGLES.PA),
+        // 外臂径向伸出量（ARM_EXTEND offset_x）：各单元中心距离不同，分别给出
+        ARM_EXTEND_PORT: String(reachFor(port === '2' ? 'PORT2' : 'PORT1')),
+        ARM_EXTEND_PA: String(reachFor('PA')),
+        ARM_EXTEND_CH: String(reachFor(`CH_${ch}`)),
+        // 兼容旧引用（默认伸出量）
+        ARM_EXTEND_OUT: String(reachFor(`CH_${ch}`)),
+        // 面板：完成计数（{DONE_COUNT} 文本模板）
+        DONE_COUNT: `${doneCount[port]}/25`,
+        // 面板：告警归属 + 计数 + 最近 3 行
+        ALARM_PORT: alarmPort,
+        ALARM_COUNT: String(alarmPort ? alarmCount[alarmPort] : 0),
+        AL1: alarmPort ? alarms[alarmPort][0] || '' : '',
+        AL2: alarmPort ? alarms[alarmPort][1] || '' : '',
+        AL3: alarmPort ? alarms[alarmPort][2] || '' : '',
+      }
+      // 面板：mapping 逐槽字符 SM01..SM25（when 白名单不允许 []，下标必须在 deriver 展开）
+      const smap = slotState[port].map(v => String(v)).join('')
+      for (let i = 0; i < 25; i += 1) {
+        params[`SM${String(i + 1).padStart(2, '0')}`] = smap[i] || '0'
       }
       return { ok: true, params, info: { port, chamber: ch, slot } }
     },
@@ -116,8 +258,6 @@ export function createOxeDeriver() {
       if (params?.PORT === '1' || params?.PORT === '2') lastPort = params.PORT
     },
 
-    reset() {
-      lastPort = '1'
-    },
+    reset,
   }
 }

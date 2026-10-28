@@ -252,7 +252,7 @@ def main():
     conn = oracledb.connect(user=USER, password=PWD, dsn=DSN)
     cur = conn.cursor()
 
-    tools = ["PODOPENER-1", "OXE-1", "OXE-51"]
+    tools = ["PODOPENER-1", "PODOPENER-2", "OXE-1", "OXE-2", "OXE-51"]
     day_like = day0.strftime("%Y-%m-%d") + "%"
 
     # ---------- 幂等：只清当天这三台机台的数据，绝不动其他 ----------
@@ -305,9 +305,38 @@ def main():
         start_ts=evs[0][0] + shift, msg=evs[-1][2]))
     print("  %-12s %d 个周期" % (tool, pod_cycles))
 
+    # ============ PODOPENER-2（与 PODOPENER-1 同构，时间窗错开 3 分钟）============
+    tool = "PODOPENER-2"
+    msg_seq = random.randint(12000, 19000)
+    t = win_start + timedelta(minutes=3)
+    pod_cycles = 0
+    while t < now - timedelta(minutes=6):
+        mode = "PACKING" if pod_cycles % 2 == 0 else "UNPACKING"
+        lot = random.choice(LOT_POOL)
+        cass = gen_cassette()
+        evs, msg_seq = podopener_cycle(tool, t, mode, lot, cass, msg_seq)
+        for d, p, m in evs:
+            all_rows.append((next_raw_id(), tool, m, d, p))
+        t = evs[-1][0] + timedelta(minutes=random.randint(6, 12))
+        pod_cycles += 1
+    lot = random.choice(LOT_POOL)
+    cass = gen_cassette()
+    live_start = now - timedelta(minutes=5)
+    evs, msg_seq = podopener_cycle(tool, live_start, "PACKING", lot, cass, msg_seq, cut_at=8)
+    shift = (now - timedelta(minutes=2)) - evs[-1][0]
+    for d, p, m in evs:
+        all_rows.append((next_raw_id(), tool, m, d + shift, p))
+    pod_cycles += 1
+    rtlot_rows.append(dict(
+        tool_id=tool, port_id="1", lot_id=lot, batch_id="BT_%s" % cass,
+        cassette_id=cass, smif_id="1", wafer_mapping="1" * 25,
+        last_event_name=evs[-1][1]["event_name"], last_ts=evs[-1][0] + shift,
+        start_ts=evs[0][0] + shift, msg=evs[-1][2]))
+    print("  %-12s %d 个周期" % (tool, pod_cycles))
+
     # ============ OXE-1（line1，无 SMIF：MIC/MOC）============
     # ============ OXE-51（line2，有 SMIF：POD_PLACED/POD_REMOVED）============
-    for tool, has_smif, ports in [("OXE-1", False, [1]), ("OXE-51", True, [1, 2])]:
+    for tool, has_smif, ports in [("OXE-1", False, [1]), ("OXE-2", False, [1]), ("OXE-51", True, [1, 2])]:
         msg_seq = random.randint(20000, 80000)
         cycles = 0
         for port in ports:
