@@ -5,11 +5,13 @@
   （parse_ts 可正确解析，与 NLS 中文格式兼容）
 - 查询历史时按 raw_id 降序，不用 VARCHAR2 时间排序
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
+import hmac
 import json
+import os
 
 from database import get_db
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
@@ -17,6 +19,52 @@ from services.realtime import manager
 from services.time_utils import normalize_ts
 
 router = APIRouter(prefix="/api/rv", tags=["rv"])
+
+
+def _ingest_key() -> str:
+    return os.getenv("FABTWIN_INGEST_API_KEY", "").strip()
+
+
+def _client_is_local(request: Request) -> bool:
+    host = (request.client.host if request.client else "") or ""
+    if host in ("127.0.0.1", "::1", "localhost"):
+        return True
+    try:
+        import ipaddress
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback
+    except Exception:
+        return False
+
+
+def require_ingest_auth(
+    request: Request,
+    x_api_key: str = Header(None, alias="X-API-Key"),
+):
+    """事件注入鉴权。
+
+    2026-10-29 安全修复：`POST /api/rv/message` 此前零鉴权，任何人都能向千万级的
+    DT_EVENT_RAW 注入伪造事件，污染历史回放 / AI 分析 / 前端动画，并广播给所有客户端。
+
+    策略（兼顾 EAP/WinForm 对接与开发便利）：
+      1. 设置 FABTWIN_INGEST_API_KEY → 必须携带匹配的 X-API-Key（恒定时间比较）
+      2. 未设置 → 仅允许本机/内网来源（开发调试与同机部署可用），外网一律 401
+    """
+    expected = _ingest_key()
+    if expected:
+        provided = x_api_key or ""
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            provided = provided or auth_header[7:].strip()
+        if not hmac.compare_digest(provided, expected):
+            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+        return True
+    if not _client_is_local(request):
+        raise HTTPException(
+            status_code=401,
+            detail="事件注入需要鉴权：请设置 FABTWIN_INGEST_API_KEY 并在请求头携带 X-API-Key",
+        )
+    return True
 
 
 class RVMessageRequest(BaseModel):
@@ -30,7 +78,12 @@ class RVMessageRequest(BaseModel):
 
 
 @router.post("/message")
-def receive_rv_message(data: RVMessageRequest, db: Session = Depends(get_db)):
+def receive_rv_message(
+    data: RVMessageRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_ingest_auth),
+):
     """接收RV实时消息，写入DT_EVENT_RAW和DT_EVENT_RAW_CUR
 
     普通 def（FastAPI 自动放入线程池执行）：同步DB写入不再阻塞事件循环。

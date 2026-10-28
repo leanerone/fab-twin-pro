@@ -39,18 +39,28 @@ class ConnectionManager:
     async def broadcast(self, message: dict):
         """向所有活跃连接广播 JSON 消息，自动清理失效连接
 
-        test31：单连接发送加 3s 超时——此前串行 await 无超时，一个慢客户端
-        （弱网/挂起页）能让广播卡住，进而拖住 db_poller 轮询协程。
-        超时的连接视为失效并清理。
+        2026-10-29 修复：原实现是串行 await，每个连接最长等 3s，N 个客户端最坏
+        O(N × 3s)——100 个客户端时一轮广播可能耗时 300s，直接把 db_poller 的轮询
+        协程堵死（每秒一轮，广播不返回就永远不轮询下一轮）。
+        改为 asyncio.gather 并发发送：单连接仍有 3s 超时保护，但总耗时取决于
+        最慢的那个连接，而不是所有连接之和。
         """
-        dead = []
-        for ws in self.active:
+        targets = list(self.active)
+        if not targets:
+            return
+
+        async def _send(ws):
             try:
                 await asyncio.wait_for(ws.send_json(message), timeout=3.0)
+                return None
             except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self.disconnect(ws)
+                return ws
+
+        results = await asyncio.gather(*(_send(ws) for ws in targets),
+                                       return_exceptions=True)
+        for ws, res in zip(targets, results):
+            if res is not None and not isinstance(res, BaseException):
+                self.disconnect(res)
 
 
 # 全局连接管理器单例

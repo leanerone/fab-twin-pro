@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { api } from '../api'
 import { stateColors, makeTextSprite } from '../composables/useThree'
+import { disposeScene } from '../composables/threeDispose'
 
 // 楼层 3D 视图：按楼层加载机台，用简单模型占位，支持后续替换为真实模型
 const props = defineProps({
@@ -733,10 +734,16 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (animId) cancelAnimationFrame(animId)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
   if (canvasRef.value) canvasRef.value.removeEventListener('click', onCanvasClick)
-  if (renderer) renderer.dispose()
+  // 2026-10-29 修复：原来只 dispose renderer，本文件 94 处 new THREE.* 的
+  // geometry/material/CanvasTexture 全部泄漏，OrbitControls 也从未 dispose。
+  // disposeScene 会递归释放场景内容 + 摘除并 dispose controls + 归还 WebGL 上下文。
+  disposeScene({ scene, renderer, controls, rafId: animId })
+  animId = null
+  scene = null
+  renderer = null
+  controls = null
 })
 </script>
 

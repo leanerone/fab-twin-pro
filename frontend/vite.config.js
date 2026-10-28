@@ -30,9 +30,13 @@ export default defineConfig({
   // test31 构建优化：
   // - manualChunks：three（约600KB）/vue 全家桶拆独立长缓存 chunk——业务代码
   //   改动不再使整个大包缓存失效
-  // - drop console：生产构建剔除 console（路由守卫/高频事件流的日志序列化开销）
+  //
+  // 2026-10-29 修正：原 drop: ['console'] 会把 console.error / console.warn 一起剔除，
+  // 而本仓库大量用 console.error 记录失败（FloorView3D / useWebSocket / stores 等），
+  // 结果线上排障时一条错误日志都看不到。改为只剔除 log/debug/info，保留 error/warn。
   esbuild: {
-    drop: ['console', 'debugger'],
+    pure: ['console.log', 'console.debug', 'console.info'],
+    drop: ['debugger'],
   },
   build: {
     rollupOptions: {

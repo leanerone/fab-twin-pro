@@ -3096,9 +3096,11 @@ Lot ID 格式说明：
             return True
         return False
 
-    def list_sessions(self, limit: int = 20) -> List[Dict]:
-        """列出所有会话（最近的）"""
+    def list_sessions(self, limit: int = 20, user_id: Optional[str] = None) -> List[Dict]:
+        """列出会话（最近的）。传入 user_id 时只返回该用户的会话。"""
         sessions = list(self.sessions.values())
+        if user_id:
+            sessions = [s for s in sessions if s.get("user_id") == user_id]
         return sorted(sessions, key=lambda s: s.get("created_at", ""), reverse=True)[:limit]
 
 

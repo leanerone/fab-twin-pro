@@ -105,3 +105,10 @@ tests/raw_*_input.txt
 
 # pytest 读写测试的实测耗时产物
 tests/pytest/.perf_report.json
+
+# 2026-10-29: 开发用随机 token 密钥（运行时生成，禁止提交）
+backend/.dev_token_secret
+.dev_token_secret
+
+# 性能基准运行产物（机器相关，不入库）
+tests/perf/last_run.json

@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { useEventActionMapping } from '../composables/useEventActionMapping.js'
 import { useAnimationConfig } from '../composables/useAnimationConfig.js'
+import { disposeScene } from '../composables/threeDispose'
 
 // === 统一动画配置（M1 配置层）===
 // 加载 /configs/machine-animations/podopener.json，2D/3D 共用
@@ -1424,21 +1425,24 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopAutoLoop()
-  if (animId) cancelAnimationFrame(animId)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-  if (renderer) {
-    renderer.dispose()
-    if (containerRef.value && renderer.domElement && renderer.domElement.parentNode === containerRef.value) {
-      containerRef.value.removeChild(renderer.domElement)
-    }
+  if (containerRef.value && renderer && renderer.domElement && renderer.domElement.parentNode === containerRef.value) {
+    containerRef.value.removeChild(renderer.domElement)
   }
-  if (machineGroup && scene) scene.remove(machineGroup)
-  if (podShellGroup && scene) scene.remove(podShellGroup)
-  if (cassetteGroup && scene) scene.remove(cassetteGroup)
-  if (scanLine && scene) scene.remove(scanLine)
-  if (signalGroup && scene) scene.remove(signalGroup)
-  if (leftHandGroup && scene) scene.remove(leftHandGroup)
-  if (rightHandGroup && scene) scene.remove(rightHandGroup)
+  // 2026-10-29 修复：本文件 102 处 new THREE.*，原来只 dispose renderer，
+  // geometry/material/texture 与 OrbitControls 全部泄漏。
+  disposeScene({ scene, renderer, controls, rafId: animId })
+  animId = null
+  machineGroup = null
+  podShellGroup = null
+  cassetteGroup = null
+  scanLine = null
+  signalGroup = null
+  leftHandGroup = null
+  rightHandGroup = null
+  scene = null
+  renderer = null
+  controls = null
 })
 
 defineExpose({ triggerAttach, triggerDetach, startAutoLoop, stopAutoLoop })

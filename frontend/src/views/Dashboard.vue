@@ -8,6 +8,7 @@ import MachineList from '../components/MachineList.vue'
 import FloorView3D from '../components/FloorView3D.vue'
 import FloorPlan from '../components/FloorPlan.vue'
 import { api } from '../api'
+import { useInterval } from '../composables/useRafLoop'
 
 const appStore = useAppStore()
 const router = useRouter()
@@ -47,8 +48,11 @@ onMounted(async () => {
   await appStore.fetchMachines()
   appStore.fetchStats()
   await loadFloors()
-  
-  setInterval(() => appStore.fetchStats(), 10000)
+
+  // 2026-10-29 修复：原来是裸 setInterval，无句柄、本组件也没有 onUnmounted，
+  // 每次进入首页就多一个永不停止的 10s 轮询。改用受管定时器：卸载即清理，
+  // 且页面切到后台时暂停（前台才需要刷 KPI）。
+  useInterval(() => appStore.fetchStats(), 10000)
 })
 </script>
 

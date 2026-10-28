@@ -10,15 +10,59 @@
 """
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 import time
 
+logger = logging.getLogger("fabtwin.security")
+
 PBKDF2_ITERATIONS = 120_000
 TOKEN_TTL_SECONDS = 7 * 24 * 3600  # 7 天
 
-# 生产部署务必通过环境变量覆盖
-_TOKEN_SECRET = os.getenv("FABTWIN_TOKEN_SECRET", "fabtwin-dev-token-secret-v1").encode("utf-8")
+# 2026-10-29 修复：原先默认密钥是仓库里的常量 "fabtwin-dev-token-secret-v1"，
+# 任何人拿到源码即可伪造任意用户的 token。改为：
+#   1) 显式设置 FABTWIN_TOKEN_SECRET → 直接用（生产必须这样部署）
+#   2) 未设置且 FABTWIN_ENV=production → 拒绝启动（防止带默认密钥上生产）
+#   3) 开发环境 → 生成随机密钥并持久化到 backend/.dev_token_secret（已 gitignore），
+#      保证重启后已登录用户不掉线，同时不再是全网公开的常量
+_SECRET_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".dev_token_secret")
+
+
+def _load_token_secret() -> bytes:
+    env_secret = os.getenv("FABTWIN_TOKEN_SECRET", "").strip()
+    if env_secret:
+        return env_secret.encode("utf-8")
+
+    if os.getenv("FABTWIN_ENV", "").strip().lower() == "production":
+        raise RuntimeError(
+            "FABTWIN_ENV=production 但未设置 FABTWIN_TOKEN_SECRET：拒绝以默认密钥启动。"
+            "请设置 FABTWIN_TOKEN_SECRET 环境变量后重启。"
+        )
+
+    try:
+        if os.path.exists(_SECRET_FILE):
+            with open(_SECRET_FILE, "r", encoding="utf-8") as f:
+                data = f.read().strip()
+            if data:
+                return data.encode("utf-8")
+    except Exception as e:
+        logger.warning("读取开发密钥文件失败，将重新生成: %s", e)
+
+    generated = secrets.token_hex(32)
+    try:
+        with open(_SECRET_FILE, "w", encoding="utf-8") as f:
+            f.write(generated)
+        logger.warning(
+            "[安全] 未设置 FABTWIN_TOKEN_SECRET，已生成随机开发密钥并写入 %s。"
+            "生产环境必须通过环境变量配置该密钥。", _SECRET_FILE
+        )
+    except Exception as e:
+        logger.warning("[安全] 无法持久化开发密钥（重启后已登录用户需重新登录）: %s", e)
+    return generated.encode("utf-8")
+
+
+_TOKEN_SECRET = _load_token_secret()
 
 
 # ── 密码哈希 ────────────────────────────────────────────────────────────

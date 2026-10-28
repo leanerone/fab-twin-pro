@@ -28,8 +28,16 @@ from schemas import (
 )
 from services.ai_middleware import ai_middleware, PROVIDER_PRESETS
 from services import speech_service
+# 2026-10-29 安全修复：本模块此前 32 个端点全部零鉴权，任何人可改 AI Provider/Key、
+# 读取全部会话与用量日志、免登录消耗 LLM token。现统一要求登录。
+from routers.auth import get_current_user
+from models import User
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+router = APIRouter(
+    prefix="/api/ai",
+    tags=["ai"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ========== 统一聊天接口（新版） ==========
@@ -242,9 +250,9 @@ def get_usage_log_detail(log_id: int):
 # ========== 会话管理 ==========
 
 @router.get("/sessions")
-def list_sessions(limit: int = 20):
-    """列出最近的AI会话"""
-    sessions = ai_middleware.list_sessions(limit=limit)
+def list_sessions(limit: int = 20, current_user: User = Depends(get_current_user)):
+    """列出当前用户最近的AI会话（不再返回所有人的会话）"""
+    sessions = ai_middleware.list_sessions(limit=limit, user_id=current_user.id)
     return {"sessions": sessions, "total": len(sessions)}
 
 

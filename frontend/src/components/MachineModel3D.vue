@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { stateColors, stateLabels } from '../composables/useThree'
+import { disposeScene } from '../composables/threeDispose'
 
 // TEL DRM UNITY 单机 3D 模型：EFEM + VTM + 4 工艺腔 + 气体面板 + 状态灯塔 + 控制屏 + 动画
 const props = defineProps({
@@ -765,12 +766,11 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (animId) cancelAnimationFrame(animId)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-  if (machine) {
-    if (activeWafer) machine.remove(activeWafer)
-    if (scene) scene.remove(machine)
-  }
+  // 2026-10-29 修复：本文件 92 处 new THREE.*，含 screenTex 的 CanvasTexture。
+  // 原来只是把引用置 null + renderer.dispose()，GPU 资源从未真正释放。
+  disposeScene({ scene, renderer, controls, rafId: animId })
+  animId = null
   activeWafer = null
   machine = null
   robotArm = null
@@ -782,7 +782,9 @@ onUnmounted(() => {
   screenCanvas = null
   plasmaList = []
   chambers = []
-  if (renderer) renderer.dispose()
+  scene = null
+  renderer = null
+  controls = null
 })
 </script>
 

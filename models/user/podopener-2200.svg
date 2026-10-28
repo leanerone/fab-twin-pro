@@ -51,14 +51,14 @@
   <ellipse cx="506" cy="906" rx="386" ry="52" fill="#cbd5e1" opacity="0.45"/>
 
   <!-- ===== 标题区 ===== -->
-  <g id="title_block">
+  <g id="title_block" data-pid="title_block">
     <rect x="56" y="46" width="10" height="52" fill="url(#vpoTelBlue)"/>
     <text x="80" y="72" font-size="26" font-weight="800" fill="#0f172a">PODOPENER-2200</text>
     <text x="80" y="97" font-size="13" fill="#64748b">POD OPENING SYSTEM · FRONT VIEW · <tspan fill="#0068b7" font-weight="700">TEL STYLE</tspan></text>
   </g>
 
   <!-- ===== 塔灯（三色状态灯）===== -->
-  <g id="tower_light">
+  <g id="tower_light" data-pid="tower_light">
     <rect x="497" y="118" width="8" height="112" fill="#94a3b8"/>
     <rect x="486" y="88" width="30" height="12" rx="3" fill="#64748b"/>
     <circle cx="501" cy="72" r="11" fill="#22c55e" stroke="#166534" stroke-width="1.5"/>
@@ -67,7 +67,7 @@
   </g>
 
   <!-- ===== 主体机柜（真机样式：浅灰钣金 + 蓝色腰带）===== -->
-  <g id="cabinet" filter="url(#vpoSoftShadow)">
+  <g id="cabinet" data-pid="cabinet" filter="url(#vpoSoftShadow)">
     <!-- 底座柜体 -->
     <rect x="285" y="810" width="430" height="80" rx="10" fill="url(#vpoCabinetGrad)" stroke="#6b7784" stroke-width="2"/>
     <rect x="297" y="822" width="180" height="26" rx="4" fill="url(#vpoVentPattern)"/>
@@ -110,7 +110,7 @@
   </g>
 
   <!-- ===== 玻璃窗（半透明，位于晶舟/POD 之后）===== -->
-  <g id="window_glass">
+  <g id="window_glass" data-pid="window_glass">
     <rect x="365" y="278" width="270" height="470" rx="10" fill="url(#vpoGlassGrad)" stroke="none"/>
     <line x1="385" y1="300" x2="415" y2="730" stroke="#ffffff" stroke-width="7" opacity="0.25"/>
     <line x1="405" y1="295" x2="445" y2="725" stroke="#ffffff" stroke-width="3" opacity="0.22"/>
@@ -118,7 +118,7 @@
   </g>
 
   <!-- ===== COMM / SERVICE PORTS ===== -->
-  <g id="comm_ports">
+  <g id="comm_ports" data-pid="comm_ports">
     <rect x="384" y="790" width="164" height="36" rx="6" fill="none" stroke="#475569" stroke-width="2"/>
     <circle cx="399" cy="801" r="3" fill="#64748b"/><circle cx="411" cy="801" r="3" fill="#64748b"/><circle cx="423" cy="801" r="3" fill="#64748b"/><circle cx="435" cy="801" r="3" fill="#64748b"/><circle cx="447" cy="801" r="3" fill="#64748b"/><circle cx="459" cy="801" r="3" fill="#64748b"/><circle cx="471" cy="801" r="3" fill="#64748b"/><circle cx="483" cy="801" r="3" fill="#64748b"/><circle cx="495" cy="801" r="3" fill="#64748b"/><circle cx="507" cy="801" r="3" fill="#64748b"/><circle cx="519" cy="801" r="3" fill="#64748b"/><circle cx="531" cy="801" r="3" fill="#64748b"/>
     <circle cx="399" cy="813" r="3" fill="#64748b"/><circle cx="411" cy="813" r="3" fill="#64748b"/><circle cx="423" cy="813" r="3" fill="#64748b"/><circle cx="435" cy="813" r="3" fill="#64748b"/><circle cx="447" cy="813" r="3" fill="#64748b"/><circle cx="459" cy="813" r="3" fill="#64748b"/><circle cx="471" cy="813" r="3" fill="#64748b"/><circle cx="483" cy="813" r="3" fill="#64748b"/><circle cx="495" cy="813" r="3" fill="#64748b"/><circle cx="507" cy="813" r="3" fill="#64748b"/><circle cx="519" cy="813" r="3" fill="#64748b"/><circle cx="531" cy="813" r="3" fill="#64748b"/>
@@ -126,18 +126,18 @@
   </g>
 
   <!-- ===== 操作控制箱（含急停）===== -->
-  <g id="control_box" filter="url(#vpoSoftShadow)">
+  <g id="control_box" data-pid="control_box" filter="url(#vpoSoftShadow)">
     <rect x="130" y="790" width="165" height="70" rx="10" fill="#111827" stroke="#0b1020" stroke-width="1.2"/>
     <rect x="142" y="800" width="70" height="30" rx="4" fill="#1f2937" stroke="#334155" stroke-width="1"/>
     <text x="177" y="819" font-size="9" fill="#7dd3fc" text-anchor="middle" font-family="monospace">RUN: 00025</text>
-    <circle id="estop" cx="248" cy="824" r="18" fill="#f59e0b" stroke="#7c2d12" stroke-width="2"/>
+    <circle id="estop" data-pid="estop" cx="248" cy="824" r="18" fill="#f59e0b" stroke="#7c2d12" stroke-width="2"/>
     <circle cx="248" cy="824" r="10" fill="#dc2626" stroke="#7f1d1d" stroke-width="1.5"/>
     <line x1="295" y1="824" x2="390" y2="788" stroke="#94a3b8" stroke-width="2"/>
   </g>
   <text x="92" y="880" font-size="12" fill="#0f172a">OPERATOR CONTROL BOX</text>
 
   <!-- ===== 安装螺栓 ===== -->
-  <g id="mount_bolts">
+  <g id="mount_bolts" data-pid="mount_bolts">
     <g><circle cx="320" cy="240" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="320" cy="240" r="3" fill="#334155"/></g>
     <g><circle cx="680" cy="240" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="680" cy="240" r="3" fill="#334155"/></g>
     <g><circle cx="320" cy="890" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="320" cy="890" r="3" fill="#334155"/></g>
@@ -147,7 +147,7 @@
   </g>
 
   <!-- ===== 晶舟 CASSETTE（25 片装，动画部件，初始隐藏）===== -->
-  <g id="cassette" data-motion-base-visibility="hidden">
+  <g id="cassette" data-pid="cassette" data-motion-base-visibility="hidden">
     <rect x="366" y="640" width="268" height="80" rx="6" fill="#e5e7eb" stroke="#4b5563" stroke-width="1.5"/>
     <rect x="374" y="648" width="252" height="64" rx="4" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>
     <line x1="382" y1="654" x2="618" y2="654" stroke="#cbd5e1" stroke-width="1.5"/>
@@ -162,40 +162,40 @@
   </g>
 
   <!-- ===== 锁扣 ×4（双态：解锁绿/锁定红）===== -->
-  <g id="latches">
-    <g id="latch_1">
-      <g id="latch_1_unlocked">
+  <g id="latches" data-pid="latches">
+    <g id="latch_1" data-pid="latch_1">
+      <g id="latch_1_unlocked" data-pid="latch_1_unlocked">
         <rect x="348" y="650" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
         <line x1="355" y1="664" x2="343" y2="658" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
       </g>
-      <g id="latch_1_locked" data-motion-base-visibility="hidden">
+      <g id="latch_1_locked" data-pid="latch_1_locked" data-motion-base-visibility="hidden">
         <rect x="348" y="650" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
       </g>
     </g>
-    <g id="latch_2">
-      <g id="latch_2_unlocked">
+    <g id="latch_2" data-pid="latch_2">
+      <g id="latch_2_unlocked" data-pid="latch_2_unlocked">
         <rect x="348" y="718" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
         <line x1="355" y1="732" x2="343" y2="726" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
       </g>
-      <g id="latch_2_locked" data-motion-base-visibility="hidden">
+      <g id="latch_2_locked" data-pid="latch_2_locked" data-motion-base-visibility="hidden">
         <rect x="348" y="718" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
       </g>
     </g>
-    <g id="latch_3">
-      <g id="latch_3_unlocked">
+    <g id="latch_3" data-pid="latch_3">
+      <g id="latch_3_unlocked" data-pid="latch_3_unlocked">
         <rect x="664" y="650" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
         <line x1="671" y1="664" x2="683" y2="658" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
       </g>
-      <g id="latch_3_locked" data-motion-base-visibility="hidden">
+      <g id="latch_3_locked" data-pid="latch_3_locked" data-motion-base-visibility="hidden">
         <rect x="664" y="650" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
       </g>
     </g>
-    <g id="latch_4">
-      <g id="latch_4_unlocked">
+    <g id="latch_4" data-pid="latch_4">
+      <g id="latch_4_unlocked" data-pid="latch_4_unlocked">
         <rect x="664" y="718" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
         <line x1="671" y1="732" x2="683" y2="726" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
       </g>
-      <g id="latch_4_locked" data-motion-base-visibility="hidden">
+      <g id="latch_4_locked" data-pid="latch_4_locked" data-motion-base-visibility="hidden">
         <rect x="664" y="718" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
       </g>
     </g>
@@ -203,10 +203,10 @@
 
   <!-- ===== POD 组件（整体升降/进出，初始隐藏）=====
        基准位：carrierY=730，罩顶=520（=730-210） -->
-  <g id="pod_assembly" data-motion-base-visibility="hidden">
+  <g id="pod_assembly" data-pid="pod_assembly" data-motion-base-visibility="hidden">
     <ellipse cx="506" cy="760" rx="108" ry="20" fill="rgba(15,23,42,0.12)"/>
     <!-- 升降载台 LIFT CARRIER -->
-    <g id="pod_carrier">
+    <g id="pod_carrier" data-pid="pod_carrier">
       <rect x="312" y="730" width="376" height="34" fill="#111827" stroke="#0b1020" stroke-width="1.3"/>
       <rect x="438" y="722" width="124" height="62" rx="12" fill="#d7dde3" stroke="#6b7280" stroke-width="1.2"/>
       <rect x="452" y="736" width="96" height="34" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>
@@ -216,7 +216,7 @@
       <text x="562" y="784" font-size="13" font-weight="700" fill="#0f172a">LIFT CARRIER</text>
     </g>
     <!-- POD 门罩（半透明，罩住晶舟）-->
-    <g id="pod_shell">
+    <g id="pod_shell" data-pid="pod_shell">
       <rect x="344" y="520" width="312" height="190" rx="12" fill="rgba(214,226,235,0.45)" stroke="#6b7280" stroke-width="1.4"/>
       <rect x="392" y="560" width="216" height="132" rx="10" fill="rgba(236,244,251,0.5)" stroke="#9ca3af" stroke-width="1.1"/>
       <rect x="456" y="600" width="88" height="84" rx="8" fill="rgba(248,251,254,0.55)" stroke="#a8b3bd" stroke-width="1"/>
@@ -227,26 +227,26 @@
       <text x="482" y="622" font-size="7" fill="#1e40af" text-anchor="middle">RFID</text>
     </g>
     <!-- 扫描线 + 右侧传感器光束（READ_TAG / WRITE_TAG）-->
-    <g id="scan_line" data-motion-base-visibility="hidden">
+    <g id="scan_line" data-pid="scan_line" data-motion-base-visibility="hidden">
       <line x1="456" y1="604" x2="544" y2="604" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
     </g>
-    <g id="scan_beam" data-motion-base-visibility="hidden">
+    <g id="scan_beam" data-pid="scan_beam" data-motion-base-visibility="hidden">
       <polygon points="506,644 640,610 640,680" fill="rgba(239,68,68,0.15)"/>
       <line x1="506" y1="644" x2="640" y2="645" stroke="rgba(248,113,113,0.8)" stroke-width="3" stroke-linecap="round"/>
       <circle cx="644" cy="645" r="6" fill="#ef4444"/>
     </g>
     <!-- 信号波 + 扩散环（BATCH / UI_CONFIRM）-->
-    <g id="signal_wave" data-motion-base-visibility="hidden">
+    <g id="signal_wave" data-pid="signal_wave" data-motion-base-visibility="hidden">
       <polyline points="452,638 460,632 468,644 476,634 484,642 492,636 500,643 508,635 516,641 524,637 532,642 540,636 548,640" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
-    <g id="effect_rings" data-motion-base-visibility="hidden">
+    <g id="effect_rings" data-pid="effect_rings" data-motion-base-visibility="hidden">
       <circle cx="506" cy="630" r="20" fill="none" stroke="rgba(34,197,94,0.30)" stroke-width="2"/>
       <circle cx="506" cy="630" r="35" fill="none" stroke="rgba(34,197,94,0.22)" stroke-width="2"/>
       <circle cx="506" cy="630" r="50" fill="none" stroke="rgba(34,197,94,0.14)" stroke-width="2"/>
     </g>
     <!-- 推拉双手（POD 进出时出现）-->
-    <g id="pod_hands" data-motion-base-visibility="hidden">
-      <g id="hand_left">
+    <g id="pod_hands" data-pid="pod_hands" data-motion-base-visibility="hidden">
+      <g id="hand_left" data-pid="hand_left">
         <ellipse cx="308" cy="670" rx="32" ry="26" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="2.2"/>
         <ellipse cx="290" cy="636" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
         <ellipse cx="304" cy="632" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
@@ -254,7 +254,7 @@
         <ellipse cx="288" cy="660" rx="7" ry="16" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8" transform="rotate(-35 288 660)"/>
         <rect x="286" y="663" width="36" height="14" rx="4" fill="#5c8ad6" stroke="#3a609e" stroke-width="1.5"/>
       </g>
-      <g id="hand_right">
+      <g id="hand_right" data-pid="hand_right">
         <ellipse cx="748" cy="670" rx="32" ry="26" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="2.2"/>
         <ellipse cx="730" cy="636" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
         <ellipse cx="744" cy="632" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>

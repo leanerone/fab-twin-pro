@@ -1110,19 +1110,51 @@ function confirmDeleteVehicle(v) {
 }
 
 let vehicleAnimFrame = null
-const vehicleProgress = reactive({})
 
-function updateVehiclePositions() {
+// 2026-10-29 修复：原来 vehicleProgress 是 reactive({})，rAF 每帧写它 →
+// 渲染 effect 依赖它 → 515 行模板（含机台/区域/天车三组 v-for）以 60fps 全量 patch。
+// 改为：进度存普通对象（不触发响应），位置结果按 15fps 推给模板。
+// 视觉上天车 15fps 完全够（原来是 60fps 纯浪费），重渲染开销降到 1/4。
+const VEHICLE_FRAME_MS = 1000 / 15
+const vehicleProgress = {}
+const vehiclePositions = ref({})
+let _lastVehicleEmit = 0
+
+function updateVehiclePositions(ts) {
+  const moving = vehicles.value.filter(v => v.track_id)
+
+  // 没有在轨天车就彻底停掉循环，数据变化时由 watch 重新拉起
+  if (moving.length === 0) {
+    vehicleAnimFrame = null
+    return
+  }
+
   const dt = 16 / 1000
-  vehicles.value.forEach(v => {
-    if (v.track_id) {
-      if (vehicleProgress[v.id] === undefined) {
-        vehicleProgress[v.id] = v.progress || 0
-      }
-      vehicleProgress[v.id] += dt * (v.speed || 1) * 0.05
-      if (vehicleProgress[v.id] >= 1) vehicleProgress[v.id] = 0
+  moving.forEach(v => {
+    if (vehicleProgress[v.id] === undefined) {
+      vehicleProgress[v.id] = v.progress || 0
     }
+    vehicleProgress[v.id] += dt * (v.speed || 1) * 0.05
+    if (vehicleProgress[v.id] >= 1) vehicleProgress[v.id] = 0
   })
+
+  const now = ts || (typeof performance !== 'undefined' ? performance.now() : Date.now())
+  if (now - _lastVehicleEmit >= VEHICLE_FRAME_MS) {
+    _lastVehicleEmit = now
+    const next = {}
+    moving.forEach(v => {
+      const p = vehiclePos(v)
+      if (p) next[v.id] = p
+    })
+    vehiclePositions.value = next
+  }
+
+  vehicleAnimFrame = requestAnimationFrame(updateVehiclePositions)
+}
+
+function startVehicleLoop() {
+  if (vehicleAnimFrame !== null) return
+  _lastVehicleEmit = 0
   vehicleAnimFrame = requestAnimationFrame(updateVehiclePositions)
 }
 
@@ -1292,15 +1324,21 @@ watch(() => authStore.hasPermission('floor_edit'), (allowed) => {
 
 onMounted(() => {
   loadFloorData().then(() => {
-    updateVehiclePositions()
+    startVehicleLoop()
   })
   loadModelConfigs()
+})
+
+// 天车集合变化（新增/删除/换轨迹）时，若循环已停则重新拉起
+watch(() => vehicles.value.length, () => {
+  startVehicleLoop()
 })
 
 onUnmounted(() => {
   document.removeEventListener('mousemove', docMouseMove)
   document.removeEventListener('mouseup', docMouseUp)
   if (vehicleAnimFrame) cancelAnimationFrame(vehicleAnimFrame)
+  vehicleAnimFrame = null
 })
 </script>
 
@@ -1692,7 +1730,7 @@ onUnmounted(() => {
         :key="'v-' + v.id"
         class="vehicle-marker"
         :class="{ 'vehicle-hover': hoverVehicle === v.id }"
-        :style="vehiclePos(v) ? { left: pctX(vehiclePos(v).x), top: pctY(vehiclePos(v).y) } : { display: 'none' }"
+        :style="vehiclePositions[v.id] ? { left: pctX(vehiclePositions[v.id].x), top: pctY(vehiclePositions[v.id].y) } : { display: 'none' }"
       >
         <div class="vehicle-icon" :class="{ moving: v.state === 'moving' }">🚁</div>
         <div class="vehicle-id">{{ v.id }}</div>

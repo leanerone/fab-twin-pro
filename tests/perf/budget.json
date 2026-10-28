@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "updated": "2026-10-29",
+  "note": "性能预算表。benchmark.py 会拿实测 P95 与这里的 p95_ms 比对，超出即判定失败。分环境配置：本机小库与量产大库的量级完全不同，不能用同一套阈值。",
+
+  "profiles": {
+    "local": {
+      "desc": "本机 Oracle XE（万级行数）开发基线",
+      "budgets": {
+        "GET /api/machines": {"p95_ms": 800},
+        "GET /api/machines/stats": {"p95_ms": 800},
+        "GET /api/floors": {"p95_ms": 600},
+        "GET /api/alarms": {"p95_ms": 800},
+        "GET /api/lots": {"p95_ms": 1000},
+        "GET /api/models": {"p95_ms": 600},
+        "GET /api/events/latest": {"p95_ms": 800},
+        "GET /api/oht/positions": {"p95_ms": 500},
+        "GET /api/history/{tool_id}": {"p95_ms": 2500},
+        "GET /api/history/{tool_id}/timeline": {"p95_ms": 2500}
+      }
+    },
+    "prod": {
+      "desc": "量产库（DT_EVENT_RAW 千万级），需在有真实数据量后标定",
+      "budgets": {
+        "GET /api/machines": {"p95_ms": 3000},
+        "GET /api/machines/stats": {"p95_ms": 3000},
+        "GET /api/floors": {"p95_ms": 1500},
+        "GET /api/alarms": {"p95_ms": 3000},
+        "GET /api/lots": {"p95_ms": 3000},
+        "GET /api/models": {"p95_ms": 1500},
+        "GET /api/events/latest": {"p95_ms": 2000},
+        "GET /api/oht/positions": {"p95_ms": 1000},
+        "GET /api/history/{tool_id}": {"p95_ms": 5000},
+        "GET /api/history/{tool_id}/timeline": {"p95_ms": 5000}
+      }
+    }
+  },
+
+  "global": {
+    "max_error_rate": 0.0,
+    "slow_request_ms": 1000,
+    "slow_sql_ms": 500
+  }
+}

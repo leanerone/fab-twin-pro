@@ -20,6 +20,7 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 
 from sqlalchemy import DateTime, inspect
@@ -36,6 +37,44 @@ _poller_task = None
 _running = False
 # 列类型缓存：_TS_IS_TEMPORAL["raw"]=True 表示量产 TIMESTAMP 形态
 _TS_IS_TEMPORAL = {}
+
+# 2026-10-29 可观测性：轮询健康指标。此前 db_poller 因同步 startup 从未启动，
+# 但 /health 无条件返回 ok，故障完全不可见。用这些指标让 /health 真正能探出它活着。
+# VARCHAR2 形态下的轮询窗口（按 raw_id 倒序取的行数）。
+# 默认 300：原来硬编码 100，事件突发时容易漏推且无从察觉。
+_POLL_WINDOW = int(os.getenv("FABTWIN_POLL_WINDOW", "300"))
+
+_poll_stats = {
+    "started_at": None,
+    "last_poll_at": None,
+    "poll_count": 0,
+    "events_pushed": 0,
+    "last_error": None,
+    "error_count": 0,
+}
+
+
+def poller_health() -> dict:
+    """给 /health 用的轮询存活探针。
+
+    判定：任务存在且未完成 + 最近一次轮询在 30s 内 → ok。
+    """
+    task_alive = _poller_task is not None and not _poller_task.done()
+    last = _poll_stats["last_poll_at"]
+    if not task_alive:
+        return {"status": "dead", "detail": "poller task not running"}
+    if last is None:
+        return {"status": "starting", "detail": "no poll cycle completed yet"}
+    age = (datetime.now() - last).total_seconds()
+    status = "ok" if age < 30 else "stalled"
+    return {
+        "status": status,
+        "poll_count": _poll_stats["poll_count"],
+        "events_pushed": _poll_stats["events_pushed"],
+        "seconds_since_last_poll": round(age, 1),
+        "error_count": _poll_stats["error_count"],
+        "last_error": _poll_stats["last_error"],
+    }
 
 
 def _detect_ts_column_type(db, table_name: str) -> bool:
@@ -146,19 +185,28 @@ def _poll_once(state: dict) -> dict:
             logger.info("[DB Poller] 列类型: raw=%s, cur=%s", state["raw_is_ts"], state["cur_is_ts"])
 
         # ── DT_EVENT_RAW 增量查询 ──────────────────────────────
+        # 窗口大小可配。前提：raw_id 字典序单调（真实 EAP 写 TID.<时间戳> 满足）。
+        # 若某路生产者用了别的前缀（如 E2E.xxx），其新事件可能排在窗口之外被漏掉，
+        # 故窗口被新事件打满时打告警，便于及早发现。
+        window = _POLL_WINDOW
         q_raw = db.query(DT_EVENT_RAW)
         if state["last_ts"] and state["raw_is_ts"]:
             # TIMESTAMP 列：SQL 层直接比时间，空转时查询近零行
             q_raw = q_raw.filter(DT_EVENT_RAW.received_ts_utc > state["last_ts"])
-            new_events = q_raw.order_by(DT_EVENT_RAW.raw_id.desc()).limit(100).all()
+            new_events = q_raw.order_by(DT_EVENT_RAW.raw_id.desc()).limit(window).all()
         else:
-            # VARCHAR2 列 / 首次无 last_ts：退化成拉 100 行 + Python 兜底过滤
-            all_recent = q_raw.order_by(DT_EVENT_RAW.raw_id.desc()).limit(100).all()
+            # VARCHAR2 列 / 首次无 last_ts：退化成拉 N 行 + Python 兜底过滤
+            all_recent = q_raw.order_by(DT_EVENT_RAW.raw_id.desc()).limit(window).all()
             new_events = []
             for ev in all_recent:
                 ev_ts = parse_ts(ev.received_ts_utc)
                 if ev_ts and state["last_ts"] and ev_ts > state["last_ts"]:
                     new_events.append(ev)
+            if len(all_recent) >= window and len(new_events) >= window:
+                logger.warning(
+                    "[DB Poller] 轮询窗口(%d)被新事件打满，可能有事件被漏推；"
+                    "可调大 FABTWIN_POLL_WINDOW 或确认 raw_id 字典序单调", window
+                )
 
         # 按 raw_id 正序推送
         new_events.sort(key=lambda e: e.raw_id)
@@ -201,6 +249,7 @@ async def poll_db_events():
     logger.info("[DB Poller] 启动DB事件轮询服务")
     print("[DB Poller] 启动DB事件轮询服务", flush=True)
     _running = True
+    _poll_stats["started_at"] = datetime.now()
 
     # 启动时：推送最近50条历史事件作为初始快照
     try:
@@ -234,6 +283,10 @@ async def poll_db_events():
             if result["cur_list"]:
                 await manager.broadcast({"type": "cur_status", "data": result["cur_list"]})
 
+            _poll_stats["last_poll_at"] = datetime.now()
+            _poll_stats["poll_count"] += 1
+            _poll_stats["events_pushed"] += len(result["raw_events"])
+
             if state["poll_count"] % 30 == 0:
                 print(
                     f"[DB Poller] 心跳: 已轮询{state['poll_count']}次，当前last_ts={state['last_ts']}，"
@@ -243,6 +296,8 @@ async def poll_db_events():
         except Exception as e:
             logger.error(f"[DB Poller] 轮询错误: {e}")
             print(f"[DB Poller] 轮询错误: {e}", flush=True)
+            _poll_stats["last_error"] = str(e)[:300]
+            _poll_stats["error_count"] += 1
 
         await asyncio.sleep(1.0)  # 每秒轮询一次
 
