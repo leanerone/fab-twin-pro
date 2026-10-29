@@ -7,6 +7,25 @@ from fastapi import WebSocket
 
 logger = logging.getLogger("fabtwin.realtime")
 
+# raw_event 广播去重（FIFO 有界集合；去重判定在事件循环内串行执行，无并发问题）
+_RAW_DEDUP_MAX = 512
+_raw_dedup_order: list = []
+_raw_dedup_seen: set = set()
+
+
+def _raw_event_seen(raw_id) -> bool:
+    """登记并判断 raw_id 是否已广播过；空 raw_id 不去重"""
+    key = str(raw_id or "").strip()
+    if not key:
+        return False
+    if key in _raw_dedup_seen:
+        return True
+    _raw_dedup_seen.add(key)
+    _raw_dedup_order.append(key)
+    if len(_raw_dedup_order) > _RAW_DEDUP_MAX:
+        _raw_dedup_seen.discard(_raw_dedup_order.pop(0))
+    return False
+
 
 class ConnectionManager:
     """管理所有 WebSocket 连接，支持向全部客户端广播消息"""
@@ -44,7 +63,17 @@ class ConnectionManager:
         协程堵死（每秒一轮，广播不返回就永远不轮询下一轮）。
         改为 asyncio.gather 并发发送：单连接仍有 3s 超时保护，但总耗时取决于
         最慢的那个连接，而不是所有连接之和。
+
+        2026-10-30 修复（raw_event 重复投递）：同一条事件会经过两条广播路径——
+        POST /api/rv/message 写库后即时广播一次，db_poller 扫描又对同一 raw_id
+        广播一次（tests/perf/test_dup_delivery.py 复现）。前端按 raw_id 消费，
+        重复投递导致事件计数 / 告警数 / 晶圆数翻倍。在广播汇聚点按 raw_id 去重：
+        首次广播登记 raw_id（有界 FIFO，512 条），重复投递静默丢弃。
         """
+        if message.get("type") == "raw_event":
+            raw_id = (message.get("data") or {}).get("raw_id")
+            if raw_id and _raw_event_seen(raw_id):
+                return
         targets = list(self.active)
         if not targets:
             return
