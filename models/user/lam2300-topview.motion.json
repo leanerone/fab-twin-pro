@@ -1,0 +1,721 @@
+{
+  "schema_version": "1.1",
+  "document": {
+    "name": "LAM 2300 顶视图",
+    "src": "lam2300-topview.svg",
+    "coord": {
+      "origin": "top-left",
+      "unit": "px",
+      "y_down": true
+    }
+  },
+  "motions": [
+    {
+      "step": "POD_PLACED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_CST",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "晶舟放到 Load Port"
+    },
+    {
+      "step": "COMPLETED_PORT_LOCK",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "端口锁定完成"
+    },
+    {
+      "step": "LOCK_PORT_COMPLETED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "UNLOCK_PORT_COMPLETED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "MVIN",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            },
+            {
+              "type": "snap",
+              "to_part_id": "{PORT}_CST",
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "晶圆从晶舟取出，进入大气端"
+    },
+    {
+      "step": "DOOR_OPEN",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": -8,
+              "duration": 300
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "DOOR_CLOSE",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "offset",
+              "offset_x": 0,
+              "offset_y": 0,
+              "duration": 300
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "LOAD_CYCLE_STARTED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "ATM_ARM",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 300
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "ATM 机械臂开始取片循环"
+    },
+    {
+      "step": "LOAD_CYCLE_COMPLETED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "ALIGNER_WAFER",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "取片完成，晶圆到 Aligner"
+    },
+    {
+      "step": "UNLOAD_CYCLE_COMPLETED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "STARTMAPPING",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "ALIGNER",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 200
+            }
+          ]
+        }
+      ],
+      "description": "开始寻边，Aligner 卡盘回零"
+    },
+    {
+      "step": "WAFER_MAPPING",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "ALIGNER",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 180,
+              "duration": 900
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "ALIGNER_WAFER",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            },
+            {
+              "type": "rotate",
+              "angle": 180,
+              "duration": 900
+            }
+          ]
+        }
+      ],
+      "description": "晶圆寻边：卡盘带动晶圆旋转"
+    },
+    {
+      "step": "ENDMAPPING",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "ALIGNER",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "BATCH_INFO_FROM_ECUI",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "TITLE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "WAFERLOADED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "ATM_ARM",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 350
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "WAFER_VTM",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}",
+          "actions": [
+            {
+              "type": "opacity",
+              "to": 1.0,
+              "duration": 200
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}_run",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "晶圆经 ATM 臂送入 Airlock，VTM 臂接手送进工艺腔"
+    },
+    {
+      "step": "WAFERUNLOADED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "WAFER_VTM",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            },
+            {
+              "type": "snap",
+              "to_part_id": "{CH}",
+              "duration": 350
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "VTM_ARM",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 350
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}_run",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}_unload",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "加工完成，晶圆由 VTM 臂取回"
+    },
+    {
+      "step": "START",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{CH}_run",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}",
+          "actions": [
+            {
+              "type": "opacity",
+              "to": 1.0,
+              "duration": 200
+            }
+          ]
+        }
+      ],
+      "description": "工艺腔开始加工"
+    },
+    {
+      "step": "PS",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{CH}_run",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "工艺进行中"
+    },
+    {
+      "step": "PE",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{CH}_run",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}_unload",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "工艺结束，转入取片态"
+    },
+    {
+      "step": "MVOU",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "WAFER_VTM",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "VTM_ARM",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 350
+            }
+          ]
+        }
+      ],
+      "description": "晶圆移出工艺腔"
+    },
+    {
+      "step": "READYTOUNLOAD",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{CH}_unload",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "ALARM_REPORT",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "TOWER_alarm",
+          "actions": [
+            {
+              "type": "opacity",
+              "to": 1.0,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{CH}_alarm",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "告警：塔灯红灯点亮 + 对应腔体告警灯"
+    },
+    {
+      "step": "STATE",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "TOWER_run",
+          "actions": [
+            {
+              "type": "opacity",
+              "to": 1.0,
+              "duration": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "TRANSFER",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "VTM_ARM",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 400
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "ATM_ARM",
+          "actions": [
+            {
+              "type": "rotate",
+              "angle": 0,
+              "duration": 400
+            }
+          ]
+        }
+      ],
+      "description": "双臂联动传输"
+    },
+    {
+      "step": "FDC_CLEARCONTEXT",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "WAFER_MOVE",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "WAFER_VTM",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "POD_REMOVED",
+      "enabled": true,
+      "when": "true",
+      "rules": [
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_CST",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": false,
+              "duration": 0
+            }
+          ]
+        },
+        {
+          "when": "true",
+          "target_part_id": "{PORT}_DOOR",
+          "actions": [
+            {
+              "type": "visibility",
+              "to": true,
+              "duration": 0
+            }
+          ]
+        }
+      ],
+      "description": "晶舟移走"
+    }
+  ],
+  "ext": {
+    "machine_type": "LAM2300",
+    "version": "1.0",
+    "description": "Lam 2300 cluster 顶视动画：ATM 取片 → Aligner 寻边 → Airlock 过渡 → VTM 送片 → PM 加工 → 回程",
+    "deriver": "lam2300",
+    "param_defaults": {
+      "PORT": "LP1",
+      "CH": "PM1",
+      "SLOT": 1,
+      "STATE": "RUN"
+    },
+    "event_aliases": {},
+    "part_aliases": {
+      "POD": "{PORT}_CST",
+      "DOOR": "{PORT}_DOOR",
+      "ARM": "ATM_ARM"
+    },
+    "viewBox_fallback": "0 0 1080 840"
+  }
+}
