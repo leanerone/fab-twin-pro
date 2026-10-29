@@ -36,9 +36,14 @@ def query_fab_data(db, sql: str = "", row_limit: int = 200) -> Dict[str, Any]:
         "row_count": res.get("row_count", 0),
         "truncated": res.get("truncated", False),
         "executed": bool(res.get("ok")),
-        "table_data": [
-            {"columns": res.get("columns", []), "rows": res.get("rows", [])},
-        ] if res.get("ok") and res.get("rows") else [],
+        # AITableData 约定：单个对象，键为 headers/rows，且 rows 是二维列表。
+        # 首版写成了 [{"columns":...}]，与 schemas.AIChatResponse.table_data 类型不符，
+        # 导致整个 /api/ai/chat 在最后一步 pydantic 校验时 500。
+        "table_data": {
+            "headers": list(res.get("columns") or []),
+            "rows": [[r.get(c) for c in (res.get("columns") or [])]
+                     for r in (res.get("rows") or [])],
+        } if res.get("ok") and res.get("rows") else None,
     }
     if not res.get("ok"):
         out["error"] = res.get("error")

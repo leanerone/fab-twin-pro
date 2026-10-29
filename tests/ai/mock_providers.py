@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -88,6 +89,78 @@ SCRIPTED = [
 ]
 
 DEFAULT_ANSWER = "（mock）已收到你的问题，这是确定性应答。"
+
+
+# ── function calling 回合（验证「AI 真实取数」闭环）──────────────────
+# 仅在 MOCK_TOOL_MODE=1 时启用，避免影响既有的 20 条链路用例。
+# 工作方式：第一轮收到带 tools 的请求 → 返回 query_fab_data 工具调用；
+# 第二轮收到 role=tool 的工具结果 → 把真实行数据渲染进答案。
+# 测试脚本再拿这个答案与直查 Oracle 的结果比对，构成「数据真实」硬门禁。
+TOOL_MODE = os.getenv("MOCK_TOOL_MODE", "0") == "1"
+
+_SQL_SCRIPT: list = [
+    (("几台机台", "机台台数", "共有多少台"), "SELECT COUNT(*) AS cnt FROM machines"),
+    (("晶圆", "产量"), "SELECT COUNT(*) AS cnt FROM dt_event_raw WHERE event_name = 'WAFERLOADED'"),
+    (("告警", "alarm"), "SELECT alarm_code, COUNT(*) AS n FROM dt_alarm_event GROUP BY alarm_code ORDER BY n DESC FETCH FIRST 3 ROWS ONLY"),
+    (("事件", "event"), "SELECT event_name, COUNT(*) AS n FROM dt_event_raw WHERE event_name IS NOT NULL GROUP BY event_name ORDER BY n DESC FETCH FIRST 3 ROWS ONLY"),
+    (("温度", "压力", "工艺参数"), "SELECT id, state, temp, pressure FROM machines WHERE temp IS NOT NULL FETCH FIRST 3 ROWS ONLY"),
+    (("批次", "lot"), "SELECT id, product, status FROM lots FETCH FIRST 5 ROWS ONLY"),
+]
+_DEFAULT_SQL = "SELECT COUNT(*) AS cnt FROM machines"
+
+
+def _pick_sql(question: str) -> str:
+    q = question or ""
+    for kws, sql in _SQL_SCRIPT:
+        for kw in kws:
+            if kw in q:
+                return sql
+    return _DEFAULT_SQL
+
+
+def _toolcall_payload(model: str, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": f"chatcmpl-mock-{uuid.uuid4().hex[:12]}",
+        "object": "chat.completion",
+        "created": _now(),
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": f"call_{uuid.uuid4().hex[:8]}",
+                    "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }],
+        "usage": _usage(model),
+    }
+
+
+def _answer_from_tool_result(messages: list) -> str:
+    """把工具回传的真实行数据渲染成一句话答案（数字原样取出，不编造）。"""
+    for m in reversed(messages or []):
+        if m.get("role") != "tool":
+            continue
+        try:
+            data = json.loads(m.get("content") or "{}")
+        except Exception:
+            return "（mock）工具结果解析失败"
+        if isinstance(data, dict) and "executed" in data and not data.get("executed"):
+            return f"（mock）查询未成功：{data.get('error')}"
+        rows = (data or {}).get("rows") or []
+        if not rows:
+            return "（mock）查询成功但没有返回数据。"
+        if len(rows) == 1:
+            pairs = "，".join(f"{k}={v}" for k, v in rows[0].items())
+            return f"根据数据库查询，结果为 1 行：{pairs}。"
+        head = "，".join(f"{k}={v}" for k, v in rows[0].items())
+        return f"根据数据库查询，共 {len(rows)} 行，第一行：{head}。"
+    return "（mock）未拿到工具结果"
 
 
 def _pick_answer(question: str) -> str:
@@ -164,6 +237,14 @@ async def openai_chat_completions(request: Request):
 
     answer = _pick_answer(question)
 
+    # function calling 回合：第一轮返回工具调用，第二轮用真实行数据作答
+    if TOOL_MODE and not body.get("stream"):
+        prior = body.get("messages") or []
+        if any(m.get("role") == "tool" for m in prior):
+            answer = _answer_from_tool_result(prior)
+        elif body.get("tools"):
+            return _toolcall_payload(model, "query_fab_data", {"sql": _pick_sql(question)})
+
     # 非流式
     if not body.get("stream"):
         return {
@@ -202,6 +283,17 @@ async def openai_chat_completions(request: Request):
 @app.get("/v1/models")
 async def openai_models():
     return {"object": "list", "data": [{"id": "mock-model", "object": "model", "owned_by": "fabtwin-test"}]}
+
+
+@app.get("/health")
+async def health():
+    """存活探针。SOP 与自动化脚本共用：返回当前工具调用模式，便于确认替身以正确模式启动。"""
+    return {
+        "status": "ok",
+        "service": "fabtwin-ai-mock",
+        "tool_mode": TOOL_MODE,
+        "scripted_cases": len(_SQL_SCRIPT),
+    }
 
 
 # ── 2) Dify 面 ──────────────────────────────────────────────

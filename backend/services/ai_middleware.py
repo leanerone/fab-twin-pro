@@ -1415,6 +1415,9 @@ Lot ID 格式说明：
         collected_jump_machine_id = None
         collected_jump_timestamp = None
         collected_table_data = None
+        # 工具真实执行过的 SQL：此前响应里 "sql" 恒为空，前端展示的来源无从追溯；
+        # 真实执行的语句（query_fab_data）要沉上来，装饰性参考语句由下面统一标注。
+        collected_sql = None
 
         try:
             for round_idx in range(max_tool_rounds):
@@ -1470,7 +1473,7 @@ Lot ID 格式说明：
 
                     return {
                         "answer": answer,
-                        "sql": "",
+                        "sql": collected_sql or "",
                         "jump_timestamp": final_jump_ts,
                         "jump_machine_id": final_jump_mid,
                         "table_data": collected_table_data,
@@ -1528,6 +1531,10 @@ Lot ID 格式说明：
                                 collected_jump_timestamp = result["jump_timestamp"]
                             if result.get("table_data") and not collected_table_data:
                                 collected_table_data = result["table_data"]
+                            # 只取真实执行过的那条 SQL（query_fab_data），
+                            # 存量工具的装饰语句不参与上浮，避免用户误以为它们跑过。
+                            if func_name == "query_fab_data" and result.get("sql") and not collected_sql:
+                                collected_sql = result["sql"]
 
                         # 把工具结果中的answer提取出来，附加到LLM可见的上下文末尾
                         # 这样即使LLM遗漏了工具返回的结构化跳转信息，也能通过answer文本传递
