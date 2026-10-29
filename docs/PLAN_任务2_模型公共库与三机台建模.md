@@ -1,21 +1,27 @@
-# 任务 2 工作计划：模型编辑器公共库开发 + 三机台建模定稿
+# 任务 2 工作计划：模型编辑器公共库开发 + 三张参考图新机台建模
 
 > 负责人：ZCode（AI-A）｜ 分支：`feature/model-kit`（基线 `8a74590`）｜ 工作副本：`E:\AI\fab\fab-twin-pro`
 > 任务 1（AI 链路）：另一 AI（AI-B）｜ 分支：`feature/ai-chain`（worktree：`C:\Users\Administrator\WorkBuddy\Worktrees\fab-twin-pro-main\test3-5f23dcb7`）
-> 编写日期：2026-10-30 ｜ 总工时预估：**16~19 小时（约 2 个工作日）**
+> 编写日期：2026-10-30（v2 修订：M2 改为「三张参考图 → 三个新机台建模」）｜ 总工时预估：**22~27 小时（约 3 个工作日）**
 
 ---
 
 ## 一、目标与验收口径
 
-**目标**：把 `models/svg_kit` 从骨架收口为三个机台真实可用的公共库；以公共库 + 模型编辑器为唯一建模通道，完成 PODOPENER-2200 / OXE DRM / AMAT METSPUT 三机台的 2D 建模定稿。
+**目标**：
+1. 把 `models/svg_kit` 从骨架收口为可支撑"看图建模"的公共库（validate 接入编辑器、primitives 补齐、tokens 收敛）
+2. **以用户上传的三张机台参考图为蓝本，用公共库构建三个新机台的 motion2d 模型（SVG 资产 + Motion JSON + deriver）并端到端跑通**：
+   - `LAM2300`（docs/assets/machine-references/LAM2300.jpg）：Lam 2300 平台俯视布局——ATM 大气端（3×Load Port + Aligner + 2×Buffer + Control Rack）+ 中央 VTM + PM1~4×4 腔 + 2×Airlock
+   - `Centris Sym3`（Centris-Sym3-Etch-Chamber-Manual.jpg）：AMAT Centris Sym3——6×方形刻蚀腔（顶面螺栓阵列）+ 中央静电卡盘腔 + EFEM 柜体 + 3×气体泵模块，等角风格
+   - `TEL Synapse`（SPT.jpg）：TEL 200mm fpD——Transport Module 居中 + 6×PM 环绕 + User Interface，等角线稿风格
+3. 现有三机台（PODOPENER/OXE/AMAT）做 validate 基线跑分留档（不重画，作为公共库改造的回归对照）
 
 **总验收口径（合版前必须全绿）**：
-1. `python -m models.svg_kit.validate` 对三机台 SVG×Motion 全量校验 **0 error**（warning 允许留档说明）
-2. 三机台 debug 注入全事件链端到端通过（注入→DB→轮询→WS→deriver→动画），零警告
-3. 模型编辑器内可见校验结果（部件高亮走查可用），不再需要独立 HTML 工具
-4. `npm run build` 通过；三机台各留一份截图基线
-5. 变更记录 + 本计划的状态列更新完毕
+1. 三个新机台各自的 SVG×Motion 经 `python -m models.svg_kit.validate` **0 error**
+2. 三个新机台 debug 注入全事件链端到端通过（注入→DB→轮询→WS→deriver→动画），零警告
+3. 事件驱动**复用现有标准事件词表**（POD_PLACED/LOCK/MAPPING/WAFERLOADED/WAFERUNLOADED/PE/ALARM…，即 OXE 27 步同款）+ 新写一个 `generic_cluster` 泛型 deriver——新机型不发明新事件名，现有 DB 数据/调试流程/AI 链路天然可驱动
+4. 模型编辑器内可见 validate 结果并完成部件高亮走查
+5. `npm run build` 通过；三台新机台各留截图基线；变更记录更新
 
 ## 二、里程碑分解
 
@@ -23,43 +29,48 @@
 - [x] 三方基线对齐 `8a74590`；本地 test3 引用修复
 - [x] WS 重复投递修复（`realtime.py` 广播汇聚点 raw_id 去重，验收脚本通过）— 提交 `528acee`
 - [x] vite 双栈监听修复；8002 单进程确认
-- [ ] AI-B 侧 db_proxy(8001) 起动确认（其自测项，不阻塞我）
 
 ### M1 svg_kit 公共库收口（4~5h）
 
 | # | 条目 | 产出 | 工时 |
 |---|---|---|---|
-| 1.1 | **validate 接入编辑器**：MotionPreview/ModelEditor 挂"校验"面板（调 python CLI 太绕，改为把 validate 移植成同规则的前端模块 `frontend/src/utils/svgMotionValidate.js`，双端共用同一规则集），部件 id 双向高亮联动 | 前端校验面板 + 单测 | 2h |
-| 1.2 | **primitives 补件**：PODOPENER 风格件（机柜钣金/升降载台/锁扣对/观察窗/控制箱）、AMAT 风格件（楔形腔/彩虹晶圆/金属槽条）从三份 SVG 抽取进公共库 | primitives.py 扩充 | 1.5h |
-| 1.3 | **tokens 收敛**：三机台 SVG 的 defs（渐变/滤镜/pattern）改引统一 token 生成，消除三份重复定义 | tokens.json 扩充 + 三 SVG defs 瘦身 | 1h |
-| 1.4 | **validate 规则强化**：新增规则——part_id 命名规范（小写下划线/禁保留字）、`data-motion-base-visibility` 与首条规则一致性、offset 累积路径复核（防"跳起点→动画到终点"漏写 phase 1） | validate.py 规则 + 用例 | 0.5h |
+| 1.1 | **validate 接入编辑器**：把 validate 规则移植为前端模块 `frontend/src/utils/svgMotionValidate.js`（与 Python CLI 同一规则集），MotionPreview/ModelEditor 挂校验面板 + 部件 id 双向高亮 | 前端校验面板 | 2h |
+| 1.2 | **primitives 补件（面向三张参考图）**：等角投影件（iso_box/iso_cylinder——Sym3 与 Synapse 需要）、方形腔体+顶面螺栓阵列、airlock、buffer station、aligner、气体泵模块、control rack | primitives.py 扩充 | 1.5h |
+| 1.3 | **tokens 收敛**：三份存量 SVG 的 defs 改引统一 token（回归对照：validate + 截图对比不劣化） | tokens.json 扩充 | 1h |
+| 1.4 | **validate 规则强化**：part_id 命名规范、`data-motion-base-visibility` 与首条规则一致性、offset 累积路径复核 | validate.py | 0.5h |
 
-**M1 验收**：scaffold 生成的新机台样例经 validate 0 error；三机台资产跑 validate 出具第一份基线报告（error 清零或留档）。
+**M1 验收**：scaffold 样例 0 error；三份存量资产 validate 基线报告留档（作为 M3 改造的回归对照）。
 
-### M2 三机台建模定稿（6~8h，每台 2~2.5h）
+### M2 三张参考图 → 三个新机台建模（12~15h，每台 4~5h）
 
-| 机台 | 走查范围 | 工时 |
-|---|---|---|
-| PODOPENER-2200 | 14 事件 motions 逐条走查（穿入/脱出分支、锁扣双态、晶舟时序）；svg_kit 重构 defs；ModelEditor 高亮走查全部 part_id；debug 全链注入验收（PACKING+UNPACKING 各一轮）+ 截图基线 | 2.5h |
-| OXE DRM | 资产由 `gen_oxe_svg.py`/`build_oxe_motion.py` 生成——生成器接 tokens/primitives 收敛（不改 14989 行 JSON 手工面）；26 步逐条 validate；端到端注入验收（取放片 13 相编排 + 双 PORT + mapping）+ 截图基线 | 2.5h |
-| AMAT METSPUT | svg_kit 重构 defs（该资产已被 26af040 精修过，做收敛而非重画）；motions 6 步 + deriver 双臂语义走查；端到端注入验收 + 截图基线 | 2h |
+**通用设计决策（三台共用）**：
+- 事件词表复用 OXE 27 步标准集；新写 `generic_cluster` deriver（从 `oxe.js` 泛化：端口/腔体归一 + 占位符 id 产出，去掉 OXE 专用映射）
+- 视图风格跟随参考图：LAM2300=俯视平面图；Centris Sym3=等角；TEL Synapse=等角
+- 每台的动画语义按参考图可辨识的机构定义：load port 门/POD、VTM/Transport Module 机械臂取放、PM 加工状态、airlock/buffer 流转
 
-**M2 验收**：三机台"validate 0 error + 端到端零警告 + 截图基线入库（docs/assets/baseline/）"。
+| # | 机台 | 建模内容 | 工时 |
+|---|---|---|---|
+| 2.1 | **LAM2300**（俯视） | ATM 区：3×Load Port（门+POD+CST 25槽）+ Aligner + 2×Buffer + Control Rack；ATM/VTM 双机械臂 + airlock 联通；PM1~4 放射。事件映射：POD 放置→ATM 臂→airlock→VTM 臂→PM 加工→回程，全链 27 步词表 | 5h |
+| 2.2 | **Centris Sym3**（等角） | 6×方形刻蚀腔（顶面螺栓阵列，开关盖动画）+ 中央卡盘腔（晶圆吸附发光）+ EFEM 柜体 + 3×气体泵（状态灯）。iso_box/iso_cylinder primitives 首次实战 | 4.5h |
+| 2.3 | **TEL Synapse**（等角） | Transport Module 居中双臂 + 6×PM 环绕（等角布局）+ UI 站；6 腔轮转加工编排 | 3.5h |
+| 2.4 | 三台接线与验收 | MACHINE_MODEL_CONFIGS 建模（scaffold 产出 source_files 槽位登记）+ 演示机台绑定 + debug 全链注入验收 + 截图基线（docs/assets/baseline/） | 2h |
+
+**M2 验收**：三台新机台在 5173 页面可见、可切换；27 步词表注入全通过零警告；validate 0 error；截图基线入库。
 
 ### M3 编辑器集成与 SOP（3~4h）
 
 | # | 条目 | 产出 | 工时 |
 |---|---|---|---|
-| 3.1 | ModelEditor 建模页串起完整闭环：上传/生成 → validate 面板 → 部件高亮走查 → Motion 编排（MotionBuilder）→ 一键入库（seed 等价 API） | 编辑器功能补齐 | 2h |
-| 3.2 | `docs/新机台建模SOP_v1.md`：以第四台假想机型走一遍 scaffold→validate→编辑器→入库 全流程，记录耗时作为"零代码接入"的实证 | SOP 文档 | 1.5h |
-| 3.3 | 回归确认：归档的独立工具（oxe_editor.html 等）标记为历史参考，SOP 指向平台编辑器 | — | 0.5h |
+| 3.1 | ModelEditor 闭环补齐：上传/生成 → validate 面板 → 部件高亮走查 → MotionBuilder 编排 → 入库 | 编辑器功能 | 2h |
+| 3.2 | `docs/新机台建模SOP_v1.md`：**以三张参考图的实建过程为蓝本**（看图→scaffold→primitives 建模→validate→编辑器走查→接线→验收），记录每台实耗 | SOP 文档 | 1.5h |
+| 3.3 | 独立工具（oxe_editor.html 等）标记历史参考，SOP 指向平台编辑器 | — | 0.5h |
 
 ### M4 回归与合版准备（2h）
 
-- [ ] 三机台全事件回归（沿用 M2 截图基线对比）
-- [ ] `npm run build` + vite preview 冒烟
-- [ ] 变更记录 ver2.15 草稿 + PROJECT_STATUS 速览更新
-- [ ] `feature/model-kit` 推远端，出具《合版说明》（改动文件清单 + 冲突预检：`git merge-tree` 对 test3 试合并）
+- [ ] 三台新机台 + 三台存量机台全量回归（存量做 validate/截图对照）
+- [ ] `npm run build` + preview 冒烟
+- [ ] 变更记录 ver2.15 + PROJECT_STATUS 速览
+- [ ] `feature/model-kit` 推远端 + 《合版说明》（文件清单 + merge-tree 预检）
 
 ## 三、与任务 1（AI-B）的对齐机制
 
@@ -71,28 +82,27 @@
 
 | 区域 | 归属 | 说明 |
 |---|---|---|
-| `frontend/src/**`、`models/**`、`model-editor-standalone/**` | **AI-A（我）** | 含 useWebSocket.js / stores/app.js（WS 去重已由我修完，AI-B 无需再动） |
+| `frontend/src/**`、`models/**`、`model-editor-standalone/**`、`docs/assets/baseline/**` | **AI-A（我）** | 含 useWebSocket.js / stores/app.js（WS 去重已由我修完） |
 | `backend/services/ai_*`、`backend/routers/ai.py`、`dify/**`、`services/db_proxy/**`、`deploy/`（AI 相关） | **AI-B** | |
-| `backend/main.py`、`backend/config.py`、`requirements.txt` | **缓冲区（默认 AI-B，改动先知会）** | 我方承诺任务 2 期间不动 main.py / requirements.txt；config.py 只读 |
-| `backend/services/realtime.py` | **共享敏感区**：我已提交去重修复（`528acee`），AI-B 若需改动 **先拉我的分支或知会**，避免同文件分叉 |
-| `backend/services/db_poller.py` / `routers/rvmessages.py` | AI-B（8a74590 已含其 P0 改造）；我方只读不改 |
+| `backend/main.py`、`backend/config.py`、`requirements.txt` | **缓冲区（默认 AI-B，改动先知会）** | 我方任务 2 期间不动；若新机台接线需要动（如演示机台 seed），改 `seed_*.py` 旁路，不动 main.py |
+| `backend/services/realtime.py` | **共享敏感区**：我已提交去重修复（`528acee`），AI-B 若需改动先拉我的分支或知会 |
+| `backend/services/db_poller.py` / `routers/rvmessages.py` | AI-B；我方只读不改 |
 
 ### 3.3 环境隔离表
 
 | 资源 | AI-A（任务 2） | AI-B（任务 1） |
 |---|---|---|
-| 前端 | 5173（我的副本，host 双栈已修） | 5174（自己副本，proxy 指向 8003） |
-| 后端 | 8002（已在跑，**AI-B 改共享后端代码需重启前知会**） | 8003（`API_PORT=8003` 需 config 环境变量化——已建议，AI-B 实施） |
+| 前端 | 5173（我的副本，双栈已修） | 5174（自己副本，proxy 指向 8003） |
+| 后端 | 8002（已在跑；AI-B 重启共享后端前知会） | 8003（`API_PORT` 环境变量化由 AI-B 实施） |
 | db_proxy | 不依赖 | 8001（自起） |
-| Oracle schema | `fabtwin`（现用） | 建议切 `fabtwin_dev2`（未建；若 AI-B 直接共用 `fabtwin`，则遵守 3.4） |
-| WS 验收 | 我的动画链路依赖 raw_event 单次投递（`528acee` 保证） | AI 链路若监听 WS，同样受益 |
+| Oracle schema | `fabtwin`（现用） | 建议 `fabtwin_dev2`（未建；共用 `fabtwin` 则遵守 3.4） |
 
 ### 3.4 测试数据隔离约定（共用 schema 期间的降级方案）
-- debug 注入事件按**机台号分工**：AI-A 用 `OXE-03` / `PODOPENER-1` / `AMAT-T1`；AI-B 的 AI 链路联调若需造数，用 `OXE-51` 等演示机台，且 AI 查询测试约定查**历史日期**（非当日），避开我注入的当日事件
-- 双方不动对方的 seed 脚本；`MACHINE_MODEL_CONFIGS` 行我只写 `PODOPENER-2200` / `TEL-DRM-UNIT` / `AMAT-METSPUT` 三个 model_id
+- debug 注入按**机台号分工**：AI-A 的存量验收用 `OXE-03` / `PODOPENER-1` / `AMAT-T1`；**三台新机台的注入用各自演示机台号（LAM-01 / SYM3-01 / SYNAPSE-01，任务 2 新建，天然隔离）**；AI-B 的 AI 链路联调造数用 `OXE-51` 等演示机台且 AI 查询约定查**历史日期**
+- `MACHINE_MODEL_CONFIGS` 写入分工：AI-A 写三个存量 + 三个新 model_id；AI-B 不写机型配置
 
 ### 3.5 同步节奏与简报格式
-- **节奏**：每完成一个里程碑互发一次对齐简报（不设固定钟点）；**共享文件改动**（realtime.py / main.py / config.py）发生时**即时**知会，不等里程碑
+- **节奏**：每完成一个里程碑互发一次对齐简报；**共享文件改动**（realtime.py / main.py / config.py）发生时**即时**知会，不等里程碑
 - **简报模板**（双方统一）：
   ```
   【里程碑】M1 完成/进行中
@@ -101,23 +111,23 @@
   【影响对方】有无：…（端口/服务重启/共享文件/DB 数据）
   【需要对方】有无：…（验收/拍板/告知）
   ```
-- **冲突预警**：任一方预计要动缓冲区文件，提前一条消息声明；合并前用 `git merge-tree $(git merge-base HEAD test3) HEAD test3` 预检冲突文件清单并在简报中列出
+- **冲突预警**：预计要动缓冲区文件提前声明；合并前 `git merge-tree $(git merge-base HEAD test3) HEAD test3` 预检并在简报列出冲突清单
 
 ### 3.6 合版流程（SOP）
 1. 双方 feature 分支推远端，出具《合版说明》（改动文件清单 + 自验记录 + 截图基线路径）
-2. 用户拍板合并顺序；先合者直接 ff/merge，**后合者负责解冲突**（冲突域按 3.2 归属表判断取舍）
-3. 合并后 test3 上跑联合冒烟：build + 三机台动画抽查 + AI 链路连通性（`test_dify_integration.py`）
-4. 合版后双方 `git fetch` + 本地 test3 引用对齐（`git branch -f test3 origin/test3`，防旧引用再漂移）
+2. 用户拍板合并顺序；先合者直接 ff/merge，**后合者负责解冲突**（冲突域按 3.2 归属表取舍）
+3. 合并后 test3 联合冒烟：build + 三机台动画抽查 + AI 链路连通性（`test_dify_integration.py`）
+4. 合版后双方 `git fetch` + `git branch -f test3 origin/test3` 对齐引用
 
 ## 四、风险与预案
 
 | 风险 | 概率 | 预案 |
 |---|---|---|
-| AI-B 改 realtime.py 与我去重修复分叉 | 中 | 3.2 已声明；我的提交粒度小，合版以功能等价为准（去重语义保留即可） |
-| OXE Motion JSON（1.5 万行）validate 报错量大 | 中 | 生成器 `build_oxe_motion.py` 是源头——规则改动回生成器修，不手改 JSON |
-| 编辑器校验面板改 MotionPreview 触碰 AI-B 也关注的文件 | 低 | MotionPreview 在我的边界内（已声明）；AI-B 的改动集中在 ai 域 |
-| 共用 schema 下 AI 链路测试读到我的当日注入事件 | 中 | 3.4 机台/日期分工；AI-B 建好 dev2 schema 后自动归零 |
-| 工期交叉（双方都今晚出大提交） | 低 | 合版顺序用户拍板；我方 M4 的 merge-tree 预检把冲突清单提前暴露 |
+| 等角投影（Sym3/Synapse）部件几何复杂，primitives 首战超时 | 中 | iso 件先做"简化多面体"版保结构正确，细节渐变留 M3 打磨；单台超 6h 先降级为俯视风格并留档说明 |
+| 新机台无真实事件流，语义靠推断 | 中 | 复用标准 27 步词表 + generic deriver（不发明新事件名）；动画语义按参考图可辨识机构映射 |
+| AI-B 改 realtime.py 与我去重修复分叉 | 中 | 3.2 已声明；合版以功能等价为准（去重语义保留） |
+| OXE Motion JSON（1.5 万行）validate 报错量大 | 中 | 源头在 `build_oxe_motion.py` 修，不手改 JSON |
+| 新机台演示机台号与现有 seed 冲突 | 低 | 新 model_id/machine_id 用独立前缀（LAM/SYM3/SYNAPSE），seed 幂等先删后插 |
 
 ## 五、状态跟踪（每里程碑更新此表）
 
@@ -125,6 +135,6 @@
 |---|---|---|---|
 | M0 对齐收尾 | ✅ 完成 | 0.5h | `528acee` |
 | M1 svg_kit 收口 | ⬜ 未开始 | — | — |
-| M2 三机台建模定稿 | ⬜ 未开始 | — | — |
+| M2 三张参考图建模（LAM2300/Sym3/Synapse） | ⬜ 未开始 | — | — |
 | M3 编辑器集成与 SOP | ⬜ 未开始 | — | — |
 | M4 回归与合版准备 | ⬜ 未开始 | — | — |
