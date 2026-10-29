@@ -13,6 +13,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { evalWhen, resolveMotionRule, enrichMotionParams, extractParamKeys } from '../composables/useExprEval.motion'
 import { computeExtendVec } from '../motionDerivers/amatMetsput'
+import { getMotionDeriver } from '../motionDerivers'
 // P3-A：调试页与机台详情页统一使用「逐帧同步圆弧」单引擎（原 .motion.js 的事后屏幕测量补偿已废弃）
 import { playMotion, resetMotionState, invalidateMotionGeometry } from '../composables/useMotionPlayback'
 import { scopeSvgPaintIds } from '../utils/svgPaintScope'
@@ -217,7 +218,25 @@ const paramDefaults = computed(() => {
   return { ...(cfg.param_defaults || {}), ...(cfg.ext?.param_defaults || {}) }
 })
 
+// 与机台详情同一条链路：ext.deriver 指定业务推导器（oxe / amat_metsput / podopener）
+const ext = computed(() => props.motionConfig?.ext || {})
+const deriverName = computed(() => ext.value.deriver || '')
+
 const PARAM_ORDER = ['LOT_ID', 'PORT', 'SLOT', 'CHAMBER', 'BATCH_ID', 'Qty', 'RunMode', 'RECIPE1']
+
+// deriver 内部派生参数：由推导器按事件算出来，不需要用户手填
+const DERIVER_INTERNAL_KEYS = new Set(['has_entered_chamber', 'cross_arm', 'cycle',
+  'pod_shell', 'POD', 'POD_LK', 'CST', 'DOOR', 'MAP', 'SMIF_C', 'PORT_C', 'SLOT_ANCHOR',
+  'CH_C', 'WAFER_CH', 'CH_RUN', 'CH_ALARM', 'CH_UNLOAD', 'ARM_HOME', 'ARM_PORT_ANGLE',
+  'ARM_CH_ANGLE', 'ARM_PA_ANGLE', 'ARM_EXTEND_OUT', 'ARM_EXTEND_PORT', 'ARM_EXTEND_PA',
+  'ARM_EXTEND_CH', 'DONE_COUNT', 'ALARM_PORT', 'ALARM_COUNT', 'AL1', 'AL2', 'AL3',
+  'ARM_T1_PORT', 'ARM_T2_PORT', 'ARM_T3_PORT', 'ARM_T1_PA', 'ARM_T2_PA', 'ARM_T3_PA',
+  'ARM_T1_CH', 'ARM_T2_CH', 'ARM_T3_CH'])
+// SM01..SM25 = deriver 展开的逐槽 mapping 字符（只在 when 里用），同样不展示
+const DERIVER_INTERNAL_RE = /^SM\d{2}$/
+// 业务输入白名单：其余键即使出现在 when 里也由 deriver 产出
+const USER_INPUT_KEYS = new Set(['LOT_ID', 'PORT', 'SLOT', 'CHAMBER', 'BATCH_ID', 'Qty',
+  'RunMode', 'RECIPE1', 'SMIFPORTID'])
 
 const paramKeys = computed(() => {
   const whens = []
@@ -227,7 +246,14 @@ const paramKeys = computed(() => {
   }
   const keys = new Set(Object.keys(paramDefaults.value))
   for (const k of extractParamKeys(whens)) keys.add(k)
-  return Array.from(keys).sort((a, b) => {
+  let list = Array.from(keys)
+  // 有 deriver 的机型：只保留业务输入，避免 OXE 面板出现 SM01~SM25 / ARM_* 等 30+ 个手填框；
+  // CHAMBER 即使 when 没引用也保留（OXE 靠它把片送进 CH_A/B/C 不同腔，需要手动指定）
+  if (deriverName.value) {
+    list = Array.from(new Set([...list, 'CHAMBER'])).filter(k => USER_INPUT_KEYS.has(k)
+      && !DERIVER_INTERNAL_KEYS.has(k) && !DERIVER_INTERNAL_RE.test(k))
+  }
+  return list.sort((a, b) => {
     const ia = PARAM_ORDER.indexOf(a)
     const ib = PARAM_ORDER.indexOf(b)
     if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
@@ -238,7 +264,9 @@ const paramKeys = computed(() => {
 watch(paramKeys, (keys) => {
   for (const k of keys) {
     if (!(k in paramValues.value)) {
-      paramValues.value[k] = paramDefaults.value[k] ?? DEFAULT_PARAM_VALUES[k] ?? ''
+      // OXE 等有 deriver 的机型腔体编号是 A/B/C，不是 AMAT 的 E
+      const fallback = k === 'CHAMBER' && deriverName.value ? 'A' : DEFAULT_PARAM_VALUES[k]
+      paramValues.value[k] = paramDefaults.value[k] ?? fallback ?? ''
     }
   }
 }, { immediate: true })
@@ -284,7 +312,15 @@ async function playQueuedStep(stepName) {
     return
   }
 
-  if (stepName === 'BATCH_INFO_FROM_ECUI') {
+  // 与机台详情同一条参数链路：有 ext.deriver 的机型由推导器按事件产出参数
+  // （ARM_T1/T2/T3、ARM_PORT_ANGLE、部件 id 占位符等）。缺这一步时参数为空，
+  // rule.when 全不命中、角度占位符解析成 0，点了事件动画也不会动。
+  const deriver = getMotionDeriver(deriverName.value)
+  const payload = Object.fromEntries(
+    paramKeys.value.map(k => [k, paramValues.value[k] ?? ''])
+  )
+
+  if (!deriver && stepName === 'BATCH_INFO_FROM_ECUI') {
     const lotId = String(paramValues.value.LOT_ID || '').trim()
     if (lotId) {
       lotRegistry.set(lotId, {
@@ -298,14 +334,32 @@ async function playQueuedStep(stepName) {
     }
   }
 
-  const { params, matchedBy, lotId, carrier, slot } = enrichMotionParams(paramValues.value, lotRegistry)
+  let params
+  let info = {}
+  let matchedBy = 'PORT'
+  let lotId = ''
+  let carrier = ''
+  let slot = ''
+  if (deriver) {
+    const r = deriver.derive(motion.step, payload, { motionConfig: props.motionConfig, ext: ext.value })
+    if (!r?.ok) {
+      logEvent(stepName, r?.warn || '参数推导失败', 'warn')
+      return
+    }
+    params = r.params
+    info = r.info || {}
+    lotId = String(params.LOT_ID || '').trim()
+    slot = params.SLOT || '1'
+  } else {
+    ;({ params, matchedBy, lotId, carrier, slot } = enrichMotionParams(payload, lotRegistry))
+  }
 
   if (!evalWhen(motion.when, params)) {
     logEvent(stepName, `未命中 step.when: ${motion.when || 'true'}`, 'warn')
     return
   }
 
-  if (stepName === 'CHAMBER_PS') {
+  if (!deriver && stepName === 'CHAMBER_PS') {
     if (matchedBy !== 'LOT_ID' || !carrier) {
       logEvent(stepName, `未找到 LOT_ID=${lotId || '?'} 的载具映射，请先触发 BATCH_INFO_FROM_ECUI`, 'warn')
       return
@@ -394,7 +448,7 @@ async function playQueuedStep(stepName) {
     }
   }
 
-  if (stepName === 'WAFER_PROCESS_COMPLETE') {
+  if (!deriver && stepName === 'WAFER_PROCESS_COMPLETE') {
     if (matchedBy !== 'LOT_ID' || !carrier) {
       logEvent(stepName, `未找到 LOT_ID=${lotId || '?'} 的载具映射，请先触发 BATCH_INFO_FROM_ECUI`, 'warn')
       return
@@ -486,6 +540,7 @@ async function playQueuedStep(stepName) {
     params,
     reset: false,
     partAliases: props.motionConfig?.ext?.part_aliases || {},
+    offsetMode: ext.value.offset_mode === 'absolute' ? 'absolute' : 'relative',
     onWarn: (msg) => logEvent(stepName, msg, 'warn'),
   })
 
@@ -511,7 +566,10 @@ async function playQueuedStep(stepName) {
     logEvent(stepName, `命中: ${motion.when || rule.when || 'true'} → ${targetId || '文本'} ${actions.length}个动作`, 'success')
   }
 
-  if (stepName === 'CHAMBER_PS') {
+  // deriver 业务状态推进（lastPort 记忆 / 槽位状态机），与机台详情一致
+  if (deriver) deriver.commit(motion.step, params, info)
+
+  if (!deriver && stepName === 'CHAMBER_PS') {
     const chamber = String(params.CHAMBER || '').trim()
     if (lotId && chamber) {
       waferPosRegistry.set(waferPosKey(lotId, slot), { chamber })
@@ -519,7 +577,7 @@ async function playQueuedStep(stepName) {
     }
   }
 
-  if (stepName === 'WAFER_PROCESS_COMPLETE') {
+  if (!deriver && stepName === 'WAFER_PROCESS_COMPLETE') {
     if (lotId) {
       waferPosRegistry.delete(waferPosKey(lotId, slot))
       logEvent(stepName, `晶圆回槽: LOT_ID=${lotId} SLOT=${slot || '1'} → ${carrier}${slot || '1'}`, 'info')
@@ -534,6 +592,7 @@ function resetAll(options = {}) {
   resetMotionState(svgContainer.value)
   invalidateMotionGeometry(svgContainer.value)
   waferPosRegistry.clear()
+  getMotionDeriver(deriverName.value)?.reset()
   if (!options.silent) logEvent('初始化', '所有部件已重置', 'info')
 }
 

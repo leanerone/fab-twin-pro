@@ -474,20 +474,41 @@
     <circle cx="454.5" cy="381.81" r="2.2" fill="#39414e"/>
     <g id="ARM_UPPER">
       <rect x="184" y="140" width="520" height="520" fill="none" stroke="none" pointer-events="none"/>
-      <line x1="450.83" y1="401.56" x2="470.83" y2="313.81" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
-      <line x1="437.17" y1="398.44" x2="457.17" y2="310.69" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
-      <circle cx="444" cy="400" r="9" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
-      <circle cx="464" cy="312.25" r="8" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+      <!-- 肩臂：双板连杆（沿折臂基态 77.17° 方向，宽 24），不再是细线 -->
+      <g transform="rotate(-77.16 444 400)">
+        <rect x="446" y="388" width="88" height="9" rx="4.5" fill="url(#armBlade)" stroke="#3a4250" stroke-width="1.6"/>
+        <rect x="446" y="403" width="88" height="9" rx="4.5" fill="url(#armBlade)" stroke="#3a4250" stroke-width="1.6"/>
+        <rect x="452" y="396.5" width="82" height="7" rx="3.5" fill="url(#armSteel)" stroke="#3a4250" stroke-width="1.2"/>
+      </g>
+      <!-- 肩关节盘 + 肘关节盘 -->
+      <circle cx="444" cy="400" r="15" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+      <circle cx="444" cy="400" r="5" fill="#39414e"/>
+      <circle cx="464" cy="312.25" r="13" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+      <circle cx="464" cy="312.25" r="4.5" fill="#39414e"/>
       <g id="ARM_FORE">
         <rect x="294" y="142.25" width="340" height="340" fill="none" stroke="none" pointer-events="none"/>
-        <line x1="470.83" y1="310.69" x2="490.83" y2="398.44" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
-        <line x1="457.17" y1="313.81" x2="477.17" y2="401.56" stroke="url(#armBlade)" stroke-width="5" stroke-linecap="round"/>
-        <circle cx="484" cy="400" r="7" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+        <!-- 前臂：双板连杆（沿 77.16° 方向指向腕关节） -->
+        <g transform="rotate(77.16 464 312.25)">
+          <rect x="466" y="300.25" width="88" height="9" rx="4.5" fill="url(#armBlade)" stroke="#3a4250" stroke-width="1.6"/>
+          <rect x="466" y="315.25" width="88" height="9" rx="4.5" fill="url(#armBlade)" stroke="#3a4250" stroke-width="1.6"/>
+          <rect x="470" y="308.75" width="83" height="7" rx="3.5" fill="url(#armSteel)" stroke="#3a4250" stroke-width="1.2"/>
+        </g>
+        <!-- 腕关节盘 -->
+        <circle cx="484" cy="400" r="12" fill="url(#armSteel)" stroke="#3a4250" stroke-width="2"/>
+        <circle cx="484" cy="400" r="4" fill="#39414e"/>
         <g id="ARM_WRIST">
-          <rect x="414" y="330" width="140" height="140" fill="none" stroke="none" pointer-events="none"/>
-          <path d="M486,368 L540,368 M486,432 L540,432 M486,368 L486,432" fill="none" stroke="url(#armBlade)" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
-          <g id="WAFER_MOVE" data-motion-base-visibility="hidden"><circle cx="514" cy="400" r="30" fill="url(#waferPattern)" stroke="#2f3a4d" stroke-width="1.2"/><circle cx="514" cy="400" r="30" fill="url(#waferShade)" pointer-events="none"/><circle cx="514" cy="400" r="29.4" fill="none" stroke="url(#edgeMetal)" stroke-width="1.2" pointer-events="none"/><path d="M492.4,382 A28.2,28.2 0 0 1 515.5,371.8" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="1.5" stroke-linecap="round" pointer-events="none"/><path d="M510.8,374.2 L517.2,374.2 L514,378.2 Z" fill="#0d1117" pointer-events="none"/></g>
-          <circle id="ARM_TIP" cx="514" cy="400" r="1.2" fill="#000" fill-opacity="0.01"/>
+          <rect x="413" y="330" width="142" height="140" fill="none" stroke="none" pointer-events="none"/>
+          <!-- 腕座（压在晶圆下方，只露出手腕到叉根这一段） -->
+          <rect x="482" y="387" width="16" height="26" rx="5" fill="url(#armSteel)" stroke="#3a4250" stroke-width="1.4"/>
+          <!-- 末端叉：窄间距平板双轨，轨根嵌进根部连接座连成一整件（叉臂保持长 54）。
+               轨心距晶圆心 ≤12，r=30 晶圆在轨尖 (552) 处弦半宽 29.5>27 → 双轨被完全盖住 -->
+          <rect x="490" y="385" width="26" height="30" rx="4" fill="url(#armSteel)" stroke="#3a4250" stroke-width="1.4"/>
+          <rect x="497" y="396" width="12" height="8" rx="1.5" fill="#2b323e" stroke="#1c2230" stroke-width="1"/>
+          <rect x="498" y="388" width="54" height="7" rx="2" fill="url(#armBlade)" stroke="#3a4250" stroke-width="1.4"/>
+          <rect x="498" y="405" width="54" height="7" rx="2" fill="url(#armBlade)" stroke="#3a4250" stroke-width="1.4"/>
+          <!-- 晶圆绘制在叉之后、且中心前移到叉前端 (525,400)：夹片时晶圆完全盖住双轨 -->
+          <g id="WAFER_MOVE" data-motion-base-visibility="hidden"><circle cx="525" cy="400" r="30" fill="url(#waferPattern)" stroke="#2f3a4d" stroke-width="1.2"/><circle cx="525" cy="400" r="30" fill="url(#waferShade)" pointer-events="none"/><circle cx="525" cy="400" r="29.4" fill="none" stroke="url(#edgeMetal)" stroke-width="1.2" pointer-events="none"/><path d="M503.4,382 A28.2,28.2 0 0 1 526.5,371.8" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="1.5" stroke-linecap="round" pointer-events="none"/><path d="M521.8,374.2 L528.2,374.2 L525,378.2 Z" fill="#0d1117" pointer-events="none"/></g>
+          <circle id="ARM_TIP" cx="525" cy="400" r="1.2" fill="#000" fill-opacity="0.01"/>
         </g>
       </g>
     </g>

@@ -7,8 +7,9 @@
  *    → 历史回放 seek、容器 CSS 缩放、视图隐藏后再显示均不影响几何正确性。
  * 2. 支持 mode: 'instant'（无过渡无等待，直接落到终态），用于历史回放 seek。
  * 3. 部件别名不写死，由 options.partAliases 注入（来自 Motion JSON ext.part_aliases）。
- * 4. 旋转统一用「绕自身中心等效」表示：外部 pivot / 跟随旋转都折算成 rotate + translate，
- *    transform-origin 恒为 fill-box center，状态可增量累积。
+ * 4. 旋转统一用「绕自身基准中心等效」表示：外部 pivot / 跟随旋转都折算成 rotate + translate，
+ *    支点固定为加载时测到的元素本地 bbox 中心（transform-box: view-box + px 原点），
+ *    不受子组动态变换影响，状态可增量累积。
  *
  * 保留能力（用户批准的 7 动作 + 4 特性）：
  *   动作：offset / rotate / scale / opacity / visibility(折叠在 action.visible) / snap / text
@@ -116,6 +117,9 @@ function measureSvg(container, onWarn) {
     geom.set(id, {
       cx: root.x,
       cy: root.y,
+      // 元素**本地**基准中心（未叠加任何动态 transform 时 getBBox 的中心），
+      // 供 applyState 固定旋转支点用（见 applyState 里的 view-box 说明）
+      px: local.x, py: local.y,
       invA: inv ? inv.a : 1, invB: inv ? inv.b : 0,
       invC: inv ? inv.c : 0, invD: inv ? inv.d : 1,
     })
@@ -513,8 +517,16 @@ function applyState(el, state, g) {
   parts.push(`translate(${lx}px, ${ly}px)`)
   if (state.rotate) parts.push(`rotate(${state.rotate}deg)`)
   if (state.scale !== 1 || (state.scaleY ?? 1) !== 1) parts.push(`scale(${state.scale}, ${state.scaleY ?? 1})`)
-  el.style.transformBox = 'fill-box'
-  el.style.transformOrigin = 'center'
+  // === 支点必须用「加载时测到的本地基准中心」，不能用 fill-box + center ===
+  // fill-box 的参考框是元素**当前**的 object bounding box：一旦子组（ARM_FORE/ARM_WRIST）
+  // 也带了 CSS transform，父组的 bbox 会随之变大、bbox 中心随之上移/下移 →
+  // transform-origin: center 跟着漂 → 旋转支点从枢纽 (444,400) 移到 (444,385.6) 之类的位置，
+  // 整个子树（包括 ARM_ROBOT 里画在枢纽上的圆形底座 r=26）被平移到别处
+  // （实测伸出到 PORT1 时底座从 (538.5,388.6) 漂到 (525.6,367.9)，即"底座上下移动"）。
+  // 改用 transform-box: view-box：参考框是 SVG 视口（viewBox），支点 px 值恒等于元素本地坐标，
+  // 与子组是否被变换无关 → 支点固定 = 关节。实测 viewBox 是否带 min-x/min-y 都不影响。
+  el.style.transformBox = 'view-box'
+  el.style.transformOrigin = `${g.px ?? 0}px ${g.py ?? 0}px`
   el.style.transform = parts.join(' ')
   syncFollowMotionTexts(el)
 }
@@ -966,8 +978,8 @@ export async function playMotion({
       const state = ensureState(states, pid)
       const g = geom.get(pid)
       // 纯 visibility/opacity/text 规则不改写 transform：applyState 会 consolidate()
-      // 掉部件的静态 transform 属性并强设 transform-box:fill-box，带静态 rotate 的
-      // 部件（如状态覆盖层）会被错误换算原点而飞出画面
+      // 掉部件的静态 transform 属性并强设 transform-box:view-box + 固定本地支点，
+      // 对带静态 rotate 的部件（如状态覆盖层）也能正确换算原点
       const affectsTransform = actions.some(a =>
         a && ['offset', 'rotate', 'scale', 'snap', 'move_to'].includes(a.type))
       for (const action of actions) {

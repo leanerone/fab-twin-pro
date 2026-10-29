@@ -1,7 +1,8 @@
 # SVG 公共库（svg-kit）编写指南
 
-> 建立日期：2026-10-29　|　版本：1.0
+> 建立日期：2026-10-29　|　版本：1.1
 > 目标：**后续新建机型的 SVG 有公共库可以编写**，不再从零手绘、不再踩重复的坑。
+> 当前边界：初版公共部件已可用；PODOPENER 新外观尚未全部回收，LAM2300/SPT/Sym3 仍需补布局模板。
 
 ---
 
@@ -51,12 +52,18 @@ models/svg_kit/
 | 机型 | id 总数 | 可检视部件 | 状态 |
 |---|---|---|---|
 | OXE (oxe-drm-topview) | 353 | 50 | 正常 |
-| PODOPENER (podopener-2200) | 40 | **0 → 32** | 已用 backfill 修复 |
+| PODOPENER (podopener-2200) | 53 | **0 → 32 → 35** | 已回填并按 GLB 重绘，保留动画挂点 |
 | AMAT (amat_metsput) | 261 | **0 → 237** | 已用 backfill 修复 |
 
 > PODOPENER / AMAT 原先完全没有 `data-pid`，模型编辑器部件清单是空的——这正是
-> ver2.15 反馈的"部件不能点选查看"在另两个机型上的残留。已用 `backfill.py` 修复，
-> 原文件备份为 `*.svg.bak`。
+> ver2.15 反馈的"部件不能点选查看"在另两个机型上的残留。已用 `backfill.py` 修复；
+> PODOPENER 后续重绘后的最终数量为 53 IDs / 35 可检视部件。
+
+### 根 SVG 尺寸约定
+
+- 必须同时保留 `viewBox` 与根节点 `width` / `height`，否则调试预览可能得到 `0×0` 画布。
+- **禁止在根节点写固定 `style="width:...px;height:...px"`**，它会覆盖预览 CSS 的等比缩放并产生 viewport 留白；`primitives.svg_open()` 已遵守此约定。
+- 部件内部尺寸仍使用 SVG 用户坐标；响应式显示交给预览容器，不要把屏幕像素尺寸写进部件参数。
 
 ---
 
@@ -164,3 +171,25 @@ json.dump(b.build(), f, ensure_ascii=False, indent=2)
 - 新增通用部件时，同时补 `primitives.py` 与本文件的部件清单表
 - 改完任何 SVG 或 Motion JSON，跑一次 `validate.py` 再提交
 - `tokens.json` 是 Python / JS / HTML 编辑器共用的唯一真源，改色板只改这一处
+- `models/user/*.svg` 与 `backend/uploads/models/` 的运行时副本必须同步；提交前复核哈希
+- 动画开发只在「模型编辑器 → 动画调试」进行，机台详情仅用于最终演示
+
+---
+
+## 八、机型参考图与下一轮接续
+
+参考原图已随仓库保存，不依赖聊天附件：
+
+- [LAM2300](assets/machine-references/LAM2300.jpg)
+- [SPT](assets/machine-references/SPT.jpg)
+- [Centris Sym3 Etch Chamber Manual](assets/machine-references/Centris-Sym3-Etch-Chamber-Manual.jpg)
+
+### 推荐开发顺序
+
+1. **先回收 PODOPENER 通用件**：把 POD 外壳、载台、钣金机架、精密导轨、观察窗、控制盒整理为 `primitives.py` 参数化函数；动画 ID 由调用方传入，不在公共函数里绑定机型事件。
+2. **再拆参考图**：分别记录 LAM2300/SPT/Sym3 的腔体、传输区、Load Port、机械臂和专属外形，能复用的只传布局与尺寸参数，确属机型专属的结构才单独绘制。
+3. **新增布局模板**：优先扩展 `scaffold.py` 或增加机型布局脚本，不另建一套与 `svg_kit` 不兼容的库。
+4. **最后接 Motion/Deriver**：沿用 Motion JSON v1.1 和现有 deriver 注册机制；在动画调试页逐步验收，不在机台详情新增调试入口。
+5. **每次交付前**：跑 SVG × Motion 校验、前端构建和后端语法检查，并更新《变更更改版记录》。
+
+> 新机型不是绝对零绘制：公共库负责基础部件、材质和通用结构；机型仍保留布局、通道、少量专属外观及动作调教。

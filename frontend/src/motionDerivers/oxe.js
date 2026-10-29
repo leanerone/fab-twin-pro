@@ -19,30 +19,32 @@
  */
 const ARM_ANGLES = {
   HOME: -90,
-  PORT1: 120,
-  PORT2: 60,
+  PORT1: 116.3,
+  PORT2: 63.0,
   CH_A: -120,
   CH_B: -60,
   CH_C: 0,
   PA: 180,
 }
-// 各单元中心到 hub 的距离（v2.5 镜像对称布局，SVG 坐标）
+// 各单元中心到 hub 的距离（v2.5 镜像对称布局，SVG user space，hub=(538.5,388.6) 绝对坐标）
 // 机械臂收回叉托在局部 r=70；伸出 offset = 单元距离 - 70，使叉托精确到单元中心
+// 实测：CH_A/B=(443.5|633.5,224.1)→190、CH_C=(739.5,388.6)→201、PA=(346.5,388.6)→192、
+// PORT1 装载口=(452.9,561.7)→193.2、PORT2 装载口=(626.4,560.7)→193.2（旧值 205 会让叉子越过中心 12px）
 const UNIT_DIST = {
-  CH_A: 190, CH_B: 190, CH_C: 201, PA: 192, PORT1: 205, PORT2: 205,
+  CH_A: 190, CH_B: 190, CH_C: 201, PA: 192, PORT1: 193.2, PORT2: 193.2,
 }
-const ARM_REACH_IN = 70
+const ARM_REACH_IN = 81
 const ARM_EXTEND_OUT = UNIT_DIST.CH_C - ARM_REACH_IN   // 兜底默认（CH_C）
 function reachFor(unitKey) {
   return Math.round((UNIT_DIST[unitKey] ?? 200) - ARM_REACH_IN)
 }
 
 // 三段连杆几何（与 oxe-drm-topview.svg 的 ARM_UPPER / ARM_FORE / ARM_WRIST 一致）：
-// 肩、肘各 90，腕关节收回时半径 40，叉端晶圆中心再外伸 30（= ARM_REACH_IN 70）。
-// 折臂基态 α₀ = acos(40/180) ≈ 77.16°，伸直（α=0）即完全伸出（腕 180，晶圆 210）。
+// 肩、肘各 90，腕关节收回时半径 40，叉端晶圆中心再外伸 41（= ARM_REACH_IN 81，晶圆在叉前端）。
+// 折臂基态 α₀ = acos(40/180) ≈ 77.16°，伸直（α=0）即完全伸出（腕 180，晶圆 221）。
 const LINK_LEN = 90
 const WRIST_BASE_R = 40
-const FORK_REACH = 30
+const FORK_REACH = 41
 const ALPHA_BASE = (Math.acos(WRIST_BASE_R / (LINK_LEN * 2)) * 180) / Math.PI
 
 /**

@@ -65,8 +65,7 @@ def svg_open(width: int = 1080, height: int = 840, viewbox: str = None) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}" '
-        f'font-family="{ff}" width="{width}" height="{height}" '
-        f'style="width: {width}px; height: {height}px;">\n'
+        f'font-family="{ff}" width="{width}" height="{height}">\n'
     )
 
 

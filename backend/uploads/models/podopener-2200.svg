@@ -1,270 +1,368 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   PODOPENER-2200 前视图 2D 资产（motion2d 管线用）
-  参考真机样式：TEL 晶圆载具(Pod/FOUP)开盖机 —— 浅灰机身、TEL 蓝点缀、
-  三色塔灯、急停按钮、开门机构（升降载台 + 门罩 + 锁扣）。
-  几何锚点与旧 MachineVpoView 程序化绘制一致：
-    POD 升降行程 y 730 ↔ 300；进出平移 ±400x/±200y；
-    锁扣 (348,650)(348,718)(664,650)(664,718)；晶舟 (366,640) 268x80。
-  动画部件 id：pod_assembly / cassette / latch_*_unlocked / latch_*_locked /
-    scan_line / scan_beam / signal_wave / effect_rings / pod_hands
+  依据真机 GLB 重绘：深色升降横梁、双侧精密导轨、钣金机柜、POD 门罩与载台。
+  动画锚点保持不变：POD 载台 y=730、罩顶 y=520、升降 ±430；
+  锁扣 (348,650)(348,718)(664,650)(664,718)；晶舟 (366,640) 268x80。
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" stroke-linecap="round" stroke-linejoin="round">
   <defs>
     <linearGradient id="vpoCabinetGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#eef2f6"/>
-      <stop offset="100%" stop-color="#d3dce5"/>
+      <stop offset="0" stop-color="#fbfcfe"/>
+      <stop offset="0.48" stop-color="#e4e9ef"/>
+      <stop offset="1" stop-color="#b7c1cd"/>
     </linearGradient>
     <linearGradient id="vpoColumnGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#c6d0da"/>
-      <stop offset="45%" stop-color="#e6ecf2"/>
-      <stop offset="100%" stop-color="#aab6c2"/>
+      <stop offset="0" stop-color="#8e9aa9"/>
+      <stop offset="0.18" stop-color="#d7dfe8"/>
+      <stop offset="0.48" stop-color="#f8fafc"/>
+      <stop offset="0.78" stop-color="#d1d9e2"/>
+      <stop offset="1" stop-color="#7b8797"/>
     </linearGradient>
     <linearGradient id="vpoDarkGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#313b47"/>
-      <stop offset="100%" stop-color="#161d27"/>
+      <stop offset="0" stop-color="#596474"/>
+      <stop offset="0.42" stop-color="#303946"/>
+      <stop offset="1" stop-color="#171e28"/>
+    </linearGradient>
+    <linearGradient id="vpoRailMetal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#596474"/>
+      <stop offset="0.28" stop-color="#f4f7fb"/>
+      <stop offset="0.55" stop-color="#b7c2cf"/>
+      <stop offset="1" stop-color="#4c5665"/>
+    </linearGradient>
+    <linearGradient id="vpoEdgeMetal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.35" stop-color="#c6d0dc"/>
+      <stop offset="0.62" stop-color="#eef2f7"/>
+      <stop offset="1" stop-color="#707c8d"/>
+    </linearGradient>
+    <linearGradient id="vpoBayGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5f7fa"/>
+      <stop offset="0.55" stop-color="#d9e0e8"/>
+      <stop offset="1" stop-color="#a8b3c0"/>
     </linearGradient>
     <linearGradient id="vpoGlassGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#dfeaf3" stop-opacity="0.55"/>
-      <stop offset="55%" stop-color="#c3d5e4" stop-opacity="0.30"/>
-      <stop offset="100%" stop-color="#d7e4ef" stop-opacity="0.50"/>
+      <stop offset="0" stop-color="#eaf2f9" stop-opacity="0.68"/>
+      <stop offset="0.45" stop-color="#9fb1c2" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#dce7f0" stop-opacity="0.52"/>
+    </linearGradient>
+    <linearGradient id="vpoPodShell" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.42" stop-color="#e7ecf2"/>
+      <stop offset="0.72" stop-color="#c3cdd8"/>
+      <stop offset="1" stop-color="#8e9aa9"/>
+    </linearGradient>
+    <linearGradient id="vpoPodGlass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dce7f0" stop-opacity="0.76"/>
+      <stop offset="0.5" stop-color="#8fa2b5" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#eef4f9" stop-opacity="0.68"/>
+    </linearGradient>
+    <linearGradient id="vpoCassetteMetal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4f7fb"/>
+      <stop offset="0.42" stop-color="#c3cdd9"/>
+      <stop offset="0.75" stop-color="#8996a6"/>
+      <stop offset="1" stop-color="#596474"/>
+    </linearGradient>
+    <linearGradient id="vpoGlove" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="0.55" stop-color="#d6dee7"/>
+      <stop offset="1" stop-color="#9eabb9"/>
     </linearGradient>
     <linearGradient id="vpoTelBlue" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#0068b7"/>
-      <stop offset="100%" stop-color="#044e8c"/>
+      <stop offset="0" stop-color="#2472a8"/>
+      <stop offset="1" stop-color="#174f7c"/>
     </linearGradient>
-    <filter id="vpoSoftShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="16" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/>
+    <radialGradient id="vpoGroundShadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#111827" stop-opacity="0.26"/>
+      <stop offset="0.65" stop-color="#111827" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#111827" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="vpoSoftShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#0f172a" flood-opacity="0.18"/>
     </filter>
     <pattern id="vpoGridPattern" width="50" height="50" patternUnits="userSpaceOnUse">
-      <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#dbe3ea" stroke-width="1"/>
+      <path d="M50 0H0V50" fill="none" stroke="#d7dfe8" stroke-width="1"/>
     </pattern>
-    <pattern id="vpoVentPattern" width="12" height="8" patternUnits="userSpaceOnUse">
-      <rect width="12" height="8" fill="#b7c2cd"/>
-      <rect y="2" width="12" height="3" rx="1.5" fill="#8f9daa"/>
+    <pattern id="vpoVentPattern" width="10" height="8" patternUnits="userSpaceOnUse">
+      <rect width="10" height="8" fill="#c6cfda"/>
+      <rect y="2" width="10" height="2" rx="1" fill="#6f7b8a"/>
     </pattern>
+    <pattern id="vpoCassetteSlots" width="8" height="3" patternUnits="userSpaceOnUse">
+      <rect width="8" height="3" fill="#26303d"/>
+      <path d="M0 1H8" stroke="#d7e0ea" stroke-width="1"/>
+    </pattern>
+    <g id="vpoBolt">
+      <circle r="5" fill="url(#vpoEdgeMetal)" stroke="#4b5665" stroke-width="1.2"/>
+      <path d="M-2.2 0H2.2" stroke="#596474" stroke-width="1"/>
+    </g>
   </defs>
 
-  <!-- ===== 背景 ===== -->
+  <!-- 背景与图签 -->
   <rect width="1000" height="1000" fill="#f4f7fa"/>
-  <rect width="1000" height="1000" fill="url(#vpoGridPattern)" opacity="0.5"/>
-  <ellipse cx="506" cy="906" rx="386" ry="52" fill="#cbd5e1" opacity="0.45"/>
-
-  <!-- ===== 标题区 ===== -->
+  <rect width="1000" height="1000" fill="url(#vpoGridPattern)" opacity="0.24"/>
+  <ellipse cx="500" cy="906" rx="300" ry="42" fill="url(#vpoGroundShadow)"/>
   <g id="title_block" data-pid="title_block">
-    <rect x="56" y="46" width="10" height="52" fill="url(#vpoTelBlue)"/>
-    <text x="80" y="72" font-size="26" font-weight="800" fill="#0f172a">PODOPENER-2200</text>
-    <text x="80" y="97" font-size="13" fill="#64748b">POD OPENING SYSTEM · FRONT VIEW · <tspan fill="#0068b7" font-weight="700">TEL STYLE</tspan></text>
+    <rect x="56" y="46" width="8" height="52" rx="2" fill="url(#vpoDarkGrad)"/>
+    <text x="80" y="72" font-size="25" font-weight="750" fill="#17202c" letter-spacing="0.5">PODOPENER-2200</text>
+    <text x="80" y="96" font-size="12" fill="#64748b" letter-spacing="1.1">POD OPENING SYSTEM · PRECISION LIFT PORT</text>
   </g>
+  <text x="748" y="96" font-size="14" font-weight="700" fill="#3a4250" letter-spacing="1.2">FRONT VIEW</text>
 
-  <!-- ===== 塔灯（三色状态灯）===== -->
+  <!-- 三色塔灯 -->
   <g id="tower_light" data-pid="tower_light">
-    <rect x="497" y="118" width="8" height="112" fill="#94a3b8"/>
-    <rect x="486" y="88" width="30" height="12" rx="3" fill="#64748b"/>
-    <circle cx="501" cy="72" r="11" fill="#22c55e" stroke="#166534" stroke-width="1.5"/>
-    <circle cx="501" cy="48" r="11" fill="#f59e0b" stroke="#92400e" stroke-width="1.5"/>
-    <circle cx="501" cy="24" r="11" fill="#ef4444" stroke="#7f1d1d" stroke-width="1.5"/>
+    <rect x="496" y="104" width="10" height="126" rx="3" fill="url(#vpoRailMetal)" stroke="#4b5563" stroke-width="1.2"/>
+    <rect x="485" y="91" width="32" height="13" rx="3" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1.4"/>
+    <rect x="489" y="20" width="24" height="70" rx="6" fill="#2b3441" stroke="#3a4250" stroke-width="1.5"/>
+    <rect id="tower_run" data-pid="tower_run" x="492" y="62" width="18" height="21" rx="4" fill="#22c55e" stroke="#166534" stroke-width="1"/>
+    <rect id="tower_idle" data-pid="tower_idle" x="492" y="41" width="18" height="18" rx="4" fill="#f4c542" stroke="#8a6413" stroke-width="1"/>
+    <rect id="tower_alarm" data-pid="tower_alarm" x="492" y="23" width="18" height="15" rx="4" fill="#b94b52" stroke="#7f1d1d" stroke-width="1"/>
+    <path d="M494 65H508M494 44H508M494 26H508" stroke="#ffffff" stroke-opacity="0.45" stroke-width="2"/>
   </g>
 
-  <!-- ===== 主体机柜（真机样式：浅灰钣金 + 蓝色腰带）===== -->
-  <g id="cabinet" data-pid="cabinet" filter="url(#vpoSoftShadow)">
+  <!-- 钣金机柜与升降机架 -->
+  <g id="cabinet" data-pid="cabinet">
     <!-- 底座柜体 -->
-    <rect x="285" y="810" width="430" height="80" rx="10" fill="url(#vpoCabinetGrad)" stroke="#6b7784" stroke-width="2"/>
-    <rect x="297" y="822" width="180" height="26" rx="4" fill="url(#vpoVentPattern)"/>
-    <rect x="297" y="854" width="180" height="26" rx="4" fill="url(#vpoVentPattern)"/>
-    <rect x="492" y="820" width="210" height="60" rx="6" fill="#dde5ec" stroke="#9aa7b3" stroke-width="1"/>
-    <rect x="504" y="832" width="90" height="36" rx="4" fill="url(#vpoTelBlue)" opacity="0.85"/>
-    <text x="549" y="856" font-size="14" font-weight="800" fill="#ffffff" text-anchor="middle">TEL</text>
-    <rect x="604" y="832" width="86" height="36" rx="4" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1"/>
-    <text x="647" y="849" font-size="9" fill="#475569" text-anchor="middle">MODEL 2200</text>
-    <text x="647" y="861" font-size="8" fill="#64748b" text-anchor="middle">POD OPENER</text>
-    <!-- 底座脚 -->
-    <rect x="297" y="888" width="42" height="12" rx="3" fill="#4b5563"/>
-    <rect x="661" y="888" width="42" height="12" rx="3" fill="#4b5563"/>
+    <g filter="url(#vpoSoftShadow)">
+      <rect x="285" y="790" width="430" height="100" rx="9" fill="url(#vpoCabinetGrad)" stroke="#3a4250" stroke-width="2.2"/>
+      <path d="M294 802H706" stroke="#ffffff" stroke-width="2" opacity="0.85"/>
+      <rect x="298" y="812" width="176" height="61" rx="5" fill="#dce3ea" stroke="#7c8795" stroke-width="1.2"/>
+      <rect x="309" y="822" width="154" height="17" rx="3" fill="url(#vpoVentPattern)"/>
+      <rect x="309" y="846" width="154" height="17" rx="3" fill="url(#vpoVentPattern)"/>
+      <rect x="486" y="812" width="214" height="61" rx="5" fill="url(#vpoCabinetGrad)" stroke="#7c8795" stroke-width="1.2"/>
+      <rect x="500" y="824" width="86" height="34" rx="4" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1"/>
+      <text x="543" y="847" font-size="15" font-weight="700" fill="#eef3fa" text-anchor="middle" letter-spacing="1">TEL</text>
+      <rect x="597" y="824" width="89" height="34" rx="4" fill="#c7d0da" stroke="#7c8795" stroke-width="1"/>
+      <text x="641.5" y="839" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">MODEL 2200</text>
+      <text x="641.5" y="851" font-size="8" fill="#596474" text-anchor="middle">POD OPENER</text>
+    </g>
+    <rect x="278" y="884" width="444" height="20" rx="5" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="2"/>
+    <rect x="298" y="900" width="46" height="8" rx="3" fill="#303946"/>
+    <rect x="656" y="900" width="46" height="8" rx="3" fill="#303946"/>
 
-    <!-- 顶梁 -->
-    <rect x="310" y="228" width="380" height="32" rx="7" fill="url(#vpoDarkGrad)" stroke="#111827" stroke-width="2"/>
-    <rect x="322" y="236" width="70" height="16" rx="3" fill="#0068b7" opacity="0.9"/>
-    <text x="357" y="248" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">TEL</text>
-    <circle cx="648" cy="244" r="5" fill="#22c55e" stroke="#166534" stroke-width="1"/>
-    <circle cx="668" cy="244" r="5" fill="#f59e0b" stroke="#92400e" stroke-width="1"/>
+    <!-- 顶部驱动梁 -->
+    <rect x="306" y="228" width="388" height="66" rx="7" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="2.4"/>
+    <path d="M313 232H687" stroke="#aab6c4" stroke-width="2" opacity="0.75"/>
+    <rect x="319" y="240" width="82" height="38" rx="4" fill="#242d39" stroke="#697586" stroke-width="1"/>
+    <rect x="329" y="249" width="44" height="20" rx="3" fill="url(#vpoTelBlue)"/>
+    <text x="351" y="264" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">TEL</text>
+    <path d="M420 247H582M420 258H582M420 269H552" stroke="#7f8b9a" stroke-width="2" opacity="0.55"/>
+    <circle cx="648" cy="254" r="5" fill="#22c55e" stroke="#14291d" stroke-width="1.2"/>
+    <circle cx="668" cy="254" r="5" fill="#d6a732" stroke="#4c3b12" stroke-width="1.2"/>
+    <rect x="687" y="238" width="13" height="66" rx="3" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.4"/>
+    <circle cx="693.5" cy="249" r="2.5" fill="#334155"/>
+    <circle cx="693.5" cy="291" r="2.5" fill="#334155"/>
 
-    <!-- 立柱 ×2 -->
-    <rect x="320" y="240" width="45" height="570" rx="8" fill="url(#vpoColumnGrad)" stroke="#475569" stroke-width="2"/>
-    <rect x="635" y="240" width="45" height="570" rx="8" fill="url(#vpoColumnGrad)" stroke="#475569" stroke-width="2"/>
-    <!-- 立柱细节：导轨槽 -->
-    <rect x="336" y="252" width="8" height="546" rx="4" fill="#9aa7b3" opacity="0.7"/>
-    <rect x="656" y="252" width="8" height="546" rx="4" fill="#9aa7b3" opacity="0.7"/>
+    <!-- 立柱与内嵌滑轨 -->
+    <rect x="306" y="286" width="60" height="510" rx="6" fill="url(#vpoColumnGrad)" stroke="#3a4250" stroke-width="2.2"/>
+    <rect x="634" y="286" width="60" height="510" rx="6" fill="url(#vpoColumnGrad)" stroke="#3a4250" stroke-width="2.2"/>
+    <rect x="316" y="302" width="24" height="470" rx="4" fill="url(#vpoDarkGrad)" stroke="#596474" stroke-width="1.2"/>
+    <rect x="660" y="302" width="24" height="470" rx="4" fill="url(#vpoDarkGrad)" stroke="#596474" stroke-width="1.2"/>
+    <rect x="323" y="310" width="7" height="452" rx="2" fill="url(#vpoRailMetal)"/>
+    <rect x="670" y="310" width="7" height="452" rx="2" fill="url(#vpoRailMetal)"/>
+    <path d="M351 302V776M649 302V776" stroke="#ffffff" stroke-width="2" opacity="0.65"/>
+    <g fill="#aeb9c6" stroke="#3a4250" stroke-width="0.8">
+      <circle cx="328" cy="414" r="3"/><circle cx="328" cy="434" r="3"/><circle cx="328" cy="454" r="3"/>
+      <circle cx="328" cy="474" r="3"/><circle cx="328" cy="494" r="3"/><circle cx="328" cy="514" r="3"/>
+    </g>
 
-    <!-- 观察窗内腔背景 -->
-    <rect x="365" y="278" width="270" height="470" rx="10" fill="#dde6ee" stroke="#475569" stroke-width="2"/>
-    <rect x="373" y="286" width="254" height="454" rx="7" fill="#eef3f8"/>
-
-    <!-- 升降导轨 -->
-    <rect x="470" y="300" width="6" height="440" fill="#a8b1ba" stroke="#64748b" stroke-width="1"/>
-    <rect x="524" y="300" width="6" height="440" fill="#a8b1ba" stroke="#64748b" stroke-width="1"/>
-
-    <!-- 载台显示器 -->
-    <rect x="374" y="742" width="252" height="42" rx="10" fill="rgba(15,23,42,0.92)" stroke="#0f172a" stroke-width="1"/>
-    <text x="500" y="768" font-size="12" fill="#7dd3fc" text-anchor="middle" font-family="monospace">READY · PORT 1</text>
+    <!-- 内腔背板及真实升降导轨 -->
+    <rect x="366" y="294" width="268" height="456" rx="7" fill="url(#vpoBayGrad)" stroke="#596474" stroke-width="1.8"/>
+    <rect x="376" y="305" width="248" height="432" rx="5" fill="#e9edf2" stroke="#9aa6b3" stroke-width="1"/>
+    <path d="M382 312H618M382 730H618" stroke="#ffffff" stroke-width="2" opacity="0.8"/>
+    <rect x="466" y="312" width="13" height="412" rx="3" fill="url(#vpoRailMetal)" stroke="#64748b" stroke-width="1"/>
+    <rect x="521" y="312" width="13" height="412" rx="3" fill="url(#vpoRailMetal)" stroke="#64748b" stroke-width="1"/>
+    <path d="M472.5 320V716M527.5 320V716" stroke="#f8fafc" stroke-width="2" opacity="0.8"/>
+    <g fill="url(#vpoEdgeMetal)" stroke="#596474" stroke-width="1">
+      <rect x="459" y="330" width="27" height="24" rx="4"/><rect x="514" y="330" width="27" height="24" rx="4"/>
+      <rect x="459" y="676" width="27" height="24" rx="4"/><rect x="514" y="676" width="27" height="24" rx="4"/>
+    </g>
+    <rect x="389" y="754" width="222" height="25" rx="5" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1.2"/>
+    <circle cx="403" cy="766.5" r="3.5" fill="#22c55e"/>
+    <text x="500" y="770" font-size="10" fill="#d6e4ef" text-anchor="middle" font-family="monospace" letter-spacing="1">READY · PORT 1</text>
   </g>
 
-  <!-- ===== 玻璃窗（半透明，位于晶舟/POD 之后）===== -->
+  <!-- 观察窗：只保留轻薄反射与金属压框 -->
   <g id="window_glass" data-pid="window_glass">
-    <rect x="365" y="278" width="270" height="470" rx="10" fill="url(#vpoGlassGrad)" stroke="none"/>
-    <line x1="385" y1="300" x2="415" y2="730" stroke="#ffffff" stroke-width="7" opacity="0.25"/>
-    <line x1="405" y1="295" x2="445" y2="725" stroke="#ffffff" stroke-width="3" opacity="0.22"/>
-    <rect x="365" y="278" width="270" height="470" rx="10" fill="none" stroke="#8fa1b2" stroke-width="2.5"/>
+    <rect x="366" y="294" width="268" height="456" rx="7" fill="url(#vpoGlassGrad)" opacity="0.32"/>
+    <path d="M388 318L423 318L392 716H380Z" fill="#ffffff" opacity="0.20"/>
+    <path d="M433 318H443L414 716H404Z" fill="#ffffff" opacity="0.16"/>
+    <rect x="366" y="294" width="268" height="456" rx="7" fill="none" stroke="#5b6679" stroke-width="2"/>
   </g>
 
-  <!-- ===== COMM / SERVICE PORTS ===== -->
+  <!-- 通讯与维护接口 -->
   <g id="comm_ports" data-pid="comm_ports">
-    <rect x="384" y="790" width="164" height="36" rx="6" fill="none" stroke="#475569" stroke-width="2"/>
-    <circle cx="399" cy="801" r="3" fill="#64748b"/><circle cx="411" cy="801" r="3" fill="#64748b"/><circle cx="423" cy="801" r="3" fill="#64748b"/><circle cx="435" cy="801" r="3" fill="#64748b"/><circle cx="447" cy="801" r="3" fill="#64748b"/><circle cx="459" cy="801" r="3" fill="#64748b"/><circle cx="471" cy="801" r="3" fill="#64748b"/><circle cx="483" cy="801" r="3" fill="#64748b"/><circle cx="495" cy="801" r="3" fill="#64748b"/><circle cx="507" cy="801" r="3" fill="#64748b"/><circle cx="519" cy="801" r="3" fill="#64748b"/><circle cx="531" cy="801" r="3" fill="#64748b"/>
-    <circle cx="399" cy="813" r="3" fill="#64748b"/><circle cx="411" cy="813" r="3" fill="#64748b"/><circle cx="423" cy="813" r="3" fill="#64748b"/><circle cx="435" cy="813" r="3" fill="#64748b"/><circle cx="447" cy="813" r="3" fill="#64748b"/><circle cx="459" cy="813" r="3" fill="#64748b"/><circle cx="471" cy="813" r="3" fill="#64748b"/><circle cx="483" cy="813" r="3" fill="#64748b"/><circle cx="495" cy="813" r="3" fill="#64748b"/><circle cx="507" cy="813" r="3" fill="#64748b"/><circle cx="519" cy="813" r="3" fill="#64748b"/><circle cx="531" cy="813" r="3" fill="#64748b"/>
-    <text x="382" y="846" font-size="12" fill="#64748b">COMM / SERVICE PORTS</text>
+    <rect x="298" y="777" width="174" height="27" rx="4" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1.2"/>
+    <g fill="#9aa8b7" stroke="#1f2937" stroke-width="0.7">
+      <circle cx="313" cy="790" r="4"/><circle cx="331" cy="790" r="4"/><circle cx="349" cy="790" r="4"/>
+      <rect x="369" y="785" width="27" height="10" rx="2"/><rect x="404" y="785" width="27" height="10" rx="2"/>
+    </g>
+    <text x="451" y="794" font-size="8" fill="#d6dee7" text-anchor="end" letter-spacing="0.5">COMM / SERVICE</text>
   </g>
 
-  <!-- ===== 操作控制箱（含急停）===== -->
+  <!-- 操作控制盒 -->
   <g id="control_box" data-pid="control_box" filter="url(#vpoSoftShadow)">
-    <rect x="130" y="790" width="165" height="70" rx="10" fill="#111827" stroke="#0b1020" stroke-width="1.2"/>
-    <rect x="142" y="800" width="70" height="30" rx="4" fill="#1f2937" stroke="#334155" stroke-width="1"/>
-    <text x="177" y="819" font-size="9" fill="#7dd3fc" text-anchor="middle" font-family="monospace">RUN: 00025</text>
-    <circle id="estop" data-pid="estop" cx="248" cy="824" r="18" fill="#f59e0b" stroke="#7c2d12" stroke-width="2"/>
-    <circle cx="248" cy="824" r="10" fill="#dc2626" stroke="#7f1d1d" stroke-width="1.5"/>
-    <line x1="295" y1="824" x2="390" y2="788" stroke="#94a3b8" stroke-width="2"/>
+    <path d="M294 818L365 786" fill="none" stroke="#3a4250" stroke-width="8"/>
+    <path d="M294 816L365 784" fill="none" stroke="url(#vpoRailMetal)" stroke-width="5"/>
+    <rect x="124" y="772" width="171" height="91" rx="9" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="2"/>
+    <path d="M133 779H286" stroke="#7d8998" stroke-width="1.5"/>
+    <rect x="139" y="788" width="82" height="37" rx="4" fill="#111a25" stroke="#667385" stroke-width="1"/>
+    <text x="180" y="803" font-size="8" fill="#8ea4b8" text-anchor="middle" font-family="monospace">RUN COUNT</text>
+    <text x="180" y="818" font-size="12" fill="#d8e7f2" text-anchor="middle" font-family="monospace">00025</text>
+    <circle id="estop" data-pid="estop" cx="256" cy="810" r="20" fill="#d6a732" stroke="#5f4712" stroke-width="1.8"/>
+    <circle cx="256" cy="810" r="12" fill="#c4454d" stroke="#7f1d1d" stroke-width="1.4"/>
+    <path d="M248 804A10 10 0 0 1 264 804" fill="none" stroke="#f8c2c5" stroke-width="2" opacity="0.65"/>
+    <text x="210" y="847" font-size="9" fill="#c7d0da" text-anchor="middle" letter-spacing="1">OPERATOR CONTROL</text>
   </g>
-  <text x="92" y="880" font-size="12" fill="#0f172a">OPERATOR CONTROL BOX</text>
 
-  <!-- ===== 安装螺栓 ===== -->
+  <!-- 安装螺栓 -->
   <g id="mount_bolts" data-pid="mount_bolts">
-    <g><circle cx="320" cy="240" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="320" cy="240" r="3" fill="#334155"/></g>
-    <g><circle cx="680" cy="240" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="680" cy="240" r="3" fill="#334155"/></g>
-    <g><circle cx="320" cy="890" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="320" cy="890" r="3" fill="#334155"/></g>
-    <g><circle cx="680" cy="890" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="680" cy="890" r="3" fill="#334155"/></g>
-    <g><circle cx="347" cy="812" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="347" cy="812" r="3" fill="#334155"/></g>
-    <g><circle cx="652" cy="812" r="8" fill="#f4f7fa" stroke="#334155" stroke-width="2"/><circle cx="652" cy="812" r="3" fill="#334155"/></g>
+    <use href="#vpoBolt" x="320" y="240"/><use href="#vpoBolt" x="680" y="240"/>
+    <use href="#vpoBolt" x="320" y="890"/><use href="#vpoBolt" x="680" y="890"/>
+    <use href="#vpoBolt" x="347" y="812"/><use href="#vpoBolt" x="652" y="812"/>
+    <use href="#vpoBolt" x="312" y="300"/><use href="#vpoBolt" x="688" y="300"/>
   </g>
 
-  <!-- ===== 晶舟 CASSETTE（25 片装，动画部件，初始隐藏）===== -->
+  <!-- 晶舟：25 槽金属片架，动画几何基准不变 -->
   <g id="cassette" data-pid="cassette" data-motion-base-visibility="hidden">
-    <rect x="366" y="640" width="268" height="80" rx="6" fill="#e5e7eb" stroke="#4b5563" stroke-width="1.5"/>
-    <rect x="374" y="648" width="252" height="64" rx="4" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>
-    <line x1="382" y1="654" x2="618" y2="654" stroke="#cbd5e1" stroke-width="1.5"/>
-    <line x1="382" y1="664" x2="618" y2="664" stroke="#cbd5e1" stroke-width="1.5"/>
-    <line x1="382" y1="674" x2="618" y2="674" stroke="#cbd5e1" stroke-width="1.5"/>
-    <line x1="382" y1="684" x2="618" y2="684" stroke="#cbd5e1" stroke-width="1.5"/>
-    <line x1="382" y1="694" x2="618" y2="694" stroke="#cbd5e1" stroke-width="1.5"/>
-    <line x1="382" y1="704" x2="618" y2="704" stroke="#cbd5e1" stroke-width="1.5"/>
-    <circle cx="380" cy="712" r="4" fill="#9ca3af"/>
-    <circle cx="620" cy="712" r="4" fill="#9ca3af"/>
-    <text x="642" y="698" font-size="13" font-weight="700" fill="#0f172a">CASSETTE x25</text>
+    <rect x="366" y="640" width="268" height="80" rx="6" fill="url(#vpoCassetteMetal)" stroke="#3a4250" stroke-width="1.8"/>
+    <rect x="374" y="648" width="252" height="64" rx="4" fill="#26303d" stroke="#596474" stroke-width="1"/>
+    <rect x="382" y="652" width="236" height="56" rx="2" fill="url(#vpoCassetteSlots)"/>
+    <rect x="374" y="648" width="9" height="64" rx="3" fill="url(#vpoEdgeMetal)"/>
+    <rect x="617" y="648" width="9" height="64" rx="3" fill="url(#vpoEdgeMetal)"/>
+    <path d="M390 648H610M390 712H610" stroke="#eef3fa" stroke-width="1.4" opacity="0.85"/>
+    <path d="M392 657V703M608 657V703" stroke="#7d8998" stroke-width="2"/>
+    <g fill="#64748b" stroke="#2b3441" stroke-width="0.8">
+      <circle cx="378.5" cy="655" r="2.5"/><circle cx="621.5" cy="655" r="2.5"/>
+      <circle cx="378.5" cy="705" r="2.5"/><circle cx="621.5" cy="705" r="2.5"/>
+    </g>
   </g>
 
-  <!-- ===== 锁扣 ×4（双态：解锁绿/锁定红）===== -->
+  <!-- 锁扣：金属本体 + 状态灯 + 双态手柄 -->
   <g id="latches" data-pid="latches">
     <g id="latch_1" data-pid="latch_1">
       <g id="latch_1_unlocked" data-pid="latch_1_unlocked">
-        <rect x="348" y="650" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
-        <line x1="355" y1="664" x2="343" y2="658" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+        <rect x="346" y="648" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M355 668L345 657" stroke="#596474" stroke-width="4"/><circle cx="355" cy="653" r="2.5" fill="#22c55e"/>
       </g>
       <g id="latch_1_locked" data-pid="latch_1_locked" data-motion-base-visibility="hidden">
-        <rect x="348" y="650" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
+        <rect x="346" y="648" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M355 657V671" stroke="#3a4250" stroke-width="4"/><circle cx="355" cy="653" r="2.5" fill="#c4454d"/>
       </g>
     </g>
     <g id="latch_2" data-pid="latch_2">
       <g id="latch_2_unlocked" data-pid="latch_2_unlocked">
-        <rect x="348" y="718" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
-        <line x1="355" y1="732" x2="343" y2="726" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+        <rect x="346" y="716" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M355 736L345 725" stroke="#596474" stroke-width="4"/><circle cx="355" cy="721" r="2.5" fill="#22c55e"/>
       </g>
       <g id="latch_2_locked" data-pid="latch_2_locked" data-motion-base-visibility="hidden">
-        <rect x="348" y="718" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
+        <rect x="346" y="716" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M355 725V739" stroke="#3a4250" stroke-width="4"/><circle cx="355" cy="721" r="2.5" fill="#c4454d"/>
       </g>
     </g>
     <g id="latch_3" data-pid="latch_3">
       <g id="latch_3_unlocked" data-pid="latch_3_unlocked">
-        <rect x="664" y="650" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
-        <line x1="671" y1="664" x2="683" y2="658" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+        <rect x="662" y="648" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M671 668L681 657" stroke="#596474" stroke-width="4"/><circle cx="671" cy="653" r="2.5" fill="#22c55e"/>
       </g>
       <g id="latch_3_locked" data-pid="latch_3_locked" data-motion-base-visibility="hidden">
-        <rect x="664" y="650" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
+        <rect x="662" y="648" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M671 657V671" stroke="#3a4250" stroke-width="4"/><circle cx="671" cy="653" r="2.5" fill="#c4454d"/>
       </g>
     </g>
     <g id="latch_4" data-pid="latch_4">
       <g id="latch_4_unlocked" data-pid="latch_4_unlocked">
-        <rect x="664" y="718" width="14" height="28" rx="4" fill="#16a34a" stroke="#1f2937" stroke-width="1"/>
-        <line x1="671" y1="732" x2="683" y2="726" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+        <rect x="662" y="716" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M671 736L681 725" stroke="#596474" stroke-width="4"/><circle cx="671" cy="721" r="2.5" fill="#22c55e"/>
       </g>
       <g id="latch_4_locked" data-pid="latch_4_locked" data-motion-base-visibility="hidden">
-        <rect x="664" y="718" width="14" height="28" rx="4" fill="#dc2626" stroke="#1f2937" stroke-width="1"/>
+        <rect x="662" y="716" width="18" height="32" rx="4" fill="url(#vpoEdgeMetal)" stroke="#3a4250" stroke-width="1.2"/>
+        <path d="M671 725V739" stroke="#3a4250" stroke-width="4"/><circle cx="671" cy="721" r="2.5" fill="#c4454d"/>
       </g>
     </g>
   </g>
 
-  <!-- ===== POD 组件（整体升降/进出，初始隐藏）=====
-       基准位：carrierY=730，罩顶=520（=730-210） -->
+  <!-- POD 组件：整体升降/进出，基准与行程不变 -->
   <g id="pod_assembly" data-pid="pod_assembly" data-motion-base-visibility="hidden">
-    <ellipse cx="506" cy="760" rx="108" ry="20" fill="rgba(15,23,42,0.12)"/>
-    <!-- 升降载台 LIFT CARRIER -->
+    <ellipse cx="500" cy="768" rx="184" ry="25" fill="url(#vpoGroundShadow)"/>
     <g id="pod_carrier" data-pid="pod_carrier">
-      <rect x="312" y="730" width="376" height="34" fill="#111827" stroke="#0b1020" stroke-width="1.3"/>
-      <rect x="438" y="722" width="124" height="62" rx="12" fill="#d7dde3" stroke="#6b7280" stroke-width="1.2"/>
-      <rect x="452" y="736" width="96" height="34" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>
-      <rect x="468" y="764" width="10" height="80" fill="#adb5bd" stroke="#64748b" stroke-width="1"/>
-      <rect x="522" y="764" width="10" height="80" fill="#adb5bd" stroke="#64748b" stroke-width="1"/>
-      <rect x="374" y="740" width="252" height="46" rx="10" fill="rgba(100,116,139,0.18)" stroke="rgba(71,85,105,0.55)" stroke-width="0.9"/>
-      <text x="562" y="784" font-size="13" font-weight="700" fill="#0f172a">LIFT CARRIER</text>
+      <rect x="466" y="758" width="13" height="86" rx="3" fill="url(#vpoRailMetal)" stroke="#596474" stroke-width="1"/>
+      <rect x="521" y="758" width="13" height="86" rx="3" fill="url(#vpoRailMetal)" stroke="#596474" stroke-width="1"/>
+      <rect x="438" y="722" width="124" height="62" rx="9" fill="url(#vpoCabinetGrad)" stroke="#3a4250" stroke-width="1.8"/>
+      <rect x="451" y="733" width="98" height="32" rx="5" fill="url(#vpoEdgeMetal)" stroke="#7c8795" stroke-width="1"/>
+      <rect x="312" y="730" width="376" height="34" rx="5" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="2"/>
+      <rect x="321" y="724" width="358" height="15" rx="4" fill="url(#vpoEdgeMetal)" stroke="#596474" stroke-width="1.2"/>
+      <path d="M328 728H672" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>
+      <rect x="329" y="741" width="342" height="15" rx="3" fill="#2a3441"/>
+      <text x="500" y="752" font-size="8" fill="#9fadbc" text-anchor="middle" letter-spacing="1.4">LIFT CARRIER</text>
+      <g fill="#aeb9c6" stroke="#1f2937" stroke-width="0.8">
+        <circle cx="329" cy="748" r="3"/><circle cx="671" cy="748" r="3"/>
+        <circle cx="352" cy="748" r="3"/><circle cx="648" cy="748" r="3"/>
+      </g>
     </g>
-    <!-- POD 门罩（半透明，罩住晶舟）-->
+
     <g id="pod_shell" data-pid="pod_shell">
-      <rect x="344" y="520" width="312" height="190" rx="12" fill="rgba(214,226,235,0.45)" stroke="#6b7280" stroke-width="1.4"/>
-      <rect x="392" y="560" width="216" height="132" rx="10" fill="rgba(236,244,251,0.5)" stroke="#9ca3af" stroke-width="1.1"/>
-      <rect x="456" y="600" width="88" height="84" rx="8" fill="rgba(248,251,254,0.55)" stroke="#a8b3bd" stroke-width="1"/>
-      <rect x="466" y="500" width="80" height="18" rx="4" fill="#6b7280" stroke="#4b5563" stroke-width="1"/>
-      <text x="506" y="632" font-size="15" font-weight="800" fill="#0f172a" text-anchor="middle">POD</text>
-      <!-- RFID 标签 -->
-      <rect x="470" y="610" width="24" height="16" rx="2" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
-      <text x="482" y="622" font-size="7" fill="#1e40af" text-anchor="middle">RFID</text>
+      <!-- 右侧厚度与顶部提手 -->
+      <path d="M650 526L662 519V697L650 709Z" fill="#8996a5" stroke="#3a4250" stroke-width="1.4"/>
+      <rect x="466" y="500" width="80" height="19" rx="5" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1.5"/>
+      <rect x="476" y="504" width="60" height="7" rx="3" fill="#8895a4"/>
+      <path d="M478 519V526M534 519V526" stroke="#3a4250" stroke-width="5"/>
+      <!-- 外壳与门框 -->
+      <rect x="344" y="520" width="312" height="190" rx="13" fill="url(#vpoPodShell)" fill-opacity="0.94" stroke="#3a4250" stroke-width="2.2"/>
+      <path d="M356 523H644" stroke="#ffffff" stroke-width="2" opacity="0.9"/>
+      <rect x="354" y="531" width="292" height="168" rx="10" fill="#d7dfe8" fill-opacity="0.72" stroke="#7b8795" stroke-width="1.2"/>
+      <rect x="382" y="555" width="236" height="141" rx="10" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1.6"/>
+      <rect x="392" y="560" width="216" height="132" rx="8" fill="url(#vpoPodGlass)" stroke="#8b98a7" stroke-width="1.2"/>
+      <!-- 半透明门板的结构筋与反光 -->
+      <path d="M404 568V684M596 568V684" stroke="#eef4f9" stroke-width="4" opacity="0.48"/>
+      <path d="M406 566H444L414 686H398Z" fill="#ffffff" opacity="0.18"/>
+      <path d="M456 565H466L438 687H428Z" fill="#ffffff" opacity="0.14"/>
+      <rect x="462" y="665" width="76" height="21" rx="5" fill="url(#vpoDarkGrad)" stroke="#3a4250" stroke-width="1.2"/>
+      <rect x="474" y="670" width="52" height="7" rx="3" fill="url(#vpoRailMetal)"/>
+      <!-- RFID 与标识 -->
+      <rect x="470" y="610" width="25" height="17" rx="2" fill="#d7e6f2" stroke="#356f98" stroke-width="1"/>
+      <path d="M475 616H480M475 619H480M475 622H480" stroke="#356f98" stroke-width="1"/>
+      <text x="489" y="622" font-size="6.5" font-weight="700" fill="#245878" text-anchor="end">RFID</text>
+      <rect x="459" y="535" width="82" height="17" rx="3" fill="url(#vpoDarkGrad)"/>
+      <text x="500" y="547" font-size="9" font-weight="700" fill="#eef3fa" text-anchor="middle" letter-spacing="1.6">POD · 25</text>
+      <g fill="#64748b" stroke="#3a4250" stroke-width="0.7">
+        <circle cx="362" cy="540" r="2.6"/><circle cx="638" cy="540" r="2.6"/>
+        <circle cx="362" cy="689" r="2.6"/><circle cx="638" cy="689" r="2.6"/>
+      </g>
     </g>
-    <!-- 扫描线 + 右侧传感器光束（READ_TAG / WRITE_TAG）-->
+
+    <!-- 扫描与通讯特效：目标 id 及坐标不变 -->
     <g id="scan_line" data-pid="scan_line" data-motion-base-visibility="hidden">
-      <line x1="456" y1="604" x2="544" y2="604" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
+      <line x1="456" y1="604" x2="544" y2="604" stroke="#ef555c" stroke-width="2.5"/>
+      <path d="M456 600V608M544 600V608" stroke="#ef555c" stroke-width="1.5"/>
     </g>
     <g id="scan_beam" data-pid="scan_beam" data-motion-base-visibility="hidden">
-      <polygon points="506,644 640,610 640,680" fill="rgba(239,68,68,0.15)"/>
-      <line x1="506" y1="644" x2="640" y2="645" stroke="rgba(248,113,113,0.8)" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="644" cy="645" r="6" fill="#ef4444"/>
+      <polygon points="506,644 640,610 640,680" fill="#ef4444" opacity="0.10"/>
+      <line x1="506" y1="644" x2="640" y2="645" stroke="#ef666c" stroke-width="2" opacity="0.8"/>
+      <circle cx="644" cy="645" r="5" fill="#ef555c" stroke="#8e2d33" stroke-width="1"/>
     </g>
-    <!-- 信号波 + 扩散环（BATCH / UI_CONFIRM）-->
     <g id="signal_wave" data-pid="signal_wave" data-motion-base-visibility="hidden">
-      <polyline points="452,638 460,632 468,644 476,634 484,642 492,636 500,643 508,635 516,641 524,637 532,642 540,636 548,640" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <polyline points="452,638 460,632 468,644 476,634 484,642 492,636 500,643 508,635 516,641 524,637 532,642 540,636 548,640" fill="none" stroke="#38bdf8" stroke-width="2.2"/>
     </g>
     <g id="effect_rings" data-pid="effect_rings" data-motion-base-visibility="hidden">
-      <circle cx="506" cy="630" r="20" fill="none" stroke="rgba(34,197,94,0.30)" stroke-width="2"/>
-      <circle cx="506" cy="630" r="35" fill="none" stroke="rgba(34,197,94,0.22)" stroke-width="2"/>
-      <circle cx="506" cy="630" r="50" fill="none" stroke="rgba(34,197,94,0.14)" stroke-width="2"/>
+      <circle cx="506" cy="630" r="20" fill="none" stroke="#22c55e" stroke-opacity="0.55" stroke-width="2"/>
+      <circle cx="506" cy="630" r="35" fill="none" stroke="#22c55e" stroke-opacity="0.34" stroke-width="2"/>
+      <circle cx="506" cy="630" r="50" fill="none" stroke="#22c55e" stroke-opacity="0.18" stroke-width="2"/>
     </g>
-    <!-- 推拉双手（POD 进出时出现）-->
+
+    <!-- 无尘手套：保留人工推入/拉出语义，去除卡通肤色 -->
     <g id="pod_hands" data-pid="pod_hands" data-motion-base-visibility="hidden">
       <g id="hand_left" data-pid="hand_left">
-        <ellipse cx="308" cy="670" rx="32" ry="26" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="2.2"/>
-        <ellipse cx="290" cy="636" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
-        <ellipse cx="304" cy="632" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
-        <ellipse cx="318" cy="636" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
-        <ellipse cx="288" cy="660" rx="7" ry="16" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8" transform="rotate(-35 288 660)"/>
-        <rect x="286" y="663" width="36" height="14" rx="4" fill="#5c8ad6" stroke="#3a609e" stroke-width="1.5"/>
+        <path d="M277 683L283 655L288 636Q290 631 294 634L296 652L300 630Q302 625 306 629L307 651L313 633Q316 629 319 633L317 655L324 643Q328 640 330 645L323 672L316 686Z" fill="url(#vpoGlove)" stroke="#5b6679" stroke-width="1.8"/>
+        <path d="M285 664L273 653Q269 649 266 653Q264 656 268 661L281 677" fill="url(#vpoGlove)" stroke="#5b6679" stroke-width="1.8"/>
+        <path d="M278 680L317 680L320 695L276 695Z" fill="#39485a" stroke="#3a4250" stroke-width="1.5"/>
+        <path d="M282 684H315" stroke="#718198" stroke-width="2"/>
       </g>
       <g id="hand_right" data-pid="hand_right">
-        <ellipse cx="748" cy="670" rx="32" ry="26" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="2.2"/>
-        <ellipse cx="730" cy="636" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
-        <ellipse cx="744" cy="632" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
-        <ellipse cx="758" cy="636" rx="5" ry="14" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8"/>
-        <ellipse cx="728" cy="660" rx="7" ry="16" fill="rgba(255,245,230,0.92)" stroke="#c49a6c" stroke-width="1.8" transform="rotate(35 728 660)"/>
-        <rect x="694" y="663" width="36" height="14" rx="4" fill="#5c8ad6" stroke="#3a609e" stroke-width="1.5"/>
+        <path d="M723 683L717 655L712 636Q710 631 706 634L704 652L700 630Q698 625 694 629L693 651L687 633Q684 629 681 633L683 655L676 643Q672 640 670 645L677 672L684 686Z" fill="url(#vpoGlove)" stroke="#5b6679" stroke-width="1.8"/>
+        <path d="M715 664L727 653Q731 649 734 653Q736 656 732 661L719 677" fill="url(#vpoGlove)" stroke="#5b6679" stroke-width="1.8"/>
+        <path d="M722 680L683 680L680 695L724 695Z" fill="#39485a" stroke="#3a4250" stroke-width="1.5"/>
+        <path d="M718 684H685" stroke="#718198" stroke-width="2"/>
       </g>
     </g>
   </g>
-
-  <!-- ===== 视图角标 ===== -->
-  <text x="748" y="96" font-size="16" font-weight="700" fill="#0f172a">FRONT VIEW</text>
 </svg>

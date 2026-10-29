@@ -93,8 +93,10 @@ def receive_rv_message(
     received_ts = data.received_ts_utc or now
     event_ts = data.event_ts_utc or now
 
+    # raw_id 必须与存量事件保持同序（Z{timestamp} 前缀），
+    # 否则 db_poller 按 raw_id DESC 拉最近 300 行时新事件被挤出窗口。
     raw_event = DT_EVENT_RAW(
-        raw_id=f"TID.{int(datetime.now().timestamp())}",
+        raw_id=f"TID.Z{int(datetime.now().timestamp())}{os.getpid() % 1000:03d}",
         tool_id=data.tool_id,
         source_system=data.source_system,
         source_message_id=data.source_message_id,
@@ -120,16 +122,24 @@ def receive_rv_message(
     db.commit()
 
     payload = json.loads(data.payload_json) if data.payload_json else {}
-    manager.broadcast_from_thread({
-        "type": "rv_event",
-        "data": {
-            "tool_id": data.tool_id,
-            "event_name": payload.get("event_name", "UNKNOWN"),
-            "lot_id": payload.get("lot_id"),
-            "timestamp": event_ts,
-            "payload": payload,
-        }
-    })
+    # 广播格式对齐 db_poller._parse_event_payload 输出，
+    # 前端 useWebSocket 只认 type="raw_event"。
+    try:
+        from services.db_poller import _parse_event_payload
+        parsed = _parse_event_payload(raw_event)
+        manager.broadcast_from_thread({"type": "raw_event", "data": parsed})
+    except Exception:
+        # 降级：最小化格式，兜底保证前端能收到
+        manager.broadcast_from_thread({
+            "type": "raw_event",
+            "data": {
+                "raw_id": raw_event.raw_id,
+                "tool_id": data.tool_id,
+                "event_name": payload.get("event_name", "UNKNOWN"),
+                "timestamp": event_ts,
+                "payload": payload,
+            }
+        })
 
     return {"status": "ok", "raw_id": raw_event.raw_id}
 
