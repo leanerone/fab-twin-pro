@@ -18,13 +18,17 @@
 配置持久化：AI配置存储在DB ai_configs表中，启动时从DB加载，
 环境变量作为首次初始化默认值。
 """
+import os
 import re
 import json
 import time
 import uuid
+import logging
 import requests
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timedelta
+
+logger = logging.getLogger("fabtwin.ai_middleware")
 
 from config import (
     AI_MCP_ENABLED, AI_MCP_URL, AI_MCP_API_KEY,
@@ -1153,6 +1157,25 @@ Lot ID 格式说明：
 - 对于告警：如有告警，分析可能的原因和建议
 - 对于产量：如有数据，分析产量趋势
 """
+        # ========== 2026-10-30 AI 真相专项：把「库里到底有什么」真正告诉模型 ==========
+        # 此前 system prompt 是纯静态的十个工具描述，模型看不到任何表结构，
+        # 遇到「上月按天分组产量」这类问题只能凭印象瞎答，返回的 sql 也是从未执行的装饰字符串。
+        # 这里注入从 ORM 实时反射的真实数据字典，并开放受限 SQL 通道。
+        if os.getenv("FABTWIN_AI_SCHEMA_INJECT", "1") not in ("0", "false", "False"):
+            try:
+                from services.ai_schema import schema_catalog
+                prompt += (
+                    "\n\n【真实数据查询能力（务必优先使用）】\n"
+                    "除上面的固定工具外，你可以直接查询工厂数据库取真实数据：\n"
+                    "1) describe_fab_table —— 写 SQL 前先查目标表有哪些字段；不要凭印象猜列名\n"
+                    "2) query_fab_data —— 执行一条只读 SELECT，返回真实结果行\n"
+                    "凡是需要按时间/按机台/按批次分组统计、排行 TOP N、跨表关联、明细清单的问题，"
+                    "都必须通过这两个工具取到真实数据后再回答。工具没返回的数字，禁止编造。\n\n"
+                    + schema_catalog.to_prompt_text()
+                )
+            except Exception as exc:
+                logger.warning("注入数据字典失败（不影响主链路）：%s", exc)
+
         if machine_id:
             prompt += (
                 f"\n\n【重要】当前关联机台: {machine_id}\n"
@@ -1476,6 +1499,14 @@ Lot ID 格式说明：
                         db = _get_db()
                         try:
                             result = handler(db, **func_args)
+                            # 诚实化 sql 字段：只有真正执行过 SQL 的工具（query_fab_data）才让
+                            # 它的语句原样展示；存量工具返回的都是手写参考语句（此前会让用户误以为
+                            # 系统真的执行了它），这里统一标注来源。
+                            if isinstance(result, dict) and result.get("sql") and func_name != "query_fab_data":
+                                result["sql"] = (
+                                    "-- 参考查询（本次由 ORM 取数，并未执行此语句）\n"
+                                    + str(result["sql"])
+                                )
                         finally:
                             db.close()
 

@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from models import Machine, DT_EVENT_RAW
 from services.time_utils import normalize_ts
+from services.ai_sql_tools import TOOL_DEFINITIONS_SQL, TOOL_HANDLERS_SQL
 
 
 def _parse_payload(payload_json: str) -> dict:
@@ -1485,6 +1486,9 @@ TOOL_DEFINITIONS = [
 ]
 
 # 工具名 → 处理函数映射
+# 真实取数通道（受限 Text-to-SQL）：让 AI 能回答任意聚合意图，而非只能调固定查询
+TOOL_DEFINITIONS.extend(TOOL_DEFINITIONS_SQL)
+
 TOOL_HANDLERS = {
     "get_machine_status": get_machine_status,
     "get_machine_alarms": get_machine_alarms,
@@ -1496,4 +1500,5 @@ TOOL_HANDLERS = {
     "get_wafer_flow": get_wafer_flow,
     "get_chamber_status": get_chamber_status,
     "get_oxe_lot_summary": get_oxe_lot_summary,
+    **TOOL_HANDLERS_SQL,
 }

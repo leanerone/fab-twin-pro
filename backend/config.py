@@ -19,7 +19,42 @@ ORACLE_USER = os.getenv("ORACLE_USER", "fabtwin")
 ORACLE_PASSWORD = os.getenv("ORACLE_PASSWORD", "fabtwin")
 ORACLE_HOST = os.getenv("ORACLE_HOST", "localhost")
 ORACLE_PORT = int(os.getenv("ORACLE_PORT", "1521"))
-ORACLE_SERVICE = os.getenv("ORACLE_SERVICE", "ORCLPDB")
+_RAW_ORACLE_SERVICE = os.getenv("ORACLE_SERVICE", "")
+
+
+def _probe_service_name() -> str:
+    """未显式指定服务名时，自动挑一个 listener 真正认得、且能登录的服务。
+
+    起因（2026-10-30）：本机是 Oracle **21c XE**，其可插拔库叫 XEPDB1；而这里长期写死
+    ORCLPDB，导致缺省环境下任何连库操作都拿 ORA-12514 失败——包括 AI 的真实取数链路。
+    与其让人记住设环境变量，不如启动时花几百毫秒探一次。
+
+    判定细节：ORA-01017（用户/口令不符）说明 listener 认识该服务但这份凭据进不去
+    （典型是误连到 CDB 根容器 XE），要跳过而不是当成可用。
+    """
+    candidates = ["ORCLPDB", "XEPDB1", "FREEPDB1", "XE", "ORCL"]
+    try:
+        import oracledb  # type: ignore
+    except Exception:
+        return "ORCLPDB"
+    for svc in candidates:
+        try:
+            conn = oracledb.connect(
+                user=ORACLE_USER, password=ORACLE_PASSWORD,
+                host=ORACLE_HOST, port=ORACLE_PORT, service_name=svc,
+                tcp_connect_timeout=2.0,
+            )
+            conn.close()
+            return svc
+        except Exception as exc:
+            if "ORA-01017" in str(exc) or "ORA-01005" in str(exc):
+                continue  # listener 认得但凭据不符，继续找真正的 PDB
+            continue
+    return "ORCLPDB"
+
+
+# 显式环境变量优先；未指定才自动探测（探测结果不再回写环境变量，避免污染子进程）
+ORACLE_SERVICE = _RAW_ORACLE_SERVICE or _probe_service_name()
 # DSN type: service_name (12c+ PDB) or sid (10g/11g traditional)
 # Set ORACLE_DSN_TYPE=sid for Oracle 10g/11g
 ORACLE_DSN_TYPE = os.getenv("ORACLE_DSN_TYPE", "service_name").lower()

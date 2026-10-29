@@ -111,13 +111,31 @@ TABLE_NOTES: Dict[str, Dict[str, str]] = {
         "_hint": "与 dt_alarm_event 可能同源不同粒，必要时两表都核对。",
     },
     "machines": {
-        "desc": "机台主数据表。查有几个机台、按类型/区域分组、机台当前状态，用这张。",
-        "id": "机台业务 ID（如 OXE-51），前端 URL 里传的就是它",
+        "desc": "机台主数据表。查有几个机台、按工序/楼层分组、机台当前状态、机台实时工艺参数，都用这张。",
+        "id": "机台业务 ID（如 OXE-51 / PODOPENER-1），前端 URL 里传的就是它",
+        "model": "机台型号，如 OXE / PODOPENER / AMAT",
         "name": "机台显示名",
-        "type": "机台类型（如 ETCH / LITHO / CMP）",
-        "status": "当前状态：RUN / IDLE / DOWN / PM",
-        "_hint": "**重要**：dt_event_raw 里的字段叫 tool_id 不叫 machine_id，两者需通过 machine_tool_mappings 关联。"
-                 "务必先查该映射表拿到 tool_id，再去查事件表。",
+        "line": "所属产线编号（数值）",
+        "floor": "所属楼层编号（数值）",
+        "chamber_count": "腔体数量（数值，如 OXE 是 4）",
+        "process_type": "工序类型（如 ETCH / LITHO / CMP）。注意：不要写成 type，本表没有 type 列",
+        "state": "机台当前状态（字符串，如 RUN / IDLE / DOWN / PM）。注意：本表叫 state 不叫 status",
+        "temp": "腔体温度实时值（浮点）",
+        "pressure": "腔体压力实时值（浮点）",
+        "gas_flow": "气体流量实时值（浮点）",
+        "rf_power": "射频功率实时值（浮点）",
+        "wafer_count": "已加工晶圆累计片数",
+        "alarm_count": "累计告警次数",
+        "process_step": "当前工艺步序号（数值）",
+        "has_smif": "是否带 SMIF（数值 0/1）",
+        "updated_at": "最后更新时间（字符串）",
+        "x_pos": "平面图 X 坐标（用于定位机台位置）",
+        "y_pos": "平面图 Y 坐标",
+        "display_order": "展示排序号",
+        "_hint": "**三条高频踩坑**：(1) 状态列叫 state 不是 status，工序列叫 process_type 不是 type；"
+                 "(2) dt_event_raw 里关联机台的字段叫 tool_id，不等于本表的 id，需经 machine_tool_mappings 转换；"
+                 "(3) 本表自带温度/压力/气体流量/射频功率等实时工艺参数——系统**是采集传感器数据的**，"
+                 "不要再回答「系统不含传感器数据」。",
     },
     "machine_tool_mappings": {
         "desc": "机台 ID（machine_id）↔ Tool ID（tool_id）映射表。**这是关联机台主数据与事件表的桥表**。",
@@ -176,6 +194,28 @@ ORACLE_DIALECT_NOTES = """【Oracle 方言与本项目约定 — 生成 SQL 前�
 8. 结果请自带 LIMIT 意识：默认 FETCH FIRST 200 ROWS ONLY，用户明确要全量时再放宽到 1000。"""
 
 
+def _dbms_type_to_cn(dtype: Any, precision: Any = None) -> str:
+    """Oracle 数据字典的 DATA_TYPE → 中文短名。"""
+    s = str(dtype or "").upper()
+    if s.startswith("TIMESTAMP"):
+        return "日期时间"
+    if s == "DATE":
+        return "日期"
+    if s in ("CLOB", "NCLOB", "LONG"):
+        return "长文本"
+    if "VARCHAR" in s or "CHAR" in s:
+        return "字符串"
+    if s == "NUMBER":
+        return "数值"
+    if s in ("FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE"):
+        return "浮点"
+    if s == "RAW" or "BLOB" in s:
+        return "二进制"
+    if "JSON" in s:
+        return "JSON"
+    return "字符串"
+
+
 def _py_type_to_cn(col_type: Any) -> str:
     """把 SQLAlchemy 类型转成中文短名，让 LLM 一眼看懂能用什么运算。"""
     s = str(col_type).upper()
@@ -207,11 +247,103 @@ class SchemaCatalog:
         self._all_orm_tables: List[str] = []
 
     # ---------- 反射 ----------
+    def _reflect_physical(self) -> bool:
+        """**首选**方案：从 Oracle 物理数据字典反射真实表结构。
+
+        为什么不能用 ORM：本项目 ORM 定义已与物理库漂移——models.Machine 声明了
+        `type`/`status`，而真实 MACHINES 表里叫 PROCESS_TYPE / STATE。按 ORM 生成的字典
+        会让 LLM 写出必然 ORA-00904 的 SQL。AI 取数必须建立在库里真实存在的列之上，
+        所以用 user_tab_columns / user_col_comments / user_ind_columns 作唯一事实源。
+        """
+        try:
+            from sqlalchemy import text as sa_text
+            from database import SessionLocal  # type: ignore
+
+            db = SessionLocal()
+            colrows, comrows, pkrows, ixrows = None, [], [], []
+            try:
+                colrows = db.execute(sa_text(
+                    "SELECT table_name, column_name, data_type, data_length, "
+                    "       data_precision, nullable "
+                    "FROM user_tab_columns ORDER BY table_name, column_id"
+                )).fetchall()
+                comrows = db.execute(sa_text(
+                    "SELECT table_name, column_name, comments FROM user_col_comments "
+                    "WHERE comments IS NOT NULL"
+                )).fetchall()
+                pkrows = db.execute(sa_text(
+                    "SELECT c.table_name, cc.column_name "
+                    "FROM user_constraints c JOIN user_cons_columns cc "
+                    "  ON cc.constraint_name = c.constraint_name "
+                    "WHERE c.constraint_type = 'P'"
+                )).fetchall()
+                ixrows = db.execute(sa_text(
+                    "SELECT table_name, column_name FROM user_ind_columns"
+                )).fetchall()
+            finally:
+                db.close()
+            if not colrows:
+                return False
+
+            comments = {(r[0].upper(), r[1].upper()): (r[2] or "") for r in comrows}
+            pkmap: Dict[str, set] = {}
+            for t, c in pkrows:
+                pkmap.setdefault(str(t).upper(), set()).add(str(c).upper())
+            ixmap: Dict[str, set] = {}
+            for t, c in ixrows:
+                ixmap.setdefault(str(t).upper(), set()).add(str(c).upper())
+
+            wanted = {t.lower(): t for t in READABLE_TABLES}
+            grouped: Dict[str, List[Dict[str, Any]]] = {}
+            for tname, cname, dtype, dlen, dprec, nullable in colrows:
+                key = str(tname).lower()
+                self._all_orm_tables.append(str(tname))
+                if key not in wanted or _COLUMN_DENY_PAT.search(str(cname)):
+                    continue
+                grouped.setdefault(key, []).append({
+                    "name": str(cname),
+                    "type": _dbms_type_to_cn(dtype, dprec),
+                    "pk": str(cname).upper() in pkmap.get(str(tname).upper(), set()),
+                    "indexed": str(cname).upper() in ixmap.get(str(tname).upper(), set()),
+                    "nullable": str(nullable).upper() == "Y",
+                    "comment": comments.get((str(tname).upper(), str(cname).upper()), ""),
+                })
+
+            for key, cols in grouped.items():
+                notes = TABLE_NOTES.get(key, {})
+                for c in cols:
+                    # 库注释优先，其次是人工业务语义
+                    c["note"] = c.pop("comment", "") or notes.get(c["name"].lower(), "")
+                self._tables.append({
+                    "name": wanted[key],
+                    "desc": notes.get("desc", "业务表"),
+                    "columns": cols,
+                    "hint": notes.get("_hint", ""),
+                    "core": key in CORE_TABLES,
+                    "source": "physical",
+                })
+            logger.info("AI schema 物理反射成功：%d 张表", len(self._tables))
+            return True
+        except Exception as exc:
+            logger.warning("物理反射失败，回退 ORM 结构：%s", exc)
+            return False
+
+    def _apply_common(self) -> None:
+        """统一后处理：排序 + 全量表清单去重。"""
+        self._all_orm_tables = sorted(set(self._all_orm_tables))
+        self._tables.sort(key=lambda t: (not t["core"], t["name"]))
+
     def _reflect(self) -> None:
-        """延迟反射 ORM：加字段自动跟上，反射失败也不会拖垮 AI 主链路。"""
+        """延迟反射：物理库优先，ORM 兜底。反射失败不拖垮 AI 主链路。"""
         if self._loaded:
             return
         self._loaded = True
+        if not self._reflect_physical():
+            self._reflect_orm()
+        self._apply_common()
+
+    def _reflect_orm(self) -> None:
+        """**兜底**：连不上数据库时退回 ORM 声明（字段可能与库不一致，但至少不崩）。"""
         try:
             from sqlalchemy import inspect as sa_inspect
             from models import Base  # type: ignore
@@ -256,9 +388,9 @@ class SchemaCatalog:
                     "columns": columns,
                     "hint": notes.get("_hint", ""),
                     "core": tname.lower() in CORE_TABLES,
+                    "source": "orm",
                 })
-            self._tables.sort(key=lambda t: (not t["core"], t["name"]))
-            logger.info("AI schema 反射成功：%d 张可读表", len(self._tables))
+            logger.info("AI schema ORM 反射（兜底）：%d 张表", len(self._tables))
         except Exception as exc:  # 反射失败不能让 AI 崩，退化为纯人工 note
             self._load_error = f"{type(exc).__name__}: {exc}"
             logger.warning("AI schema 反射失败，退化为业务说明模式：%s", exc)
