@@ -344,6 +344,7 @@ export const api = {
   getModelFiles: (modelId) => request('GET', `/uploads/models?model_id=${modelId || ''}`),
   deleteModelFile: (fileId, modelId) => request('DELETE', `/uploads/models/${fileId}?model_id=${modelId}`),
   extractSvgParts: (modelId) => request('POST', `/uploads/models/${modelId}/extract-svg-parts`),
+  validateModelDraft: (data) => request('POST', '/uploads/models/validate-draft', data),
 
   // 消息调试API（Motion2D 调试台：注入事件走真实轮询链路驱动动画）
   debugSendEvent: (data) => request('POST', '/debug/event', data),

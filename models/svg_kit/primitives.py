@@ -104,8 +104,70 @@ def defs() -> str:
    <stop offset="0" stop-color="{T('metal.edge_light')}"/><stop offset="0.35" stop-color="{T('metal.mid')}"/>
    <stop offset="0.6" stop-color="{T('metal.edge_light')}"/><stop offset="1" stop-color="{T('metal.edge_dark')}"/>
   </linearGradient>
+  <linearGradient id="isoSilverBody" x1="0" y1="0" x2="1" y2="0">
+   <stop offset="0" stop-color="#6f7d90"/><stop offset="0.22" stop-color="#e8eef5"/>
+   <stop offset="0.48" stop-color="#9eabbc"/><stop offset="0.72" stop-color="#f4f7fb"/><stop offset="1" stop-color="#657388"/>
+  </linearGradient>
+  <linearGradient id="isoBlueBody" x1="0" y1="0" x2="1" y2="0">
+   <stop offset="0" stop-color="#043c63"/><stop offset="0.2" stop-color="#18a9d7"/>
+   <stop offset="0.42" stop-color="#07567f"/><stop offset="0.66" stop-color="#48d4f2"/><stop offset="1" stop-color="#043653"/>
+  </linearGradient>
+  <linearGradient id="isoCopperBody" x1="0" y1="0" x2="1" y2="0">
+   <stop offset="0" stop-color="#633416"/><stop offset="0.28" stop-color="#e0a05b"/>
+   <stop offset="0.52" stop-color="#8c4c21"/><stop offset="0.76" stop-color="#f0bd7e"/><stop offset="1" stop-color="#633416"/>
+  </linearGradient>
+  <linearGradient id="isoGoldBody" x1="0" y1="0" x2="1" y2="0">
+   <stop offset="0" stop-color="#69450c"/><stop offset="0.3" stop-color="#f0bd4e"/>
+   <stop offset="0.55" stop-color="#9a6411"/><stop offset="0.8" stop-color="#ffe18a"/><stop offset="1" stop-color="#69450c"/>
+  </linearGradient>
+  <filter id="isoShadow" x="-30%" y="-30%" width="160%" height="180%">
+   <feGaussianBlur stdDeviation="7"/>
+  </filter>
 </defs>
 """
+
+
+def _legacy_node(node: dict, level: int = 2) -> str:
+    """按 tokens.json 中的节点描述渲染存量 defs 资源。"""
+    indent = " " * level
+    attrs = dict(node.get("attrs", {}))
+    if "id" in node:
+        attrs = {"id": node["id"], **attrs}
+    attr_text = "".join(f' {key}="{esc(value)}"' for key, value in attrs.items())
+    tag = node["tag"]
+    children = [
+        {"tag": "stop", "attrs": stop} for stop in node.get("stops", [])
+    ] + list(node.get("children", []))
+    if not children:
+        return f"{indent}<{tag}{attr_text}/>"
+    lines = [f"{indent}<{tag}{attr_text}>"]
+    lines.extend(_legacy_node(child, level + 2) for child in children)
+    lines.append(f"{indent}</{tag}>")
+    return "\n".join(lines)
+
+
+def legacy_defs(profile_name: str, style: str = None) -> str:
+    """渲染 OXE/AMAT/PODOPENER 的存量 defs，不影响标准 defs()。"""
+    profiles = T("legacy_defs", {})
+    profile = profiles[profile_name]
+    base = profiles.get(profile.get("extends"), {})
+    resources = list(base.get("resources", profile.get("resources", [])))
+    for anchor, additions in profile.get("insert_after", {}).items():
+        index = next(
+            (i for i, resource in enumerate(resources) if resource.get("id") == anchor),
+            None,
+        )
+        if index is None:
+            raise ValueError(f"legacy defs 缺少插入锚点: {anchor}")
+        resources[index + 1:index + 1] = additions
+
+    style_text = style if style is not None else profile.get("style", base.get("style"))
+    lines = ["<defs>"]
+    if style_text is not None:
+        lines.append(f"  <style>{style_text}</style>")
+    lines.extend(_legacy_node(resource) for resource in resources)
+    lines.append("</defs>")
+    return "\n".join(lines)
 
 
 def group(pid: str, children: str, transform: str = None, extra: str = "") -> str:
@@ -332,4 +394,206 @@ def title_block(pid, x, y, title, subtitle="") -> str:
     if subtitle:
         parts.append(label(None, x, y + 16, subtitle, size=T("text.hint_size"),
                            anchor="start", fill=T("text.secondary")))
+    return group(pid, "\n".join(parts))
+
+
+# ── 等角与 cluster 公共部件 ───────────────────────────────────────────────
+def _pts(points):
+    return " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
+
+
+def _poly(points, fill, stroke=None, sw=None, extra=""):
+    stroke = stroke if stroke is not None else T("iso.edge")
+    sw = sw if sw is not None else T("stroke.thin_width")
+    ex = f" {extra}" if extra else ""
+    return f'<polygon points="{_pts(points)}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}"{ex}/>'
+
+
+def iso_box(pid, cx, cy, w, d, h, top=None, left=None, right=None, extra=""):
+    """等角柜体；cx/cy 为底面中心，顶面中心为 (cx, cy-h)。"""
+    ty = cy - h
+    p_top = (cx, ty - d / 2)
+    p_right = (cx + w / 2, ty)
+    p_bottom = (cx, ty + d / 2)
+    p_left = (cx - w / 2, ty)
+    parts = [
+        _poly([p_left, p_bottom, (p_bottom[0], p_bottom[1] + h), (p_left[0], p_left[1] + h)],
+              left or "url(#isoSilverBody)"),
+        _poly([p_bottom, p_right, (p_right[0], p_right[1] + h), (p_bottom[0], p_bottom[1] + h)],
+              right or T("iso.right")),
+        _poly([p_top, p_right, p_bottom, p_left], top or T("iso.top")),
+    ]
+    body = "\n".join(parts)
+    return group(pid, body, extra=extra) if pid else body
+
+
+def iso_cylinder(pid, cx, cy, rx, ry, h, top=None, body=None, extra=""):
+    """等角圆柱/泵体；cx/cy 为底部椭圆中心。"""
+    ty = cy - h
+    body_fill = body or "url(#isoSilverBody)"
+    top_fill = top or T("iso.top")
+    d = (
+        f"M {cx-rx:.2f} {ty:.2f} L {cx-rx:.2f} {cy:.2f} "
+        f"A {rx:.2f} {ry:.2f} 0 0 0 {cx+rx:.2f} {cy:.2f} "
+        f"L {cx+rx:.2f} {ty:.2f} Z"
+    )
+    parts = [
+        f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{ry}" fill="{T("metal.deep")}" opacity="0.18"/>',
+        f'<path d="{d}" fill="{body_fill}" stroke="{T("iso.edge")}" stroke-width="{T("stroke.thin_width")}"/>',
+        f'<ellipse cx="{cx}" cy="{ty}" rx="{rx}" ry="{ry}" fill="{top_fill}" stroke="{T("iso.edge")}" stroke-width="{T("stroke.thin_width")}"{(" " + extra) if extra else ""}/>',
+        f'<path d="M {cx-rx*.72:.2f} {ty+4:.2f} L {cx-rx*.72:.2f} {cy-3:.2f}" fill="none" stroke="#ffffff" stroke-opacity="0.38" stroke-width="2"/>',
+    ]
+    content = "\n".join(parts)
+    return group(pid, content) if pid else content
+
+
+def _rounded_top(cx, cy, rx, ry):
+    """等角 superellipse 顶盖，四角圆弧、四边平直，贴近 Sym3 圆角矩形。"""
+    points = []
+    for i in range(40):
+        a = 2 * math.pi * i / 40
+        ca, sa = math.cos(a), math.sin(a)
+        x = rx * math.copysign(abs(ca) ** 0.5, ca)
+        y = ry * math.copysign(abs(sa) ** 0.5, sa)
+        points.append((cx + x, cy + y))
+    return "M " + " L ".join(f"{x:.2f} {y:.2f}" for x, y in points) + " Z"
+
+
+def _state_lamps(pid, cx, cy):
+    return "\n".join(
+        f'<circle id="{pid}_{s}" data-pid="{pid}_{s}" cx="{cx + i * 17 - 17:.2f}" cy="{cy:.2f}" r="4.6" '
+        f'fill="{c}" stroke="{T("iso.edge")}" stroke-width="1"/>'
+        for i, (s, c) in enumerate((("run", T("state.run")), ("alarm", T("state.alarm")), ("unload", T("state.unload"))))
+    )
+
+
+def iso_process_chamber(pid, cx, cy, w=150, d=92, h=150, name="", perforated=True):
+    """Sym3 类蓝色圆角工艺腔：金属身、圆角顶盖、孔阵与状态灯。"""
+    rx, ry, ty = w / 2, d / 2, cy - h
+    parts = [iso_cylinder(None, cx, cy + 5, rx * 0.82, ry * 0.76, 20,
+                          top=T("iso.copper_top"), body="url(#isoCopperBody)")]
+    body_d = (
+        f"M {cx-rx:.2f} {ty:.2f} L {cx-rx:.2f} {cy:.2f} "
+        f"C {cx-rx:.2f} {cy+ry*.72:.2f} {cx-rx*.72:.2f} {cy+ry:.2f} {cx:.2f} {cy+ry:.2f} "
+        f"C {cx+rx*.72:.2f} {cy+ry:.2f} {cx+rx:.2f} {cy+ry*.72:.2f} {cx+rx:.2f} {cy:.2f} "
+        f"L {cx+rx:.2f} {ty:.2f} Z"
+    )
+    parts.append(f'<path d="{body_d}" fill="url(#isoBlueBody)" stroke="{T("iso.edge")}" stroke-width="1.4"/>')
+    parts.append(f'<path d="{_rounded_top(cx, ty, rx, ry)}" fill="{T("iso.blue_top")}" stroke="{T("iso.edge")}" stroke-width="1.5"/>')
+    parts.append(f'<path d="M {cx-rx:.2f} {ty+25:.2f} C {cx:.2f} {ty+ry+25:.2f} {cx+rx:.2f} {ty+25:.2f} {cx+rx:.2f} {ty+25:.2f}" fill="none" stroke="#8ee8ff" stroke-opacity="0.65" stroke-width="2"/>')
+    if perforated:
+        for ix in range(-3, 4):
+            for iy in range(-2, 3):
+                dx, dy = ix * 15, iy * 12
+                if (dx / (rx * 0.72)) ** 2 + (dy / (ry * 0.72)) ** 2 <= 1:
+                    parts.append(f'<circle cx="{cx+dx}" cy="{ty+dy}" r="3.2" fill="{T("metal.deep")}" stroke="#8ee8ff" stroke-width="0.6"/>')
+    parts.append(label(None, cx, cy - 32, name or pid, size=11, fill=T("text.inverse"), weight="700"))
+    parts.append(_state_lamps(pid, cx, ty - ry - 12))
+    return group(pid, "\n".join(parts))
+
+
+def iso_cabinet_chamber(pid, cx, cy, w=116, d=82, h=180, name=""):
+    """SPT 类高柜工艺模块：后部控制/排气柜 + 前侧圆形工艺腔。"""
+    ty = cy - h
+    parts = [iso_box(None, cx, cy, w, d, h)]
+    for i in range(-3, 4):
+        parts.append(f'<line x1="{cx-w*.26+i*5:.2f}" y1="{ty-8:.2f}" x2="{cx+w*.12+i*5:.2f}" y2="{ty+12:.2f}" stroke="{T("metal.dark")}" stroke-width="2" opacity="0.75"/>')
+    parts.append(iso_cylinder(None, cx + w * 0.18, ty - d * 0.15, 10, 6, 24,
+                              top=T("metal.light"), body="url(#isoSilverBody)"))
+    parts.append(f'<path d="M {cx-w/2+8:.2f} {ty+18:.2f} L {cx-w/2+8:.2f} {cy-12:.2f} M {cx+w/2-8:.2f} {ty+18:.2f} L {cx+w/2-8:.2f} {cy-12:.2f}" fill="none" stroke="{T("metal.dark")}" stroke-width="1.2"/>')
+    parts.append(iso_cylinder(None, cx, cy + 23, w * 0.39, d * 0.34, 65,
+                              top=T("metal.light"), body="url(#isoSilverBody)"))
+    parts.append(f'<ellipse cx="{cx}" cy="{cy-42}" rx="{w*.25}" ry="{d*.19}" fill="{T("metal.dark")}" stroke="{T("metal.bolt")}" stroke-width="3"/>')
+    parts.append(label(None, cx, cy - 70, name or pid, size=10, fill=T("text.primary"), weight="700"))
+    parts.append(_state_lamps(pid, cx, ty - d / 2 - 12))
+    return group(pid, "\n".join(parts))
+
+
+def iso_load_port(pid, cx, cy, w=105, d=70, h=105, name=""):
+    parts = [iso_box(None, cx, cy, w, d, h)]
+    ty = cy - h
+    parts.append(rect(f"{pid}_DOOR", cx - w * 0.31, ty + 26, w * 0.62, 14,
+                      fill=T("port.door_fill"), rx=2, sw=1))
+    parts.append(rect(f"{pid}_SLIT", cx - w * 0.34, cy - 18, w * 0.68, 8,
+                      fill=T("metal.dark"), rx=2, sw=1))
+    parts.append(label(None, cx, ty - d / 2 - 10, name or pid, size=9, weight="700"))
+    return group(pid, "\n".join(parts))
+
+
+def pump_module(pid, cx, cy, scale=1.0):
+    """前侧真空泵：银色基座 + 金色多级泵头。"""
+    parts = [
+        iso_cylinder(None, cx, cy, 27 * scale, 15 * scale, 68 * scale),
+        iso_cylinder(None, cx, cy - 55 * scale, 32 * scale, 18 * scale, 53 * scale,
+                     top=T("iso.gold_top"), body="url(#isoGoldBody)"),
+        f'<ellipse cx="{cx}" cy="{cy-108*scale}" rx="{20*scale}" ry="{11*scale}" fill="none" stroke="{T("iso.gold_right")}" stroke-width="{4*scale}"/>',
+        f'<ellipse cx="{cx}" cy="{cy-108*scale}" rx="{8*scale}" ry="{5*scale}" fill="{T("metal.dark")}"/>',
+    ]
+    return group(pid, "\n".join(parts))
+
+
+def vacuum_channel(pid, x1, y1, x2, y2, width=24):
+    """两腔之间的封闭通道，先画通道再画腔体可避免裸露断口。"""
+    length = math.hypot(x2 - x1, y2 - y1)
+    angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+    parts = [
+        rect(None, 0, -width / 2, length, width, fill=T("metal.mid"), rx=3),
+        rect(None, 5, -width * 0.25, max(0, length - 10), width * 0.5,
+             fill=T("metal.dark"), rx=2, sw=1),
+        rect(None, 3, -width * 0.65, 8, width * 1.3, fill=T("metal.light"), rx=2, sw=1),
+        rect(None, max(0, length - 11), -width * 0.65, 8, width * 1.3, fill=T("metal.light"), rx=2, sw=1),
+    ]
+    return group(pid, "\n".join(parts), transform=f"translate({x1:.2f},{y1:.2f}) rotate({angle:.2f})")
+
+
+def top_process_chamber(pid, cx, cy, w=122, h=132, angle=0, name=""):
+    """LAM 类顶视矩形 PM，正面 slit 朝向本地 -Y，再按 angle 旋转。"""
+    x, y = cx - w / 2, cy - h / 2
+    parts = [
+        rect(None, x, y, w, h, fill="url(#edgeMetal)", rx=5),
+        rect(None, x + 10, y + 12, w - 20, h - 25, fill=T("metal.light"), rx=3, sw=1.2),
+        rect(f"{pid}_SLIT", cx - 28, y - 5, 56, 9, fill=T("metal.dark"), rx=2, sw=1),
+    ]
+    for bx in (x + 12, x + w - 12):
+        for by in (y + 16, y + h - 16):
+            parts.append(circle(None, bx, by, 3, fill=T("metal.bolt"), sw=0.8))
+    parts.append(label(None, cx, cy + 5, name or pid, size=12, weight="700"))
+    parts.append(_state_lamps(pid, cx, y - 14))
+    return group(pid, "\n".join(parts), transform=f"rotate({angle:.2f} {cx:.2f} {cy:.2f})")
+
+
+def top_airlock(pid, cx, cy, w=100, h=112, angle=0, name=""):
+    x, y = cx - w / 2, cy - h / 2
+    parts = [
+        rect(None, x, y, w, h, fill="url(#edgeMetal)", rx=5),
+        rect(f"{pid}_DOOR", x + 10, y + 10, w - 20, h - 20, fill=T("port.inner_fill"), rx=4),
+        rect(None, x + 19, y + 18, w - 38, h - 36, fill=T("metal.mid"), rx=3, sw=1),
+        label(None, cx, cy + 4, name or pid, size=10, fill=T("text.inverse"), weight="700"),
+    ]
+    return group(pid, "\n".join(parts), transform=f"rotate({angle:.2f} {cx:.2f} {cy:.2f})")
+
+
+def aligner(pid, cx, cy, r=42):
+    parts = [
+        circle(None, cx, cy, r, fill=T("metal.panel")),
+        circle(None, cx, cy, r * 0.64, fill=T("metal.dark"), sw=1),
+        bolt_circle(cx, cy, r * 0.86, 8),
+        wafer(f"{pid}_WAFER", cx, cy, r * 0.34),
+    ]
+    return group(pid, "\n".join(parts))
+
+
+def buffer_station(pid, cx, cy, r=38):
+    parts = [circle(None, cx, cy, r, fill=T("metal.panel")),
+             circle(None, cx, cy, r * 0.7, fill=T("metal.dark"), sw=1),
+             label(None, cx, cy + 4, "BUF", size=10, fill=T("text.inverse"))]
+    return group(pid, "\n".join(parts))
+
+
+def control_rack(pid, x, y, w, h):
+    parts = [rect(None, x, y, w, h, fill=T("metal.panel"), rx=6)]
+    for i in range(4):
+        parts.append(rect(None, x + 12, y + 14 + i * (h - 28) / 4, w - 24, (h - 42) / 4,
+                          fill=T("metal.dark"), rx=2, sw=1))
+    parts.append(label(None, x + w / 2, y + h - 9, "CONTROL RACK", size=9, fill=T("text.inverse")))
     return group(pid, "\n".join(parts))

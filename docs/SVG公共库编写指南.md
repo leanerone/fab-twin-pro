@@ -1,8 +1,8 @@
 # SVG 公共库（svg-kit）编写指南
 
-> 建立日期：2026-10-29　|　版本：1.1
+> 建立日期：2026-10-29　|　版本：1.2
 > 目标：**后续新建机型的 SVG 有公共库可以编写**，不再从零手绘、不再踩重复的坑。
-> 当前边界：初版公共部件已可用；PODOPENER 新外观尚未全部回收，LAM2300/SPT/Sym3 仍需补布局模板。
+> 当前边界：俯视与等角公共部件已可用于新机型；LAM2300、Centris Sym3、TEL Synapse 已完成布局模板，存量 PODOPENER 外观仍按原资产保留。
 
 ---
 
@@ -98,10 +98,14 @@ python -m models.svg_kit.validate models/user/new-etch-topview.svg models/user/n
 - **Motion 引用的 `target_part_id` 是否在 SVG 中存在**（最容易出错的一项）
 - 含 `{POD}` 这类运行时占位符的引用会跳过存在性校验，但会提示需 deriver 侧保证
 
-### 第 4 步：上传与调试
+### 第 4 步：编辑器校验、上传与调试
 
-SVG 同步到 `backend/uploads/models/`，在模型编辑器的「动画调试」Tab 里点选部件、
-单步触发事件验证。
+SVG 同步到 `backend/uploads/models/`。在模型编辑器的「动画配置」Tab 点击「校验」，
+前端会把当前内存中的 SVG 与 Motion 草稿提交到 `POST /api/uploads/models/validate-draft`；
+结果面板分别列出 errors 与 warnings，保存前会再次校验，存在 errors 或校验请求失败时阻止保存。
+
+随后在「动画调试」Tab 点选部件、单步触发事件验证；部件清单与 SVG 支持双向高亮，
+`ext.part_aliases` 的静态别名也会解析到实际部件。动画调试不放到机台详情页。
 
 ---
 
@@ -127,6 +131,26 @@ SVG 同步到 `backend/uploads/models/`，在模型编辑器的「动画调试�
 | `robot_arm(pid, hub_x, hub_y)` | `{pid}_UPPER/_FORE/_WRIST` | 三段连杆机械臂（肩/肘/腕，供 IK 使用） |
 | `bolt_circle(cx, cy, r, n)` | — | 法兰螺栓圈 |
 | `baseplate(pid, ...)` / `title_block(pid, ...)` | — | 底板 / 图签 |
+
+### 俯视 cluster 与等角部件
+| 函数 | 产出子部件 pid | 说明 |
+|---|---|---|
+| `top_process_chamber(pid, cx, cy, w, h, angle, name)` | `{pid}_run/_alarm/_unload` | 带正面 slit 的俯视工艺腔，`angle` 用于朝向传输区 |
+| `top_airlock(pid, cx, cy, w, h, angle, name)` | `{pid}_DOOR` | 双门真空 Airlock |
+| `vacuum_channel(pid, x1, y1, x2, y2, width)` | — | 封闭真空/大气通道；先画通道，再画腔体覆盖端部 |
+| `aligner(pid, cx, cy, r)` | `ALIGNER_WAFER`（调用方约定） | 对准器及晶圆挂点 |
+| `buffer_station(pid, cx, cy, r)` | — | Buffer 工位 |
+| `control_rack(pid, x, y, w, h)` | — | 大气端控制柜 |
+| `iso_box(pid, cx, cy, w, d, h, ...)` | — | 等角长方体；`cx/cy` 为底面中心，顶面中心为 `(cx, cy-h)` |
+| `iso_cylinder(pid, cx, cy, rx, ry, h, ...)` | — | 等角圆柱；`cx/cy` 为底部椭圆中心 |
+| `iso_process_chamber(pid, ...)` | `{pid}_run/_alarm/_unload` | 蓝色金属工艺腔、superellipse 圆角孔阵顶盖、铜色底座 |
+| `iso_cabinet_chamber(pid, ...)` | `{pid}_run/_alarm/_unload` | 高柜控制/排气结构与圆形前腔 |
+| `iso_load_port(pid, ...)` | `{pid}_DOOR` | 等角 Load Port 外壳与门 |
+| `pump_module(pid, cx, cy, scale)` | — | 金色泵头与银色基座 |
+
+等角金属色使用 `tokens.json` 的 `iso.*`；`defs()` 同时提供 `isoSilverBody`、`isoBlueBody`、
+`isoCopperBody`、`isoGoldBody` 与 `isoShadow`。Sym3/Synapse 为保留既有 DB `document.src`，
+文件名仍沿用 `*-topview.svg`，但实际图形为等角视图。
 
 ---
 
@@ -171,7 +195,7 @@ json.dump(b.build(), f, ensure_ascii=False, indent=2)
 - 新增通用部件时，同时补 `primitives.py` 与本文件的部件清单表
 - 改完任何 SVG 或 Motion JSON，跑一次 `validate.py` 再提交
 - `tokens.json` 是 Python / JS / HTML 编辑器共用的唯一真源，改色板只改这一处
-- `models/user/*.svg` 与 `backend/uploads/models/` 的运行时副本必须同步；提交前复核哈希
+- `models/user/*.svg` 与 `backend/uploads/models/` 的运行时副本必须同步；提交前复核哈希。`backend/uploads/` 默认被忽略，新增规范运行时文件要逐文件 `git add -f`，不要强制添加整个上传目录
 - 动画开发只在「模型编辑器 → 动画调试」进行，机台详情仅用于最终演示
 
 ---
@@ -184,12 +208,12 @@ json.dump(b.build(), f, ensure_ascii=False, indent=2)
 - [SPT](assets/machine-references/SPT.jpg)
 - [Centris Sym3 Etch Chamber Manual](assets/machine-references/Centris-Sym3-Etch-Chamber-Manual.jpg)
 
-### 推荐开发顺序
+### 三台参考图的实现分工
 
-1. **先回收 PODOPENER 通用件**：把 POD 外壳、载台、钣金机架、精密导轨、观察窗、控制盒整理为 `primitives.py` 参数化函数；动画 ID 由调用方传入，不在公共函数里绑定机型事件。
-2. **再拆参考图**：分别记录 LAM2300/SPT/Sym3 的腔体、传输区、Load Port、机械臂和专属外形，能复用的只传布局与尺寸参数，确属机型专属的结构才单独绘制。
-3. **新增布局模板**：优先扩展 `scaffold.py` 或增加机型布局脚本，不另建一套与 `svg_kit` 不兼容的库。
-4. **最后接 Motion/Deriver**：沿用 Motion JSON v1.1 和现有 deriver 注册机制；在动画调试页逐步验收，不在机台详情新增调试入口。
-5. **每次交付前**：跑 SVG × Motion 校验、前端构建和后端语法检查，并更新《变更更改版记录》。
+- `models/build_lam2300.py`：3×Load Port、Aligner、2×Buffer、Control Rack、双斜置 Airlock、中央 VTM 与 PM1~4；PM 正面朝向传输区，ATM→Airlock→VTM→PM 使用封闭通道。
+- `models/build_sym3.py`：6×蓝色等角工艺腔、圆角矩形孔阵顶盖、铜色中央框板、银色 EFEM、3×金/银泵组。
+- `models/build_synapse.py`：6×高柜式 PM、中央圆形 Transport Module、前侧 EFEM 与独立 UI 站。
 
-> 新机型不是绝对零绘制：公共库负责基础部件、材质和通用结构；机型仍保留布局、通道、少量专属外观及动作调教。
+三台共享 `cluster_motion.py` 的 26 步标准事件和现有 deriver，不另造事件名或部件 ID。
+新增通用结构时回收到 `primitives.py`；机型脚本只维护布局、通道、专属外观与动作参数。
+完整操作流程见《新机台建模SOP_v1》。

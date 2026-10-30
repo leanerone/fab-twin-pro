@@ -2,7 +2,7 @@
 """LAM2300 全链验证：注入一炉完整流程事件（复用 OXE 26 步词表）
 
 走真实链路：/api/debug/event → DT_EVENT_RAW → db_poller → WS raw_event →
-前端 MachineMotion2D（lam2300 deriver）→ 动画。
+模型编辑器「动画调试」MotionPreview（lam2300 deriver）→ 动画。
 用法：python scripts/inject_lam2300_cycle.py [backend_url]
 """
 import json

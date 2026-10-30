@@ -3,11 +3,15 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { api } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useModelStore } from '../stores/model'
+import { useAppStore } from '../stores/app'
 import ModelUpload from '../components/ModelUpload.vue'
 import MotionPreview from '../components/MotionPreview.vue'
 import { scopeSvgPaintIds } from '../utils/svgPaintScope'
+import { useWebSocket } from '../composables/useWebSocket'
 
 const authStore = useAuthStore()
+const appStore = useAppStore()
+const ws = useWebSocket()
 
 // === 顶部 Tab ===
 const activeTab = ref('models')  // models / config / debug / voxel
@@ -25,12 +29,24 @@ const newModel = ref({
 // === 动画配置编辑（DB 驱动） ===
 const editingConfig = ref(null)
 const editDirty = ref(false)
+const validationResult = ref(null)
+const validatingDraft = ref(false)
 const svgPartsCache = ref([])  // ModelUpload 触发 svgPartsExtracted 时缓存的部件列表
 
 // === 动画调试 ===
 const debugFlow = ref('PACKING')
 const testEvents = ref([])
 const debugTestMachine = ref('PODOPENER-1')
+const debugRealtimeEvent = ref(null)
+const DEBUG_TOOL_BY_MODEL = {
+  LAM2300: 'LAM2300-1',
+  'AMAT-CENTRIS-SYM3': 'SYM3-1',
+  'TEL-SYNAPSE': 'SYN-1',
+}
+watch(() => selectedModel.value?.model_id, (modelId) => {
+  const toolId = DEBUG_TOOL_BY_MODEL[modelId]
+  if (toolId) debugTestMachine.value = toolId
+})
 
 // === 体素编辑器 ===
 const voxelParts = ref([])
@@ -117,6 +133,7 @@ function getAnimConfig(model) {
 }
 
 function loadAnimConfig(model) {
+  validationResult.value = null
   if (!model) {
     editingConfig.value = null
     editDirty.value = false
@@ -145,6 +162,14 @@ async function saveAnimConfig() {
   if (!selectedModel.value || !editingConfig.value) {
     toast('请先选择机型', 'warn')
     return
+  }
+  if (isMotionJson.value) {
+    const result = await validateAnimConfig(false)
+    if (!result) return
+    if (result.errors.length > 0) {
+      toast(`校验发现 ${result.errors.length} 项错误，已阻止保存`, 'error')
+      return
+    }
   }
   try {
     await api.updateModel(selectedModel.value.model_id, {
@@ -179,10 +204,42 @@ function exportConfig() {
 
 function markDirty() {
   editDirty.value = true
+  validationResult.value = null
 }
 
 // === Motion JSON 格式检测 ===
 const isMotionJson = computed(() => !!editingConfig.value?.schema_version)
+
+async function validateAnimConfig(notify = true) {
+  if (!selectedModel.value || !editingConfig.value) {
+    toast('请先选择机型', 'warn')
+    return null
+  }
+  if (!svgInlineHtml.value.includes('<svg')) {
+    toast('SVG 尚未加载，无法校验', 'warn')
+    return null
+  }
+  validatingDraft.value = true
+  try {
+    const result = await api.validateModelDraft({
+      svg_text: svgInlineHtml.value,
+      motion: editingConfig.value,
+    })
+    validationResult.value = result
+    if (notify) {
+      if (result.errors.length > 0) toast(`校验发现 ${result.errors.length} 项错误`, 'error')
+      else if (result.warnings.length > 0) toast(`校验通过，有 ${result.warnings.length} 项警告`, 'warn')
+      else toast('SVG 与 Motion JSON 校验通过', 'success')
+    }
+    return result
+  } catch (e) {
+    validationResult.value = { errors: [`校验请求失败: ${e.message}`], warnings: [] }
+    toast(`校验失败: ${e.message}`, 'error')
+    return null
+  } finally {
+    validatingDraft.value = false
+  }
+}
 
 // "从SVG提取"按钮：调用 api.extractSvgParts 获取部件列表，自动填充 view_2d 列
 async function extractSvgPartsToTargets() {
@@ -1223,6 +1280,14 @@ const totalPartsCount = computed(() => {
 })
 
 // === 动画调试 ===
+function onDebugRawEvent(event) {
+  if (activeTab.value !== 'debug' || !selectedModel.value) return
+  const actualTool = String(event?.tool_id || event?.machine_id || '').trim()
+  const expectedTool = debugTestMachine.value.trim()
+  if (expectedTool && actualTool.toUpperCase() !== expectedTool.toUpperCase()) return
+  debugRealtimeEvent.value = { ...event }
+}
+
 function manualTriggerEvent(eventName) {
   const fakeEvent = {
     event_code: eventName,
@@ -1557,10 +1622,12 @@ const motionPreviewConfig = computed(() => {
 
 // === 生命周期 ===
 onMounted(async () => {
+  ws.subscribeRawEvent(onDebugRawEvent)
   await loadModels()
   document.addEventListener('mousedown', onPartNameOutsideMouseDown, true)
 })
 onBeforeUnmount(() => {
+  ws.unsubscribeRawEvent(onDebugRawEvent)
   document.removeEventListener('mousedown', onPartNameOutsideMouseDown, true)
 })
 </script>
@@ -1730,9 +1797,28 @@ onBeforeUnmount(() => {
               导入JSON
             </button>
             <input ref="importInput" type="file" accept=".json" style="display:none;" @change="onImportJson" />
+            <button
+              v-if="isMotionJson"
+              class="btn-small"
+              :disabled="validatingDraft || !selectedModel || !svgPreviewUrl"
+              @click="validateAnimConfig()"
+            >{{ validatingDraft ? '校验中...' : '校验' }}</button>
             <button class="btn-save" :disabled="!editDirty || !selectedModel" @click="saveAnimConfig">保存</button>
             <button class="btn-export" :disabled="!editingConfig" @click="exportConfig">导出</button>
             <span v-if="editDirty" class="dirty-flag">● 未保存</span>
+          </div>
+        </div>
+
+        <div v-if="validationResult && isMotionJson" class="draft-validation">
+          <div
+            v-if="!validationResult.errors.length && !validationResult.warnings.length"
+            class="draft-validation-pass"
+          >✓ SVG 与 Motion JSON 校验通过</div>
+          <div v-for="(error, i) in validationResult.errors" :key="`error-${i}`" class="draft-validation-error">
+            错误：{{ error }}
+          </div>
+          <div v-for="(warning, i) in validationResult.warnings" :key="`warning-${i}`" class="draft-validation-warning">
+            警告：{{ warning }}
           </div>
         </div>
 
@@ -2120,6 +2206,10 @@ onBeforeUnmount(() => {
                 {{ m.model_id }}
               </option>
             </select>
+            <input v-model.trim="debugTestMachine" class="machine-input" placeholder="调试机台 ID" />
+            <span class="debug-live-status" :class="{ connected: appStore.wsConnected }">
+              {{ appStore.wsConnected ? '实时事件已连接' : '实时事件未连接' }}
+            </span>
           </div>
         </div>
 
@@ -2131,6 +2221,7 @@ onBeforeUnmount(() => {
           v-else
           :svg-url="motionPreviewSvgUrl"
           :motion-config="motionPreviewConfig"
+          :realtime-event="debugRealtimeEvent"
           style="height: calc(100% - 50px);"
         />
       </div>
@@ -2648,6 +2739,17 @@ onBeforeUnmount(() => {
 .btn-export:hover { opacity: 0.9; }
 .btn-export:disabled { opacity: 0.5; cursor: not-allowed; }
 .dirty-flag { color: var(--yellow); font-size: 12px; font-weight: 600; }
+.draft-validation {
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.draft-validation-pass { color: var(--green); }
+.draft-validation-error { color: var(--red); }
+.draft-validation-warning { color: var(--yellow); }
 
 .config-editor { padding: 0; }
 

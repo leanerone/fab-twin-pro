@@ -1,22 +1,9 @@
 # -*- coding: utf-8 -*-
-"""LAM2300 顶视图建模：SVG + Motion JSON 生成
+"""LAM2300 顶视图建模：SVG + Motion JSON 生成。
 
-用法：
-    python models/build_lam2300.py
-
-产出：
-    models/user/lam2300-topview.svg
-    models/user/lam2300-topview.motion.json
-
-设计依据：
-  · 布局照 docs/assets/machine-references/LAM2300.jpg（Lam 2300 平台俯视图）
-    ATM 大气端（3×Load Port + Aligner + 2×Buffer + Control Rack + ATM 机器人）
-    → 2×Airlock → 中央圆形 VTM（含机器人）→ 4×PM 放射
-  · 事件词表**复用 OXE 的 26 步标准集**，不发明新事件名，
-    这样现有 DB 数据 / 调试注入流程 / AI 链路天然就能驱动它
-  · 所有部件 id + data-pid 双写（引擎按 id 定位，编辑器按 data-pid 检视）
-
-改模型请改本脚本再重跑，不要手改产物（与 build_oxe_motion.py 同约定）。
+布局照 docs/assets/machine-references/LAM2300.jpg：3×Load Port、Aligner、
+2×Buffer、Control Rack、双斜置 Airlock、中央 VTM 与四个放射 PM。
+改模型请改本脚本再重跑，不要手改产物。
 """
 from __future__ import annotations
 
@@ -30,31 +17,25 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "svg_kit"))
 
 import primitives as P  # noqa: E402
-import motion as M  # noqa: E402
 import cluster_motion as CM  # noqa: E402
 
 OUT_SVG = os.path.join(_HERE, "user", "lam2300-topview.svg")
 OUT_MOTION = os.path.join(_HERE, "user", "lam2300-topview.motion.json")
 
-W, H = 1080, 880
-
-# ── 布局坐标（改这里即可调整排布）────────────────────────────────
-LP_X = [90, 225, 360]           # 三个 Load Port 左上角 x
+W, H = 1080, 900
+LP_X = [120, 260, 400]
 LP_Y, LP_W, LP_H = 70, 120, 130
-ALIGNER = (620, 110, 44)        # cx, cy, r
-BUF1 = (620, 250, 40)           # Metrology buffer
-BUF2 = (890, 290, 36)           # 右侧 buffer
-CTRL_RACK = (880, 70, 130, 180)
-ATM_HUB = (430, 250)            # ATM 机器人回转中心
-
-AL_A = (700, 340, 120, 100)     # Airlock A（右）
-AL_B = (330, 340, 120, 100)     # Airlock B（左）
-
-VTM = (540, 570, 118)           # cx, cy, r
-PM_RING = 265                   # PM 到 VTM 中心的距���
-PM_R = 62
-# PM 角度（度，0=右，逆时针为正；SVG y 向下，故用 -sin）
-PM_ANGLES = {"PM1": 0, "PM2": -45, "PM3": -135, "PM4": 180}
+ALIGNER = (680, 145, 42)
+BUF1 = (190, 280, 36)
+BUF2 = (840, 285, 36)
+CTRL_RACK = (720, 70, 150, 175)
+ATM_HUB = (400, 280)
+AL_A = (650, 380)
+AL_B = (430, 380)
+VTM = (540, 565, 110)
+PM_RING = 240
+# SVG y 向下：右、右下、左下、左，与参考图一致；上方两位留给 Airlock。
+PM_ANGLES = {"PM1": 0, "PM2": 48, "PM3": 132, "PM4": 180}
 
 
 def pm_center(name: str):
@@ -62,125 +43,102 @@ def pm_center(name: str):
     return VTM[0] + PM_RING * math.cos(a), VTM[1] + PM_RING * math.sin(a)
 
 
-# 基态隐藏部件：由事件（POD_PLACED / START / ALARM_REPORT…）经 visibility 规则点亮。
-# 不标注的话这些部件加载即可见——没放晶舟的 port 摆着晶舟、没开机的腔体亮着状态灯，
-# 与「初始 idle」语义不符（OXE 的 WAFER_MOVE 等也是这么处理的）。
+def facing_angle(cx, cy, tx, ty):
+    """top_process_chamber 的本地正面为 -Y，旋转后指向目标。"""
+    return math.degrees(math.atan2(ty - cy, tx - cx)) + 90
+
+
 BASE_HIDDEN = (
-    [f"LP{i}_CST" for i in (1, 2, 3)]          # 晶舟：POD_PLACED 显示
-    + ["WAFER_MOVE", "WAFER_VTM", "ALIGNER_WAFER"]  # 晶圆：随事件出现
-    + [f"PM{i}_{s}" for i in (1, 2, 3, 4) for s in ("run", "alarm", "unload")]  # 腔体状态灯
-    + ["TOWER_alarm"]                           # 塔灯红灯：ALARM_REPORT 点亮
+    [f"LP{i}_CST" for i in (1, 2, 3)]
+    + ["WAFER_MOVE", "WAFER_VTM", "ALIGNER_WAFER"]
+    + [f"PM{i}_{s}" for i in (1, 2, 3, 4) for s in ("run", "alarm", "unload")]
+    + ["TOWER_alarm"]
 )
 
 
 def _mark_base_hidden(svg: str) -> str:
-    """给 BASE_HIDDEN 里的部件开头标签注入 data-motion-base-visibility="hidden"。"""
     for pid in BASE_HIDDEN:
         pat = re.compile(r'(<\w+[^>]*\bid="%s"[^>]*?)(/?>)' % re.escape(pid))
-        svg, n = pat.subn(lambda m: m.group(1) + ' data-motion-base-visibility="hidden"' + m.group(2), svg, count=1)
+        svg, n = pat.subn(
+            lambda m: m.group(1) + ' data-motion-base-visibility="hidden"' + m.group(2),
+            svg, count=1,
+        )
         if n != 1:
             raise RuntimeError(f"base-hidden 标注失败：找不到部件 {pid}")
     return svg
 
 
-# ============================ SVG ============================
 def build_svg() -> str:
     out = [P.svg_open(W, H), P.defs()]
-
     out.append(P.baseplate("BASEPLATE", 30, 30, W - 60, H - 60))
-    out.append(P.signal_tower("TOWER", W - 110, 56))
-    out.append(P.title_block("TITLE", 46, H - 34,
-                             "LAM 2300 TOPVIEW", "ATM / 2xAirlock / VTM / 4xPM"))
+    out.append(P.signal_tower("TOWER", W - 90, 55))
+    out.append(P.title_block("TITLE", 46, H - 42,
+                             "LAM 2300 TOPVIEW", "ATM / 2x Airlock / VTM / 4x PM"))
 
-    # ── ATM 大气端 ──
     for i, x in enumerate(LP_X, start=1):
         pid = f"LP{i}"
-        out.append(P.port_box(pid, x, LP_Y, w=LP_W, h=LP_H, name=f"LP{i}"))
+        out.append(P.port_box(pid, x, LP_Y, w=LP_W, h=LP_H, name=pid))
         out.append(P.cassette(f"{pid}_CST", x + 12, LP_Y + 12, LP_W - 24, LP_H - 34))
-        out.append(P.label(None, x + LP_W / 2, LP_Y - 8, f"STATION {i}", size=10))
+        out.append(P.label(None, x + LP_W / 2, LP_Y - 9, f"ATM STATION {4-i}", size=9))
 
-    # Aligner（晶圆寻边：带可旋转卡盘）
     ax, ay, ar = ALIGNER
-    aligner = (
-        f'<circle cx="{ax}" cy="{ay}" r="{ar}" fill="{P.T("metal.panel")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.default_width")}"/>'
-        f'<circle cx="{ax}" cy="{ay}" r="{ar * 0.62:.1f}" fill="{P.T("metal.dark")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.thin_width")}"/>'
-        + P.bolt_circle(ax, ay, ar * 0.86, 8)
-        + P.wafer(f"ALIGNER_WAFER", ax, ay, ar * 0.34)
-    )
-    out.append(P.group("ALIGNER", aligner))
+    out.append(P.aligner("ALIGNER", ax, ay, ar))
     out.append(P.label(None, ax, ay - ar - 10, "ALIGNER  ST7", size=10))
-
-    # Buffer 站
     for pid, (bx, by, br) in (("BUF1", BUF1), ("BUF2", BUF2)):
-        body = (
-            f'<circle cx="{bx}" cy="{by}" r="{br}" fill="{P.T("metal.panel")}" '
-            f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.default_width")}"/>'
-            f'<circle cx="{bx}" cy="{by}" r="{br * 0.7:.1f}" fill="{P.T("metal.dark")}" '
-            f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.thin_width")}"/>'
-        )
-        out.append(P.group(pid, body))
-        out.append(P.label(None, bx, by + 4, "BUF", size=10, fill=P.T("text.inverse")))
+        out.append(P.buffer_station(pid, bx, by, br))
+    out.append(P.control_rack("CTRL_RACK", *CTRL_RACK))
 
-    # Control Rack
-    crx, cry, crw, crh = CTRL_RACK
-    out.append(P.rect("CTRL_RACK", crx, cry, crw, crh, fill=P.T("metal.panel"), rx=6))
-    out.append(P.label(None, crx + crw / 2, cry + crh / 2, "CONTROL\nRACK", size=11))
+    # 封闭传输通道必须先于腔体绘制，确保端部被法兰覆盖而非裸露。
+    for pid, (alx, aly) in (("AL_A", AL_A), ("AL_B", AL_B)):
+        out.append(P.vacuum_channel(f"{pid}_ATM_CHANNEL", ATM_HUB[0], ATM_HUB[1], alx, aly, 28))
+        out.append(P.vacuum_channel(f"{pid}_VTM_CHANNEL", alx, aly, VTM[0], VTM[1], 30))
+    for name in PM_ANGLES:
+        px, py = pm_center(name)
+        out.append(P.vacuum_channel(f"{name}_CHANNEL", VTM[0], VTM[1], px, py, 30))
 
-    # ATM 机器人
     out.append(P.robot_arm("ATM_ARM", ATM_HUB[0], ATM_HUB[1],
-                           upper_len=86, fore_len=68, wrist_r=38))
-    out.append(P.circle("ATM_HUB", ATM_HUB[0], ATM_HUB[1], 14,
-                        fill=P.T("metal.dark")))
+                           upper_len=82, fore_len=64, wrist_r=36))
+    out.append(P.circle("ATM_HUB", ATM_HUB[0], ATM_HUB[1], 14, fill=P.T("metal.dark")))
 
-    # ── Airlock（ATM↔VTM 真空隔离通道）──
-    for pid, (alx, aly, alw, alh) in (("AL_A", AL_A), ("AL_B", AL_B)):
-        body = [
-            P.rect(None, alx, aly, alw, alh, fill=P.T("metal.panel"), rx=5),
-            P.rect(f"{pid}_DOOR", alx + 8, aly + 8, alw - 16, alh - 16,
-                   fill=P.T("port.inner_fill"), rx=3),
-        ]
-        out.append(P.group(pid, "\n".join(body)))
-        out.append(P.label(None, alx + alw / 2, aly - 6,
-                           "AIRLOCK A" if pid == "AL_A" else "AIRLOCK B", size=10))
+    for pid, (alx, aly), angle, text in (
+        ("AL_A", AL_A, -45, "AIRLOCK A"),
+        ("AL_B", AL_B, 45, "AIRLOCK B"),
+    ):
+        out.append(P.top_airlock(pid, alx, aly, w=96, h=112, angle=angle, name=pid))
+        out.append(P.label(None, alx, aly - 72, text, size=10))
 
-    # ── VTM 真空传输腔（圆形，与工艺腔区分）──
     vx, vy, vr = VTM
     vtm = (
-        f'<circle cx="{vx}" cy="{vy}" r="{vr}" fill="{P.T("metal.panel")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.default_width")}"/>'
-        f'<circle cx="{vx}" cy="{vy}" r="{vr * 0.82:.1f}" fill="{P.T("metal.dark")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.thin_width")}"/>'
-        + P.bolt_circle(vx, vy, vr * 0.93, 12)
+        f'<circle cx="{vx}" cy="{vy}" r="{vr}" fill="url(#edgeMetal)" stroke="{P.T("iso.edge")}" stroke-width="2.2"/>'
+        f'<circle cx="{vx}" cy="{vy}" r="{vr*.82:.1f}" fill="{P.T("metal.dark")}" stroke="{P.T("metal.bolt")}" stroke-width="1.4"/>'
+        + P.bolt_circle(vx, vy, vr * 0.92, 12)
+        + f'<circle cx="{vx}" cy="{vy}" r="{vr*.38:.1f}" fill="none" stroke="{P.T("metal.light")}" stroke-width="5"/>'
         + P.label(None, vx, vy - vr + 20, "VTM", size=13, fill=P.T("text.inverse"))
     )
     out.append(P.group("VTM", vtm))
-
-    out.append(P.robot_arm("VTM_ARM", vx, vy, upper_len=92, fore_len=72, wrist_r=40))
+    out.append(P.robot_arm("VTM_ARM", vx, vy, upper_len=82, fore_len=62, wrist_r=34))
     out.append(P.circle("VTM_HUB", vx, vy, 16, fill=P.T("metal.dark")))
 
-    # ── 4 个工艺腔（放射状）──
-    for name in ("PM1", "PM2", "PM3", "PM4"):
+    for name in PM_ANGLES:
         cx, cy = pm_center(name)
-        out.append(P.chamber(name, cx, cy, PM_R, name=name))
+        out.append(P.top_process_chamber(
+            name, cx, cy, w=122, h=132,
+            angle=facing_angle(cx, cy, vx, vy), name=name,
+        ))
 
-    # ── 随臂搬运的晶圆（deriver 用 snap 把它送到各单元）──
     out.append(P.wafer("WAFER_MOVE", ATM_HUB[0], ATM_HUB[1], 11))
     out.append(P.wafer("WAFER_VTM", vx, vy, 11))
-
     out.append(P.svg_close())
     return "".join(out)
 
 
-# ============================ Motion ============================
 def build_motion() -> dict:
     return CM.build_cluster_motion(
         machine_type="LAM2300",
         name="LAM 2300 顶视图",
         src="lam2300-topview.svg",
         deriver="lam2300",
-        description="Lam 2300 cluster 顶视动画：ATM 取片 → Aligner 寻边 → Airlock 过渡 → VTM 送片 → PM 加工 → 回程",
+        description="Lam 2300 cluster 顶视动画：ATM 取片 → Aligner 寻边 → 双 Airlock → VTM 送片 → PM 加工 → 回程",
     )
 
 

@@ -8,12 +8,19 @@ OXE DRM 顶视图 SVG 资产生成器 v2.2（紧凑真实 cluster + 蛙腿叉形
 - 配色/质感对齐 models/user/amat_metsput.svg（金属渐变/法兰螺栓/彩虹晶圆）
 - 保留 motion 管线全部动画部件 id（与 oxe-drm-topview.motion.json 对应，勿改）
 - 左右材料详情面板（LOT/状态/完成 + 25 行 Wafer Map 三态）、左右告警消息面板、每槽晶圆条
-运行：python gen_oxe_svg.py（已定稿，默认拒绝覆盖；确需重生成加 --force）
+运行：python gen_oxe_svg.py（默认拒绝覆盖；--force 仅从 token 同步 defs，定稿几何保持不变）
 """
+import json
 import math
 import re
 import sys
 from pathlib import Path
+
+_MODELS_DIR = Path(__file__).resolve().parents[1]
+if str(_MODELS_DIR) not in sys.path:
+    sys.path.insert(0, str(_MODELS_DIR))
+from svg_kit.primitives import legacy_defs
+from svg_kit.validate import extract_ids, extract_parts, extract_pids, validate_content
 
 # ========== 几何常量（motion JSON / deriver 依赖，改动需同步） ==========
 # v2.5 镜像对称、机台居中：hub 在机台区几何中心，CH_A/B 关于过 hub 竖轴对称，
@@ -78,88 +85,7 @@ def fmt(v):
     return s if s else '0'
 
 
-DEFS = '''<defs>
-  <style>
-    .shape { fill: #fff; stroke: #3a4250; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  </style>
-  <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1">
-   <stop offset="0%" stop-color="#ff5f6d"/><stop offset="18%" stop-color="#ff9f43"/>
-   <stop offset="35%" stop-color="#f7d154"/><stop offset="50%" stop-color="#4ade80"/>
-   <stop offset="65%" stop-color="#22d3ee"/><stop offset="80%" stop-color="#3b82f6"/>
-   <stop offset="100%" stop-color="#a855f7"/>
-  </linearGradient>
-  <pattern id="dieGrid" width="0.05" height="0.05" patternUnits="objectBoundingBox">
-   <path d="M0.05,0 L0.05,0.05 M0,0.05 L0.05,0.05" fill="none" stroke="rgba(20,25,40,0.32)" stroke-width="0.008"/>
-  </pattern>
-  <pattern id="waferPattern" width="1" height="1" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox">
-   <rect width="1" height="1" fill="url(#rainbowGrad)"/><rect width="1" height="1" fill="url(#dieGrid)"/>
-  </pattern>
-  <radialGradient id="waferShade" cx="0.38" cy="0.32" r="0.78">
-   <stop offset="0" stop-color="#ffffff" stop-opacity="0.4"/><stop offset="0.45" stop-color="#dde8f6" stop-opacity="0.1"/>
-   <stop offset="0.8" stop-color="#8395b8" stop-opacity="0.16"/><stop offset="1" stop-color="#16233a" stop-opacity="0.5"/>
-  </radialGradient>
-  <linearGradient id="edgeMetal" x1="0" y1="0" x2="1" y2="1">
-   <stop offset="0" stop-color="#ffffff"/><stop offset="0.35" stop-color="#a9b4c4"/>
-   <stop offset="0.6" stop-color="#eef3f9"/><stop offset="1" stop-color="#59647a"/>
-  </linearGradient>
-  <linearGradient id="slotMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f2f6fb"/><stop offset="0.45" stop-color="#c3ccd9"/>
-   <stop offset="0.8" stop-color="#79828f"/><stop offset="1" stop-color="#3f4650"/>
-  </linearGradient>
-  <radialGradient id="chSteel" cx="0.35" cy="0.3" r="0.85">
-   <stop offset="0" stop-color="#fdfeff"/><stop offset="0.4" stop-color="#d3dbe6"/>
-   <stop offset="0.72" stop-color="#98a4b6"/><stop offset="1" stop-color="#5b6679"/>
-  </radialGradient>
-  <radialGradient id="chShade" cx="0.5" cy="0.5" r="0.5">
-   <stop offset="0.62" stop-color="#10151d" stop-opacity="0"/><stop offset="0.85" stop-color="#10151d" stop-opacity="0.12"/>
-   <stop offset="1" stop-color="#10151d" stop-opacity="0.38"/>
-  </radialGradient>
-  <linearGradient id="chFlange" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f4f7fb"/><stop offset="0.5" stop-color="#aeb9c8"/><stop offset="1" stop-color="#646e7e"/>
-  </linearGradient>
-  <radialGradient id="armSteel" cx="0.38" cy="0.32" r="0.85">
-   <stop offset="0" stop-color="#f8fafc"/><stop offset="0.45" stop-color="#cfd8e4"/>
-   <stop offset="0.78" stop-color="#8e9baf"/><stop offset="1" stop-color="#4d5666"/>
-  </radialGradient>
-  <linearGradient id="armBlade" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#eef2f8"/><stop offset="0.55" stop-color="#b9c3d2"/><stop offset="1" stop-color="#788294"/>
-  </linearGradient>
-  <radialGradient id="groundShadow" cx="0.5" cy="0.5" r="0.5">
-   <stop offset="0" stop-color="#0b0f16" stop-opacity="0.26"/><stop offset="0.65" stop-color="#0b0f16" stop-opacity="0.1"/>
-   <stop offset="1" stop-color="#0b0f16" stop-opacity="0"/>
-  </radialGradient>
-  <linearGradient id="smifShell" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f2f5f9"/><stop offset="0.5" stop-color="#c7cfdb"/><stop offset="1" stop-color="#97a2b1"/>
-  </linearGradient>
-  <linearGradient id="smifInner" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#ffffff"/><stop offset="0.6" stop-color="#dde3ea"/><stop offset="1" stop-color="#b4bdc9"/>
-  </linearGradient>
-  <linearGradient id="badgeMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#465062"/><stop offset="0.5" stop-color="#2c3542"/><stop offset="1" stop-color="#1a212c"/>
-  </linearGradient>
-  <radialGradient id="deckPlate" cx="0.5" cy="0.42" r="0.75">
-   <stop offset="0" stop-color="#ffffff"/><stop offset="0.75" stop-color="#f2f5f9"/><stop offset="1" stop-color="#dde3ec"/>
-  </radialGradient>
-  <linearGradient id="framePlate" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#edf0f5"/>
-  </linearGradient>
-  <linearGradient id="valveMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f6f8fb"/><stop offset="0.5" stop-color="#c2cbd7"/><stop offset="1" stop-color="#8a94a4"/>
-  </linearGradient>
-  <linearGradient id="panelMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#4b5563"/><stop offset="0.5" stop-color="#2f3743"/><stop offset="1" stop-color="#171d26"/>
-  </linearGradient>
-  <linearGradient id="boardMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f8fafc"/><stop offset="0.55" stop-color="#d3dae4"/><stop offset="1" stop-color="#9aa5b4"/>
-  </linearGradient>
-  <linearGradient id="glassDark" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#1e2836"/><stop offset="0.35" stop-color="#0d131c"/><stop offset="1" stop-color="#05080d"/>
-  </linearGradient>
-  <linearGradient id="cassetteMetal" x1="0" y1="0" x2="1" y2="0">
-   <stop offset="0" stop-color="#565f6e"/><stop offset="0.3" stop-color="#3a414d"/>
-   <stop offset="0.75" stop-color="#232933"/><stop offset="1" stop-color="#414a58"/>
-  </linearGradient>
-</defs>'''
+DEFS = legacy_defs("oxe")
 
 
 def wafer_g(pid, cx, cy, r=32):
@@ -438,7 +364,8 @@ def arm_group():
     return '\n'.join(S)
 
 
-def main():
+def _legacy_generate():
+    """旧版全量几何生成参考；定稿资产请使用 main() 的安全同步路径。"""
     hx, hy = HUB
     bolts = []
     # 六边形 6 顶点 + 6 边中点法兰螺栓
@@ -616,6 +543,50 @@ def main():
     if missing:
         raise SystemExit(f'[FAIL] 缺少部件 id: {missing}')
     print(f'[OK] 自检通过：{len(required)} 个必需 id 全部存在')
+
+
+def main():
+    """同步定稿 SVG 的 token defs，禁止旧版生成器覆盖手工布局与三段机械臂。"""
+    dest = Path(__file__).resolve().parent / 'oxe-drm-topview.svg'
+    if not dest.exists():
+        raise SystemExit('[ABORT] 缺少已定稿的 oxe-drm-topview.svg；旧版全量生成不符合当前 Motion 契约。')
+    if '--force' not in sys.argv:
+        raise SystemExit(
+            f'[ABORT] {dest.name} 已是手绘定稿版，默认不覆盖。\n'
+            '        确需从 tokens.json 同步 defs 请显式加 --force；几何、ID 与 data-pid 会逐字节保留。')
+
+    original = dest.read_bytes()
+    matches = list(re.finditer(br'<defs\b[^>]*>.*?</defs>', original, re.DOTALL))
+    if len(matches) != 1:
+        raise SystemExit(f'[FAIL] 应恰好有一个 defs，实际为 {len(matches)}')
+    match = matches[0]
+    original_body = original[:match.start()] + original[match.end():]
+    rendered_defs = DEFS.encode('utf-8')
+    updated = original[:match.start()] + rendered_defs + original[match.end():]
+    updated_body = updated[:match.start()] + updated[match.start() + len(rendered_defs):]
+
+    if original_body != updated_body:
+        raise SystemExit('[FAIL] 非 defs 内容发生变化，已拒绝写入')
+    body_text = original_body.decode('utf-8')
+    updated_text = updated.decode('utf-8')
+    if extract_ids(body_text) != extract_ids(updated_body.decode('utf-8')):
+        raise SystemExit('[FAIL] 部件或资源 id 发生变化，已拒绝写入')
+    if extract_pids(body_text) != extract_pids(updated_body.decode('utf-8')):
+        raise SystemExit('[FAIL] data-pid 发生变化，已拒绝写入')
+
+    motion_path = dest.with_suffix('.motion.json')
+    motion = json.loads(motion_path.read_text(encoding='utf-8'))
+    errors, warnings = validate_content(updated_text, motion)
+    if errors:
+        details = '\n'.join(f'  - {error}' for error in errors)
+        raise SystemExit(f'[FAIL] SVG × Motion 校验失败，已拒绝写入:\n{details}')
+
+    dest.write_bytes(updated)
+    print(f'[OK] {dest.name}: 仅从 tokens.json 同步 defs，非 defs 字节完全保留')
+    print(f'[OK] 动画契约保留：{len(set(extract_ids(body_text)))} 个 id，'
+          f'{len(set(extract_parts(body_text)))} 个可检视部件，'
+          f'{len(motion.get("motions", []))} 个 Motion step')
+    print(f'[OK] 校验通过：0 errors，{len(warnings)} warnings（静态部件/运行时占位符提示）')
 
 
 if __name__ == '__main__':

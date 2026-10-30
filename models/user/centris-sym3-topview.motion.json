@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "document": {
-    "name": "AMAT Centris Sym3 顶视图",
+    "name": "AMAT Centris Sym3 等角视图",
     "src": "centris-sym3-topview.svg",
     "coord": {
       "origin": "top-left",
@@ -702,7 +702,7 @@
   "ext": {
     "machine_type": "CENTRIS-SYM3",
     "version": "1.0",
-    "description": "AMAT Centris Sym3 顶视动画（俯视降级版）：EFEM 取片 → ESC 中央卡盘腔 → 6×方形刻蚀腔加工 → 回程",
+    "description": "AMAT Centris Sym3 等角动画：EFEM 取片 → 铜色中央传输框板 → 6×蓝色工艺腔 → 前侧真空泵",
     "deriver": "sym3",
     "param_defaults": {
       "PORT": "LP1",

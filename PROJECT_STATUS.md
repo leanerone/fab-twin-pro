@@ -1,12 +1,40 @@
 # FabTwin Pro 项目进度文档
 
-> 更新日期：2026-10-27
-> 当前版本：ver2.14.2（test31 分支）
-> 分支：**test31**
+> 更新日期：2026-10-30
+> 当前版本：ver2.18
+> 分支：**test3**
 
 ---
 
-## 〇、当前状态速览（2026-10-27）
+## 〇、当前状态速览（2026-10-30）
+
+**本轮交付已完成**：公共库等角部件、LAM2300/Centris Sym3/TEL Synapse 三台模型、模型编辑器校验、六台回归、真实 LAM2300 事件闭环及 AI 中间件修复已收口到 `test3`。当前交接真源是 [交接说明_2026-10-30_续.md](docs/交接说明_2026-10-30_续.md)，完整变更见 [变更更改版记录.md](docs/变更更改版记录.md) 顶部 ver2.18。
+
+### 模型与编辑器
+
+- LAM2300：3×Load Port、Aligner、2×Buffer、Control Rack、双 Airlock、VTM 与 PM1~4；ATM→Airlock→VTM→PM 使用封闭通道。
+- Sym3：最终为等角模型，6 组蓝色工艺腔、superellipse 孔阵顶盖、铜色底座、EFEM 和泵组。
+- Synapse：最终为等角模型，6 组高柜 PM、中央圆形 Transport Module、EFEM 和独立 UI 站。
+- 三台共享 26 步 Motion 与 `createClusterDeriver`；保留 `document.src`、文件名和部件 ID 契约。动画调试只在「模型编辑器 → 动画调试」。
+- 编辑器草稿校验与 CLI 共用规则；errors 阻断保存，warnings 分类展示；Sym3 真实 UI 提取 116 个部件并验证双向高亮。
+- OXE 手绘定稿受安全再生成保护；AMAT/PODOPENER 仅做 token defs 同步。六台源/运行时 SVG 哈希一致。
+
+### 验证结论
+
+- 六台 SVG×Motion 全部 0 errors；warnings 为运行时占位符或未被 Motion 直接引用的静态/可检视部件，不能描述为“零警告”。
+- 六台真实 deriver/when/template 动态回归：121 steps、1737 次 rule 展开、1760 个目标引用，0 缺失。
+- LAM2300 真实 22 事件链路通过：debug 注入→Oracle→db_poller→WS→MotionPreview。
+- 聚焦测试 `12 passed`；前端 `npm run build` 通过；六张截图基线位于 `docs/assets/baseline/`。
+
+### DB 与环境边界
+
+本轮仅对三台 cluster 的 `MACHINE_MODEL_CONFIGS` 做数据 upsert，确保 `MACHINES` 三条演示机台存在，并向 `DT_EVENT_RAW` 注入 22 条 LAM2300 验收事件；无 DDL。Oracle CLOB 已改用 ORM `SELECT + UPDATE/INSERT`，避免 `ORA-03146`。
+
+真实 Dify 当前连接失败（`All connection attempts failed`）；主 n8n workflow 未启用且无 URL，真实 webhook 未验收。AI 配置 UI 的登录 token 丢失问题尚未闭环，但 fresh token 直接访问相关 API 已验证为 200。PODOPENER/AMAT 最新 token-only 运行时副本还待补充浏览器视觉对照，不宣称“最新运行时视觉零回归”。
+
+---
+
+## 历史状态速览（2026-10-27）
 
 > **2026-10-27 ver2.14.2**：**OXE 2D 视图 AMAT 金属风格重绘 + 旧 Canvas 看板两块面板迁移落地**——顶视图改 amat_metsput 同款金属质感（法兰螺栓/彩虹晶圆/金属片槽/SMIF 金属壳），并把随归档丢失的**左右「材料详情」25 槽 Wafer Map**（等待灰/加工绿/完成黄三态 + LOT/状态/完成徽章）与**左右「告警消息」面板**（计数 + 最近 3 行）以 SVG 部件 + Motion JSON 规则形式做进统一管线；晶舟片条随取放片逐槽亮灭，deriver 维护 25 槽状态机/告警队列/完成计数，mapping 值（25 位 0/1/2/3）直接驱动。端到端 debug 注入实测通过，零告警。生成器：`models/user/gen_oxe_svg.py`、`build_oxe_motion.py`（幂等，从 git 基线重建）。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部 ver2.14.2。
 >

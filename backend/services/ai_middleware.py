@@ -23,7 +23,9 @@ import re
 import json
 import time
 import uuid
+import asyncio
 import logging
+import httpx
 import requests
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timedelta
@@ -655,7 +657,15 @@ class AIMiddleware:
             execution_log.append({"step": "route", "decision": "local_rule_engine", "provider": route_provider})
 
         try:
-            if route_provider in openai_compatible_providers and self.base_url and self.api_key:
+            # 管理员显式自动化指令统一前置到 N8N，避免 custom/OpenAI 路由绕过；
+            # 命中后直接返回，不再进入本地规则或 LLM，确保只触发一次。
+            if user_role == "admin" and self._is_n8n_command(question.lower()):
+                execution_log.append({"step": "match_intent", "intent": "n8n_command"})
+                result = self._trigger_n8n_workflow(
+                    question, machine_id, user_role,
+                    usage_tracker=usage, tool_calls_recorder=tool_calls_record,
+                )
+            elif route_provider in openai_compatible_providers and self.base_url and self.api_key:
                 execution_log.append({"step": "call_llm", "url": self._build_chat_url(self.base_url)})
                 result = self._call_openai_compatible(
                     question, system_prompt, session["messages"], machine_id,
@@ -833,9 +843,9 @@ class AIMiddleware:
             extra_sources = es
         return jump_ts, jump_mid, table_data, extra_sources
 
-    def chat_stream(self, question: str, session_id: str = None, machine_id: str = None,
-                    context: Dict = None, user_role: str = "user", config_id: int = None):
-        """流式聊天入口（生成器），逐帧 yield SSE data 行字符串。
+    async def chat_stream(self, question: str, session_id: str = None, machine_id: str = None,
+                          context: Dict = None, user_role: str = "user", config_id: int = None):
+        """流式聊天入口（异步生成器），逐帧 yield SSE data 行字符串。
 
         Dify 路由：_stream_dify() 逐 chunk 透传，自管会话保存与 usage 日志；
         非 Dify 路由：委托 chat() 同步执行（它自管会话/日志），结果包装单帧。
@@ -851,10 +861,12 @@ class AIMiddleware:
         route_is_dify = bool(machine_dify) or self.provider in ("dify", "hybrid")
 
         if not route_is_dify:
-            # 非 Dify：委托 chat() 完整同步执行（路由/会话/日志全包），包装单帧
+            # 非 Dify：同步 chat() 仅在短任务期间占用工作线程，不阻塞事件循环
             result = None
             try:
-                result = self.chat(question, session_id, machine_id, context, user_role, config_id)
+                result = await asyncio.to_thread(
+                    self.chat, question, session_id, machine_id, context, user_role, config_id
+                )
             except Exception as e:
                 yield self._sse_line({"event": "error", "message": str(e)[:300]})
                 yield self._sse_line({
@@ -927,7 +939,7 @@ class AIMiddleware:
         execution_log.append({"step": "call_dify_stream"})
         stream_result = {}
         try:
-            for evt in self._stream_dify(
+            async for evt in self._stream_dify(
                 question, session_id, machine_id, user_role,
                 stream_result=stream_result,
                 dify_cfg=dify_cfg,
@@ -1672,10 +1684,10 @@ Lot ID 格式说明：
             "retriever_resources": rag_records,
         }
 
-    def _stream_dify(self, question: str, session_id: str, machine_id: str = None,
-                     user_role: str = "user", stream_result: Dict = None,
-                     dify_cfg: Dict = None):
-        """流式调用 Dify，逐事件 yield（透传帧，dict 形态）。
+    async def _stream_dify(self, question: str, session_id: str, machine_id: str = None,
+                           user_role: str = "user", stream_result: Dict = None,
+                           dify_cfg: Dict = None):
+        """异步流式调用 Dify，逐事件 yield（透传帧，dict 形态）。
 
         与 _call_dify 的差异：
         - 不在本地聚合等待完整答案，而是逐 SSE 事件 yield 给 chat_stream 透传前端
@@ -1737,132 +1749,141 @@ Lot ID 格式说明：
         )
         print(f"[Dify-stream] → POST {url}, {conv_info}, query_len={len(question)}")
 
-        resp = requests.post(url, json=payload, headers=headers, timeout=120, stream=True)
-        # ---------- 4xx inputs 回退重试（与 _call_dify 同逻辑） ----------
-        if 400 <= resp.status_code < 500:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = None
+            retry_resp = None
             try:
-                body_json = resp.json() if resp.text else {}
-            except Exception:
-                body_json = {}
-            msg = body_json.get("message") or body_json.get("error") or (resp.text or "")[:500]
-            print(f"[Dify-stream] × HTTP {resp.status_code}（首次请求，尝试兼容回退）: {str(msg)[:300]}")
-            if (("inputs" in str(msg).lower() or "field" in str(msg).lower() or "param" in str(msg).lower())
-                    and payload.get("inputs") != {}):
-                payload2 = dict(payload)
-                payload2["inputs"] = {}
-                print(f"[Dify-stream] ↻ 回退重试：清空 inputs")
-                resp2 = requests.post(url, json=payload2, headers=headers, timeout=120, stream=True)
-                if resp2.status_code < 400:
-                    resp = resp2
-                    print(f"[Dify-stream] [OK] 回退重试成功 HTTP {resp.status_code}")
-            if resp.status_code >= 400:
+                resp = await client.send(
+                    client.build_request("POST", url, json=payload, headers=headers),
+                    stream=True,
+                )
+                # ---------- 4xx inputs 回退重试（与 _call_dify 同逻辑） ----------
                 body_txt = ""
                 body_json = {}
-                try:
-                    body_txt = resp.text
-                    body_json = resp.json() if body_txt else {}
-                except Exception:
-                    pass
-                dify_msg = (body_json.get("message") or body_json.get("error")
-                            or body_json.get("detail") or "")
-                if isinstance(dify_msg, list):
-                    dify_msg = "; ".join(str(x) for x in dify_msg)
-                raise RuntimeError(
-                    f"Dify HTTP {resp.status_code}: "
-                    f"{dify_msg or ('无 message 字段，原始body: ' + (body_txt or '')[:400])}"
-                )
-        resp.raise_for_status()
+                if 400 <= resp.status_code < 500:
+                    body_txt = (await resp.aread()).decode("utf-8", "replace")
+                    try:
+                        body_json = json.loads(body_txt) if body_txt else {}
+                    except Exception:
+                        body_json = {}
+                    msg = body_json.get("message") or body_json.get("error") or body_txt[:500]
+                    print(f"[Dify-stream] × HTTP {resp.status_code}（首次请求，尝试兼容回退）: {str(msg)[:300]}")
+                    if (("inputs" in str(msg).lower() or "field" in str(msg).lower() or "param" in str(msg).lower())
+                            and payload.get("inputs") != {}):
+                        payload2 = dict(payload)
+                        payload2["inputs"] = {}
+                        print(f"[Dify-stream] ↻ 回退重试：清空 inputs")
+                        await resp.aclose()
+                        retry_resp = await client.send(
+                            client.build_request("POST", url, json=payload2, headers=headers),
+                            stream=True,
+                        )
+                        if retry_resp.status_code < 400:
+                            resp = retry_resp
+                            retry_resp = None
+                            print(f"[Dify-stream] [OK] 回退重试成功 HTTP {resp.status_code}")
+                    if resp.status_code >= 400:
+                        dify_msg = (body_json.get("message") or body_json.get("error")
+                                    or body_json.get("detail") or "")
+                        if isinstance(dify_msg, list):
+                            dify_msg = "; ".join(str(x) for x in dify_msg)
+                        raise RuntimeError(
+                            f"Dify HTTP {resp.status_code}: "
+                            f"{dify_msg or ('无 message 字段，原始body: ' + (body_txt or '')[:400])}"
+                        )
+                resp.raise_for_status()
 
-        # ---------- 逐事件透传 + FABTWIN 过滤 ----------
-        fab_tag = self._FAB_TAG
-        keep = len(fab_tag) - 1   # lookahead：保留末尾 8 字符防标记跨 chunk
-        pending = ""              # 正文 lookahead 缓冲
-        fab_mode = False          # 已进入 <FABTWIN> 块（后续内容全部吞掉）
-        answer_parts = []
-        fab_parts = []
+                # ---------- 逐事件透传 + FABTWIN 过滤 ----------
+                fab_tag = self._FAB_TAG
+                keep = len(fab_tag) - 1   # lookahead：保留末尾 8 字符防标记跨 chunk
+                pending = ""              # 正文 lookahead 缓冲
+                fab_mode = False          # 已进入 <FABTWIN> 块（后续内容全部吞掉）
+                answer_parts = []
+                fab_parts = []
 
-        def _filter_text(text):
-            """正文分片经 FABTWIN 过滤，返回可下发的文本段列表"""
-            nonlocal pending, fab_mode
-            out = []
-            if fab_mode:
-                fab_parts.append(text)
-                return out
-            pending += text
-            idx = pending.find(fab_tag)
-            if idx >= 0:
-                if idx > 0:
-                    out.append(pending[:idx])
-                fab_parts.append(pending[idx:])
-                pending = ""
-                fab_mode = True
-            elif len(pending) > keep:
-                out.append(pending[:-keep])
-                pending = pending[-keep:]
-            return out
+                def _filter_text(text):
+                    """正文分片经 FABTWIN 过滤，返回可下发的文本段列表"""
+                    nonlocal pending, fab_mode
+                    out = []
+                    if fab_mode:
+                        fab_parts.append(text)
+                        return out
+                    pending += text
+                    idx = pending.find(fab_tag)
+                    if idx >= 0:
+                        if idx > 0:
+                            out.append(pending[:idx])
+                        fab_parts.append(pending[idx:])
+                        pending = ""
+                        fab_mode = True
+                    elif len(pending) > keep:
+                        out.append(pending[:-keep])
+                        pending = pending[-keep:]
+                    return out
 
-        try:
-            for raw in resp.iter_lines():
-                line = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
-                line = (line or "").strip()
-                if not line or line.startswith(":"):
-                    continue
-                if line.startswith("data:"):
-                    data_str = line[len("data:"):].strip()
-                    if data_str == "[DONE]":
-                        break
-                else:
-                    data_str = line
-                try:
-                    evt = json.loads(data_str)
-                except Exception:
-                    continue
-                if not isinstance(evt, dict):
-                    continue
-                event = evt.get("event")
-                if event in ("message", "agent_message", "message_replace"):
-                    chunk = evt.get("answer")
-                    if isinstance(chunk, str) and chunk:
-                        for vis in _filter_text(chunk):
-                            answer_parts.append(vis)
-                            fwd = dict(evt)
-                            fwd["answer"] = vis
-                            yield fwd
-                    if not stream_result["conversation_id"]:
-                        stream_result["conversation_id"] = evt.get("conversation_id")
-                elif event == "message_end":
-                    mmeta = evt.get("metadata") or {}
-                    if isinstance(mmeta.get("usage"), dict):
-                        stream_result["usage"] = mmeta["usage"]
-                    if not stream_result["conversation_id"]:
-                        stream_result["conversation_id"] = evt.get("conversation_id")
-                    yield evt
-                elif event == "agent_thought":
-                    stream_result["thoughts_count"] += 1
-                    yield evt
-                elif event == "retriever_resources":
-                    for r in (evt.get("records") or []):
-                        if isinstance(r, dict):
-                            stream_result["rag_records"].append(r)
-                    yield evt
-                else:
-                    # workflow_started / workflow_finished 等其他事件原样透传
-                    yield evt
-        finally:
-            try:
-                resp.close()
-            except Exception:
-                pass
+                async for line in resp.aiter_lines():
+                    line = (line or "").strip()
+                    if not line or line.startswith(":"):
+                        continue
+                    if line.startswith("data:"):
+                        data_str = line[len("data:"):].strip()
+                        if data_str == "[DONE]":
+                            break
+                    else:
+                        data_str = line
+                    try:
+                        evt = json.loads(data_str)
+                    except Exception:
+                        continue
+                    if not isinstance(evt, dict):
+                        continue
+                    event = evt.get("event")
+                    if event in ("message", "agent_message", "message_replace"):
+                        chunk = evt.get("answer")
+                        if isinstance(chunk, str) and chunk:
+                            for vis in _filter_text(chunk):
+                                answer_parts.append(vis)
+                                fwd = dict(evt)
+                                fwd["answer"] = vis
+                                yield fwd
+                        if not stream_result["conversation_id"]:
+                            stream_result["conversation_id"] = evt.get("conversation_id")
+                    elif event == "message_end":
+                        mmeta = evt.get("metadata") or {}
+                        if isinstance(mmeta.get("usage"), dict):
+                            stream_result["usage"] = mmeta["usage"]
+                        if not stream_result["conversation_id"]:
+                            stream_result["conversation_id"] = evt.get("conversation_id")
+                        yield evt
+                    elif event == "agent_thought":
+                        stream_result["thoughts_count"] += 1
+                        yield evt
+                    elif event == "retriever_resources":
+                        for r in (evt.get("records") or []):
+                            if isinstance(r, dict):
+                                stream_result["rag_records"].append(r)
+                        yield evt
+                    else:
+                        # workflow_started / workflow_finished 等其他事件原样透传
+                        yield evt
+            finally:
+                # 正常结束、上游异常、下游取消及重试失败均释放连接。
+                for closing_resp in (retry_resp, resp):
+                    if closing_resp is not None:
+                        try:
+                            await closing_resp.aclose()
+                        except Exception:
+                            pass
 
-        # 冲刷 lookahead 残余（全程未出现 FABTWIN 时 pending 里的尾巴）
-        if pending and not fab_mode:
-            answer_parts.append(pending)
-            yield {"event": "agent_message", "answer": pending}
+            # 冲刷 lookahead 残余（全程未出现 FABTWIN 时 pending 里的尾巴）
+            if pending and not fab_mode:
+                answer_parts.append(pending)
+                yield {"event": "agent_message", "answer": pending}
 
-        stream_result["answer"] = "".join(answer_parts)
-        stream_result["fab_text"] = "".join(fab_parts)
-        print(f"[Dify-stream] [DONE] 流结束: answer_len={len(stream_result['answer'])}, "
-              f"fab={'有' if fab_mode else '无'}, thoughts={stream_result['thoughts_count']}")
+            stream_result["answer"] = "".join(answer_parts)
+            stream_result["fab_text"] = "".join(fab_parts)
+            print(f"[Dify-stream] [DONE] 流结束: answer_len={len(stream_result['answer'])}, "
+                  f"fab={'有' if fab_mode else '无'}, thoughts={stream_result['thoughts_count']}")
 
     def _call_dify(self, question: str, session_id: str, machine_id: str = None,
                    user_role: str = "user",
@@ -2669,31 +2690,18 @@ Lot ID 格式说明：
             traceback.print_exc()
 
     def get_usage_stats(self, days: int = 30) -> Dict[str, Any]:
-        """获取使用量统计（F-#2：修复 Oracle ORA-00979 not a GROUP BY expression）
-
-        根因：`substr(created_at, 1, 10)` 在 Oracle 中对 DATE/TIMESTAMP 列先做隐式 NLS 转字符串，
-        SELECT/GROUP BY/ORDER BY 三处表达式的参数化绑定不保证列位置等价，触发 ORA-00979。
-        修复：按方言选择"真实日期截断函数"并复用同一 ColumnElement 取别名 group_by。
-        """
+        """获取使用量统计；CREATED_AT 为 ISO 字符串，按字符串边界和日期前缀统计。"""
         try:
             db = _get_db()
             try:
                 from models import AIUsageLog
-                from sqlalchemy import func, column, select
+                from sqlalchemy import func
                 from datetime import datetime, timedelta
 
-                start_date = (datetime.now() - timedelta(days=days))
-                # created_at 列在 DB 里可能是 DATE/TIMESTAMP/Oracle VARCHAR2/SQLite TEXT，
-                # 为兼容 Oracle DATE/TIMESTAMP + SQLite TEXT(ISO-8601) 两种历史布局：
-                # Oracle 用 TRUNC(date_col)；SQLite 用 date(strftime(...))；都产出日粒度值。
-                dialect = db.bind.dialect.name if db.bind else "sqlite"
-                if dialect.lower().startswith("oracle"):
-                    day_expr = func.TRUNC(AIUsageLog.created_at)
-                    day_to_str = func.TO_CHAR(day_expr, "YYYY-MM-DD")
-                else:
-                    # SQLite: date(col) 对 ISO-8601 / yyyy-mm-dd hh:mm:ss 都安全
-                    day_expr = func.date(AIUsageLog.created_at)
-                    day_to_str = day_expr
+                # Oracle 物理列为 VARCHAR2，禁止 TRUNC/日期隐式转换（ORA-01722）。
+                start_date = (datetime.now() - timedelta(days=days)).date().isoformat()
+                day_expr = func.substr(AIUsageLog.created_at, 1, 10)
+                day_to_str = day_expr
 
                 totals = db.query(
                     func.count(AIUsageLog.id).label("total_calls"),
@@ -2727,7 +2735,7 @@ Lot ID 格式说明：
 
                 daily_stats = []
                 for d in daily:
-                    # TRUNC/TO_CHAR 出来是 datetime/str 的兼容写法：统一转字符串
+                    # 字符串日期前缀统一为 YYYY-MM-DD；保留历史 DATE 返回值兼容。
                     val = d.day
                     if isinstance(val, datetime):
                         day_str = val.strftime("%Y-%m-%d")

@@ -13,6 +13,7 @@ v2.2 修复：
 """
 import os
 import re
+import sys
 import uuid
 import json
 import xml.etree.ElementTree as ET
@@ -28,6 +29,12 @@ from models import MachineModelConfig, User
 from routers.auth import get_current_user, check_permission
 from services.html_parser import parse_html_file as _parse_html_lib
 from xml.sax.saxutils import escape as _xml_escape
+
+# 根目录 models/ 与后端 models.py 同名，加入其内部路径后按 svg_kit 包导入，避免模块冲突。
+_SVG_KIT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models"))
+if _SVG_KIT_ROOT not in sys.path:
+    sys.path.append(_SVG_KIT_ROOT)
+from svg_kit.validate import extract_ids, extract_parts, validate_content  # noqa: E402
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -62,6 +69,11 @@ def require_model_edit(user: User = Depends(get_current_user), db: Session = Dep
     return user
 
 
+class DraftValidationRequest(BaseModel):
+    svg_text: str
+    motion: dict
+
+
 class ModelFileResponse(BaseModel):
     file_id: str
     file_name: str
@@ -82,14 +94,28 @@ class ModelFileResponse(BaseModel):
 MOTION_ACTION_WHITELIST = {"offset", "rotate", "scale", "opacity", "visibility", "snap", "move_to", "text"}
 
 
-def _extract_svg_ids_from_model(model: MachineModelConfig) -> set:
-    """读取机型已上传 SVG，提取全部元素 id（用于 Motion JSON 的 SVG id 校验）"""
+def _model_svg_url(model: MachineModelConfig) -> str:
+    """读取当前 SVG；上传记录缺失时回退到 view_2d 的现有绑定。"""
     try:
         source_files = json.loads(model.source_files_json) if model.source_files_json else {}
     except (json.JSONDecodeError, TypeError):
-        return set()
-    current = source_files.get("current_svg") or {}
+        source_files = {}
+    current = source_files.get("current_svg") or source_files.get("current_file") or {}
     file_url = current.get("file_url", "")
+    if file_url and str(file_url).lower().endswith(".svg"):
+        return file_url
+    try:
+        views = json.loads(model.views_config_json) if model.views_config_json else {}
+    except (json.JSONDecodeError, TypeError):
+        views = {}
+    view_2d = views.get("view_2d") or {}
+    file_url = view_2d.get("svg_source") or view_2d.get("model_source") or ""
+    return file_url if str(file_url).lower().endswith(".svg") else ""
+
+
+def _extract_svg_ids_from_model(model: MachineModelConfig) -> set:
+    """读取机型当前 SVG，提取全部元素 id（用于 Motion JSON 的 SVG id 校验）"""
+    file_url = _model_svg_url(model)
     if not file_url:
         return set()
     abs_path = os.path.join(UPLOAD_DIR, os.path.basename(file_url))
@@ -316,6 +342,24 @@ def _save_file_record(db: Session, model_id: str, file_id: str, file_name: str,
     model.updated_at = now_str
     model.version = version
     db.commit()
+
+
+@router.post("/models/validate-draft")
+def validate_model_draft(
+    payload: DraftValidationRequest,
+    _: User = Depends(require_model_edit),
+):
+    """复用 svg-kit 规则校验编辑器内存中的 SVG 与 Motion 草稿"""
+    errors, warnings = validate_content(payload.svg_text, payload.motion)
+    return {
+        "errors": errors,
+        "warnings": warnings,
+        "summary": {
+            "id_count": len(set(extract_ids(payload.svg_text))),
+            "part_count": len(set(extract_parts(payload.svg_text))),
+            "motion_count": len(payload.motion.get("motions", [])),
+        },
+    }
 
 
 @router.post("/models", response_model=ModelFileResponse)
@@ -556,19 +600,9 @@ async def extract_svg_parts(
     if not model:
         raise HTTPException(status_code=404, detail=f"机型 {model_id} 不存在")
 
-    # 从 source_files_json 获取 SVG 文件路径
-    # v2.5.3: 优先从 current_svg 槽读取，旧版 fallback 到 current_file
-    source_files = {}
-    try:
-        source_files = json.loads(model.source_files_json) if model.source_files_json else {}
-    except (json.JSONDecodeError, TypeError):
-        source_files = {}
-
-    current = source_files.get("current_svg") or source_files.get("current_file") or {}
-    file_url = current.get("file_url", "")
-    file_type = current.get("file_type", "")
-
-    if not file_url or file_type != ".svg":
+    # DB 同步的机型可能没有上传历史，但 view_2d 已绑定当前 SVG。
+    file_url = _model_svg_url(model)
+    if not file_url:
         raise HTTPException(status_code=400, detail="该机型没有已上传的 SVG 文件，请先上传 SVG")
 
     # 读取 SVG 文件

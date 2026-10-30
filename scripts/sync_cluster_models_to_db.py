@@ -16,13 +16,14 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "backend"))
 
 from sqlalchemy import text  # noqa: E402
-from database import engine  # noqa: E402
+from database import SessionLocal  # noqa: E402
+from models import MachineModelConfig  # noqa: E402
 
 # model_id: (型号名, 厂商, SVG 文件名, 视图标签, 机台行 id, motion 里的 deriver 名)
 MODELS = {
     "lam2300": ("LAM 2300 刻蚀台", "LAM", "lam2300-topview.svg", "LAM 2300 顶视图", "LAM2300-1", "LAM2300"),
-    "synapse": ("TEL Synapse SPT 刻蚀台", "TEL", "tel-synapse-topview.svg", "TEL Synapse 顶视图", "SYN-1", "TEL-SYNAPSE"),
-    "sym3": ("AMAT Centris Sym3 刻蚀台", "AMAT", "centris-sym3-topview.svg", "Centris Sym3 顶视图", "SYM3-1", "CENTRIS-SYM3"),
+    "synapse": ("TEL Synapse SPT 刻蚀台", "TEL", "tel-synapse-topview.svg", "TEL Synapse 等角视图", "SYN-1", "TEL-SYNAPSE"),
+    "sym3": ("AMAT Centris Sym3 刻蚀台", "AMAT", "centris-sym3-topview.svg", "Centris Sym3 等角视图", "SYM3-1", "CENTRIS-SYM3"),
 }
 
 
@@ -49,23 +50,30 @@ def sync_one(key: str) -> None:
                     "view_label": view_label},
     }
     now = datetime.datetime.now().isoformat(timespec="seconds")
-    with engine.connect() as conn:
-        conn.execute(text(
-            "MERGE INTO machine_model_configs t USING (SELECT :mid AS model_id FROM dual) s ON (t.model_id = s.model_id) "
-            "WHEN MATCHED THEN UPDATE SET t.model_name = :mname, t.vendor = :vendor, t.process_type = 'ETCH', "
-            "  t.version = '1.0', t.view_mode = 'motion2d', t.views_config_json = :vjson, "
-            "  t.animation_config_json = :ajson, t.updated_at = :ts "
-            "WHEN NOT MATCHED THEN INSERT (model_id, model_name, vendor, process_type, version, view_mode, "
-            "  description, views_config_json, animation_config_json, created_at, updated_at) "
-            "VALUES (:mid, :mname, :vendor, 'ETCH', '1.0', 'motion2d', :desc, :vjson, :ajson, :ts, :ts)"
-        ), {
-            "mid": model_id, "mname": mname, "vendor": vendor,
-            "desc": f"{mname}（motion2d 统一管线，26 步标准事件词表）",
-            "vjson": json.dumps(views, ensure_ascii=False),
-            "ajson": json.dumps(motion, ensure_ascii=False), "ts": now,
-        })
-        if not conn.execute(text("SELECT COUNT(*) FROM machines WHERE id = :id"), {"id": machine_id}).scalar():
-            conn.execute(text(
+    values = {
+        "model_name": mname,
+        "vendor": vendor,
+        "process_type": "ETCH",
+        "version": "1.0",
+        "view_mode": "motion2d",
+        "views_config_json": json.dumps(views, ensure_ascii=False),
+        "animation_config_json": json.dumps(motion, ensure_ascii=False),
+        "updated_at": now,
+    }
+    with SessionLocal() as db:
+        config = db.get(MachineModelConfig, model_id)
+        if config is None:
+            db.add(MachineModelConfig(
+                model_id=model_id,
+                description=f"{mname}（motion2d 统一管线，26 步标准事件词表）",
+                created_at=now,
+                **values,
+            ))
+        else:
+            for field, value in values.items():
+                setattr(config, field, value)
+        if not db.execute(text("SELECT COUNT(*) FROM machines WHERE id = :id"), {"id": machine_id}).scalar():
+            db.execute(text(
                 "INSERT INTO machines (id, model, name, line, floor, chamber_count, process_type, state, "
                 "temp, pressure, gas_flow, rf_power, wafer_count, alarm_count, process_step, has_smif, "
                 "updated_at, x_pos, y_pos, floor_x, floor_y, display_order, use_external_url) "
@@ -74,7 +82,7 @@ def sync_one(key: str) -> None:
             machine_msg = f"机台行已创建 {machine_id}"
         else:
             machine_msg = f"机台行已存在 {machine_id}"
-        conn.commit()
+        db.commit()
     print(f"[OK] {model_id}: SVG {len(svg_text)}ch / motion {len(motion['motions'])} 步 / deriver={motion['ext']['deriver']} / {machine_msg}")
 
 

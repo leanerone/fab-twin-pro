@@ -54,155 +54,133 @@
             #CASSETTE_1, #CASSETTE_2 { stroke: #4b5563; }
             #LLA25_carrier_outline, #LLB25_carrier_outline { stroke: #1f2937; stroke-width: 3.5; }
 </style>
-  <!-- 彩虹薄膜干涉色（斜向，参考真实晶圆照片） -->
   <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1">
-   <stop offset="0%" stop-color="#ff5f6d"/>
-   <stop offset="18%" stop-color="#ff9f43"/>
-   <stop offset="35%" stop-color="#f7d154"/>
-   <stop offset="50%" stop-color="#4ade80"/>
-   <stop offset="65%" stop-color="#22d3ee"/>
-   <stop offset="80%" stop-color="#3b82f6"/>
-   <stop offset="100%" stop-color="#a855f7"/>
+    <stop offset="0%" stop-color="#ff5f6d"/>
+    <stop offset="18%" stop-color="#ff9f43"/>
+    <stop offset="35%" stop-color="#f7d154"/>
+    <stop offset="50%" stop-color="#4ade80"/>
+    <stop offset="65%" stop-color="#22d3ee"/>
+    <stop offset="80%" stop-color="#3b82f6"/>
+    <stop offset="100%" stop-color="#a855f7"/>
   </linearGradient>
-  <!-- die 网格（芯片阵列刻线） -->
   <pattern id="dieGrid" width="0.05" height="0.05" patternUnits="objectBoundingBox">
-   <path d="M0.05,0 L0.05,0.05 M0,0.05 L0.05,0.05" fill="none" stroke="rgba(20,25,40,0.32)" stroke-width="0.008"/>
+    <path d="M0.05,0 L0.05,0.05 M0,0.05 L0.05,0.05" fill="none" stroke="rgba(20,25,40,0.32)" stroke-width="0.008"/>
   </pattern>
-  <!-- 晶圆质感 = 彩虹底 + 网格叠加 -->
   <pattern id="waferPattern" width="1" height="1" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox">
-   <rect width="1" height="1" fill="url(#rainbowGrad)"/>
-   <rect width="1" height="1" fill="url(#dieGrid)"/>
+    <rect width="1" height="1" fill="url(#rainbowGrad)"/>
+    <rect width="1" height="1" fill="url(#dieGrid)"/>
   </pattern>
-  <!-- 侧视晶圆片：横放金属圆柱光泽（userSpace 对齐片槽 x 326→346） -->
   <linearGradient id="slotGrad" gradientUnits="userSpaceOnUse" x1="326" y1="0" x2="346" y2="0">
-   <stop offset="0%" stop-color="#7e90ac"/>
-   <stop offset="25%" stop-color="#f2f6fb"/>
-   <stop offset="55%" stop-color="#ccd6e5"/>
-   <stop offset="100%" stop-color="#71839f"/>
+    <stop offset="0%" stop-color="#7e90ac"/>
+    <stop offset="25%" stop-color="#f2f6fb"/>
+    <stop offset="55%" stop-color="#ccd6e5"/>
+    <stop offset="100%" stop-color="#71839f"/>
   </linearGradient>
   <radialGradient id="waferShade" cx="0.38" cy="0.32" r="0.78">
-   <stop offset="0" stop-color="#ffffff" stop-opacity="0.4"/>
-   <stop offset="0.45" stop-color="#dde8f6" stop-opacity="0.1"/>
-   <stop offset="0.8" stop-color="#8395b8" stop-opacity="0.16"/>
-   <stop offset="1" stop-color="#16233a" stop-opacity="0.5"/>
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0.4"/>
+    <stop offset="0.45" stop-color="#dde8f6" stop-opacity="0.1"/>
+    <stop offset="0.8" stop-color="#8395b8" stop-opacity="0.16"/>
+    <stop offset="1" stop-color="#16233a" stop-opacity="0.5"/>
   </radialGradient>
   <linearGradient id="edgeMetal" x1="0" y1="0" x2="1" y2="1">
-   <stop offset="0" stop-color="#ffffff"/>
-   <stop offset="0.35" stop-color="#a9b4c4"/>
-   <stop offset="0.6" stop-color="#eef3f9"/>
-   <stop offset="1" stop-color="#59647a"/>
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.35" stop-color="#a9b4c4"/>
+    <stop offset="0.6" stop-color="#eef3f9"/>
+    <stop offset="1" stop-color="#59647a"/>
   </linearGradient>
   <linearGradient id="slotMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f2f6fb"/>
-   <stop offset="0.45" stop-color="#c3ccd9"/>
-   <stop offset="0.8" stop-color="#79828f"/>
-   <stop offset="1" stop-color="#3f4650"/>
+    <stop offset="0" stop-color="#f2f6fb"/>
+    <stop offset="0.45" stop-color="#c3ccd9"/>
+    <stop offset="0.8" stop-color="#79828f"/>
+    <stop offset="1" stop-color="#3f4650"/>
   </linearGradient>
-  <!-- === 腔室金属化（阶段2） === -->
-  <!-- 不锈钢主体：左上光源径向渐变 -->
   <radialGradient id="chSteel" cx="0.35" cy="0.3" r="0.85">
-   <stop offset="0" stop-color="#fdfeff"/>
-   <stop offset="0.4" stop-color="#d3dbe6"/>
-   <stop offset="0.72" stop-color="#98a4b6"/>
-   <stop offset="1" stop-color="#5b6679"/>
+    <stop offset="0" stop-color="#fdfeff"/>
+    <stop offset="0.4" stop-color="#d3dbe6"/>
+    <stop offset="0.72" stop-color="#98a4b6"/>
+    <stop offset="1" stop-color="#5b6679"/>
   </radialGradient>
-  <!-- 腔体明暗罩：边缘压暗出球面感 -->
   <radialGradient id="chShade" cx="0.5" cy="0.5" r="0.5">
-   <stop offset="0.62" stop-color="#10151d" stop-opacity="0"/>
-   <stop offset="0.85" stop-color="#10151d" stop-opacity="0.12"/>
-   <stop offset="1" stop-color="#10151d" stop-opacity="0.38"/>
+    <stop offset="0.62" stop-color="#10151d" stop-opacity="0"/>
+    <stop offset="0.85" stop-color="#10151d" stop-opacity="0.12"/>
+    <stop offset="1" stop-color="#10151d" stop-opacity="0.38"/>
   </radialGradient>
-  <!-- 法兰圈金属 -->
   <linearGradient id="chFlange" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f4f7fb"/>
-   <stop offset="0.5" stop-color="#aeb9c8"/>
-   <stop offset="1" stop-color="#646e7e"/>
+    <stop offset="0" stop-color="#f4f7fb"/>
+    <stop offset="0.5" stop-color="#aeb9c8"/>
+    <stop offset="1" stop-color="#646e7e"/>
   </linearGradient>
-  <!-- 机械臂关节金属 -->
   <radialGradient id="armSteel" cx="0.38" cy="0.32" r="0.85">
-   <stop offset="0" stop-color="#f8fafc"/>
-   <stop offset="0.45" stop-color="#cfd8e4"/>
-   <stop offset="0.78" stop-color="#8e9baf"/>
-   <stop offset="1" stop-color="#4d5666"/>
+    <stop offset="0" stop-color="#f8fafc"/>
+    <stop offset="0.45" stop-color="#cfd8e4"/>
+    <stop offset="0.78" stop-color="#8e9baf"/>
+    <stop offset="1" stop-color="#4d5666"/>
   </radialGradient>
-  <!-- 机械臂叉臂纵向金属 -->
   <linearGradient id="armBlade" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#eef2f8"/>
-   <stop offset="0.55" stop-color="#b9c3d2"/>
-   <stop offset="1" stop-color="#788294"/>
+    <stop offset="0" stop-color="#eef2f8"/>
+    <stop offset="0.55" stop-color="#b9c3d2"/>
+    <stop offset="1" stop-color="#788294"/>
   </linearGradient>
-  <!-- === 整体光影收尾（阶段3） === -->
-  <!-- 落地阴影：径向渐隐 -->
   <radialGradient id="groundShadow" cx="0.5" cy="0.5" r="0.5">
-   <stop offset="0" stop-color="#0b0f16" stop-opacity="0.26"/>
-   <stop offset="0.65" stop-color="#0b0f16" stop-opacity="0.1"/>
-   <stop offset="1" stop-color="#0b0f16" stop-opacity="0"/>
+    <stop offset="0" stop-color="#0b0f16" stop-opacity="0.26"/>
+    <stop offset="0.65" stop-color="#0b0f16" stop-opacity="0.1"/>
+    <stop offset="1" stop-color="#0b0f16" stop-opacity="0"/>
   </radialGradient>
-  <!-- SMIF 外壳金属 -->
   <linearGradient id="smifShell" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f2f5f9"/>
-   <stop offset="0.5" stop-color="#c7cfdb"/>
-   <stop offset="1" stop-color="#97a2b1"/>
+    <stop offset="0" stop-color="#f2f5f9"/>
+    <stop offset="0.5" stop-color="#c7cfdb"/>
+    <stop offset="1" stop-color="#97a2b1"/>
   </linearGradient>
   <linearGradient id="smifInner" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#ffffff"/>
-   <stop offset="0.6" stop-color="#dde3ea"/>
-   <stop offset="1" stop-color="#b4bdc9"/>
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.6" stop-color="#dde3ea"/>
+    <stop offset="1" stop-color="#b4bdc9"/>
   </linearGradient>
-  <!-- 标签徽章深色金属 -->
   <linearGradient id="badgeMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#465062"/>
-   <stop offset="0.5" stop-color="#2c3542"/>
-   <stop offset="1" stop-color="#1a212c"/>
+    <stop offset="0" stop-color="#465062"/>
+    <stop offset="0.5" stop-color="#2c3542"/>
+    <stop offset="1" stop-color="#1a212c"/>
   </linearGradient>
-  <!-- 转盘/缓冲台面板微渐变 -->
   <radialGradient id="deckPlate" cx="0.5" cy="0.42" r="0.75">
-   <stop offset="0" stop-color="#ffffff"/>
-   <stop offset="0.75" stop-color="#f2f5f9"/>
-   <stop offset="1" stop-color="#dde3ec"/>
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.75" stop-color="#f2f5f9"/>
+    <stop offset="1" stop-color="#dde3ec"/>
   </radialGradient>
   <linearGradient id="framePlate" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#ffffff"/>
-   <stop offset="1" stop-color="#edf0f5"/>
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="1" stop-color="#edf0f5"/>
   </linearGradient>
-  <!-- === 整体金属化（阶段4） === -->
-  <!-- 腔室底座椭圆台：左上光源径向金属 -->
   <radialGradient id="pedestalMetal" cx="0.38" cy="0.3" r="0.9">
-   <stop offset="0" stop-color="#ffffff"/>
-   <stop offset="0.45" stop-color="#dbe2ec"/>
-   <stop offset="0.8" stop-color="#a7b2c2"/>
-   <stop offset="1" stop-color="#6e7989"/>
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.45" stop-color="#dbe2ec"/>
+    <stop offset="0.8" stop-color="#a7b2c2"/>
+    <stop offset="1" stop-color="#6e7989"/>
   </radialGradient>
-  <!-- 阀盖拉丝金属：纵向微渐变 -->
   <linearGradient id="valveMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f6f8fb"/>
-   <stop offset="0.5" stop-color="#c2cbd7"/>
-   <stop offset="1" stop-color="#8a94a4"/>
+    <stop offset="0" stop-color="#f6f8fb"/>
+    <stop offset="0.5" stop-color="#c2cbd7"/>
+    <stop offset="1" stop-color="#8a94a4"/>
   </linearGradient>
-  <!-- 深色阳极氧化面板 -->
   <linearGradient id="panelMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#4b5563"/>
-   <stop offset="0.5" stop-color="#2f3743"/>
-   <stop offset="1" stop-color="#171d26"/>
+    <stop offset="0" stop-color="#4b5563"/>
+    <stop offset="0.5" stop-color="#2f3743"/>
+    <stop offset="1" stop-color="#171d26"/>
   </linearGradient>
-  <!-- 承载板亮金属 -->
   <linearGradient id="boardMetal" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#f8fafc"/>
-   <stop offset="0.55" stop-color="#d3dae4"/>
-   <stop offset="1" stop-color="#9aa5b4"/>
+    <stop offset="0" stop-color="#f8fafc"/>
+    <stop offset="0.55" stop-color="#d3dae4"/>
+    <stop offset="1" stop-color="#9aa5b4"/>
   </linearGradient>
-  <!-- 前窗深色玻璃 -->
   <linearGradient id="glassDark" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#1e2836"/>
-   <stop offset="0.35" stop-color="#0d131c"/>
-   <stop offset="1" stop-color="#05080d"/>
+    <stop offset="0" stop-color="#1e2836"/>
+    <stop offset="0.35" stop-color="#0d131c"/>
+    <stop offset="1" stop-color="#05080d"/>
   </linearGradient>
-  <!-- cassette 外壳深色金属 -->
   <linearGradient id="cassetteMetal" x1="0" y1="0" x2="1" y2="0">
-   <stop offset="0" stop-color="#565f6e"/>
-   <stop offset="0.3" stop-color="#3a414d"/>
-   <stop offset="0.75" stop-color="#232933"/>
-   <stop offset="1" stop-color="#414a58"/>
+    <stop offset="0" stop-color="#565f6e"/>
+    <stop offset="0.3" stop-color="#3a414d"/>
+    <stop offset="0.75" stop-color="#232933"/>
+    <stop offset="1" stop-color="#414a58"/>
   </linearGradient>
 </defs>
 <g class="layer">

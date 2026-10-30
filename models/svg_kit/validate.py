@@ -173,12 +173,8 @@ def cross_check(svg_text: str, motion: dict) -> Tuple[List[str], List[str]]:
     return errors, warnings
 
 
-def validate(svg_path: str, motion_path: str) -> int:
-    with open(svg_path, "r", encoding="utf-8") as f:
-        svg_text = f.read()
-    with open(motion_path, "r", encoding="utf-8") as f:
-        motion = json.load(f)
-
+def validate_content(svg_text: str, motion: dict) -> Tuple[List[str], List[str]]:
+    """校验内存中的 SVG 文本与 Motion JSON，供 CLI 和草稿接口复用"""
     errors: List[str] = []
     warnings: List[str] = []
     for fn in (lambda: check_svg(svg_text),
@@ -187,6 +183,16 @@ def validate(svg_path: str, motion_path: str) -> int:
         e, w = fn()
         errors.extend(e)
         warnings.extend(w)
+    return errors, warnings
+
+
+def validate(svg_path: str, motion_path: str) -> int:
+    with open(svg_path, "r", encoding="utf-8") as f:
+        svg_text = f.read()
+    with open(motion_path, "r", encoding="utf-8") as f:
+        motion = json.load(f)
+
+    errors, warnings = validate_content(svg_text, motion)
 
     name = svg_path.split("\\")[-1].split("/")[-1]
     print(f"=== 校验 {name} ===")

@@ -1,18 +1,8 @@
 # -*- coding: utf-8 -*-
-"""TEL Synapse（SPT 200mm fpD）顶视图建模：SVG + Motion JSON
+"""TEL Synapse（SPT 200mm fpD）等角视图建模：SVG + Motion JSON。
 
-用法：
-    python models/build_synapse.py
-
-设计依据：
-  · 布局照 docs/assets/machine-references/SPT.jpg（Synapse Process Tool 标注图）：
-    Transport Module 居中 + 6×PM 环绕（PM1..PM6）+ User Interface
-  · 风格降级说明：原计划为等角视图（PLAN 任务2 §风险：单台超 6h 先降级俯视
-    并留档）。本期用俯视平面图落地，结构（TM 居中 / 6 腔六角环 / LP 左置 /
-    UI 站右上）按参考图，等角 iso 件留待后续打磨。
-  · 事件词表复用 cluster 共享 26 步集（cluster_motion.py），与 LAM2300 一致，
-    不发明新事件名。
-  · 改模型改本脚本重跑，不要手改产物。
+照参考图表现六组高柜式 PM（顶部控制/排气柜 + 前侧圆形工艺腔）、中央圆形
+Transport Module、前侧 EFEM 与独立 UI 站。保留共享 26 步动画契约。
 """
 from __future__ import annotations
 
@@ -30,57 +20,17 @@ import cluster_motion as CM  # noqa: E402
 
 OUT_SVG = os.path.join(_HERE, "user", "tel-synapse-topview.svg")
 OUT_MOTION = os.path.join(_HERE, "user", "tel-synapse-topview.motion.json")
-
-W, H = 1040, 820
-
-LP_X = [40, 175]                 # 2×Load Port
-LP_Y, LP_W, LP_H = 90, 120, 130
-ALIGNER = (250, 330, 40)         # 寻边（ATM 通道侧）
-UI_STATION = (925, 70, 170, 110)
-TM = (560, 470, 115)             # Transport Module（居中，含真空臂）
-PM_RING = 250
-PM_R = 58
-# 六角环：右、右上、左上、左、左下、右下（避开左侧 LP 通道）
-PM_ANGLES = {"PM1": 0, "PM2": -55, "PM3": -125, "PM4": 180, "PM5": 125, "PM6": 55}
-
-
-def pm_center(name: str):
-    a = math.radians(PM_ANGLES[name])
-    return TM[0] + PM_RING * math.cos(a), TM[1] + PM_RING * math.sin(a)
-
-
-def _hex_points(cx, cy, r, rot_deg=30):
-    """尖顶六边形顶点串（rot 30° → 左右为尖点，贴合 SPT 腔位朝向）。"""
-    pts = []
-    for k in range(6):
-        a = math.radians(rot_deg + k * 60)
-        pts.append(f"{cx + r * math.cos(a):.1f},{cy + r * math.sin(a):.1f}")
-    return " ".join(pts)
-
-
-def hex_chamber(pid, cx, cy, r, name=""):
-    """六边形工艺腔 + 法兰边 + 腔名 + 三色状态灯（id 约定同 P.chamber）。"""
-    inner = _hex_points(cx, cy, r * 0.72)
-    body = (
-        f'<polygon id="{pid}" data-pid="{pid}" points="{_hex_points(cx, cy, r)}" '
-        f'fill="{P.T("metal.panel")}" stroke="{P.T("stroke.default_color")}" '
-        f'stroke-width="{P.T("stroke.default_width")}"/>'
-        f'<polygon points="{inner}" fill="{P.T("metal.dark")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.thin_width")}"/>'
-    )
-    if name:
-        body += P.label(None, cx, cy + 4, name, size=11, fill=P.T("text.inverse"))
-    lamps = ""
-    for i, (s, c) in enumerate((
-        ("run", P.T("state.run")), ("alarm", P.T("state.alarm")),
-        ("unload", P.T("state.unload")),
-    )):
-        lx = cx - 24 + i * 18
-        ly = cy - r - 14
-        lamps += (f'<circle id="{pid}_{s}" data-pid="{pid}_{s}" cx="{lx}" cy="{ly}" r="5" '
-                  f'fill="{c}" stroke="{P.T("stroke.default_color")}" stroke-width="1"/>')
-    return body + lamps
-
+W, H = 1200, 920
+TM = (550, 510)
+ATM_HUB = (425, 665)
+PM_LAYOUT = {
+    "PM2": (430, 265, 170),
+    "PM3": (650, 250, 180),
+    "PM1": (265, 405, 175),
+    "PM4": (895, 440, 175),
+    "PM5": (835, 665, 160),
+    "PM6": (610, 745, 150),
+}
 
 BASE_HIDDEN = (
     [f"LP{i}_CST" for i in (1, 2)]
@@ -93,7 +43,10 @@ BASE_HIDDEN = (
 def _mark_base_hidden(svg: str) -> str:
     for pid in BASE_HIDDEN:
         pat = re.compile(r'(<\w+[^>]*\bid="%s"[^>]*?)(/?>)' % re.escape(pid))
-        svg, n = pat.subn(lambda m: m.group(1) + ' data-motion-base-visibility="hidden"' + m.group(2), svg, count=1)
+        svg, n = pat.subn(
+            lambda m: m.group(1) + ' data-motion-base-visibility="hidden"' + m.group(2),
+            svg, count=1,
+        )
         if n != 1:
             raise RuntimeError(f"base-hidden 标注失败：找不到部件 {pid}")
     return svg
@@ -101,66 +54,82 @@ def _mark_base_hidden(svg: str) -> str:
 
 def build_svg() -> str:
     out = [P.svg_open(W, H), P.defs()]
-    out.append(P.baseplate("BASEPLATE", 30, 30, W - 60, H - 60))
-    out.append(P.signal_tower("TOWER", W - 110, H - 96))
-    out.append(P.title_block("TITLE", 46, H - 34,
-                             "TEL SYNAPSE SPT", "EFEM / Transport Module / 6xPM"))
+    out.append(P.group("BASEPLATE",
+        '<ellipse cx="590" cy="690" rx="520" ry="150" fill="#1e293b" opacity="0.11" filter="url(#isoShadow)"/>'
+        + P.iso_box(None, 600, 650, 1100, 500, 18, top="#f1f4f7", left="#cbd5df", right="#b6c2cf")
+    ))
+    out.append(P.signal_tower("TOWER", 1120, 55))
+    out.append(P.title_block("TITLE", 46, 888, "TEL SYNAPSE SPT",
+                             "6x High-cabinet Process Modules / Circular Transport Module / EFEM / UI"))
 
-    # ── 左置 Load Port ──
-    for i, x in enumerate(LP_X, start=1):
+    tx, ty = TM
+    # 真空连接位于腔体底层，先画通道再由柜体与 TM 覆盖端部。
+    for name, (cx, cy, _) in PM_LAYOUT.items():
+        out.append(P.vacuum_channel(f"{name}_CHANNEL", tx, ty, cx, cy, 26))
+
+    for name in ("PM2", "PM3", "PM1"):
+        cx, cy, h = PM_LAYOUT[name]
+        out.append(P.iso_cabinet_chamber(name, cx, cy, w=120, d=86, h=h, name=name))
+
+    # 中央圆形 Transport Module，带法兰螺栓和圆形传输接口。
+    tm_parts = [P.iso_cylinder(None, tx, ty, 122, 72, 55, top=P.T("metal.light"))]
+    tm_parts.append(f'<ellipse cx="{tx}" cy="{ty-55}" rx="91" ry="52" fill="{P.T("metal.panel")}" stroke="{P.T("metal.dark")}" stroke-width="3"/>')
+    tm_parts.append(f'<ellipse cx="{tx}" cy="{ty-55}" rx="67" ry="37" fill="{P.T("metal.deep")}" stroke="{P.T("metal.light")}" stroke-width="5"/>')
+    for i in range(14):
+        a = math.radians(i * 360 / 14)
+        tm_parts.append(P.circle(None, tx + 105 * math.cos(a), ty - 55 + 61 * math.sin(a), 3,
+                                 fill=P.T("metal.bolt"), sw=0.8))
+    tm_parts.append(P.label(None, tx, ty - 142, "TRANSPORT MODULE", size=11, weight="700"))
+    out.append(P.group("TM", "\n".join(tm_parts)))
+    out.append(P.robot_arm("VTM_ARM", tx, ty - 55, upper_len=78, fore_len=58, wrist_r=30))
+
+    out.append(P.iso_cabinet_chamber("PM4", *PM_LAYOUT["PM4"][:2], w=120, d=86,
+                                      h=PM_LAYOUT["PM4"][2], name="PM4"))
+
+    # 前侧 EFEM 柜体：双开门、通风区与状态面板。
+    ex, ey = 290, 665
+    efem = [P.iso_box(None, ex, ey, 260, 160, 170)]
+    efem.extend([
+        '<polygon points="185,543 290,603 290,715 185,655" fill="none" stroke="#64748b" stroke-width="2"/>',
+        '<polygon points="290,603 395,543 395,655 290,715" fill="none" stroke="#64748b" stroke-width="2"/>',
+        '<polygon points="210,558 267,590 267,617 210,585" fill="#1e293b" stroke="#94a3b8" stroke-width="2"/>',
+        P.label(None, ex, 625, "EFEM", size=13, fill=P.T("text.inverse"), weight="700"),
+    ])
+    for i in range(7):
+        efem.append(f'<line x1="{330+i*7}" y1="574" x2="{330+i*7}" y2="617" stroke="#475569" stroke-width="3"/>')
+    out.append(P.group("EFEM", "\n".join(efem)))
+
+    for name in ("PM5", "PM6"):
+        cx, cy, h = PM_LAYOUT[name]
+        out.append(P.iso_cabinet_chamber(name, cx, cy, w=120, d=86, h=h, name=name))
+
+    # 左前 Load Port、Aligner 与 ATM 臂
+    for i, (lpx, lpy) in enumerate(((120, 710), (220, 785)), start=1):
         pid = f"LP{i}"
-        out.append(P.port_box(pid, x, LP_Y, w=LP_W, h=LP_H, name=f"LP{i}"))
-        out.append(P.cassette(f"{pid}_CST", x + 12, LP_Y + 12, LP_W - 24, LP_H - 34))
-        out.append(P.label(None, x + LP_W / 2, LP_Y - 8, f"LOAD PORT {i}", size=10))
+        out.append(P.iso_load_port(pid, lpx, lpy, w=94, d=66, h=108, name=pid))
+        out.append(P.cassette(f"{pid}_CST", lpx - 33, lpy - 96, 66, 90))
+    out.append(P.group("ALIGNER",
+        P.iso_cylinder(None, 425, 770, 40, 23, 45, top=P.T("metal.light"))
+        + P.wafer("ALIGNER_WAFER", 425, 725, 14)
+    ))
+    out.append(P.robot_arm("ATM_ARM", ATM_HUB[0], ATM_HUB[1], upper_len=58, fore_len=44, wrist_r=24))
+    out.append(P.circle("ATM_HUB", ATM_HUB[0], ATM_HUB[1], 11, fill=P.T("metal.dark")))
 
-    # Aligner
-    ax, ay, ar = ALIGNER
-    aligner = (
-        f'<circle cx="{ax}" cy="{ay}" r="{ar}" fill="{P.T("metal.panel")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.default_width")}"/>'
-        f'<circle cx="{ax}" cy="{ay}" r="{ar * 0.62:.1f}" fill="{P.T("metal.dark")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.thin_width")}"/>'
-        + P.bolt_circle(ax, ay, ar * 0.86, 8)
-        + P.wafer("ALIGNER_WAFER", ax, ay, ar * 0.34)
-    )
-    out.append(P.group("ALIGNER", aligner))
-    out.append(P.label(None, ax, ay - ar - 10, "ALIGNER", size=10))
+    # 独立 User Interface：显示器、键盘、立柱和脚轮底座。
+    ui = [
+        P.iso_box(None, 490, 855, 105, 65, 22),
+        '<path d="M490 835 L490 735" stroke="#64748b" stroke-width="12"/>',
+        '<rect x="442" y="690" width="96" height="66" rx="5" fill="#cbd5e1" stroke="#334155" stroke-width="4"/>',
+        '<rect x="451" y="699" width="78" height="47" rx="2" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>',
+        '<polygon points="450,770 525,770 550,790 475,790" fill="#94a3b8" stroke="#334155" stroke-width="2"/>',
+        P.circle(None, 450, 866, 7, fill=P.T("metal.dark")),
+        P.circle(None, 530, 866, 7, fill=P.T("metal.dark")),
+        P.label(None, 490, 675, "USER INTERFACE", size=9, weight="700"),
+    ]
+    out.append(P.group("UI_STATION", "\n".join(ui)))
 
-    # ── User Interface 站（参考图右上）──
-    ux, uy, uw, uh = UI_STATION
-    out.append(P.rect("UI_STATION", ux, uy, uw, uh, fill=P.T("metal.panel"), rx=6))
-    out.append(P.rect(None, ux + 12, uy + 14, uw - 24, uh - 40,
-                      fill=P.T("port.inner_fill"), rx=3))
-    out.append(P.label(None, ux + uw / 2, uy + uh - 12, "USER INTERFACE", size=10))
-
-    # ── EFEM 通道（LP → TM 之间的大气柜体，置于 LP 与 Aligner 之间的上通道，
-    #     避开 PM4 左伸范围）──
-    out.append(P.rect("EFEM", 300, 150, 150, 150, fill=P.T("metal.panel"), rx=8))
-    out.append(P.label(None, 375, 175, "EFEM", size=11))
-    out.append(P.robot_arm("ATM_ARM", 375, 235, upper_len=70, fore_len=56, wrist_r=30))
-
-    # ── Transport Module（中央，真空臂）──
-    tx, ty, tr = TM
-    ttm = (
-        f'<circle cx="{tx}" cy="{ty}" r="{tr}" fill="{P.T("metal.panel")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.default_width")}"/>'
-        f'<circle cx="{tx}" cy="{ty}" r="{tr * 0.82:.1f}" fill="{P.T("metal.dark")}" '
-        f'stroke="{P.T("stroke.default_color")}" stroke-width="{P.T("stroke.thin_width")}"/>'
-        + P.bolt_circle(tx, ty, tr * 0.93, 12)
-        + P.label(None, tx, ty - tr + 22, "TRANSPORT MODULE", size=10, fill=P.T("text.inverse"))
-    )
-    out.append(P.group("TM", ttm))
-    out.append(P.robot_arm("VTM_ARM", tx, ty, upper_len=88, fore_len=68, wrist_r=38))
-
-    # ── 6×PM 六角环 ──
-    for name in ("PM1", "PM2", "PM3", "PM4", "PM5", "PM6"):
-        cx, cy = pm_center(name)
-        out.append(hex_chamber(name, cx, cy, PM_R, name=name))
-
-    # 搬运晶圆
-    out.append(P.wafer("WAFER_MOVE", 375, 235, 11))
-    out.append(P.wafer("WAFER_VTM", tx, ty, 11))
-
+    out.append(P.wafer("WAFER_MOVE", ATM_HUB[0], ATM_HUB[1], 11))
+    out.append(P.wafer("WAFER_VTM", tx, ty - 55, 11))
     out.append(P.svg_close())
     return "".join(out)
 
@@ -168,10 +137,10 @@ def build_svg() -> str:
 def build_motion() -> dict:
     return CM.build_cluster_motion(
         machine_type="TEL-SYNAPSE",
-        name="TEL Synapse SPT 顶视图",
+        name="TEL Synapse SPT 等角视图",
         src="tel-synapse-topview.svg",
         deriver="synapse",
-        description="TEL Synapse SPT 顶视动画（俯视降级版）：EFEM 取片 → Transport Module → 6×PM 六角环加工 → 回程",
+        description="TEL Synapse SPT 等角动画：EFEM 取片 → 圆形 Transport Module → 6×高柜式 PM → 独立 UI 站",
     )
 
 

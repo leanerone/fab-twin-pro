@@ -65,7 +65,7 @@ def ai_chat(req: AIChatRequest, db: Session = Depends(get_db), user: User = Depe
 
 
 @router.post("/chat/stream")
-def ai_chat_stream(req: AIChatRequest, user: User = Depends(get_current_user)):
+async def ai_chat_stream(req: AIChatRequest, user: User = Depends(get_current_user)):
     """统一AI聊天接口 - SSE 流式版（T4：打字机输出 + 工具调用过程可见）
 
     - Dify 路由：逐 chunk 透传（agent_message / agent_thought / message_end）

@@ -23,6 +23,8 @@ const props = defineProps({
   svgUrl: { type: String, default: '' },
   /** Motion JSON 配置对象 */
   motionConfig: { type: Object, default: null },
+  /** 动画调试页接收的实时 raw_event；每次事件由父组件生成新对象 */
+  realtimeEvent: { type: Object, default: null },
 })
 
 const svgContainer = ref(null)
@@ -44,6 +46,34 @@ function waferPosKey(lotId, slot) {
 
 function normalizeKey(value) {
   return String(value || '').trim().toUpperCase()
+}
+
+function normalizeChamber(value) {
+  const s = String(value ?? '').trim()
+  const m = s.match(/^CHAMBER[_-]?(.+)$/i)
+  return (m ? m[1] : s).toUpperCase()
+}
+
+function toMotionPayload(event) {
+  const src = { ...(event?.payload || {}), ...event }
+  const pick = (...keys) => {
+    for (const key of keys) {
+      const value = src[key]
+      if (value !== undefined && value !== null && value !== '' && value !== 'NULL') return value
+    }
+    return ''
+  }
+  return {
+    ...src,
+    LOT_ID: pick('LOT_ID', 'lot_id'),
+    PORT: pick('PORT', 'port_id', 'port'),
+    SLOT: pick('SLOT', 'slot_id', 'slot'),
+    CHAMBER: normalizeChamber(pick('CHAMBER', 'chamber_id', 'chamber')),
+    BATCH_ID: pick('BATCH_ID', 'batch_id'),
+    Qty: pick('Qty', 'qty'),
+    RunMode: pick('RunMode', 'run_mode'),
+    RECIPE1: pick('RECIPE1', 'recipe', 'recipe1'),
+  }
 }
 
 function armAngleMap() {
@@ -272,12 +302,12 @@ watch(paramKeys, (keys) => {
 }, { immediate: true })
 
 // === 触发事件 ===
-async function triggerStep(stepName) {
+async function triggerStep(stepName, eventPayload = null) {
   if (stepPlaying) logEvent(stepName, '已排队，等待上一个事件播完', 'info')
   const run = async () => {
     stepPlaying = true
     try {
-      await playQueuedStep(stepName)
+      await playQueuedStep(stepName, eventPayload)
     } catch (e) {
       logEvent(stepName, e?.message || '播放失败', 'error')
     } finally {
@@ -288,7 +318,7 @@ async function triggerStep(stepName) {
   await stepPlayQueue
 }
 
-async function playQueuedStep(stepName) {
+async function playQueuedStep(stepName, eventPayload = null) {
   // 填伸缩量参数：prefix 为空填放片侧 ext 系，'pk_' 填取还片侧；rdx/rdy 为 root 版（晶圆同步用）
   const fillExtend = (params, v, prefix = '') => {
     if (!v) return
@@ -316,21 +346,22 @@ async function playQueuedStep(stepName) {
   // （ARM_T1/T2/T3、ARM_PORT_ANGLE、部件 id 占位符等）。缺这一步时参数为空，
   // rule.when 全不命中、角度占位符解析成 0，点了事件动画也不会动。
   const deriver = getMotionDeriver(deriverName.value)
-  const payload = Object.fromEntries(
+  const panelPayload = Object.fromEntries(
     paramKeys.value.map(k => [k, paramValues.value[k] ?? ''])
   )
+  const payload = eventPayload ? { ...panelPayload, ...eventPayload } : panelPayload
 
   if (!deriver && stepName === 'BATCH_INFO_FROM_ECUI') {
-    const lotId = String(paramValues.value.LOT_ID || '').trim()
+    const lotId = String(payload.LOT_ID || '').trim()
     if (lotId) {
       lotRegistry.set(lotId, {
-        PORT: paramValues.value.PORT,
-        BATCH_ID: paramValues.value.BATCH_ID,
-        Qty: paramValues.value.Qty,
-        RunMode: paramValues.value.RunMode,
-        RECIPE1: paramValues.value.RECIPE1,
+        PORT: payload.PORT,
+        BATCH_ID: payload.BATCH_ID,
+        Qty: payload.Qty,
+        RunMode: payload.RunMode,
+        RECIPE1: payload.RECIPE1,
       })
-      logEvent(stepName, `登记 LOT_ID=${lotId} → PORT=${paramValues.value.PORT || '?'}`, 'info')
+      logEvent(stepName, `登记 LOT_ID=${lotId} → PORT=${payload.PORT || '?'}`, 'info')
     }
   }
 
@@ -647,7 +678,8 @@ function refreshSvgIds() {
   // 只取带 data-pid 的部件（排除渐变/滤镜等绘制资源 id）
   svgIds.value = [...root.querySelectorAll('[data-pid]')].map(el => el.id).filter(Boolean)
   const allIds = new Set([...root.querySelectorAll('[id]')].map(el => el.id))
-  missingTargets.value = targetIds.value.filter(t => !t.includes('{') && !allIds.has(t))
+  const validIds = new Set([...allIds, ...Object.keys(ext.value.part_aliases || {})])
+  missingTargets.value = targetIds.value.filter(t => !t.includes('{') && !validIds.has(t))
 }
 
 function selectInspPart(id) {
@@ -657,7 +689,10 @@ function selectInspPart(id) {
   if (!root) return
   root.querySelectorAll('.mp-inspecting').forEach(el => el.classList.remove('mp-inspecting'))
   if (id.includes('{')) return
-  const el = root.querySelector(`[id="${String(id).replace(/"/g, '\\"')}"]`)
+  const alias = ext.value.part_aliases?.[id]
+  const candidates = Array.isArray(alias) ? alias : [alias || id]
+  const targetId = candidates.find(t => typeof t === 'string' && t && !t.includes('{')) || id
+  const el = root.querySelector(`[id="${String(targetId).replace(/"/g, '\\"')}"]`)
   if (!el) return
   el.classList.add('mp-inspecting')
   const cs = getComputedStyle(el)
@@ -678,7 +713,7 @@ function selectInspPart(id) {
     node = node.parentElement
   }
   partProbe.value = {
-    id,
+    id: targetId,
     name,
     type: partMeta.value[id]?.part_type || el.tagName.toLowerCase(),
     family: chain.join(' › ') || '根',
@@ -705,7 +740,18 @@ watch(() => props.motionConfig, () => {
   // 配置变更时重置
   resetAll()
   eventLog.value = []
+  refreshSvgIds()
 }, { deep: true })
+
+watch(() => props.realtimeEvent, (event) => {
+  if (!event) return
+  let stepName = String(event.event_name || event.event_code || '').trim().toUpperCase()
+  if (!stepName) return
+  const alias = ext.value.event_aliases?.[stepName]
+  if (alias) stepName = String(alias).toUpperCase()
+  logEvent(stepName, `接收实时事件${event.raw_id ? ` #${event.raw_id}` : ''}`, 'info')
+  triggerStep(stepName, toMotionPayload(event))
+})
 
 onMounted(() => {
   if (props.svgUrl) loadSvg()

@@ -702,7 +702,7 @@
   "ext": {
     "machine_type": "LAM2300",
     "version": "1.0",
-    "description": "Lam 2300 cluster 顶视动画：ATM 取片 → Aligner 寻边 → Airlock 过渡 → VTM 送片 → PM 加工 → 回程",
+    "description": "Lam 2300 cluster 顶视动画：ATM 取片 → Aligner 寻边 → 双 Airlock → VTM 送片 → PM 加工 → 回程",
     "deriver": "lam2300",
     "param_defaults": {
       "PORT": "LP1",

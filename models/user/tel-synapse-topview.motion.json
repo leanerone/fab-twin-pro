@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "document": {
-    "name": "TEL Synapse SPT 顶视图",
+    "name": "TEL Synapse SPT 等角视图",
     "src": "tel-synapse-topview.svg",
     "coord": {
       "origin": "top-left",
@@ -702,7 +702,7 @@
   "ext": {
     "machine_type": "TEL-SYNAPSE",
     "version": "1.0",
-    "description": "TEL Synapse SPT 顶视动画（俯视降级版）：EFEM 取片 → Transport Module → 6×PM 六角环加工 → 回程",
+    "description": "TEL Synapse SPT 等角动画：EFEM 取片 → 圆形 Transport Module → 6×高柜式 PM → 独立 UI 站",
     "deriver": "synapse",
     "param_defaults": {
       "PORT": "LP1",
