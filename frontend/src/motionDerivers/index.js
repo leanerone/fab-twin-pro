@@ -7,11 +7,13 @@
 import { createAmatMetsputDeriver } from './amatMetsput'
 import { createPodopenerDeriver } from './podopener'
 import { createOxeDeriver } from './oxe'
+import { createLam2300Deriver } from './lam2300'
 
 const factories = {
   amat_metsput: createAmatMetsputDeriver,
   podopener: createPodopenerDeriver,
   oxe: createOxeDeriver,
+  lam2300: createLam2300Deriver,
 }
 
 const instances = new Map()

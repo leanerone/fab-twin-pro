@@ -43,7 +43,7 @@ router = APIRouter(
 # ========== 统一聊天接口（新版） ==========
 
 @router.post("/chat", response_model=AIChatResponse)
-def ai_chat(req: AIChatRequest, db: Session = Depends(get_db)):
+def ai_chat(req: AIChatRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """统一AI聊天接口 - 支持多模型、配置切换、Dify、N8N联动
 
     - 本地规则引擎（默认，无需配置）
@@ -56,14 +56,16 @@ def ai_chat(req: AIChatRequest, db: Session = Depends(get_db)):
         session_id=req.session_id,
         machine_id=req.machine_id,
         context=req.context,
-        user_role=req.user_role or "user",
+        # P0 提权修复：角色只认服务端登录态，请求体里的 user_role 一律忽略
+        # （此前任意登录用户改 body 字段即可冒充 admin 触发 n8n / 导出 / 工单）
+        user_role=user.role,
         config_id=req.config_id,
     )
     return AIChatResponse(**result)
 
 
 @router.post("/chat/stream")
-def ai_chat_stream(req: AIChatRequest):
+def ai_chat_stream(req: AIChatRequest, user: User = Depends(get_current_user)):
     """统一AI聊天接口 - SSE 流式版（T4：打字机输出 + 工具调用过程可见）
 
     - Dify 路由：逐 chunk 透传（agent_message / agent_thought / message_end）
@@ -77,7 +79,7 @@ def ai_chat_stream(req: AIChatRequest):
             session_id=req.session_id,
             machine_id=req.machine_id,
             context=req.context,
-            user_role=req.user_role or "user",
+            user_role=user.role,  # 同 /chat：服务端角色覆盖
             config_id=req.config_id,
         ),
         media_type="text/event-stream",

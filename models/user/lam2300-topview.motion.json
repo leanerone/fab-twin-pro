@@ -571,8 +571,8 @@
           "target_part_id": "TOWER_alarm",
           "actions": [
             {
-              "type": "opacity",
-              "to": 1.0,
+              "type": "visibility",
+              "to": true,
               "duration": 0
             }
           ]
@@ -601,8 +601,8 @@
           "target_part_id": "TOWER_run",
           "actions": [
             {
-              "type": "opacity",
-              "to": 1.0,
+              "type": "visibility",
+              "to": true,
               "duration": 0
             }
           ]

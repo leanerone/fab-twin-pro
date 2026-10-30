@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +59,27 @@ PM_ANGLES = {"PM1": 0, "PM2": -45, "PM3": -135, "PM4": 180}
 def pm_center(name: str):
     a = math.radians(PM_ANGLES[name])
     return VTM[0] + PM_RING * math.cos(a), VTM[1] + PM_RING * math.sin(a)
+
+
+# 基态隐藏部件：由事件（POD_PLACED / START / ALARM_REPORT…）经 visibility 规则点亮。
+# 不标注的话这些部件加载即可见——没放晶舟的 port 摆着晶舟、没开机的腔体亮着状态灯，
+# 与「初始 idle」语义不符（OXE 的 WAFER_MOVE 等也是这么处理的）。
+BASE_HIDDEN = (
+    [f"LP{i}_CST" for i in (1, 2, 3)]          # 晶舟：POD_PLACED 显示
+    + ["WAFER_MOVE", "WAFER_VTM", "ALIGNER_WAFER"]  # 晶圆：随事件出现
+    + [f"PM{i}_{s}" for i in (1, 2, 3, 4) for s in ("run", "alarm", "unload")]  # 腔体状态灯
+    + ["TOWER_alarm"]                           # 塔灯红灯：ALARM_REPORT 点亮
+)
+
+
+def _mark_base_hidden(svg: str) -> str:
+    """给 BASE_HIDDEN 里的部件开头标签注入 data-motion-base-visibility="hidden"。"""
+    for pid in BASE_HIDDEN:
+        pat = re.compile(r'(<\w+[^>]*\bid="%s"[^>]*?)(/?>)' % re.escape(pid))
+        svg, n = pat.subn(lambda m: m.group(1) + ' data-motion-base-visibility="hidden"' + m.group(2), svg, count=1)
+        if n != 1:
+            raise RuntimeError(f"base-hidden 标注失败：找不到部件 {pid}")
+    return svg
 
 
 # ============================ SVG ============================
@@ -261,13 +283,13 @@ def build_motion() -> dict:
 
     # 22) 告警
     b.add("ALARM_REPORT", [
-        M.rule("TOWER_alarm", [M.opacity(1.0, 0)]),
+        M.rule("TOWER_alarm", [M.visibility(True, 0)]),
         M.rule("{CH}_alarm", [M.visibility(True, 0)]),
     ], description="告警：塔灯红灯点亮 + 对应腔体告警灯")
 
     # 23) 状态刷新（塔灯）
     b.add("STATE", [
-        M.rule("TOWER_run", [M.opacity(1.0, 0)]),
+        M.rule("TOWER_run", [M.visibility(True, 0)]),
     ])
 
     # 24) 传输中
@@ -294,7 +316,7 @@ def build_motion() -> dict:
 def main() -> int:
     os.makedirs(os.path.dirname(OUT_SVG), exist_ok=True)
     with open(OUT_SVG, "w", encoding="utf-8") as f:
-        f.write(build_svg())
+        f.write(_mark_base_hidden(build_svg()))
     with open(OUT_MOTION, "w", encoding="utf-8") as f:
         json.dump(build_motion(), f, ensure_ascii=False, indent=2)
     print(f"已生成:\n  {OUT_SVG}\n  {OUT_MOTION}")
