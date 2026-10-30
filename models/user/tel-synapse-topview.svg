@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 820" font-family="Arial, 'Microsoft YaHei', sans-serif" width="1040" height="820">
+<defs>
+  <style>
+    .shape { fill: #fff; stroke: #3a4250; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+  <linearGradient id="rainbowGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ff5f6d"/><stop offset="18%" stop-color="#ff9f43"/><stop offset="35%" stop-color="#f7d154"/><stop offset="50%" stop-color="#4ade80"/><stop offset="65%" stop-color="#22d3ee"/><stop offset="80%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient>
+  <pattern id="dieGrid" width="0.05" height="0.05" patternUnits="objectBoundingBox">
+   <path d="M0.05,0 L0.05,0.05 M0,0.05 L0.05,0.05" fill="none" stroke="rgba(20,25,40,0.32)" stroke-width="0.008"/>
+  </pattern>
+  <pattern id="waferPattern" width="1" height="1" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox">
+   <rect width="1" height="1" fill="url(#rainbowGrad)"/><rect width="1" height="1" fill="url(#dieGrid)"/>
+  </pattern>
+  <radialGradient id="waferShade" cx="0.38" cy="0.32" r="0.78">
+   <stop offset="0" stop-color="#ffffff" stop-opacity="0.4"/><stop offset="0.45" stop-color="#dde8f6" stop-opacity="0.1"/>
+   <stop offset="0.8" stop-color="#8395b8" stop-opacity="0.16"/><stop offset="1" stop-color="#16233a" stop-opacity="0.5"/>
+  </radialGradient>
+  <linearGradient id="edgeMetal" x1="0" y1="0" x2="1" y2="1">
+   <stop offset="0" stop-color="#eef3fa"/><stop offset="0.35" stop-color="#94a3b8"/>
+   <stop offset="0.6" stop-color="#eef3fa"/><stop offset="1" stop-color="#59647a"/>
+  </linearGradient>
+</defs>
+<g id="BASEPLATE" data-pid="BASEPLATE">
+<rect x="30" y="30" width="980" height="760" rx="6" fill="#cbd5e1" stroke="#3a4250" stroke-width="2.2"/>
+</g>
+<g id="TOWER" data-pid="TOWER">
+<rect x="930" y="724" width="22" height="54" rx="3" fill="#334155" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="TOWER_run" data-pid="TOWER_run" x="933" y="728" width="16" height="12" rx="2" fill="#22c55e" stroke="#3a4250" stroke-width="1"/>
+<rect id="TOWER_alarm" data-pid="TOWER_alarm" x="933" y="744" width="16" height="12" rx="2" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/>
+<rect id="TOWER_idle" data-pid="TOWER_idle" x="933" y="760" width="16" height="12" rx="2" fill="#fde047" stroke="#3a4250" stroke-width="1"/>
+</g>
+<g id="TITLE" data-pid="TITLE">
+<text x="46" y="786" font-size="16" fill="#0d1420" text-anchor="start" font-weight="500">TEL SYNAPSE SPT</text>
+<text x="46" y="802" font-size="9" fill="#64748b" text-anchor="start" font-weight="500">EFEM / Transport Module / 6xPM</text>
+</g>
+<g id="LP1" data-pid="LP1">
+<rect x="40" y="90" width="120" height="130" rx="5" fill="#cbd5e1" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="LP1_WINDOW" data-pid="LP1_WINDOW" x="50" y="100" width="100" height="96" rx="3" fill="#0d1420" stroke="#3a4250" stroke-width="2.2"/>
+<text x="100.0" y="212" font-size="9" fill="#0d1420" text-anchor="middle" font-weight="500">LP1</text>
+<rect id="LP1_DOOR" data-pid="LP1_DOOR" x="52" y="194" width="96" height="8" rx="2" fill="#334155" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="LP1_SLIT" data-pid="LP1_SLIT" x="46" y="83" width="108" height="7" rx="2" fill="#94a3b8" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+<g id="LP1_CST" data-pid="LP1_CST" data-motion-base-visibility="hidden">
+<rect x="52" y="102" width="96" height="96" rx="4" fill="#cbd5e1" stroke="#3a4250" stroke-width="2.2"/>
+<rect x="56" y="106" width="88" height="88" rx="3" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="LP1_CST_S1" data-pid="LP1_CST_S1" x="60" y="112.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S2" data-pid="LP1_CST_S2" x="60" y="115.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S3" data-pid="LP1_CST_S3" x="60" y="119.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S4" data-pid="LP1_CST_S4" x="60" y="122.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S5" data-pid="LP1_CST_S5" x="60" y="126.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S6" data-pid="LP1_CST_S6" x="60" y="129.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S7" data-pid="LP1_CST_S7" x="60" y="133.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S8" data-pid="LP1_CST_S8" x="60" y="136.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S9" data-pid="LP1_CST_S9" x="60" y="140.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S10" data-pid="LP1_CST_S10" x="60" y="143.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S11" data-pid="LP1_CST_S11" x="60" y="147.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S12" data-pid="LP1_CST_S12" x="60" y="150.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S13" data-pid="LP1_CST_S13" x="60" y="154.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S14" data-pid="LP1_CST_S14" x="60" y="157.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S15" data-pid="LP1_CST_S15" x="60" y="161.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S16" data-pid="LP1_CST_S16" x="60" y="164.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S17" data-pid="LP1_CST_S17" x="60" y="168.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S18" data-pid="LP1_CST_S18" x="60" y="171.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S19" data-pid="LP1_CST_S19" x="60" y="175.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S20" data-pid="LP1_CST_S20" x="60" y="178.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S21" data-pid="LP1_CST_S21" x="60" y="182.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S22" data-pid="LP1_CST_S22" x="60" y="185.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S23" data-pid="LP1_CST_S23" x="60" y="189.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S24" data-pid="LP1_CST_S24" x="60" y="192.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP1_CST_S25" data-pid="LP1_CST_S25" x="60" y="196.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+</g>
+<text x="100.0" y="82" font-size="10" fill="#0d1420" text-anchor="middle" font-weight="500">LOAD PORT 1</text><g id="LP2" data-pid="LP2">
+<rect x="175" y="90" width="120" height="130" rx="5" fill="#cbd5e1" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="LP2_WINDOW" data-pid="LP2_WINDOW" x="185" y="100" width="100" height="96" rx="3" fill="#0d1420" stroke="#3a4250" stroke-width="2.2"/>
+<text x="235.0" y="212" font-size="9" fill="#0d1420" text-anchor="middle" font-weight="500">LP2</text>
+<rect id="LP2_DOOR" data-pid="LP2_DOOR" x="187" y="194" width="96" height="8" rx="2" fill="#334155" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="LP2_SLIT" data-pid="LP2_SLIT" x="181" y="83" width="108" height="7" rx="2" fill="#94a3b8" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+<g id="LP2_CST" data-pid="LP2_CST" data-motion-base-visibility="hidden">
+<rect x="187" y="102" width="96" height="96" rx="4" fill="#cbd5e1" stroke="#3a4250" stroke-width="2.2"/>
+<rect x="191" y="106" width="88" height="88" rx="3" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/>
+<rect id="LP2_CST_S1" data-pid="LP2_CST_S1" x="195" y="112.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S2" data-pid="LP2_CST_S2" x="195" y="115.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S3" data-pid="LP2_CST_S3" x="195" y="119.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S4" data-pid="LP2_CST_S4" x="195" y="122.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S5" data-pid="LP2_CST_S5" x="195" y="126.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S6" data-pid="LP2_CST_S6" x="195" y="129.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S7" data-pid="LP2_CST_S7" x="195" y="133.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S8" data-pid="LP2_CST_S8" x="195" y="136.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S9" data-pid="LP2_CST_S9" x="195" y="140.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S10" data-pid="LP2_CST_S10" x="195" y="143.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S11" data-pid="LP2_CST_S11" x="195" y="147.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S12" data-pid="LP2_CST_S12" x="195" y="150.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S13" data-pid="LP2_CST_S13" x="195" y="154.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S14" data-pid="LP2_CST_S14" x="195" y="157.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S15" data-pid="LP2_CST_S15" x="195" y="161.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S16" data-pid="LP2_CST_S16" x="195" y="164.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S17" data-pid="LP2_CST_S17" x="195" y="168.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S18" data-pid="LP2_CST_S18" x="195" y="171.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S19" data-pid="LP2_CST_S19" x="195" y="175.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S20" data-pid="LP2_CST_S20" x="195" y="178.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S21" data-pid="LP2_CST_S21" x="195" y="182.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S22" data-pid="LP2_CST_S22" x="195" y="185.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S23" data-pid="LP2_CST_S23" x="195" y="189.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S24" data-pid="LP2_CST_S24" x="195" y="192.50" width="80" height="1.75" fill="#334155" stroke="none"/>
+<rect id="LP2_CST_S25" data-pid="LP2_CST_S25" x="195" y="196.00" width="80" height="1.75" fill="#334155" stroke="none"/>
+</g>
+<text x="235.0" y="82" font-size="10" fill="#0d1420" text-anchor="middle" font-weight="500">LOAD PORT 2</text><g id="ALIGNER" data-pid="ALIGNER">
+<circle cx="250" cy="330" r="40" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><circle cx="250" cy="330" r="24.8" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><circle cx="284.40" cy="330.00" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="274.32" cy="354.32" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="250.00" cy="364.40" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="225.68" cy="354.32" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="215.60" cy="330.00" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="225.68" cy="305.68" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="250.00" cy="295.60" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="274.32" cy="305.68" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/><g id="ALIGNER_WAFER" data-pid="ALIGNER_WAFER" data-motion-base-visibility="hidden"><circle cx="250" cy="330" r="13.600000000000001" fill="url(#waferPattern)"/><circle cx="250" cy="330" r="13.600000000000001" fill="url(#waferShade)"/><circle cx="250" cy="330" r="13.600000000000001" fill="none" stroke="#3a4250" stroke-width="1.0"/></g>
+</g>
+<text x="250" y="280" font-size="10" fill="#0d1420" text-anchor="middle" font-weight="500">ALIGNER</text><rect id="UI_STATION" data-pid="UI_STATION" x="925" y="70" width="170" height="110" rx="6" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><rect x="937" y="84" width="146" height="70" rx="3" fill="#0d1420" stroke="#3a4250" stroke-width="2.2"/><text x="1010.0" y="168" font-size="10" fill="#0d1420" text-anchor="middle" font-weight="500">USER INTERFACE</text><rect id="EFEM" data-pid="EFEM" x="300" y="150" width="150" height="150" rx="8" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><text x="375" y="175" font-size="11" fill="#0d1420" text-anchor="middle" font-weight="500">EFEM</text><g id="ATM_ARM" data-pid="ATM_ARM">
+<g id="ATM_ARM_UPPER" data-pid="ATM_ARM_UPPER" transform="translate(375,235)">
+<line x1="0" y1="0" x2="70" y2="0" stroke="#94a3b8" stroke-width="11" stroke-linecap="round"/><circle cx="0" cy="0" r="8" fill="#334155" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+<g id="ATM_ARM_FORE" data-pid="ATM_ARM_FORE" transform="translate(445,235)">
+<line x1="0" y1="0" x2="56" y2="0" stroke="#cbd5e1" stroke-width="9" stroke-linecap="round"/><circle cx="0" cy="0" r="6" fill="#334155" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+<g id="ATM_ARM_WRIST" data-pid="ATM_ARM_WRIST" transform="translate(501,235)">
+<circle cx="0" cy="0" r="10.5" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><path d="M -21.0 -6 L 21.0 -6 L 21.0 6 L -21.0 6 Z" fill="#cbd5e1" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+
+</g>
+<g id="TM" data-pid="TM">
+<circle cx="560" cy="470" r="115" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><circle cx="560" cy="470" r="94.3" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><circle cx="666.95" cy="470.00" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="652.62" cy="523.48" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="613.48" cy="562.62" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="560.00" cy="576.95" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="506.53" cy="562.62" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="467.38" cy="523.48" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="453.05" cy="470.00" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="467.38" cy="416.52" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="506.52" cy="377.38" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="560.00" cy="363.05" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="613.48" cy="377.38" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/>
+<circle cx="652.62" cy="416.52" r="2.6" fill="#64748b" stroke="#3a4250" stroke-width="1.0"/><text x="560" y="377" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="500">TRANSPORT MODULE</text>
+</g>
+<g id="VTM_ARM" data-pid="VTM_ARM">
+<g id="VTM_ARM_UPPER" data-pid="VTM_ARM_UPPER" transform="translate(560,470)">
+<line x1="0" y1="0" x2="88" y2="0" stroke="#94a3b8" stroke-width="11" stroke-linecap="round"/><circle cx="0" cy="0" r="8" fill="#334155" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+<g id="VTM_ARM_FORE" data-pid="VTM_ARM_FORE" transform="translate(648,470)">
+<line x1="0" y1="0" x2="68" y2="0" stroke="#cbd5e1" stroke-width="9" stroke-linecap="round"/><circle cx="0" cy="0" r="6" fill="#334155" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+<g id="VTM_ARM_WRIST" data-pid="VTM_ARM_WRIST" transform="translate(716,470)">
+<circle cx="0" cy="0" r="13.3" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><path d="M -26.6 -6 L 26.6 -6 L 26.6 6 L -26.6 6 Z" fill="#cbd5e1" stroke="#3a4250" stroke-width="1.0"/>
+</g>
+
+</g>
+<polygon id="PM1" data-pid="PM1" points="860.2,499.0 810.0,528.0 759.8,499.0 759.8,441.0 810.0,412.0 860.2,441.0" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><polygon points="846.2,490.9 810.0,511.8 773.8,490.9 773.8,449.1 810.0,428.2 846.2,449.1" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><text x="810.0" y="474.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="500">PM1</text><circle id="PM1_run" data-pid="PM1_run" cx="786.0" cy="398.0" r="5" fill="#22c55e" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM1_alarm" data-pid="PM1_alarm" cx="804.0" cy="398.0" r="5" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM1_unload" data-pid="PM1_unload" cx="822.0" cy="398.0" r="5" fill="#fde047" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><polygon id="PM2" data-pid="PM2" points="753.6,294.2 703.4,323.2 653.2,294.2 653.2,236.2 703.4,207.2 753.6,236.2" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><polygon points="739.6,286.1 703.4,307.0 667.2,286.1 667.2,244.3 703.4,223.5 739.6,244.3" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><text x="703.3941090877615" y="269.21198892775203" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="500">PM2</text><circle id="PM2_run" data-pid="PM2_run" cx="679.3941090877615" cy="193.21198892775203" r="5" fill="#22c55e" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM2_alarm" data-pid="PM2_alarm" cx="697.3941090877615" cy="193.21198892775203" r="5" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM2_unload" data-pid="PM2_unload" cx="715.3941090877615" cy="193.21198892775203" r="5" fill="#fde047" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><polygon id="PM3" data-pid="PM3" points="466.8,294.2 416.6,323.2 366.4,294.2 366.4,236.2 416.6,207.2 466.8,236.2" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><polygon points="452.8,286.1 416.6,307.0 380.4,286.1 380.4,244.3 416.6,223.5 452.8,244.3" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><text x="416.60589091223846" y="269.2119889277521" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="500">PM3</text><circle id="PM3_run" data-pid="PM3_run" cx="392.60589091223846" cy="193.2119889277521" r="5" fill="#22c55e" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM3_alarm" data-pid="PM3_alarm" cx="410.60589091223846" cy="193.2119889277521" r="5" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM3_unload" data-pid="PM3_unload" cx="428.60589091223846" cy="193.2119889277521" r="5" fill="#fde047" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><polygon id="PM4" data-pid="PM4" points="360.2,499.0 310.0,528.0 259.8,499.0 259.8,441.0 310.0,412.0 360.2,441.0" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><polygon points="346.2,490.9 310.0,511.8 273.8,490.9 273.8,449.1 310.0,428.2 346.2,449.1" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><text x="310.0" y="474.00000000000006" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="500">PM4</text><circle id="PM4_run" data-pid="PM4_run" cx="286.0" cy="398.00000000000006" r="5" fill="#22c55e" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM4_alarm" data-pid="PM4_alarm" cx="304.0" cy="398.00000000000006" r="5" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM4_unload" data-pid="PM4_unload" cx="322.0" cy="398.00000000000006" r="5" fill="#fde047" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><polygon id="PM5" data-pid="PM5" points="466.8,703.8 416.6,732.8 366.4,703.8 366.4,645.8 416.6,616.8 466.8,645.8" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><polygon points="452.8,695.7 416.6,716.5 380.4,695.7 380.4,653.9 416.6,633.0 452.8,653.9" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><text x="416.60589091223846" y="678.7880110722479" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="500">PM5</text><circle id="PM5_run" data-pid="PM5_run" cx="392.60589091223846" cy="602.7880110722479" r="5" fill="#22c55e" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM5_alarm" data-pid="PM5_alarm" cx="410.60589091223846" cy="602.7880110722479" r="5" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM5_unload" data-pid="PM5_unload" cx="428.60589091223846" cy="602.7880110722479" r="5" fill="#fde047" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><polygon id="PM6" data-pid="PM6" points="753.6,703.8 703.4,732.8 653.2,703.8 653.2,645.8 703.4,616.8 753.6,645.8" fill="#39414e" stroke="#3a4250" stroke-width="2.2"/><polygon points="739.6,695.7 703.4,716.5 667.2,695.7 667.2,653.9 703.4,633.0 739.6,653.9" fill="#334155" stroke="#3a4250" stroke-width="1.0"/><text x="703.3941090877615" y="678.788011072248" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="500">PM6</text><circle id="PM6_run" data-pid="PM6_run" cx="679.3941090877615" cy="602.788011072248" r="5" fill="#22c55e" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM6_alarm" data-pid="PM6_alarm" cx="697.3941090877615" cy="602.788011072248" r="5" fill="#dc2626" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><circle id="PM6_unload" data-pid="PM6_unload" cx="715.3941090877615" cy="602.788011072248" r="5" fill="#fde047" stroke="#3a4250" stroke-width="1" data-motion-base-visibility="hidden"/><g id="WAFER_MOVE" data-pid="WAFER_MOVE" data-motion-base-visibility="hidden"><circle cx="375" cy="235" r="11" fill="url(#waferPattern)"/><circle cx="375" cy="235" r="11" fill="url(#waferShade)"/><circle cx="375" cy="235" r="11" fill="none" stroke="#3a4250" stroke-width="1.0"/></g><g id="WAFER_VTM" data-pid="WAFER_VTM" data-motion-base-visibility="hidden"><circle cx="560" cy="470" r="11" fill="url(#waferPattern)"/><circle cx="560" cy="470" r="11" fill="url(#waferShade)"/><circle cx="560" cy="470" r="11" fill="none" stroke="#3a4250" stroke-width="1.0"/></g></svg>

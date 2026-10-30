@@ -7,13 +7,16 @@
 import { createAmatMetsputDeriver } from './amatMetsput'
 import { createPodopenerDeriver } from './podopener'
 import { createOxeDeriver } from './oxe'
-import { createLam2300Deriver } from './lam2300'
+import { createLam2300Deriver, createClusterDeriver } from './lam2300'
 
 const factories = {
   amat_metsput: createAmatMetsputDeriver,
   podopener: createPodopenerDeriver,
   oxe: createOxeDeriver,
   lam2300: createLam2300Deriver,
+  // 六腔 cluster（2×Load Port + 6×PM），共用同一归一化工厂
+  sym3: () => createClusterDeriver({ maxPort: 2, maxCh: 6 }),
+  synapse: () => createClusterDeriver({ maxPort: 2, maxCh: 6 }),
 }
 
 const instances = new Map()
