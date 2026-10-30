@@ -2,9 +2,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import OHTPosition
 
-router = APIRouter(prefix="/api/oht", tags=["oht"])
+router = APIRouter(prefix="/api/oht", tags=["oht"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/")

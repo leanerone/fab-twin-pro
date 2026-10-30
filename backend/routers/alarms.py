@@ -12,11 +12,12 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import Alarm
 from schemas import AlarmOut
 from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 
-router = APIRouter(prefix="/api/alarms", tags=["alarms"])
+router = APIRouter(prefix="/api/alarms", tags=["alarms"], dependencies=[Depends(get_current_user)])
 
 
 def _apply_date_like(q, col, date: str):

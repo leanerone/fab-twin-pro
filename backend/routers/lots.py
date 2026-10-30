@@ -14,12 +14,13 @@ import json
 from datetime import datetime
 
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import Lot, MachineEvent, DT_EVENT_RAW, MachineToolMapping
 from schemas import LotOut, EventOut
 from services.time_utils import parse_ts, normalize_ts, extract_date, build_date_like_patterns
 from routers.machines import _day_clause
 
-router = APIRouter(prefix="/api/lots", tags=["lots"])
+router = APIRouter(prefix="/api/lots", tags=["lots"], dependencies=[Depends(get_current_user)])
 
 
 def _unwrap(payload: dict) -> dict:

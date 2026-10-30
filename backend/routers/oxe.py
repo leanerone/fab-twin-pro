@@ -15,11 +15,12 @@ import time
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
 from services.ai_tools import clean_alarm_event
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/oxe", tags=["oxe"])
+router = APIRouter(prefix="/api/oxe", tags=["oxe"], dependencies=[Depends(get_current_user)])
 
 # 量产 payload 中表示"无值"的占位串（注意是字符串，不是 None，因此 `v or '-'` 拦不住）
 _INVALID_LOT_VALUES = {"", "NULL", "NONE", "NAN", "UNDEFINED"}

@@ -2,9 +2,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import Recipe
 
-router = APIRouter(prefix="/api/recipes", tags=["recipes"])
+router = APIRouter(prefix="/api/recipes", tags=["recipes"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/")

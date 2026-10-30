@@ -57,12 +57,13 @@ def _decrement_raw_id(raw_id):
         return None
 
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import DT_EVENT_RAW, MachineToolMapping
 from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 from services.ai_tools import ALARM_EVENT_NAMES
 from services.cache import HybridTTLCache
 
-router = APIRouter(prefix="/api/history", tags=["history"])
+router = APIRouter(prefix="/api/history", tags=["history"], dependencies=[Depends(get_current_user)])
 
 # 回放查询缓存（test31）：同参数重复查询（反复切日期/重进回放页）直接命中。
 # 历史日期数据不变可安全缓存；当天数据最多 60s 延迟可见（回放场景可接受）。

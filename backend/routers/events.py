@@ -12,11 +12,12 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database import get_db
+from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import MachineEvent, Machine
 from schemas import EventOut
 from services.time_utils import parse_ts, build_date_like_patterns
 
-router = APIRouter(prefix="/api/events", tags=["events"])
+router = APIRouter(prefix="/api/events", tags=["events"], dependencies=[Depends(get_current_user)])
 
 
 def _apply_date_like(q, col, date: str):
