@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
-from services.ai_tools import clean_alarm_event
+from core.events_query import clean_alarm_event  # 批次1：告警清洗归公共层
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/oxe", tags=["oxe"], dependencies=[Depends(get_current_user)])

@@ -25,11 +25,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/machines", tags=["machines"])
 
 
-def require_model_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """要求当前用户拥有 model_edit 权限（管理员）"""
-    if not check_permission(user, "model_edit", db):
-        raise HTTPException(status_code=403, detail="无权限：需要 model_edit 权限")
-    return user
+# 依赖统一收拢到 core.deps（批次1去重），保留原名供既有 import 使用
+from core.deps import require_model_edit  # noqa: E402,F811
 
 
 # ============== 机台状态实时推导（B-#4/B-#5）==============
@@ -39,47 +36,10 @@ def require_model_edit(user: User = Depends(get_current_user), db: Session = Dep
 #            → DB 存储的 Machine.state
 # 今日产量 = 今日 WaferUnloaded 事件数；今日告警数 = 今日 DT_ALARM_EVENT 数
 
-_COL_TEMPORAL_CACHE: Dict[str, bool] = {}
-
-
-def _col_is_temporal(db, table_name: str, col_name: str) -> bool:
-    """反射判定某列是否 DATE/TIMESTAMP（量产形态）；字符列返回 False（本地形态）。
-
-    结果按 (table, col) 缓存。探测失败按字符列处理，避免把查询打死。
-    """
-    key = f"{table_name}.{col_name}"
-    if key in _COL_TEMPORAL_CACHE:
-        return _COL_TEMPORAL_CACHE[key]
-    temporal = False
-    try:
-        cols = inspect(db.get_bind()).get_columns(table_name)
-        col = next((c for c in cols if str(c.get("name", "")).lower() == col_name.lower()), None)
-        temporal = isinstance(col.get("type"), DateTime) if col else False
-    except Exception as e:
-        logger.warning("[machines] 探测 %s 列类型失败，按字符列处理: %s", key, e)
-    _COL_TEMPORAL_CACHE[key] = temporal
-    return temporal
-
-
-def _day_clause(db, model, col, date_str: str):
-    """生成「限定在 date_str 这一天」的 SQL 条件，按列真实类型选写法。
-
-    - TIMESTAMP/DATE 列：半开区间 [当日00:00, 次日00:00)
-    - 字符列：前缀 LIKE，兼容 ISO T分隔/空格分隔/NLS 月日不补零
-    返回 None 表示 date_str 非法，调用方应跳过 SQL 层日期过滤。
-    """
-    table = model.__tablename__
-    if _col_is_temporal(db, table, col.key):
-        try:
-            day = datetime.strptime(date_str, "%Y-%m-%d")
-        except (ValueError, TypeError):
-            return None
-        nxt = day + timedelta(days=1)
-        return and_(col >= day, col < nxt)
-    patterns = build_date_like_patterns(date_str)
-    if not patterns:
-        return None
-    return or_(*[col.like(p) for p in patterns])
+# 列类型反射与日期条件收拢到 core.events_query（批次1去重）；
+# 保留原名别名：main.py 启动预热（main.py:96）与既有调用不受影响
+from core.events_query import col_is_temporal as _col_is_temporal  # noqa: E402
+from core.events_query import day_clause as _day_clause  # noqa: E402,F811
 
 
 def _normalize_state(raw_state: Optional[str]) -> str:

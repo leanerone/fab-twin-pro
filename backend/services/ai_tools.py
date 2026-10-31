@@ -57,58 +57,22 @@ def _format_ts(ts) -> str:
     return normalize_ts(ts) or None
 
 
-def _resolve_tool_ids(db: Session, machine_id: str) -> list:
-    """获取机台对应的 tool_id 列表（前缀匹配 + MachineToolMapping）"""
-    tool_ids = [machine_id]
-    upper_id = machine_id.upper() if machine_id else ""
-    # PODOPENER 系列特殊处理：PODOPENER-1 也匹配 PODOPENER
-    if upper_id.startswith("PODOPENER"):
-        tool_ids.append("PODOPENER")
-    # OXE 系列特殊处理：OXE-61 也匹配 OXE 前缀
-    if upper_id.startswith("OXE"):
-        tool_ids.append("OXE")
-    # 尝试 MachineToolMapping（生产可能没有此表）
-    try:
-        from models import MachineToolMapping
-        mappings = db.query(MachineToolMapping).filter(
-            (MachineToolMapping.machine_id == machine_id) |
-            (MachineToolMapping.tool_id == machine_id)
-        ).all()
-        for m in mappings:
-            tool_ids.append(m.tool_id)
-            tool_ids.append(m.machine_id)
-    except Exception:
-        pass
-    return list(set(tool_ids))
-
-
-# ALARM 类事件名：port_id/chamber_id 等字段被错误填充为告警描述词，需清空
-# 公开给路由层复用，避免各处重复维护「哪些事件算告警」的清单
-ALARM_EVENT_NAMES = {"ALARM_REPORT", "EC_ALARM_REPORT"}
-# ALARM 事件需要清空的字段（这些字段在 ALARM 报文中是错误解析的描述词）
-_ALARM_FIELDS_TO_CLEAR = (
-    "port_id", "chamber_id", "cassette_id", "smif_id",
-    "slot_id", "wafer_id", "pod_id", "unit_id", "batch_id",
+# 批次1：tool_id 解析与 ALARM 清洗收拢到 core.events_query；
+# AI 工具层保留 OXE 前缀匹配（history/lots 不带，见 PROJECT_STATUS 已知问题 #7）
+from core.events_query import (  # noqa: F401
+    ALARM_EVENT_NAMES,
+    clean_alarm_event,
+    resolve_tool_ids,
 )
 
 
-def clean_alarm_event(payload: dict) -> dict:
-    """清理 ALARM 事件中被错误填充的字段
-
-    量产 DB 中 ALARM_REPORT/EC_ALARM_REPORT 事件的 port_id/chamber_id 等字段
-    被 bridge.py 错误填充为告警描述词（如 "AGC"/"Time"/"Sensor-2"），
-    需清空这些字段，只保留 alarm_text/alarm_code 等告警字段。
-
-    与 oxe.py 中的 _convert_event 保持一致，提取为公共函数供 AI 工具复用。
-    """
-    if not payload:
-        return payload
-    event_name = str(payload.get("event_name", "")).upper().strip()
-    if event_name in ALARM_EVENT_NAMES:
-        for field in _ALARM_FIELDS_TO_CLEAR:
-            if field in payload:
-                payload[field] = "NULL"
-    return payload
+def _resolve_tool_ids(db: Session, machine_id: str) -> list:
+    """获取机台对应的 tool_id 列表（前缀匹配 + MachineToolMapping）"""
+    ids = resolve_tool_ids(db, machine_id, extra_prefixes=("OXE",))
+    if ids:
+        return sorted(ids)
+    # machine_id 为空时保持旧行为：返回仅含原值的列表（调用方 IN 查询不命中）
+    return [machine_id] if machine_id else []
 
 
 # ==================== 工具1: 机台状态 ====================

@@ -18,7 +18,7 @@ from routers.auth import get_current_user  # P0：生产数据只读端点也必
 from models import Lot, MachineEvent, DT_EVENT_RAW, MachineToolMapping
 from schemas import LotOut, EventOut
 from services.time_utils import parse_ts, normalize_ts, extract_date, build_date_like_patterns
-from routers.machines import _day_clause
+from core.events_query import day_clause as _day_clause  # 批次1：不再跨 router 引用 machines
 
 router = APIRouter(prefix="/api/lots", tags=["lots"], dependencies=[Depends(get_current_user)])
 
@@ -36,73 +36,9 @@ def _unwrap(payload: dict) -> dict:
     return payload
 
 
-def _find_raw_id_anchor(db, tool_ids: set, target_dt: datetime) -> Optional[int]:
-    """在 raw_id 中定位到 ts <= target_dt 的最大 raw_id（与 history.py 逻辑一致）"""
-    try:
-        min_max = db.query(
-            func.min(DT_EVENT_RAW.raw_id),
-            func.max(DT_EVENT_RAW.raw_id)
-        ).filter(DT_EVENT_RAW.tool_id.in_(tool_ids)).first()
-        if not min_max or min_max[0] is None:
-            return None
-        rid_min, rid_max = min_max[0], min_max[1]
-    except Exception:
-        return None
-    lo, hi = rid_min, rid_max
-    best_anchor = None
-    for _ in range(15):  # 15次迭代足够覆盖单机台事件范围
-        if lo > hi:
-            break
-        mid = (lo + hi) // 2
-        row = db.query(DT_EVENT_RAW).filter(
-            DT_EVENT_RAW.tool_id.in_(tool_ids),
-            DT_EVENT_RAW.raw_id <= mid
-        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(1).first()
-        if not row:
-            hi = mid - 1
-            continue
-        ts = row.event_ts_utc or row.received_ts_utc
-        row_dt = parse_ts(ts) if ts else 0
-        if row_dt and row_dt <= target_dt:
-            best_anchor = mid
-            lo = mid + 1
-        else:
-            hi = mid - 1
-    return best_anchor
-
-
-def _resolve_tool_ids(db: Session, machine_id: str) -> set:
-    """将 machine_id 解析为对应的 tool_id 集合
-
-    支持三种情况：
-    1. machine_id 和 tool_id 相同（如 OXE-01）
-    2. machine_id 通过 machine_tool_mappings 映射到 tool_id（如 VPO-01 -> PODOPENER-1）
-    3. PODOPENER 机台：量产 Oracle 中 tool_id 为 PODOPENER（不带序号）
-
-    注意：machine_tool_mappings 表可能不存在于量产 Oracle 中，需要 try-except。
-    """
-    # machine_id 为空时返回空集合（调用方查询命中空 IN 得到空列表，而非 None.upper() 500）
-    if not machine_id:
-        return set()
-    tool_ids = {machine_id}
-
-    # PODOPENER 机台量产 tool_id 通常是 PODOPENER（不带 -1）
-    if machine_id.upper().startswith("PODOPENER"):
-        tool_ids.add("PODOPENER")
-
-    # 尝试查询映射表（可能不存在于量产 Oracle 中）
-    try:
-        mappings = db.query(MachineToolMapping).filter(
-            (MachineToolMapping.machine_id == machine_id) |
-            (MachineToolMapping.tool_id == machine_id)
-        ).all()
-        for m in mappings:
-            tool_ids.add(m.tool_id)
-            tool_ids.add(m.machine_id)
-    except Exception:
-        pass  # 映射表不存在或查询失败，忽略
-
-    return tool_ids
+# raw_id 时间锚点与 tool_id 解析收拢到 core.events_query（批次1去重）
+from core.events_query import find_raw_id_anchor as _find_raw_id_anchor  # noqa: E402
+from core.events_query import resolve_tool_ids as _resolve_tool_ids  # noqa: E402,F811
 
 
 @router.get("", response_model=List[LotOut])

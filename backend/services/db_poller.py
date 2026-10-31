@@ -35,8 +35,8 @@ logger = logging.getLogger("fabtwin.db_poller")
 # 全局状态
 _poller_task = None
 _running = False
-# 列类型缓存：_TS_IS_TEMPORAL["raw"]=True 表示量产 TIMESTAMP 形态
-_TS_IS_TEMPORAL = {}
+# 列类型反射收拢到 core.events_query（批次1去重）
+from core.events_query import col_is_temporal  # noqa: E402
 
 # 2026-10-29 可观测性：轮询健康指标。此前 db_poller 因同步 startup 从未启动，
 # 但 /health 无条件返回 ok，故障完全不可见。用这些指标让 /health 真正能探出它活着。
@@ -78,21 +78,8 @@ def poller_health() -> dict:
 
 
 def _detect_ts_column_type(db, table_name: str) -> bool:
-    """探测某表的 received_ts_utc 列是否为 TIMESTAMP/DATE 类型"""
-    if table_name in _TS_IS_TEMPORAL:
-        return _TS_IS_TEMPORAL[table_name]
-    temporal = False
-    try:
-        cols = inspect(db.get_bind()).get_columns(table_name)
-        col = next(
-            (c for c in cols if str(c.get("name", "")).lower() == "received_ts_utc"),
-            None,
-        )
-        temporal = isinstance(col.get("type"), DateTime) if col else False
-    except Exception as e:
-        logger.warning("[DB Poller] 探测 %s.received_ts_utc 列类型失败，按字符列处理: %s", table_name, e)
-    _TS_IS_TEMPORAL[table_name] = temporal
-    return temporal
+    """探测某表的 received_ts_utc 列是否为 TIMESTAMP/DATE 类型（批次1收拢到 core）"""
+    return col_is_temporal(db, table_name, "received_ts_utc")
 
 
 def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
@@ -149,6 +136,10 @@ def _parse_event_payload(raw_event: DT_EVENT_RAW) -> dict:
         "payload": payload,
     }
 
+
+
+# 公共别名：rvmessages 复用解析逻辑时不引用私有名（批次1）
+parse_event_payload = _parse_event_payload
 
 def _initial_snapshot():
     """启动快照（同步，在 to_thread 中运行）：取最近50条事件并解析，返回正序列表"""

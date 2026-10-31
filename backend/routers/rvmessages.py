@@ -125,8 +125,8 @@ def receive_rv_message(
     # 广播格式对齐 db_poller._parse_event_payload 输出，
     # 前端 useWebSocket 只认 type="raw_event"。
     try:
-        from services.db_poller import _parse_event_payload
-        parsed = _parse_event_payload(raw_event)
+        from services.db_poller import parse_event_payload
+        parsed = parse_event_payload(raw_event)
         manager.broadcast_from_thread({"type": "raw_event", "data": parsed})
     except Exception:
         # 降级：最小化格式，兜底保证前端能收到

@@ -14,11 +14,7 @@ from services.cache import models_config_ttl
 router = APIRouter(prefix="/api/models", tags=["机台型号配置"])
 
 
-def require_model_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """要求当前用户拥有 model_edit 权限"""
-    if not check_permission(user, "model_edit", db):
-        raise HTTPException(status_code=403, detail="无权限：需要 model_edit 权限")
-    return user
+from core.deps import require_model_edit  # noqa: E402,F811  批次1：依赖收拢
 
 
 def _now_iso():

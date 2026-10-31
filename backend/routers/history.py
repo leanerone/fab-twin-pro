@@ -60,7 +60,8 @@ from database import get_db
 from routers.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import DT_EVENT_RAW, MachineToolMapping
 from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
-from services.ai_tools import ALARM_EVENT_NAMES
+from core.events_query import ALARM_EVENT_NAMES  # 批次1：不再引用 AI 服务层常量
+from core.events_query import col_is_temporal, resolve_tool_ids, find_raw_id_anchor  # noqa: F401
 from services.cache import HybridTTLCache
 
 router = APIRouter(prefix="/api/history", tags=["history"], dependencies=[Depends(get_current_user)])
@@ -73,35 +74,23 @@ _timeline_ttl = HybridTTLCache("history_timeline", ttl=120, maxsize=64)
 
 
 # 缓存 DT_EVENT_RAW 时间列的类型判定结果（每进程只探测一次）
-_TS_COL_TEMPORAL = {}
+_TS_LOGGED = False
 
 
 def _ts_columns_are_temporal(db) -> bool:
     """DT_EVENT_RAW 的时间列是 DATE/TIMESTAMP 时返回 True，是字符列时返回 False。
 
-    用 SQLAlchemy 反射读真实表结构，不受 models.py 里 String(255) 声明的影响
-    （本地建表脚本确实按 String 建的，量产却是 TIMESTAMP(6)）。
-    探测失败时按字符列处理，保证不至于把查询打死。
+    批次1收拢：反射逻辑统一在 core.events_query.col_is_temporal（自带缓存），
+    这里只保留首次判定时的形态日志（main.py 启动预热会触发）。
     """
-    if "dt_event_raw" in _TS_COL_TEMPORAL:
-        return _TS_COL_TEMPORAL["dt_event_raw"]
-
-    temporal = False
-    try:
-        cols = inspect(db.get_bind()).get_columns(DT_EVENT_RAW.__tablename__)
-        col = next(
-            (c for c in cols if str(c.get("name", "")).lower() == "received_ts_utc"),
-            None,
+    global _TS_LOGGED
+    temporal = col_is_temporal(db, DT_EVENT_RAW.__tablename__, "received_ts_utc")
+    if not _TS_LOGGED:
+        _TS_LOGGED = True
+        logger.info(
+            "[history] DT_EVENT_RAW 时间列类型判定: %s",
+            "TIMESTAMP/DATE（量产形态）" if temporal else "VARCHAR2（本地形态）",
         )
-        temporal = isinstance(col.get("type"), DateTime) if col else False
-    except Exception as e:
-        logger.warning("[history] 探测 DT_EVENT_RAW 时间列类型失败，按字符列处理: %s", e)
-
-    logger.info(
-        "[history] DT_EVENT_RAW 时间列类型判定: %s",
-        "TIMESTAMP/DATE（量产形态）" if temporal else "VARCHAR2（本地形态）",
-    )
-    _TS_COL_TEMPORAL["dt_event_raw"] = temporal
     return temporal
 
 
@@ -169,26 +158,11 @@ def _date_range_clause(db, start_dt, end_dt):
 
 
 def _resolve_tool_ids(db, machine_id: str) -> set:
-    """将 machine_id 解析为对应的 tool_id 集合（支持 VPO-01 -> PODOPENER-1 映射）"""
-    tool_ids = {machine_id}
+    """tool_id 解析收拢到 core.events_query（批次1去重），语义与原实现一致。
 
-    # PODOPENER 机台量产 Oracle 中 tool_id 通常为 PODOPENER（不带序号）
-    if machine_id.upper().startswith("PODOPENER"):
-        tool_ids.add("PODOPENER")
-
-    # 尝试查询映射表（可能不存在于量产 Oracle 中）
-    try:
-        mappings = db.query(MachineToolMapping).filter(
-            (MachineToolMapping.machine_id == machine_id) |
-            (MachineToolMapping.tool_id == machine_id)
-        ).all()
-        for m in mappings:
-            tool_ids.add(m.tool_id)
-            tool_ids.add(m.machine_id)
-    except Exception:
-        pass  # 映射表不存在或查询失败，忽略
-
-    return tool_ids
+    注意：不带 OXE 前缀匹配（PROJECT_STATUS 已知问题 #7，误伤面未确认前不改默认行为）。
+    """
+    return resolve_tool_ids(db, machine_id)
 
 
 def _parse_vfei_payload(payload_json: str) -> dict:
@@ -470,55 +444,8 @@ def get_history(
 
 
 def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
-    """在 raw_id 中定位到 ts <= target_dt 的最大 raw_id
-
-    解决 VARCHAR2 时间字段无法在SQL层做时间比较的问题：
-    二分查找定位 ts <= target_dt 的最大 raw_id，作为时间锚点。
-    由于 raw_id 随时间递增，后续查询应以 raw_id >= anchor 为条件，
-    获取从该时间点往后的所有事件。
-    """
-    from models import DT_EVENT_RAW
-    try:
-        # 获取 raw_id 范围
-        min_max = db.query(
-            func.min(DT_EVENT_RAW.raw_id),
-            func.max(DT_EVENT_RAW.raw_id)
-        ).filter(DT_EVENT_RAW.tool_id.in_(tool_ids)).first()
-        if not min_max or min_max[0] is None:
-            return None
-        rid_min, rid_max = min_max[0], min_max[1]
-    except Exception:
-        return None
-
-    # 二分查找：找最大的 raw_id 使得 ts <= target_dt
-    lo, hi = rid_min, rid_max
-    best_anchor = None
-    max_iterations = 15  # 15次迭代可覆盖2^15=32768范围，足以定位单机台事件
-    for _ in range(max_iterations):
-        if lo > hi:
-            break
-        mid = (lo + hi) // 2
-        # 取出 mid 位置之前的最近一条同机台事件
-        # （raw_id 全表递增，mid 可能落在其他机台的行上，用 <= mid + DESC LIMIT 1 找到最近的）
-        row = db.query(DT_EVENT_RAW).filter(
-            DT_EVENT_RAW.tool_id.in_(tool_ids),
-            DT_EVENT_RAW.raw_id <= mid
-        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(1).first()
-        if not row:
-            # mid 位置无数据，向左移动
-            hi = mid - 1
-            continue
-        ts = row.event_ts_utc or row.received_ts_utc
-        row_dt = parse_ts(ts) if ts else 0
-        if row_dt and row_dt <= target_dt:
-            # mid 位置的时间 <= target_dt，可以作为候选，尝试向右找更大的
-            best_anchor = mid
-            lo = mid + 1
-        else:
-            # mid 位置的时间 > target_dt，需要向左找
-            hi = mid - 1
-
-    return best_anchor
+    """raw_id 二分时间锚点（批次1收拢到 core.events_query，语义与原实现一致）。"""
+    return find_raw_id_anchor(db, tool_ids, target_dt)
 
 
 @router.get("/{tool_id}/timeline")
