@@ -12,18 +12,10 @@ import MachineMotion2D from '../components/MachineMotion2D.vue'
 import PlaybackBar from '../components/PlaybackBar.vue'
 import AiAssistant from '../components/AiAssistant.vue'
 import HistoryReplay from '../components/HistoryReplay.vue'
+import { parseTs, fmtHM, hmToMs, msToHM, fmtDateMs, fmtLocalTs, HOUR_MS, MAX_RANGE_MS } from '../composables/timeFormat.js'
+import { calcRunState, createRunState } from '../composables/useRunState.js'
+import { useMachinePlayback } from '../composables/useMachinePlayback.js'
 
-// 时间戳解析：统一处理东八区时间
-// 后端返回的时间戳已去掉Z后缀，但需兼容历史数据可能带Z的情况
-// 带Z的时间戳实际上是东八区时间被误标为UTC，需要去掉Z后按本地时间解析
-function parseTs(ts) {
-  if (!ts) return 0
-  const str = String(ts).trim()
-  // 去掉Z后缀和时区偏移，按本地时间（东八区）解析
-  const localStr = str.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '')
-  const d = new Date(localStr)
-  return isNaN(d.getTime()) ? 0 : d.getTime()
-}
 
 // 机台详情：3D 模型 + 2D原理图 + 回放 + 右侧 Tab（告警/事件/Lot/AI）
 const props = defineProps({
@@ -68,31 +60,9 @@ const currentLotId = ref('')  // 当前正在run的Lot ID
 const pendingJumpTs = ref('') // 等待数据加载完成后执行的跳转时间戳
 
 // 时间区段（HH:MM）：默认最近1小时，最大查询跨度12小时
-const HOUR_MS = 3600 * 1000
-const MAX_RANGE_MS = 12 * HOUR_MS
 const initNow = new Date()
 const playbackStartHM = ref(fmtHM(new Date(initNow.getTime() - HOUR_MS)))
 const playbackEndHM = ref(fmtHM(initNow))
-function fmtHM(d) {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-function hmToMs(hm) {
-  const [h, m] = String(hm || '0:0').split(':').map(Number)
-  return ((h || 0) * 3600 + (m || 0) * 60) * 1000
-}
-function msToHM(ms) {
-  const totalMin = Math.max(0, Math.floor(ms / 60000))
-  return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`
-}
-function fmtDateMs(ms) {
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function fmtLocalTs(ms) {
-  const d = new Date(ms)
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
 // 校正区段：结束<=开始自动补1小时；跨度超12小时从结束时间前收；限制在所选日期内
 function normalizeRange(startHM, endHM) {
   const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
@@ -156,330 +126,8 @@ const availableViews = computed(() => {
 })
 
 // ===== Run货动画状态（2D/3D共用） =====
-const TOTAL_WAFERS = 25
-
-// SVG坐标系中各模块相对ARM中心的角度（0=右, 90=下, 180=左, 270=上）
-const TARGET_ANGLES = {
-  port: 150,        // PORT1方向（左下）
-  pa: 180,          // PA方向（左）
-  chamberA: 250,    // Chamber A（左上）
-  chamberB: 290,    // Chamber B（右上）
-  chamberC: 0,      // Chamber C（右）
-  idle: 90,         // 待机（向下）
-}
-const CHAMBER_KEYS = ['chamberA', 'chamberB', 'chamberC']
-
-// 每片晶圆的完整run货流程（10步，每步含子阶段）
-const RUN_STEPS = [
-  { key: 'pick_port',     name: 'PORT取片',   duration: 2500 },
-  { key: 'place_pa',      name: '放置PA',     duration: 2000 },
-  { key: 'pa_align',      name: 'PA对准',     duration: 2500 },
-  { key: 'pick_pa',       name: 'PA取片',     duration: 2000 },
-  { key: 'place_chamber', name: '放入腔体',   duration: 2500 },
-  { key: 'chamber_proc',  name: '腔体加工',   duration: 6000 },
-  { key: 'pick_chamber',  name: '腔体取片',   duration: 2500 },
-  { key: 'place_pa2',     name: 'PA放回',     duration: 2000 },
-  { key: 'pick_pa2',      name: 'PA取回',     duration: 2000 },
-  { key: 'place_port',    name: 'PORT放回',   duration: 2500 },
-]
-const SINGLE_WAFER_MS = RUN_STEPS.reduce((s, st) => s + st.duration, 0)
-const TOTAL_RUN_MS = SINGLE_WAFER_MS * TOTAL_WAFERS
-
-const runState = reactive({
-  currentWafer: 0,
-  currentStep: 0,
-  stepProgress: 0,
-  armAngle: 90,          // 当前角度
-  armExtension: 0,       // 0=收回, 1=完全伸出
-  gripperClosed: false,  // 夹爪是否闭合
-  armHolding: null,      // 夹持的晶圆ID
-  waferLocation: null,   // 晶圆所在位置: 'port'|'pa'|'chamberA'|'chamberB'|'chamberC'|'arm'|null
-  chambers: [
-    { id: 'A', state: 'idle', wafer: null, progress: 0 },
-    { id: 'B', state: 'idle', wafer: null, progress: 0 },
-    { id: 'C', state: 'idle', wafer: null, progress: 0 },
-  ],
-  waferStatuses: Array.from({ length: TOTAL_WAFERS }, (_, i) => ({
-    id: `W${String(i + 1).padStart(2, '0')}`,
-    status: 'pending',
-  })),
-})
-
-function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)) }
-function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2 }
-
-// 根据时间偏移计算run货状态
-function calcRunState(timeOffsetMs) {
-  if (timeOffsetMs < 0) timeOffsetMs = 0
-  const totalMs = timeOffsetMs % TOTAL_RUN_MS
-  const waferIdx = Math.floor(totalMs / SINGLE_WAFER_MS)
-  const waferTime = totalMs - waferIdx * SINGLE_WAFER_MS
-  const waferId = `W${String(waferIdx + 1).padStart(2, '0')}`
-  
-  let stepIdx = 0
-  let stepProgress = 0
-  let acc = 0
-  for (let i = 0; i < RUN_STEPS.length; i++) {
-    if (waferTime < acc + RUN_STEPS[i].duration) {
-      stepIdx = i
-      stepProgress = (waferTime - acc) / RUN_STEPS[i].duration
-      break
-    }
-    acc += RUN_STEPS[i].duration
-    stepIdx = i
-    stepProgress = 1
-  }
-  
-  const chamberIdx = waferIdx % 3
-  const chamberKey = CHAMBER_KEYS[chamberIdx]
-  const chamberAngle = TARGET_ANGLES[chamberKey]
-  const stepKey = RUN_STEPS[stepIdx].key
-  const p = stepProgress
-  
-  // 默认值
-  let armAngle = TARGET_ANGLES.idle
-  let armExtension = 0
-  let gripperClosed = false
-  let armHolding = null
-  let waferLocation = null
-  
-  const chambers = [
-    { id: 'A', state: 'idle', wafer: null, progress: 0 },
-    { id: 'B', state: 'idle', wafer: null, progress: 0 },
-    { id: 'C', state: 'idle', wafer: null, progress: 0 },
-  ]
-  
-  // 每步分4个子阶段: 旋转(0-0.25) → 伸出(0.25-0.5) → 夹爪动作(0.5-0.6) → 收回(0.6-1.0)
-  const rotEnd = 0.25
-  const extEnd = 0.5
-  const gripEnd = 0.6
-  const rotT = easeInOut(p / rotEnd)
-  const extT = easeInOut((p - rotEnd) / (extEnd - rotEnd))
-  const retT = easeInOut((p - gripEnd) / (1 - gripEnd))
-  
-  switch (stepKey) {
-    case 'pick_port': // 从PORT取片
-      if (p < rotEnd) {
-        armAngle = lerp(TARGET_ANGLES.idle, TARGET_ANGLES.port, rotT)
-      } else if (p < extEnd) {
-        armAngle = TARGET_ANGLES.port
-        armExtension = extT
-      } else if (p < gripEnd) {
-        armAngle = TARGET_ANGLES.port
-        armExtension = 1
-        gripperClosed = p > (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { waferLocation = 'port' }
-      } else {
-        armAngle = TARGET_ANGLES.port
-        armExtension = 1 - retT
-        gripperClosed = true
-        armHolding = waferId
-        waferLocation = 'arm'
-      }
-      break
-      
-    case 'place_pa': // 放到PA上
-      if (p < rotEnd) {
-        armAngle = lerp(TARGET_ANGLES.port, TARGET_ANGLES.pa, rotT)
-        armHolding = waferId
-        waferLocation = 'arm'
-      } else if (p < extEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = extT
-        armHolding = waferId
-        waferLocation = 'arm'
-      } else if (p < gripEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = 1
-        gripperClosed = p < (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { armHolding = null; waferLocation = 'pa' }
-      } else {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = 1 - retT
-        waferLocation = 'pa'
-      }
-      break
-      
-    case 'pa_align': // PA对准中，臂收回待机
-      armAngle = TARGET_ANGLES.idle
-      armExtension = 0
-      waferLocation = 'pa'
-      break
-      
-    case 'pick_pa': // 从PA取片
-      if (p < rotEnd) {
-        armAngle = lerp(TARGET_ANGLES.idle, TARGET_ANGLES.pa, rotT)
-        waferLocation = 'pa'
-      } else if (p < extEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = extT
-        waferLocation = 'pa'
-      } else if (p < gripEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = 1
-        gripperClosed = p > (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { waferLocation = 'pa' }
-      } else {
-        armAngle = lerp(TARGET_ANGLES.pa, chamberAngle, retT)
-        armExtension = 1 - retT
-        gripperClosed = true
-        armHolding = waferId
-        waferLocation = 'arm'
-      }
-      break
-      
-    case 'place_chamber': // 放入腔体
-      if (p < rotEnd) {
-        armAngle = lerp(TARGET_ANGLES.pa, chamberAngle, rotT)
-        armHolding = waferId
-        chambers[chamberIdx].state = 'loading'
-        waferLocation = 'arm'
-      } else if (p < extEnd) {
-        armAngle = chamberAngle
-        armExtension = extT
-        armHolding = waferId
-        chambers[chamberIdx].state = 'loading'
-        waferLocation = 'arm'
-      } else if (p < gripEnd) {
-        armAngle = chamberAngle
-        armExtension = 1
-        gripperClosed = p < (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { armHolding = null; waferLocation = chamberKey }
-      } else {
-        armAngle = chamberAngle
-        armExtension = 1 - retT
-        chambers[chamberIdx].state = 'run'
-        waferLocation = chamberKey
-      }
-      break
-      
-    case 'chamber_proc': // 腔体加工中
-      armAngle = TARGET_ANGLES.idle
-      armExtension = 0
-      chambers[chamberIdx].state = 'run'
-      chambers[chamberIdx].wafer = waferId
-      chambers[chamberIdx].progress = p
-      waferLocation = chamberKey
-      break
-      
-    case 'pick_chamber': // 从腔体取片
-      if (p < rotEnd) {
-        armAngle = lerp(TARGET_ANGLES.idle, chamberAngle, rotT)
-        chambers[chamberIdx].state = 'unloading'
-        waferLocation = chamberKey
-      } else if (p < extEnd) {
-        armAngle = chamberAngle
-        armExtension = extT
-        chambers[chamberIdx].state = 'unloading'
-        waferLocation = chamberKey
-      } else if (p < gripEnd) {
-        armAngle = chamberAngle
-        armExtension = 1
-        gripperClosed = p > (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; chambers[chamberIdx].wafer = null; waferLocation = 'arm' }
-        else { waferLocation = chamberKey }
-      } else {
-        armAngle = chamberAngle
-        armExtension = 1 - retT
-        gripperClosed = true
-        armHolding = waferId
-        waferLocation = 'arm'
-      }
-      break
-      
-    case 'place_pa2': // 放回PA
-      if (p < rotEnd) {
-        armAngle = lerp(chamberAngle, TARGET_ANGLES.pa, rotT)
-        armHolding = waferId
-        waferLocation = 'arm'
-      } else if (p < extEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = extT
-        armHolding = waferId
-        waferLocation = 'arm'
-      } else if (p < gripEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = 1
-        gripperClosed = p < (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { armHolding = null; waferLocation = 'pa' }
-      } else {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = 1 - retT
-        waferLocation = 'pa'
-      }
-      break
-      
-    case 'pick_pa2': // 从PA取回
-      if (p < rotEnd) {
-        armAngle = TARGET_ANGLES.pa
-        waferLocation = 'pa'
-      } else if (p < extEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = extT
-        waferLocation = 'pa'
-      } else if (p < gripEnd) {
-        armAngle = TARGET_ANGLES.pa
-        armExtension = 1
-        gripperClosed = p > (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { waferLocation = 'pa' }
-      } else {
-        armAngle = lerp(TARGET_ANGLES.pa, TARGET_ANGLES.port, retT)
-        armExtension = 1 - retT
-        gripperClosed = true
-        armHolding = waferId
-        waferLocation = 'arm'
-      }
-      break
-      
-    case 'place_port': // 放回PORT
-      if (p < rotEnd) {
-        armAngle = lerp(TARGET_ANGLES.pa, TARGET_ANGLES.port, rotT)
-        armHolding = waferId
-        waferLocation = 'arm'
-      } else if (p < extEnd) {
-        armAngle = TARGET_ANGLES.port
-        armExtension = extT
-        armHolding = waferId
-        waferLocation = 'arm'
-      } else if (p < gripEnd) {
-        armAngle = TARGET_ANGLES.port
-        armExtension = 1
-        gripperClosed = p < (gripEnd + extEnd) / 2
-        if (gripperClosed) { armHolding = waferId; waferLocation = 'arm' }
-        else { armHolding = null; waferLocation = 'port' }
-      } else {
-        armAngle = lerp(TARGET_ANGLES.port, TARGET_ANGLES.idle, retT)
-        armExtension = 1 - retT
-        waferLocation = 'port'
-      }
-      break
-  }
-  
-  const waferStatuses = Array.from({ length: TOTAL_WAFERS }, (_, i) => {
-    if (i < waferIdx) return { id: `W${String(i + 1).padStart(2, '0')}`, status: 'done' }
-    if (i === waferIdx) return { id: `W${String(i + 1).padStart(2, '0')}`, status: 'processing' }
-    return { id: `W${String(i + 1).padStart(2, '0')}`, status: 'pending' }
-  })
-  
-  return {
-    currentWafer: waferIdx,
-    currentStep: stepIdx,
-    stepProgress,
-    armAngle,
-    armExtension,
-    gripperClosed,
-    armHolding,
-    waferLocation,
-    chambers,
-    waferStatuses,
-  }
-}
+// 常量与 calcRunState 纯函数收拢到 composables/useRunState.js（批次3）
+const runState = createRunState()
 
 // 实时模式动画时间
 let realtimeRunTime = 0
@@ -514,9 +162,6 @@ watch(mode, (newMode) => {
 })
 
 // 历史回放数据
-let historyData = []
-let playbackIdx = 0
-let playbackTimer = null
 let realtimeTimer = null
 
 // 当前机台
@@ -590,8 +235,8 @@ function tsToMs(ts) {
   const ms = Date.parse(String(ts).replace(' ', 'T'))
   return Number.isNaN(ms) ? 0 : ms
 }
-let lastProcessedRealtimeTsMs = 0
-let realtimeEventsInitialized = false
+const lastProcessedRealtimeTsMs = ref(0)
+const realtimeEventsInitialized = ref(false)
 // watch 队首元素（test31）：每个新事件 unshift 后队首引用变化，浅比较即触发；
 // 此前 deep:true 每条 WS 事件都要递归遍历 200 个事件对象的全部嵌套属性，
 // 回放模式下 guard 虽会拦下处理，但遍历成本已经付出
@@ -605,17 +250,17 @@ watch(() => appStore.recentEvents[0], () => {
   // 历史里已经播过的事件不重复播，但**这条新事件本身要照常处理**。
   // 旧实现直接 return 丢掉第一条实时事件，导致进页面后注入/上送的第一个事件
   // 完全不播（表现为「第一次动作没有任何动画」）。
-  if (!realtimeEventsInitialized) {
-    realtimeEventsInitialized = true
+  if (!realtimeEventsInitialized.value) {
+    realtimeEventsInitialized.value = true
     const histLastTsMs = events.value.length
       ? tsToMs(events.value[events.value.length - 1].timestamp || events.value[events.value.length - 1].event_ts_utc)
       : 0
-    lastProcessedRealtimeTsMs = Math.max(lastProcessedRealtimeTsMs, histLastTsMs)
-    console.log('[MachineDetail] 实时事件初始化, lastProcessedRealtimeTsMs=', lastProcessedRealtimeTsMs)
+    lastProcessedRealtimeTsMs.value = Math.max(lastProcessedRealtimeTsMs.value, histLastTsMs)
+    console.log('[MachineDetail] 实时事件初始化, lastProcessedRealtimeTsMs=', lastProcessedRealtimeTsMs.value)
   }
   // 只处理比上次更新的事件
   const newEvents = myEvents.filter(e => {
-    return tsToMs(e.timestamp || e.event_ts_utc) > lastProcessedRealtimeTsMs
+    return tsToMs(e.timestamp || e.event_ts_utc) > lastProcessedRealtimeTsMs.value
   })
   if (!newEvents.length) return
   console.log('[MachineDetail] 收到新实时事件:', newEvents.length, '个')
@@ -624,7 +269,7 @@ watch(() => appStore.recentEvents[0], () => {
     if (events.value.length > 200) events.value.shift()
     applyEventData(ev)
     const tsMs = tsToMs(ev.timestamp || ev.event_ts_utc)
-    if (tsMs > lastProcessedRealtimeTsMs) lastProcessedRealtimeTsMs = tsMs
+    if (tsMs > lastProcessedRealtimeTsMs.value) lastProcessedRealtimeTsMs.value = tsMs
   })
 })
 
@@ -660,354 +305,20 @@ function applyEventData(ev) {
   }
 }
 
-// 回放区段一次最多拉多少条：量产数据量大，一次 5000 条会让后端逐条解析 CLOB、
-// 前端再排序，首屏明显变慢
-const PLAYBACK_EVENT_LIMIT = 2000
-// 实时模式只拉最新多少条（实时画面不需要区段全量历史）
-const REALTIME_EVENT_LIMIT = 200
-
-// 把 /history 返回的原始事件映射成回放面板期望的结构（升序）
-function mapEventList(resp) {
-  const list = (resp?.events || []).map(e => ({
-    ...e,
-    machine_id: e.tool_id || machineId.value,
-    event_code: e.event_name,
-    description: e.description || e.event_name,
-    _ts: parseTs(e.timestamp),
-  }))
-  list.sort((a, b) => a._ts - b._ts)
-  return list
-}
-
-// 历史数据取数控制器（test31）：切换机台/日期/区段时取消上一个未完成的请求，
-// 防止慢响应乱序返回覆盖新数据（竞态）
-let historyAbort = null
-function newHistorySignal() {
-  if (historyAbort) historyAbort.abort()
-  historyAbort = new AbortController()
-  return historyAbort.signal
-}
-
-// 拉取当前日期+时间区段的事件（升序）
-async function fetchRangeEvents() {
-  const start = `${playbackDate.value}T${playbackStartHM.value}:00`
-  const end = `${playbackDate.value}T${playbackEndHM.value}:59.999`
-  const resp = await api.getHistory(machineId.value, {
-    start_time: start,
-    end_time: end,
-    limit: PLAYBACK_EVENT_LIMIT,
-  }, newHistorySignal())
-  return mapEventList(resp)
-}
-
-// 拉取最新 N 条事件（实时模式用，不带时间区段）
-async function fetchLatestEvents() {
-  const resp = await api.getHistory(machineId.value, { limit: REALTIME_EVENT_LIMIT }, newHistorySignal())
-  return mapEventList(resp)
-}
-
-// === 回放模式 ===
-async function switchToPlayback() {
-  mode.value = 'playback'
-  stopPlayback()
-  playing.value = false
-  events.value = []
-  // test31：加载前先清上一台机台/上一区段的事件列表，
-  // 避免请求期间残留显示旧数据（切换机台时旧列表一直挂到新数据返回）
-  replayEvents.value = []
-  loading.value = true
-  try {
-    // 按所选日期+时间区段加载该区间历史事件
-    const list = await fetchRangeEvents()
-    historyData = list
-    if (!list.length) {
-      console.warn('所选时间段内无历史数据')
-      playbackStart.value = 0
-      playbackEnd.value = 0
-      cursor.value = 0
-      playbackIdx = 0
-      replayEvents.value = []
-      pendingJumpTs.value = ''
-      return
-    }
-    playbackStart.value = list[0]._ts
-    playbackEnd.value = list[list.length - 1]._ts
-    cursor.value = playbackStart.value
-    playbackIdx = 0
-    // 区段事件列表交给回放面板（LOT 统计/事件列表/回放驱动）
-    replayEvents.value = list
-    // 加载历史数据后先初始化到起始位置，批量重建初始视觉状态
-    seek(0)
-    // 如果有等待中的跳转，执行它（覆盖上面seek(0)的位置）
-    if (pendingJumpTs.value) {
-      const ts = pendingJumpTs.value
-      pendingJumpTs.value = ''
-      doJump(ts)
-    }
-  } catch (e) {
-    // 被新请求取消（切换机台/日期/区段）时保持静默，让新请求接管
-    if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) return
-    console.warn('回放数据加载失败:', e?.message || e)
-    playbackStart.value = 0
-    playbackEnd.value = 0
-    cursor.value = 0
-    replayEvents.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-function switchToRealtime() {
-  mode.value = 'realtime'
-  stopPlayback()
-  playing.value = false
-  events.value = []
-  // test31：同 switchToPlayback——加载前清残留，避免显示上一台机台的事件
-  replayEvents.value = []
-  // 重置回放状态
-  cursor.value = 0
-  playbackStart.value = 0
-  playbackEnd.value = 0
-  historyData = []
-  playbackIdx = 0
-  // 重置实时事件初始化标记
-  realtimeEventsInitialized = false
-  lastProcessedRealtimeTsMs = 0
-  // 实时模式下回放面板展示最新事件（不驱动模型）
-  // 只取最新 N 条：实时画面不需要区段全量历史，量产数据量下这是首屏快慢的关键
-  loading.value = true
-  fetchLatestEvents()
-    .then(list => { replayEvents.value = list })
-    .catch(e => {
-      if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) return
-      console.warn('实时事件加载失败:', e?.message || e)
-    })
-    .finally(() => { loading.value = false })
-}
-
-// 模式切换
-function onModeChange(newMode) {
-  if (newMode === mode.value) return
-  if (newMode === 'playback') {
-    switchToPlayback()
-  } else {
-    switchToRealtime()
-  }
-}
-
-// 播放/暂停
-function onPlayingChange(val) {
-  playing.value = val
-  if (val) {
-    startPlaybackLoop()
-  } else {
-    stopPlayback()
-  }
-}
-
-// 回放循环
-function startPlaybackLoop() {
-  stopPlayback()
-  if (mode.value !== 'playback') return
-  playbackTimer = setTimeout(() => {
-    if (!playing.value) return
-    const targetTime = cursor.value + 800 * speed.value
-    while (playbackIdx < historyData.length && historyData[playbackIdx]._ts <= targetTime) {
-      applyEventData(historyData[playbackIdx])
-      events.value.push(historyData[playbackIdx])
-      if (events.value.length > 200) events.value.shift()
-      playbackIdx++
-    }
-    cursor.value = Math.min(targetTime, playbackEnd.value)
-    if (cursor.value >= playbackEnd.value) {
-      playing.value = false
-      return
-    }
-    startPlaybackLoop()
-  }, 100)
-}
-
-function stopPlayback() {
-  if (playbackTimer) {
-    clearTimeout(playbackTimer)
-    playbackTimer = null
-  }
-}
-
-// 时间轴跳转（test31 拖拽重构）：
-// 拖动中只移动游标做轻量预览（进度条 + runState 跟随），mouseup 或静止
-// 200ms 后才做一次全量重放重建 —— 此前 30ms 防抖到期即从第 0 条重放全部
-// 最多 2000 条 applyEventData，拖 1 秒 ≈ 33 次全量重放，是拖拽卡顿主因
-let seekDebounceTimer = null
-function seek(pct, dragging) {
-  if (!historyData.length) return
-
-  // 跳转时暂停播放，避免自动开始播放
-  if (playing.value) {
-    playing.value = false
-    stopPlayback()
-  }
-
-  const targetTime = playbackStart.value + pct * (playbackEnd.value - playbackStart.value)
-  // 轻量预览：游标立即跟随
-  cursor.value = targetTime
-
-  if (dragging) {
-    clearTimeout(seekDebounceTimer)
-    seekDebounceTimer = setTimeout(() => commitSeek(targetTime), 200)
-    return
-  }
-  clearTimeout(seekDebounceTimer)
-  commitSeek(targetTime)
-}
-
-// 真正的跳转提交：重建目标时间点之前的全部事件状态（一次）
-function commitSeek(targetTime) {
-  const idx = bisectLeft(historyData, targetTime, (e) => e._ts)
-  playbackIdx = idx >= 0 ? idx : historyData.length
-
-  // Motion2D 视图：回放 seek 后按新事件流重建状态
-  motion2dRef.value?.resetReplayCursor?.()
-
-  events.value = []
-
-  const batchSize = 50
-  let i = 0
-  while (i < historyData.length && historyData[i]._ts <= targetTime) {
-    applyEventData(historyData[i])
-    events.value.push(historyData[i])
-    i++
-    if (i % batchSize === 0) {
-      if (events.value.length > 200) events.value = events.value.slice(-200)
-    }
-  }
-  if (events.value.length > 200) events.value = events.value.slice(-200)
-  playbackIdx = i
-}
-
-function bisectLeft(arr, target, getKey) {
-  let low = 0, high = arr.length
-  while (low < high) {
-    const mid = (low + high) >> 1
-    if (getKey(arr[mid]) < target) {
-      low = mid + 1
-    } else {
-      high = mid
-    }
-  }
-  return low
-}
-
-// 探测指定日期的数据时间跨度（返回该日升序事件的首尾时间戳）
-// 用途：默认区段是「当前时刻往前 1 小时」，切到历史日期后该区段通常与
-// 当日数据没有交集，会表现为「只有当天能查到数据，前几天都查不到」
-async function probeDayRange(dateStr) {
-  try {
-    const resp = await api.getHistory(machineId.value, {
-      start_time: `${dateStr}T00:00:00`,
-      end_time: `${dateStr}T23:59:59`,
-      limit: PLAYBACK_EVENT_LIMIT,
-    })
-    const list = mapEventList(resp)
-    if (!list.length) return null
-    return { start: list[0]._ts, end: list[list.length - 1]._ts }
-  } catch {
-    return null
-  }
-}
-
-// 把时间区段设为覆盖给定数据跨度（首尾各留 1 分钟余量，并限制在所选日期内）。
-// 超过 12h 上限时保留结束端、向前收，与 normalizeRange 的处理保持一致
-function applyRangeToSpan(span) {
-  const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
-  const dayEnd = dayStart + 86400000 - 1
-  let s = Math.max(dayStart, span.start - 60000)
-  let e = Math.min(dayEnd, span.end + 60000)
-  if (e - s > MAX_RANGE_MS) s = e - MAX_RANGE_MS
-  if (s < dayStart) s = dayStart
-  playbackStartHM.value = msToHM(s - dayStart)
-  playbackEndHM.value = msToHM(e - dayStart)
-}
-
-// 日期变化：切换日期后重新加载。
-// 换到别的日期时先探测该日数据跨度并自动适配时间区段，避免沿用
-// 「最近 1 小时」区段导致查不到历史数据；同日期刷新（刷新按钮）则保持区段不变
-async function onDateChange(newDate) {
-  if (!newDate) return
-  const dateChanged = newDate !== playbackDate.value
-  playbackDate.value = newDate
-  if (dateChanged) {
-    const span = await probeDayRange(newDate)
-    if (span) applyRangeToSpan(span)
-  }
-  await switchToPlayback()
-}
-
-// 时间区段变化（开始/结束），最大跨度12小时
-function onStartTimeChange(v) {
-  if (!v) return
-  normalizeRange(v, playbackEndHM.value)
-  switchToPlayback()
-}
-function onEndTimeChange(v) {
-  if (!v) return
-  normalizeRange(playbackStartHM.value, v)
-  switchToPlayback()
-}
-
-// 倍速变化
-function onSpeedChange(s) {
-  speed.value = s
-}
-
-// 跳转到指定时间：在当前区段内直接跳，否则调整区段后重新加载
-async function jumpToTime(payload) {
-  if (!payload) return
-  // T4 统一契约：AiAssistant 与悬浮球均传对象 { machine_id, timestamp }，兼容旧裸时间戳
-  const ts = (typeof payload === 'object') ? payload.timestamp : payload
-  if (!ts) return
-  const target = parseTs(ts)
-  if (!target) return
-  const targetDate = fmtDateMs(target)
-  const inRange = mode.value === 'playback' && targetDate === playbackDate.value &&
-    playbackStart.value > 0 && playbackEnd.value > 0 &&
-    target >= playbackStart.value && target <= playbackEnd.value
-  if (inRange) {
-    doJump(ts)
-    return
-  }
-  if (targetDate !== playbackDate.value) {
-    playbackDate.value = targetDate
-  }
-  setRangeAround(target)
-  pendingJumpTs.value = String(ts)
-  await switchToPlayback()
-}
-
-function doJump(ts) {
-  if (!historyData.length) return
-  const target = parseTs(ts)
-  if (!target) return
-  const clamped = Math.max(playbackStart.value, Math.min(playbackEnd.value, target))
-  const pct = (clamped - playbackStart.value) / (playbackEnd.value - playbackStart.value)
-  // 跳转前确保暂停
-  playing.value = false
-  stopPlayback()
-  seek(pct)
-}
-
-// 回放历史事件（从历史回放面板触发）
-function onReplayEvent(ev) {
-  if (!ev || !ev.timestamp) return
-  // 切换到回放模式
-  if (mode.value !== 'playback') {
-    switchToPlayback().then(() => {
-      doJump(ev.timestamp)
-    })
-  } else {
-    doJump(ev.timestamp)
-  }
-}
+// === 回放引擎（批次3抽离至 composables/useMachinePlayback.js） ===
+// 传入组件的状态引用与事件分发器，返回全部回放控制函数；函数体为原实现逐字搬运
+const {
+  switchToPlayback, switchToRealtime, onModeChange, onPlayingChange,
+  seek, commitSeek, onDateChange, onStartTimeChange, onEndTimeChange,
+  onSpeedChange, jumpToTime, onReplayEvent,
+} = useMachinePlayback({
+  mode, playing, speed, events, replayEvents, loading,
+  playbackDate, playbackStartHM, playbackEndHM,
+  playbackStart, playbackEnd, cursor, pendingJumpTs,
+  machineId, motion2dRef,
+  realtimeEventsInitialized, lastProcessedRealtimeTsMs,
+  applyEventData, normalizeRange, setRangeAround,
+})
 
 // 回放 Tab 的"AI分析当前回放"：切换到 AI Tab 并预填问题
 function onAiAnalyze(payload) {
@@ -1095,23 +406,12 @@ onMounted(() => {
   })
 })
 
-// 泄漏修复（test31）：离开详情页停掉动画循环与全部定时器。
-// 此前 rAF 无条件自续且无 onUnmounted —— 每进出一次详情页就多泄漏一个
-// 60fps 循环，多次进出后 CPU 线性上涨（每帧仍执行 calcRunState）。
+// 泄漏修复（test31）：离开详情页停掉 run 货动画 rAF 循环。
+// 回放定时器/防抖/未完成请求的清理已内聚到 useMachinePlayback 的 onUnmounted（批次3）。
 onUnmounted(() => {
   if (runAnimFrame) {
     cancelAnimationFrame(runAnimFrame)
     runAnimFrame = null
-  }
-  stopPlayback()
-  if (seekDebounceTimer) {
-    clearTimeout(seekDebounceTimer)
-    seekDebounceTimer = null
-  }
-  // 取消未完成的历史请求，避免卸载后响应回来写已销毁的状态
-  if (historyAbort) {
-    historyAbort.abort()
-    historyAbort = null
   }
 })
 </script>
