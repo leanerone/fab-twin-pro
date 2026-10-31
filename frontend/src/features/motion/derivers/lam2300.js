@@ -114,6 +114,16 @@ export function createClusterDeriver({ maxPort = 3, maxCh = 4 } = {}) {
   }
 }
 
+export default {
+  name: 'lam2300',
+  factory: createLam2300Deriver,
+  // 六腔 cluster（2×Load Port + 6×PM），共用同一归一化工厂
+  aliases: {
+    sym3: () => createClusterDeriver({ maxPort: 2, maxCh: 6 }),
+    synapse: () => createClusterDeriver({ maxPort: 2, maxCh: 6 }),
+  },
+}
+
 export function createLam2300Deriver() {
   // LAM 2300：3×Load Port + 4×PM
   return createClusterDeriver({ maxPort: 3, maxCh: 4 })

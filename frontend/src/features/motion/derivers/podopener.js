@@ -9,6 +9,8 @@
  *   UNPACKING（脱出）：满 POD 从右侧进入，POD 上升后移走晶舟，空 POD 向左侧移出。
  * - 纯状态推导，不产生几何参数（几何分支全部在 Motion JSON 的 when 里）。
  */
+export default { name: 'podopener', factory: createPodopenerDeriver }
+
 export function createPodopenerDeriver() {
   let cycle = 'PACKING'
 

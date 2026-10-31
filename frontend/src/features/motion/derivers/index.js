@@ -1,22 +1,27 @@
 /**
- * Motion 参数推导器注册表
+ * Motion 参数推导器注册表（批次5：import.meta.glob 自动发现）
  *
- * 新机型上线：实现一个 deriver（derive/commit/reset），在此注册名字，
- * Motion JSON 的 ext.deriver 填同名即可绑定，前端无需改其他代码。
+ * 新机型上线：在 derivers/ 下新建 .js 文件并 default 导出
+ *   export default { name: '机型标识', factory: createXxxDeriver }
+ * 一文件多形态用 aliases（如 lam2300 派生 sym3/synapse）：
+ *   export default { name, factory, aliases: { sym3: () => createClusterDeriver({...}) } }
+ * Motion JSON 的 ext.deriver 填同名即可绑定，注册表零编辑。
  */
-import { createAmatMetsputDeriver } from './amatMetsput'
-import { createPodopenerDeriver } from './podopener'
-import { createOxeDeriver } from './oxe'
-import { createLam2300Deriver, createClusterDeriver } from './lam2300'
+const modules = import.meta.glob('./*.js', { eager: true })
 
-const factories = {
-  amat_metsput: createAmatMetsputDeriver,
-  podopener: createPodopenerDeriver,
-  oxe: createOxeDeriver,
-  lam2300: createLam2300Deriver,
-  // 六腔 cluster（2×Load Port + 6×PM），共用同一归一化工厂
-  sym3: () => createClusterDeriver({ maxPort: 2, maxCh: 6 }),
-  synapse: () => createClusterDeriver({ maxPort: 2, maxCh: 6 }),
+const factories = {}
+for (const [path, mod] of Object.entries(modules)) {
+  const file = path.split('/').pop().replace(/\.js$/, '')
+  if (file === 'index') continue
+  // 约定一：default 导出 { name, factory, aliases? }
+  if (mod.default && mod.default.name && mod.default.factory) {
+    factories[mod.default.name] = mod.default.factory
+    if (mod.default.aliases) Object.assign(factories, mod.default.aliases)
+    continue
+  }
+  // 约定二：按文件名找 createXxxDeriver 导出
+  const camel = file[0].toUpperCase() + file.slice(1)
+  if (mod[`create${camel}Deriver`]) factories[file] = mod[`create${camel}Deriver`]
 }
 
 const instances = new Map()
@@ -43,4 +48,8 @@ export function resetMotionDerivers() {
   for (const inst of instances.values()) inst?.reset?.()
 }
 
-export default { getMotionDeriver, registerMotionDeriver, resetMotionDerivers }
+export function listDeriverNames() {
+  return Object.keys(factories)
+}
+
+export default { getMotionDeriver, registerMotionDeriver, resetMotionDerivers, listDeriverNames }

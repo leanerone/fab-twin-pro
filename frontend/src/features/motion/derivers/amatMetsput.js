@@ -301,4 +301,4 @@ export function createAmatMetsputDeriver() {
   return { derive, commit, reset }
 }
 
-export default { createAmatMetsputDeriver }
+export default { name: 'amat_metsput', factory: createAmatMetsputDeriver }

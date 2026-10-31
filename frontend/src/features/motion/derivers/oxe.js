@@ -103,6 +103,8 @@ function mappingValueOf(src) {
     'EventValue', 'mapping_value', 'MAPPING_VALUE', 'alarm_text', 'ALARM_TEXT', 'ALTX')
 }
 
+export default { name: 'oxe', factory: createOxeDeriver }
+
 export function createOxeDeriver() {
   let lastPort = '1'
   // 每端口槽位状态：0 空 / 1 等待 / 2 加工 / 3 完成
