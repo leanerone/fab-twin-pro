@@ -1,49 +1,70 @@
 # ============================================================
-# CODEOWNERS —— GitHub 按路径自动把审核请求派给对应负责人
+# CODEOWNERS v2（2026-11-01，按《功能全景与分工重组规划》目录级归属微调）
 #
 # ⚠️ 启用前必做：把下面的占位账号换成每人真实的 GitHub 用户名！
-#    对照（换成各自的 GitHub 用户名）：
-#      @jishiqing    = 季世庆（总控/数据链路/PODOPENER）
-#      @qianming     = 钱鸣  （机台建模）
-#      @zhumingzhao  = 朱明钊（AI应用/界面）
-#      @zhangliang   = 张亮  （Dify/n8n）
+#      @jishiqing    = 季世庆（总控/数据链路/历史查询/PODOPENER）
+#      @qianming     = 钱鸣  （机台建模/动画管线/模型编辑器）
+#      @zhumingzhao  = 朱明钊（界面/看板楼层/AI应用侧）
+#      @zhangliang   = 张亮  （AI数据侧/Dify/n8n）
 #      @hongjiaqi    = 洪佳琪（平台内核/最终审核）
-#
-# 规则：一个 PR 改动了某路径，GitHub 自动请求该路径 owner 批准；
-#      同一文件匹配多行时，【最后一行】生效（所以具体文件规则写在目录规则后面）。
-# 生效前提：Settings → Branches → test3 保护规则勾选 "Require review from Code Owners"。
-# 未列出的文件不绑定 owner（分支保护仍要求 1 个普通批准）。
+# 规则：同文件匹配多行时【最后一行】生效（具体文件规则写在目录规则后面）。
 # ============================================================
 
-# ---- 朱明钊：AI 应用 + 界面（目录级，先声明；钱鸣的两个组件在后面覆盖）----
+# ---- 朱明钊：界面 + 看板楼层 + AI 应用侧（目录级，先声明）----
 /frontend/src/views/                    @zhumingzhao
 /frontend/src/components/               @zhumingzhao
+/backend/routers/floors.py              @zhumingzhao
+/backend/routers/ai.py                  @zhumingzhao
 /backend/services/ai_middleware.py      @zhumingzhao
 
-# ---- 张亮：Dify / n8n 基础设施 ----
-/services/db_proxy/                     @zhangliang
+# ---- 张亮：AI 数据侧 + 外部服务 ----
+/backend/services/ai_tools.py           @zhangliang
+/backend/services/ai_schema.py          @zhangliang
+/backend/services/ai_sql.py             @zhangliang
+/backend/services/ai_sql_tools.py       @zhangliang
+/backend/services/mcp_client.py         @zhangliang
+/backend/services/mcp_registry.py       @zhangliang
 /scripts/generate_dify_dsl.py           @zhangliang
 /scripts/generate_n8n_workflows.py      @zhangliang
 /scripts/check_dify_db.py               @zhangliang
 /scripts/test_dify_direct.py            @zhangliang
 /deploy/deploy_dify.ps1                 @zhangliang
 /deploy/deploy_n8n.ps1                  @zhangliang
+/tests/ai/                              @zhangliang
 
-# ---- 季世庆：总控 + 数据链路 + PODOPENER 族 ----
+# ---- 季世庆：总控 + 数据链路 + 历史查询 + PODOPENER ----
 /sql/                                   @jishiqing
 /backend/routers/rvmessages.py          @jishiqing
+/backend/routers/debug.py               @jishiqing
+/backend/routers/history.py             @jishiqing
+/backend/routers/events.py              @jishiqing
+/backend/routers/lots.py                @jishiqing
+/backend/routers/alarms.py              @jishiqing
+/backend/routers/recipes.py             @jishiqing
+/backend/routers/oht.py                 @jishiqing
+/backend/routers/oxe.py                 @jishiqing
 /backend/services/db_poller.py          @jishiqing
+/backend/services/simulator.py          @jishiqing
+/backend/services/time_utils.py         @jishiqing
+/backend/services/db_proxy/             @jishiqing
 /backend/seed_data.py                   @jishiqing
 /backend/seed_vpo_motion.py             @jishiqing
 /models/user/podopener-2200.svg         @jishiqing
 /models/user/podopener-2200.motion.json @jishiqing
 
-# ---- 钱鸣：机台建模（目录级 owner；上面两个 podopener 文件除外）----
+# ---- 钱鸣：机台建模 + 动画管线 + 模型编辑器（覆盖上面 components/views 目录规则）----
 /models/                                     @qianming
 /backend/uploads/models/                     @qianming
+/backend/routers/uploads.py                  @qianming
+/backend/routers/models.py                   @qianming
 /frontend/src/motionDerivers/                @qianming
+/frontend/src/composables/useMotionPlayback.js   @qianming
+/frontend/src/composables/useExprEval.js         @qianming
+/frontend/src/composables/useExprEval.motion.js  @qianming
 /frontend/src/components/MachineMotion2D.vue @qianming
 /frontend/src/components/MotionPreview.vue   @qianming
+/frontend/src/components/ModelUpload.vue     @qianming
+/frontend/src/views/ModelEditor.vue          @qianming
 
 # ---- 洪佳琪：平台内核（这些文件的改动必须你批准）----
 /backend/main.py                        @hongjiaqi
@@ -52,12 +73,14 @@
 /backend/models.py                      @hongjiaqi
 /backend/schemas.py                     @hongjiaqi
 /backend/services/security.py           @hongjiaqi
+/backend/services/cache.py              @hongjiaqi
 /backend/services/realtime.py           @hongjiaqi
+/backend/services/perf.py               @hongjiaqi
 /backend/routers/auth.py                @hongjiaqi
 /backend/routers/users.py               @hongjiaqi
+/backend/routers/machines.py            @hongjiaqi
 /frontend/src/router/                   @hongjiaqi
 /frontend/src/stores/                   @hongjiaqi
 /frontend/src/api/index.js              @hongjiaqi
 /.github/                               @hongjiaqi
 /CODEOWNERS                             @hongjiaqi
-/docs/团队分工与协作手册_20261101.md      @hongjiaqi
