@@ -1,36 +1,42 @@
 # ============================================================
-# CODEOWNERS v2（2026-11-01，按《功能全景与分工重组规划》目录级归属微调）
+# CODEOWNERS v3（2026-11-01，两处修正）
+#   1. 张亮定位修正：只负责 Dify/n8n 对接与调试（部署脚本/DSL/联调测试），
+#      不拥有任何后端平台代码——services/ai 全包归朱明钊（AI 调试）。
+#   2. 路径刷新：批次2（services/ai 包）与批次4（features/）搬家后的真实路径。
 #
-# ⚠️ 启用前必做：把下面的占位账号换成每人真实的 GitHub 用户名！
+# ⚠️ 启用前必做：把占位账号换成每人真实的 GitHub 用户名！
 #      @jishiqing    = 季世庆（总控/数据链路/历史查询/PODOPENER）
 #      @qianming     = 钱鸣  （机台建模/动画管线/模型编辑器）
-#      @zhumingzhao  = 朱明钊（界面/看板楼层/AI应用侧）
-#      @zhangliang   = 张亮  （AI数据侧/Dify/n8n）
+#      @zhumingzhao  = 朱明钊（界面/看板/机台详情/AI 全链路代码）
+#      @zhangliang   = 张亮  （Dify/n8n 对接调试，零平台代码）
 #      @hongjiaqi    = 洪佳琪（平台内核/最终审核）
 # 规则：同文件匹配多行时【最后一行】生效（具体文件规则写在目录规则后面）。
 # ============================================================
 
-# ---- 朱明钊：界面 + 看板楼层 + AI 应用侧（目录级，先声明）----
+# ---- 朱明钊：界面 + 看板 + 机台详情 + AI 全链路代码（目录级，先声明）----
 /frontend/src/views/                    @zhumingzhao
-/frontend/src/components/               @zhumingzhao
+/frontend/src/features/ai/              @zhumingzhao
+/frontend/src/features/dashboard/       @zhumingzhao
+/frontend/src/features/machines/        @zhumingzhao
 /backend/routers/floors.py              @zhumingzhao
 /backend/routers/ai.py                  @zhumingzhao
-/backend/services/ai_middleware.py      @zhumingzhao
+/backend/services/ai/                   @zhumingzhao
 
-# ---- 张亮：AI 数据侧 + 外部服务 ----
-/backend/services/ai_tools.py           @zhangliang
-/backend/services/ai_schema.py          @zhangliang
-/backend/services/ai_sql.py             @zhangliang
-/backend/services/ai_sql_tools.py       @zhangliang
-/backend/services/mcp_client.py         @zhangliang
-/backend/services/mcp_registry.py       @zhangliang
+# ---- 张亮：Dify / n8n 对接与调试（部署脚本 + DSL 生成 + 联调测试，零平台代码）----
 /scripts/generate_dify_dsl.py           @zhangliang
 /scripts/generate_n8n_workflows.py      @zhangliang
 /scripts/check_dify_db.py               @zhangliang
 /scripts/test_dify_direct.py            @zhangliang
 /deploy/deploy_dify.ps1                 @zhangliang
 /deploy/deploy_n8n.ps1                  @zhangliang
-/tests/ai/                              @zhangliang
+/tests/test_dify_integration.py         @zhangliang
+/tests/test_n8n_f1_f10.py               @zhangliang
+/tests/test_n8n_integration.py          @zhangliang
+/tests/test_mcp_connection.py           @zhangliang
+/tests/test_mcp_workflow.py             @zhangliang
+/tests/test_mcp_execute.py              @zhangliang
+/tests/test_mcp_search_lotinfo.py       @zhangliang
+/tests/test_mcp_async.py                @zhangliang
 
 # ---- 季世庆：总控 + 数据链路 + 历史查询 + PODOPENER ----
 /sql/                                   @jishiqing
@@ -51,20 +57,26 @@
 /backend/seed_vpo_motion.py             @jishiqing
 /models/user/podopener-2200.svg         @jishiqing
 /models/user/podopener-2200.motion.json @jishiqing
+/tests/pytest/                          @jishiqing
+/tests/perf/                            @jishiqing
+/tests/smoke_baseline.py                @hongjiaqi
 
-# ---- 钱鸣：机台建模 + 动画管线 + 模型编辑器（覆盖上面 components/views 目录规则）----
+# ---- 钱鸣：机台建模 + 动画管线 + 模型编辑器（覆盖上面 views 目录规则）----
 /models/                                     @qianming
 /backend/uploads/models/                     @qianming
 /backend/routers/uploads.py                  @qianming
 /backend/routers/models.py                   @qianming
-/frontend/src/motionDerivers/                @qianming
-/frontend/src/composables/useMotionPlayback.js   @qianming
-/frontend/src/composables/useExprEval.js         @qianming
-/frontend/src/composables/useExprEval.motion.js  @qianming
-/frontend/src/components/MachineMotion2D.vue @qianming
-/frontend/src/components/MotionPreview.vue   @qianming
-/frontend/src/components/ModelUpload.vue     @qianming
+/frontend/src/features/motion/               @qianming
+/frontend/src/features/editor/               @qianming
 /frontend/src/views/ModelEditor.vue          @qianming
+
+# ---- API 域文件随所属线 ----
+/frontend/src/api/ai.js                 @zhumingzhao
+/frontend/src/api/floors.js             @zhumingzhao
+/frontend/src/api/machines.js           @jishiqing
+/frontend/src/api/history.js            @jishiqing
+/frontend/src/api/models.js             @qianming
+/frontend/src/api/uploads.js            @qianming
 
 # ---- 洪佳琪：平台内核（这些文件的改动必须你批准）----
 /backend/main.py                        @hongjiaqi
@@ -82,5 +94,6 @@
 /frontend/src/router/                   @hongjiaqi
 /frontend/src/stores/                   @hongjiaqi
 /frontend/src/api/index.js              @hongjiaqi
+/frontend/src/api/core.js               @hongjiaqi
 /.github/                               @hongjiaqi
 /CODEOWNERS                             @hongjiaqi
