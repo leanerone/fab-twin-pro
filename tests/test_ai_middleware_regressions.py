@@ -219,7 +219,9 @@ def test_usage_stats_compile_oracle_substr_and_iso_string_bounds(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(ai_middleware_module, "_get_db", lambda: FakeDB())
+    # 批次2拆包后 get_usage_stats 在 services.ai.usage，_get_db 需补丁到实现的命名空间
+    from services.ai import usage as ai_usage_module
+    monkeypatch.setattr(ai_usage_module, "_get_db", lambda: FakeDB())
     middleware = AIMiddleware.__new__(AIMiddleware)
 
     stats = middleware.get_usage_stats(days=7)
