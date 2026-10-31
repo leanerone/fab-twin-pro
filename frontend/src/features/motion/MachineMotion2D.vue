@@ -11,16 +11,16 @@
  * 不写死任何机型业务：PORT 映射/缺省值/别名读 Motion JSON ext，业务推导走 motionDerivers。
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useModelStore } from '../stores/model'
+import { useModelStore } from '../../stores/model'
 import {
   playMotion,
   resetMotionState,
   applyMotionBaseVisibility,
   invalidateMotionGeometry,
-} from '../composables/useMotionPlayback'
-import { evalWhen, resolveMotionRule } from '../composables/useExprEval'
-import { getMotionDeriver } from '../motionDerivers'
-import { scopeSvgPaintIds } from '../utils/svgPaintScope'
+} from './useMotionPlayback'
+import { evalWhen, resolveMotionRule } from './useExprEval'
+import { getMotionDeriver } from './derivers'
+import { scopeSvgPaintIds } from '../../utils/svgPaintScope'
 
 const props = defineProps({
   machine: { type: Object, default: null },

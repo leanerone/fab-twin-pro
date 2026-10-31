@@ -2,9 +2,9 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { api } from '../api'
-import { stateColors, makeTextSprite } from '../composables/useThree'
-import { disposeScene } from '../composables/threeDispose'
+import { api } from '../../api'
+import { stateColors, makeTextSprite } from '../../composables/useThree'
+import { disposeScene } from '../../composables/threeDispose'
 
 // 楼层 3D 视图：按楼层加载机台，用简单模型占位，支持后续替换为真实模型
 const props = defineProps({

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { api } from '../api'
-import { useAuthStore } from '../stores/auth'
+import { api } from '../../api'
+import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
   modelId: { type: String, default: '' },

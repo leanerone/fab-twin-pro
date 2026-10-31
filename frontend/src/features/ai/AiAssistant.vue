@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { api } from '../api'
+import { api } from '../../api'
 import VoiceInput from './VoiceInput.vue'
 
 // AI 助手聊天：发送问题、显示回答、SQL、表格、跳转按钮

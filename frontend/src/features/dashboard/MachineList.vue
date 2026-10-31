@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useAppStore } from '../stores/app'
+import { useAppStore } from '../../stores/app'
 
 // 机台列表侧边栏：产线选择 + 机台列表
 const appStore = useAppStore()

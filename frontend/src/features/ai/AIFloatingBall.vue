@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { api } from '../api'
+import { api } from '../../api'
 import VoiceInput from './VoiceInput.vue'
 
 const STORAGE_KEY = 'fabtwin_ai_floating_session'

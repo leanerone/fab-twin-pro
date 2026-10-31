@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed, reactive } from 'vue'
-import { api } from '../api'
-import { useAuthStore } from '../stores/auth'
-import { useModelStore } from '../stores/model'
+import { api } from '../../api'
+import { useAuthStore } from '../../stores/auth'
+import { useModelStore } from '../../stores/model'
 
 const props = defineProps({
   floorId: { type: Number, default: 1 },

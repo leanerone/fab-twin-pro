@@ -2,8 +2,8 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { stateColors, stateLabels } from '../composables/useThree'
-import { disposeScene } from '../composables/threeDispose'
+import { stateColors, stateLabels } from '../../composables/useThree'
+import { disposeScene } from '../../composables/threeDispose'
 
 // TEL DRM UNITY 单机 3D 模型：EFEM + VTM + 4 工艺腔 + 气体面板 + 状态灯塔 + 控制屏 + 动画
 const props = defineProps({

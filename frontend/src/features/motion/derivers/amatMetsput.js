@@ -9,7 +9,7 @@
  * （from_arm/to_arm/pickup_part/drop_part/from_angle/to_angle/cross_angle_* 等），
  * 不含任何播放逻辑；角度表读 motionConfig.arm_chamber_angles，不写死。
  */
-import { enrichMotionParams } from '../composables/useExprEval'
+import { enrichMotionParams } from '../useExprEval'
 
 function waferPosKey(lotId, slot) {
   return `${String(lotId || '').trim()}::${String(slot || '1').trim()}`

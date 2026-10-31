@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import AIConfigPanel from '../components/AIConfigPanel.vue'
+import AIConfigPanel from '@/features/ai/AIConfigPanel.vue'
 
 const panelRef = ref(null)
 </script>

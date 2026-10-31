@@ -2,9 +2,9 @@
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { useEventActionMapping } from '../composables/useEventActionMapping.js'
-import { useAnimationConfig } from '../composables/useAnimationConfig.js'
-import { disposeScene } from '../composables/threeDispose'
+import { useEventActionMapping } from '../../composables/useEventActionMapping.js'
+import { useAnimationConfig } from '../../composables/useAnimationConfig.js'
+import { disposeScene } from '../../composables/threeDispose'
 
 // === 统一动画配置（M1 配置层）===
 // 加载 /configs/machine-animations/podopener.json，2D/3D 共用

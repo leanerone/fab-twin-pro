@@ -11,12 +11,12 @@
  * 6. 重置按钮恢复所有部件到初始状态
  */
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { evalWhen, resolveMotionRule, enrichMotionParams, extractParamKeys } from '../composables/useExprEval.motion'
-import { computeExtendVec } from '../motionDerivers/amatMetsput'
-import { getMotionDeriver } from '../motionDerivers'
+import { evalWhen, resolveMotionRule, enrichMotionParams, extractParamKeys } from './useExprEval.motion'
+import { computeExtendVec } from './derivers/amatMetsput'
+import { getMotionDeriver } from './derivers'
 // P3-A：调试页与机台详情页统一使用「逐帧同步圆弧」单引擎（原 .motion.js 的事后屏幕测量补偿已废弃）
-import { playMotion, resetMotionState, invalidateMotionGeometry } from '../composables/useMotionPlayback'
-import { scopeSvgPaintIds } from '../utils/svgPaintScope'
+import { playMotion, resetMotionState, invalidateMotionGeometry } from './useMotionPlayback'
+import { scopeSvgPaintIds } from '../../utils/svgPaintScope'
 
 const props = defineProps({
   /** SVG 文件 URL */
