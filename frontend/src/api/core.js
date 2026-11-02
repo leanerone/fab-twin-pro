@@ -35,10 +35,12 @@ async function request(method, path, data = null, requireAuth = true, options = 
     opts.signal = ctrl.signal;
 
     try {
+      let sentAuth = false;
       if (requireAuth) {
         const token = getToken();
         if (token) {
           opts.headers.Authorization = `Bearer ${token}`;
+          sentAuth = true;
         } else {
           const currentHash = window.location.hash;
           if (!currentHash.includes('/login')) {
@@ -50,11 +52,10 @@ async function request(method, path, data = null, requireAuth = true, options = 
       if (data && method !== 'GET' && method !== 'DELETE') opts.body = JSON.stringify(data);
       const res = await fetch(BASE + path, opts);
       if (!res.ok) {
-        if (res.status === 401) {
-          const token = getToken();
-          if (token) {
-            localStorage.removeItem('fabtwin_token');
-          }
+        // 401 只在「确实带了登录态」时才算会话失效：requireAuth=false 的匿名请求
+        // （如公开探活）被后端新加的鉴权拦下时，不应清 token 把用户踢回登录页
+        if (res.status === 401 && sentAuth) {
+          localStorage.removeItem('fabtwin_token');
           const currentHash = window.location.hash;
           if (!currentHash.includes('/login')) {
             window.location.hash = '#/login';

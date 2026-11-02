@@ -111,10 +111,11 @@ export const aiApi = {
   aiToggleModelConfig: (id) => request('PUT', `/ai/model-configs/${id}/toggle`),
   aiSwitchModelConfig: (id) => request('POST', `/ai/model-configs/switch?config_id=${id}`),
 
-  // MCP Server (N8N) 配置（管理面板已登录，但不要求强鉴权跳转，保持与原裸 fetch 一致的行为）
-  aiGetMcpConfig: () => request('GET', '/ai/mcp/config', null, false),
-  aiSaveMcpConfig: (payload) => request('PUT', '/ai/mcp/config', payload, false),
-  aiTestMcpConnection: () => request('POST', '/ai/mcp/test', null, false),
+  // MCP Server (N8N) 配置。ver3 安全加固后整个 /api/ai 路由都要求登录
+  // （此前 requireAuth=false 是裸 fetch 时代的行为，会导致 401 → 拦截器清 token 踢回登录页）
+  aiGetMcpConfig: () => request('GET', '/ai/mcp/config'),
+  aiSaveMcpConfig: (payload) => request('PUT', '/ai/mcp/config', payload),
+  aiTestMcpConnection: () => request('POST', '/ai/mcp/test'),
   // 机台专属 Dify 配置管理
   aiGetMachineDifyConfigs: () => request('GET', '/ai/machine-dify'),
   aiCreateMachineDifyConfig: (data) => request('POST', '/ai/machine-dify', data),
