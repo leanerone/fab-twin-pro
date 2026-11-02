@@ -39,30 +39,34 @@ export function useMachinePlayback(ctx) {
     return list
   }
 
-  // 历史数据取数控制器（test31）：切换机台/日期/区段时取消上一个未完成的请求，
-  // 防止慢响应乱序返回覆盖新数据（竞态）
+  // 切换机台/日期/区段时取消旧请求；代次同时拦截已返回但尚未应用的慢响应。
   let historyAbort = null
-  function newHistorySignal() {
+  let historyGeneration = 0
+  function newHistoryRequest() {
     if (historyAbort) historyAbort.abort()
     historyAbort = new AbortController()
-    return historyAbort.signal
+    historyGeneration += 1
+    return { signal: historyAbort.signal, generation: historyGeneration }
+  }
+  function isCurrentHistoryRequest(generation) {
+    return generation === historyGeneration
   }
 
   // 拉取当前日期+时间区段的事件（升序）
-  async function fetchRangeEvents() {
+  async function fetchRangeEvents(request = newHistoryRequest()) {
     const start = `${playbackDate.value}T${playbackStartHM.value}:00`
     const end = `${playbackDate.value}T${playbackEndHM.value}:59.999`
     const resp = await api.getHistory(machineId.value, {
       start_time: start,
       end_time: end,
       limit: PLAYBACK_EVENT_LIMIT,
-    }, newHistorySignal())
+    }, request.signal)
     return mapEventList(resp)
   }
 
   // 拉取最新 N 条事件（实时模式用，不带时间区段）
-  async function fetchLatestEvents() {
-    const resp = await api.getHistory(machineId.value, { limit: REALTIME_EVENT_LIMIT }, newHistorySignal())
+  async function fetchLatestEvents(request = newHistoryRequest()) {
+    const resp = await api.getHistory(machineId.value, { limit: REALTIME_EVENT_LIMIT }, request.signal)
     return mapEventList(resp)
   }
 
@@ -76,9 +80,11 @@ export function useMachinePlayback(ctx) {
     // 避免请求期间残留显示旧数据（切换机台时旧列表一直挂到新数据返回）
     replayEvents.value = []
     loading.value = true
+    const request = newHistoryRequest()
     try {
       // 按所选日期+时间区段加载该区间历史事件
-      const list = await fetchRangeEvents()
+      const list = await fetchRangeEvents(request)
+      if (!isCurrentHistoryRequest(request.generation)) return
       historyData = list
       if (!list.length) {
         console.warn('所选时间段内无历史数据')
@@ -105,6 +111,7 @@ export function useMachinePlayback(ctx) {
         doJump(ts)
       }
     } catch (e) {
+      if (!isCurrentHistoryRequest(request.generation)) return
       // 被新请求取消（切换机台/日期/区段）时保持静默，让新请求接管
       if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) return
       console.warn('回放数据加载失败:', e?.message || e)
@@ -113,7 +120,7 @@ export function useMachinePlayback(ctx) {
       cursor.value = 0
       replayEvents.value = []
     } finally {
-      loading.value = false
+      if (isCurrentHistoryRequest(request.generation)) loading.value = false
     }
   }
 
@@ -136,13 +143,19 @@ export function useMachinePlayback(ctx) {
     // 实时模式下回放面板展示最新事件（不驱动模型）
     // 只取最新 N 条：实时画面不需要区段全量历史，量产数据量下这是首屏快慢的关键
     loading.value = true
-    fetchLatestEvents()
-      .then(list => { replayEvents.value = list })
+    const request = newHistoryRequest()
+    fetchLatestEvents(request)
+      .then(list => {
+        if (isCurrentHistoryRequest(request.generation)) replayEvents.value = list
+      })
       .catch(e => {
+        if (!isCurrentHistoryRequest(request.generation)) return
         if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) return
         console.warn('实时事件加载失败:', e?.message || e)
       })
-      .finally(() => { loading.value = false })
+      .finally(() => {
+        if (isCurrentHistoryRequest(request.generation)) loading.value = false
+      })
   }
 
   // 模式切换
@@ -261,13 +274,13 @@ export function useMachinePlayback(ctx) {
   // 探测指定日期的数据时间跨度（返回该日升序事件的首尾时间戳）
   // 用途：默认区段是「当前时刻往前 1 小时」，切到历史日期后该区段通常与
   // 当日数据没有交集，会表现为「只有当天能查到数据，前几天都查不到」
-  async function probeDayRange(dateStr) {
+  async function probeDayRange(dateStr, request = newHistoryRequest()) {
     try {
       const resp = await api.getHistory(machineId.value, {
         start_time: `${dateStr}T00:00:00`,
         end_time: `${dateStr}T23:59:59`,
         limit: PLAYBACK_EVENT_LIMIT,
-      })
+      }, request.signal)
       const list = mapEventList(resp)
       if (!list.length) return null
       return { start: list[0]._ts, end: list[list.length - 1]._ts }
@@ -297,7 +310,9 @@ export function useMachinePlayback(ctx) {
     const dateChanged = newDate !== playbackDate.value
     playbackDate.value = newDate
     if (dateChanged) {
-      const span = await probeDayRange(newDate)
+      const request = newHistoryRequest()
+      const span = await probeDayRange(newDate, request)
+      if (!isCurrentHistoryRequest(request.generation) || playbackDate.value !== newDate) return
       if (span) applyRangeToSpan(span)
     }
     await switchToPlayback()
@@ -377,7 +392,8 @@ export function useMachinePlayback(ctx) {
       clearTimeout(seekDebounceTimer)
       seekDebounceTimer = null
     }
-    // 取消未完成的历史请求，避免卸载后响应回来写已销毁的状态
+    // 先使全部异步回调失效，再取消未完成的历史请求。
+    historyGeneration += 1
     if (historyAbort) {
       historyAbort.abort()
       historyAbort = null

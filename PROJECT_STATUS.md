@@ -1,36 +1,38 @@
 # FabTwin Pro 项目进度文档
 
-> 更新日期：2026-10-30
-> 当前版本：ver2.18
-> 分支：**test3**
+> 更新日期：2026-11-02
+> 当前交接版本：ver3
+> 正式主线：**ver3**
 
 ---
 
-## 〇、当前状态速览（2026-10-30）
+## 〇、当前状态速览（2026-11-02）
 
-**本轮交付已完成**：公共库等角部件、LAM2300/Centris Sym3/TEL Synapse 三台模型、模型编辑器校验、六台回归、真实 LAM2300 事件闭环及 AI 中间件修复已收口到 `test3`。当前交接真源是 [交接说明_2026-10-30_续.md](docs/交接说明_2026-10-30_续.md)，完整变更见 [变更更改版记录.md](docs/变更更改版记录.md) 顶部 ver2.18。
+**ver3 交接修复与回归已完成**：当前正式主线为 `ver3`，源分支为 `test31`。部署步骤、完整证据和分支处置建议见 [ver3 正式交接说明](docs/交接说明_2026-11-02_ver3.md)。本版已达到可交接状态，但不等于真实外部系统或量产现场验收通过。
 
-### 模型与编辑器
+### 本版收口
 
-- LAM2300：3×Load Port、Aligner、2×Buffer、Control Rack、双 Airlock、VTM 与 PM1~4；ATM→Airlock→VTM→PM 使用封闭通道。
-- Sym3：最终为等角模型，6 组蓝色工艺腔、superellipse 孔阵顶盖、铜色底座、EFEM 和泵组。
-- Synapse：最终为等角模型，6 组高柜 PM、中央圆形 Transport Module、EFEM 和独立 UI 站。
-- 三台共享 26 步 Motion 与 `createClusterDeriver`；保留 `document.src`、文件名和部件 ID 契约。动画调试只在「模型编辑器 → 动画调试」。
-- 编辑器草稿校验与 CLI 共用规则；errors 阻断保存，warnings 分类展示；Sym3 真实 UI 提取 116 个部件并验证双向高亮。
-- OXE 手绘定稿受安全再生成保护；AMAT/PODOPENER 仅做 token defs 同步。六台源/运行时 SVG 哈希一致。
+- 历史回放、实时切换与日期探测增加请求取消和代次校验，慢响应及卸载后的回调不再覆盖新状态。
+- 删除不可达的 `raw_id` 数值二分死代码；AI 配置改为单事务持久化，写库失败不再返回成功或留下部分运行时更新。
+- 补齐 `AI_CONVERSATIONS` 真实 Oracle 迁移；修复 SQL*Plus 客户端命令被 Python 执行器误拼接的问题。
+- 平台索引逐项容错，并通过版本化迁移解决查询列过宽导致的 `ORA-01450`；新环境初始化 SQL 同步列宽。
+- CI 与协作主线切换到 `ver3`；未确认的 CODEOWNERS 占位账号不再形成生效规则。
 
 ### 验证结论
 
-- 六台 SVG×Motion 全部 0 errors；warnings 为运行时占位符或未被 Motion 直接引用的静态/可检视部件，不能描述为“零警告”。
-- 六台真实 deriver/when/template 动态回归：121 steps、1737 次 rule 展开、1760 个目标引用，0 缺失。
-- LAM2300 真实 22 事件链路通过：debug 注入→Oracle→db_poller→WS→MotionPreview。
-- 聚焦测试 `12 passed`；前端 `npm run build` 通过；六张截图基线位于 `docs/assets/baseline/`。
+| 范围 | 实测结果 | 边界 |
+|---|---|---|
+| 真实 Oracle 集成回归 | `21 passed, 1 xfailed` | XFAIL 为既有历史 keyset 分页零填充宽度问题 |
+| AI 协议兼容全链 | `20/20` 通过 | 真实后端和 Oracle；OpenAI/Dify/n8n 上游为协议 mock |
+| 前端与回放竞态 | 生产 build 通过；行为回归 `4/4` | 竞态测试使用可控网络替身，不是浏览器现场验收 |
+| 数据库迁移 | AI 会话迁移 `4/4`、平台索引迁移 `6/6`，幂等复跑均 0 失败 | Oracle 19.3 实测；其他目标库仍须先做备份和长度检查 |
+| API / WebSocket / 模型 | Oracle/API smoke `14/14`；目标事件单投递 1 次；六机台 SVG×Motion 全部通过 | 静态部件和运行时占位符仍有既有 warnings |
 
 ### DB 与环境边界
 
-本轮仅对三台 cluster 的 `MACHINE_MODEL_CONFIGS` 做数据 upsert，确保 `MACHINES` 三条演示机台存在，并向 `DT_EVENT_RAW` 注入 22 条 LAM2300 验收事件；无 DDL。Oracle CLOB 已改用 ORM `SELECT + UPDATE/INSERT`，避免 `ORA-03146`。
+`AI_CONVERSATIONS`、四个平台索引及八个目标列宽已在真实 Oracle 核验。AI 全链测试后的共享配置已按快照恢复，`sess_chain_*` 会话、用量与 mock 状态已清理；测试后端已停止以清除进程内测试状态。
 
-真实 Dify 当前连接失败（`All connection attempts failed`）；主 n8n workflow 未启用且无 URL，真实 webhook 未验收。AI 配置 UI 的登录 token 丢失问题尚未闭环，但 fresh token 直接访问相关 API 已验证为 200。PODOPENER/AMAT 最新 token-only 运行时副本还待补充浏览器视觉对照，不宣称“最新运行时视觉零回归”。
+真实 Dify、n8n、MES/MCP、EAP/RV 现场链路和量产数据规模未在本轮验收，不能将 mock 或本机 Oracle 结果描述为量产验证通过。CODEOWNERS 自动审核仍需真实 GitHub 账号和分支保护配置。
 
 ---
 

@@ -36,8 +36,7 @@ def _unwrap(payload: dict) -> dict:
     return payload
 
 
-# raw_id 时间锚点与 tool_id 解析收拢到 core.events_query（批次1去重）
-from core.events_query import find_raw_id_anchor as _find_raw_id_anchor  # noqa: E402
+# tool_id 解析收拢到 core.events_query（批次1去重）
 from core.events_query import resolve_tool_ids as _resolve_tool_ids  # noqa: E402,F811
 
 

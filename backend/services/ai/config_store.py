@@ -334,51 +334,16 @@ class _ConfigMixin:
             self.current_config_id = None
             self.provider_name = self._infer_provider_name()
 
-    def _save_dify_n8n_to_db(self):
-        """将Dify/N8N配置保存到 ai_configs 键值对表"""
+    def _save_configs_to_db(self, values: Dict[str, Any], updated_by: str = "admin") -> bool:
+        """在一个事务中保存全部配置；任一键失败时回滚并报告失败。"""
+        db = None
         try:
             db = _get_db()
-            try:
-                from models import AIConfig
-                now = datetime.now().isoformat()
-                all_config = {
-                    "dify_enabled": str(self.dify_enabled),
-                    "dify_base_url": self.dify_base_url or "",
-                    "dify_api_key": self.dify_api_key or "",
-                    "dify_app_id": self.dify_app_id or "",
-                    "n8n_enabled": str(self.n8n_enabled),
-                    "n8n_base_url": self.n8n_base_url or "",
-                    "n8n_webhook_secret": self.n8n_webhook_secret or "",
-                }
-                for key, value in all_config.items():
-                    existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
-                    if existing:
-                        existing.config_value = value
-                        existing.updated_at = now
-                    else:
-                        db.add(AIConfig(
-                            config_key=key,
-                            config_value=value,
-                            description=CONFIG_KEYS.get(key, ""),
-                            updated_at=now,
-                            updated_by="system",
-                        ))
-                db.commit()
-            finally:
-                db.close()
-        except Exception as e:
-            print(f"[AI] Dify/N8N配置保存失败: {e}")
-
-    def _save_to_db(self, key: str, value: str):
-        """保存单个配置项到 ai_configs 键值对表"""
-        try:
-            db = _get_db()
-            try:
-                from models import AIConfig
-                now = datetime.now().isoformat()
+            from models import AIConfig
+            now = datetime.now().isoformat()
+            for key, value in values.items():
                 # None 值存空字符串，避免 DB 存入字符串 "None"
-                if value is None:
-                    value = ""
+                value = "" if value is None else str(value)
                 existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
                 if existing:
                     existing.config_value = value
@@ -389,17 +354,41 @@ class _ConfigMixin:
                         config_value=value,
                         description=CONFIG_KEYS.get(key, ""),
                         updated_at=now,
-                        updated_by="admin",
+                        updated_by=updated_by,
                     ))
-                db.commit()
-            finally:
-                db.close()
+            db.commit()
+            return True
         except Exception as e:
-            print(f"[AI] 保存配置 {key} 失败: {e}")
+            if db is not None:
+                try:
+                    db.rollback()
+                except Exception as rollback_error:
+                    print(f"[AI] 配置回滚失败: {rollback_error}")
+            print(f"[AI] 批量保存配置失败: {e}")
+            return False
+        finally:
+            if db is not None:
+                db.close()
 
-    def _save_dify_n8n_key(self, key: str, value: str):
+    def _save_dify_n8n_to_db(self) -> bool:
+        """将Dify/N8N配置保存到 ai_configs 键值对表"""
+        return self._save_configs_to_db({
+            "dify_enabled": str(self.dify_enabled),
+            "dify_base_url": self.dify_base_url or "",
+            "dify_api_key": self.dify_api_key or "",
+            "dify_app_id": self.dify_app_id or "",
+            "n8n_enabled": str(self.n8n_enabled),
+            "n8n_base_url": self.n8n_base_url or "",
+            "n8n_webhook_secret": self.n8n_webhook_secret or "",
+        }, updated_by="system")
+
+    def _save_to_db(self, key: str, value: str) -> bool:
+        """保存单个配置项到 ai_configs 键值对表"""
+        return self._save_configs_to_db({key: value})
+
+    def _save_dify_n8n_key(self, key: str, value: str) -> bool:
         """保存单个Dify/N8N配置项到 ai_configs"""
-        self._save_to_db(key, value)
+        return self._save_to_db(key, value)
 
     def _build_chat_url(self, base_url: str) -> str:
         """根据 base_url 构建 chat completions 完整 URL
@@ -419,9 +408,10 @@ class _ConfigMixin:
             return f"{url}/chat/completions"
         return f"{url}/v1/chat/completions"
 
-    def _infer_provider_name(self) -> str:
-        """根据base_url推断Provider名称"""
-        url = (self.base_url or "").lower()
+    def _infer_provider_name(self, base_url: Optional[str] = None, provider: Optional[str] = None) -> str:
+        """根据候选或当前 base_url 推断Provider名称"""
+        url = ((self.base_url if base_url is None else base_url) or "").lower()
+        provider = self.provider if provider is None else provider
         if "bigmodel" in url or "zhipu" in url:
             return "智谱AI (GLM)"
         if "api.openai.com" in url:
@@ -430,7 +420,7 @@ class _ConfigMixin:
             return "DeepSeek"
         if "dashscope" in url or "qwen" in url:
             return "通义千问 (Qwen)"
-        if self.provider == "local":
+        if provider == "local":
             return "本地规则引擎"
         if url:
             return "自定义OpenAI兼容"
@@ -479,56 +469,44 @@ class _ConfigMixin:
         }
 
     def update_config(self, config: Dict[str, Any]) -> bool:
-        """更新AI配置（运行时更新 + 持久化到DB）"""
+        """先在单事务中持久化全部配置，成功后再一次性更新运行时状态。"""
         try:
+            updates = {}
             if "provider" in config:
-                self.provider = config["provider"]
-                self._save_to_db("provider", self.provider)
+                updates["provider"] = config["provider"]
             if "base_url" in config:
-                self.base_url = (config["base_url"] or "").rstrip('/')
-                self._save_to_db("base_url", self.base_url)
+                updates["base_url"] = (config["base_url"] or "").rstrip('/')
             if "api_key" in config:
-                self.api_key = config["api_key"]
-                self._save_to_db("api_key", self.api_key)
+                updates["api_key"] = config["api_key"]
             if "model" in config:
-                self.model = config["model"]
-                self._save_to_db("model", self.model)
+                updates["model"] = config["model"]
             if "temperature" in config:
-                self.temperature = float(config["temperature"])
-                self._save_to_db("temperature", str(self.temperature))
+                updates["temperature"] = float(config["temperature"])
             if "max_tokens" in config:
-                self.max_tokens = int(config["max_tokens"])
-                self._save_to_db("max_tokens", str(self.max_tokens))
+                updates["max_tokens"] = int(config["max_tokens"])
 
-            # 更新provider_name（根据base_url自动推断，或手动指定）
+            # 更新provider_name（根据候选 base_url/provider 自动推断，或手动指定）
             if "provider_name" in config:
-                self.provider_name = config["provider_name"]
+                updates["provider_name"] = config["provider_name"]
             elif "base_url" in config or "provider" in config:
-                self.provider_name = self._infer_provider_name()
-            self._save_to_db("provider_name", self.provider_name)
+                updates["provider_name"] = self._infer_provider_name(
+                    updates.get("base_url", self.base_url),
+                    updates.get("provider", self.provider),
+                )
+            else:
+                updates["provider_name"] = self.provider_name
 
-            if "dify_enabled" in config:
-                self.dify_enabled = bool(config["dify_enabled"])
-                self._save_to_db("dify_enabled", str(self.dify_enabled))
-            if "dify_base_url" in config:
-                self.dify_base_url = config["dify_base_url"]
-                self._save_to_db("dify_base_url", self.dify_base_url)
-            if "dify_api_key" in config:
-                self.dify_api_key = config["dify_api_key"]
-                self._save_to_db("dify_api_key", self.dify_api_key)
-            if "dify_app_id" in config:
-                self.dify_app_id = config["dify_app_id"]
-                self._save_to_db("dify_app_id", self.dify_app_id)
+            for key in (
+                "dify_enabled", "dify_base_url", "dify_api_key", "dify_app_id",
+                "n8n_enabled", "n8n_base_url", "n8n_webhook_secret",
+            ):
+                if key in config:
+                    updates[key] = bool(config[key]) if key.endswith("_enabled") else config[key]
 
-            if "n8n_enabled" in config:
-                self.n8n_enabled = bool(config["n8n_enabled"])
-                self._save_to_db("n8n_enabled", str(self.n8n_enabled))
-            if "n8n_base_url" in config:
-                self.n8n_base_url = config["n8n_base_url"]
-                self._save_to_db("n8n_base_url", self.n8n_base_url)
-            if "n8n_webhook_secret" in config:
-                self.n8n_webhook_secret = config["n8n_webhook_secret"]
-                self._save_to_db("n8n_webhook_secret", self.n8n_webhook_secret)
+            if not self._save_configs_to_db(updates):
+                return False
+            for key, value in updates.items():
+                setattr(self, key, value)
 
             print(f"[AI] 配置已更新并持久化: provider={self.provider}, model={self.model}")
             return True

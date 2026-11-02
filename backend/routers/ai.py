@@ -709,7 +709,8 @@ def switch_global_ai(body: dict):
     if target == "llm_default":
         ai_middleware._load_llm_config()
         # 同步落库 provider 字段（与当前实际一致，避免持久化是 dify 重启仍然走 dify）
-        ai_middleware._save_to_db("provider", ai_middleware.provider)
+        if not ai_middleware._save_to_db("provider", ai_middleware.provider):
+            raise HTTPException(status_code=500, detail="切换失败，配置写入错误")
         return {
             "success": True,
             "message": f"已切回默认 LLM: {ai_middleware.provider_name or ai_middleware.provider}/{ai_middleware.model}",

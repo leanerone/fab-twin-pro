@@ -12,6 +12,7 @@
 保证 db_poller 的「最新 100 行」窗口（raw_id desc）一定能看到测试行。
 """
 import json
+import os
 import sys
 import threading
 import time
@@ -39,6 +40,7 @@ from services.cache import machine_state_ttl, kpi_stats_ttl  # noqa: E402
 
 TEST_TOOL_PREFIX = "TEST-RW-"
 TEST_RAW_PREFIX = "TIDZ.TEST."
+TEST_INGEST_KEY = os.environ.setdefault("FABTWIN_INGEST_API_KEY", "fabtwin-pytest-ingest-key")
 
 PERF = {}
 _REPORT_PATH = Path(__file__).parent / ".perf_report.json"
@@ -70,6 +72,17 @@ def client():
     # raise_server_exceptions=False：让 500（如 raw_id 主键冲突）以响应形式返回，
     # 测试可以断言真实状态码，而不是测试进程直接抛异常
     with TestClient(fastapi_app, raise_server_exceptions=False) as c:
+        login = c.post(
+            "/api/auth/login-password",
+            json={
+                "username": os.getenv("FABTWIN_TEST_USERNAME", "admin"),
+                "password": os.getenv("FABTWIN_TEST_PASSWORD", "admin123"),
+            },
+        )
+        assert login.status_code == 200, f"测试登录失败：{login.status_code} {login.text[:200]}"
+        token = login.json().get("token")
+        assert token, "测试登录响应缺少 token"
+        c.headers.update({"Authorization": f"Bearer {token}", "X-API-Key": TEST_INGEST_KEY})
         yield c
 
 

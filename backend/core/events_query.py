@@ -4,19 +4,17 @@
 - resolve_tool_ids   ：machine_id → tool_id 集合（原三份 _resolve_tool_ids）
 - col_is_temporal    ：反射判定列是否 DATE/TIMESTAMP（原三份时间列反射）
 - day_clause         ：按列真实类型生成"某一天"的 SQL 条件（原 machines._day_clause）
-- find_raw_id_anchor ：raw_id 二分时间锚点（原 lots/history 两份）
 - clean_alarm_event  ：ALARM 事件字段清洗（原 ai_tools 内定义、oxe/history 复用）
 
 行为保持与原实现一致（OXE 前缀匹配仍只在 AI 工具层启用，见 extra_prefixes）。
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Set
+from typing import Set
 
-from sqlalchemy import DateTime, and_, func, inspect, or_
+from sqlalchemy import DateTime, and_, inspect, or_
 
-from models import DT_EVENT_RAW
-from services.time_utils import parse_ts, build_date_like_patterns
+from services.time_utils import build_date_like_patterns
 
 logger = logging.getLogger("fabtwin.core.events_query")
 
@@ -126,50 +124,3 @@ def resolve_tool_ids(db, machine_id: str, extra_prefixes: tuple = ()) -> Set[str
     except Exception:
         pass  # 映射表不存在或查询失败，忽略
     return tool_ids
-
-
-def find_raw_id_anchor(db, tool_ids, target_dt) -> Optional[int]:
-    """在 raw_id 中定位到 ts <= target_dt 的最大 raw_id。
-
-    解决 VARCHAR2 时间字段无法在 SQL 层做时间比较的问题：
-    二分查找定位 ts <= target_dt 的最大 raw_id，作为时间锚点。
-    由于 raw_id 随时间递增，后续查询应以 raw_id >= anchor 为条件，
-    获取从该时间点往后的所有事件。
-    """
-    try:
-        # 获取 raw_id 范围
-        min_max = db.query(
-            func.min(DT_EVENT_RAW.raw_id),
-            func.max(DT_EVENT_RAW.raw_id)
-        ).filter(DT_EVENT_RAW.tool_id.in_(tool_ids)).first()
-        if not min_max or min_max[0] is None:
-            return None
-        rid_min, rid_max = min_max[0], min_max[1]
-    except Exception:
-        return None
-
-    # 二分查找：找最大的 raw_id 使得 ts <= target_dt
-    lo, hi = rid_min, rid_max
-    best_anchor = None
-    max_iterations = 15  # 15次迭代可覆盖2^15=32768范围，足以定位单机台事件
-    for _ in range(max_iterations):
-        if lo > hi:
-            break
-        mid = (lo + hi) // 2
-        # 取出 mid 位置之前的最近一条同机台事件
-        # （raw_id 全表递增，mid 可能落在其他机台的行上，用 <= mid + DESC LIMIT 1 找到最近的）
-        row = db.query(DT_EVENT_RAW).filter(
-            DT_EVENT_RAW.tool_id.in_(tool_ids),
-            DT_EVENT_RAW.raw_id <= mid
-        ).order_by(DT_EVENT_RAW.raw_id.desc()).limit(1).first()
-        if not row:
-            hi = mid - 1
-            continue
-        ts = row.event_ts_utc or row.received_ts_utc
-        row_dt = parse_ts(ts) if ts else 0
-        if row_dt and row_dt <= target_dt:
-            best_anchor = mid
-            lo = mid + 1
-        else:
-            hi = mid - 1
-    return best_anchor

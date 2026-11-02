@@ -61,7 +61,7 @@ from routers.auth import get_current_user  # P0：生产数据只读端点也必
 from models import DT_EVENT_RAW, MachineToolMapping
 from services.time_utils import parse_ts, normalize_ts, build_date_like_patterns
 from core.events_query import ALARM_EVENT_NAMES  # 批次1：不再引用 AI 服务层常量
-from core.events_query import col_is_temporal, resolve_tool_ids, find_raw_id_anchor  # noqa: F401
+from core.events_query import col_is_temporal, resolve_tool_ids  # noqa: F401
 from services.cache import HybridTTLCache
 
 router = APIRouter(prefix="/api/history", tags=["history"], dependencies=[Depends(get_current_user)])
@@ -441,11 +441,6 @@ def get_history(
     if cache_key is not None:
         _history_ttl.set(cache_key, result)
     return result
-
-
-def _find_raw_id_anchor(db, tool_ids: set, target_dt) -> Optional[int]:
-    """raw_id 二分时间锚点（批次1收拢到 core.events_query，语义与原实现一致）。"""
-    return find_raw_id_anchor(db, tool_ids, target_dt)
 
 
 @router.get("/{tool_id}/timeline")

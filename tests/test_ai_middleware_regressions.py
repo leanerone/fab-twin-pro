@@ -245,3 +245,128 @@ def test_usage_stats_compile_oracle_substr_and_iso_string_bounds(monkeypatch):
     assert stats["daily_stats"] == [
         {"date": "2026-10-30", "calls": 1, "tokens": 5}
     ]
+
+
+def _config_middleware():
+    middleware = AIMiddleware.__new__(AIMiddleware)
+    middleware.provider = "local"
+    middleware.base_url = ""
+    middleware.api_key = "old-key"
+    middleware.model = "old-model"
+    middleware.temperature = 0.7
+    middleware.max_tokens = 256
+    middleware.provider_name = "本地规则引擎"
+    middleware.dify_enabled = False
+    middleware.dify_base_url = ""
+    middleware.dify_api_key = ""
+    middleware.dify_app_id = ""
+    middleware.n8n_enabled = False
+    middleware.n8n_base_url = ""
+    middleware.n8n_webhook_secret = ""
+    return middleware
+
+
+def test_update_config_keeps_runtime_unchanged_when_persistence_fails():
+    middleware = _config_middleware()
+    middleware._save_configs_to_db = Mock(return_value=False)
+
+    result = middleware.update_config({
+        "provider": "custom",
+        "base_url": "https://new.example.com/v1/",
+        "model": "new-model",
+        "temperature": "0.25",
+        "dify_enabled": True,
+    })
+
+    assert result is False
+    middleware._save_configs_to_db.assert_called_once()
+    assert middleware.provider == "local"
+    assert middleware.base_url == ""
+    assert middleware.model == "old-model"
+    assert middleware.temperature == 0.7
+    assert middleware.provider_name == "本地规则引擎"
+    assert middleware.dify_enabled is False
+
+
+def test_update_config_persists_once_before_applying_normalized_values():
+    middleware = _config_middleware()
+    persisted = []
+
+    def save(values):
+        assert middleware.provider == "local"
+        assert middleware.base_url == ""
+        assert middleware.model == "old-model"
+        persisted.append(values)
+        return True
+
+    middleware._save_configs_to_db = save
+
+    result = middleware.update_config({
+        "provider": "custom",
+        "base_url": "https://new.example.com/v1/",
+        "model": "new-model",
+        "temperature": "0.25",
+        "max_tokens": "512",
+        "dify_enabled": True,
+    })
+
+    assert result is True
+    assert persisted == [{
+        "provider": "custom",
+        "base_url": "https://new.example.com/v1",
+        "model": "new-model",
+        "temperature": 0.25,
+        "max_tokens": 512,
+        "provider_name": "自定义OpenAI兼容",
+        "dify_enabled": True,
+    }]
+    assert middleware.provider == "custom"
+    assert middleware.base_url == "https://new.example.com/v1"
+    assert middleware.model == "new-model"
+    assert middleware.temperature == 0.25
+    assert middleware.max_tokens == 512
+    assert middleware.provider_name == "自定义OpenAI兼容"
+    assert middleware.dify_enabled is True
+
+
+def test_save_configs_rolls_back_and_closes_session_on_commit_failure(monkeypatch):
+    from services.ai import config_store as ai_config_store
+
+    class FakeQuery:
+        def filter(self, *args):
+            return self
+
+        def first(self):
+            return None
+
+    class FakeDB:
+        def __init__(self):
+            self.added = []
+            self.rollback_calls = 0
+            self.close_calls = 0
+
+        def query(self, model):
+            return FakeQuery()
+
+        def add(self, value):
+            self.added.append(value)
+
+        def commit(self):
+            raise RuntimeError("commit failed")
+
+        def rollback(self):
+            self.rollback_calls += 1
+
+        def close(self):
+            self.close_calls += 1
+
+    db = FakeDB()
+    monkeypatch.setattr(ai_config_store, "_get_db", lambda: db)
+    middleware = _config_middleware()
+
+    result = middleware._save_configs_to_db({"provider": "custom", "model": "new-model"})
+
+    assert result is False
+    assert len(db.added) == 2
+    assert db.rollback_calls == 1
+    assert db.close_calls == 1

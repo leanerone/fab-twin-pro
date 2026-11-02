@@ -148,9 +148,9 @@ def main():
 
     st, body, ms = http("GET", f"{BACKEND}/api/ai/config", token=token)
     ok_model = isinstance(body, dict) and body.get("model") == "mock-model"
-    key_masked = isinstance(body, dict) and str(body.get("api_key", "")).count("*") > 0
-    R.add("配置读回且 API Key 已脱敏", ok_model and key_masked,
-          f"model={body.get('model') if isinstance(body, dict) else body}, key={body.get('api_key') if isinstance(body, dict) else '?'}")
+    key_safe = isinstance(body, dict) and body.get("has_api_key") is True and "api_key" not in body
+    R.add("配置读回且 API Key 未泄露", ok_model and key_safe,
+          f"model={body.get('model') if isinstance(body, dict) else body}, has_api_key={body.get('has_api_key') if isinstance(body, dict) else '?'}")
 
     # ── 3. 非流式对话真的调用了替身 LLM ────────────────────
     clear_mock(MOCK)

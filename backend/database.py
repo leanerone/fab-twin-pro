@@ -167,13 +167,17 @@ def init_db():
     # test31: 平台表二级索引幂等补齐——建表 SQL 只有主键，ORM 的 index=True
     # 对已存在的表不生效；这些表按 machine_id/timestamp 查询全表扫
     # 注：_ensure_index 签名为 (eng, table, index_name, columns)，勿写反
-    try:
-        _ensure_index(engine, "machine_events", "IDX_MACHINE_EVENTS_MID_TS", "(machine_id, \"TIMESTAMP\")")
-        _ensure_index(engine, "alarms", "IDX_ALARMS_MID_TS", "(machine_id, \"TIMESTAMP\")")
-        _ensure_index(engine, "oht_positions", "IDX_OHT_POS_OID_TS", "(oht_id, \"TIMESTAMP\")")
-        _ensure_index(engine, "lots", "IDX_LOTS_MID_STATUS", "(machine_id, status)")
-    except Exception as e:
-        logger.warning(f"[database] 创建平台表索引时出错（忽略，降级处理）：{e}")
+    platform_indexes = [
+        ("machine_events", "IDX_MACHINE_EVENTS_MID_TS", "(machine_id, \"TIMESTAMP\")"),
+        ("alarms", "IDX_ALARMS_MID_TS", "(machine_id, \"TIMESTAMP\")"),
+        ("oht_positions", "IDX_OHT_POS_OID_TS", "(oht_id, \"TIMESTAMP\")"),
+        ("lots", "IDX_LOTS_MID_STATUS", "(machine_id, status)"),
+    ]
+    for table, index_name, columns in platform_indexes:
+        try:
+            _ensure_index(engine, table, index_name, columns)
+        except Exception as e:
+            logger.warning(f"[database] 创建索引 {index_name} 失败（继续处理其余索引）：{e}")
 
 
 def _has_column(conn, table_name: str, column_name: str) -> bool:

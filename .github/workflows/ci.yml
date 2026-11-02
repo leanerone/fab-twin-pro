@@ -4,9 +4,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [test3]
+    branches: [ver3]
   push:
-    branches: [test3]
+    branches: [ver3]
 
 jobs:
   backend-tests:

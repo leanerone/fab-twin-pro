@@ -862,7 +862,7 @@ Lot ID 格式说明：
             db.close()
 
     def _extract_machine_id(self, question: str) -> str:
-        """从自然语言中提取机台ID
+        r"""从自然语言中提取机台ID
 
         匹配格式：PODOPENER-1 / OXE-01 / VPO-2200-01 / WAT-01
         注意：使用负向查找替代 \b，因为 Python 3 中 CJK 字符属于 \w，

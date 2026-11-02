@@ -61,8 +61,9 @@ def read_sql_blocks(sql_text: str):
                 in_block_comment = True
             continue
 
-        # 跳过注释
-        if stripped.startswith("REM") or stripped.startswith("--"):
+        # 跳过注释和 sqlplus 客户端命令。SET 没有分号，若留到缓冲区会与后续
+        # BEGIN/DECLARE 合并，导致建表块被误判为纯 SET 命令而整块跳过。
+        if stripped.startswith("REM") or stripped.startswith("--") or stripped.upper().startswith("SET "):
             continue
 
         # 检测进入 PL/SQL 块
