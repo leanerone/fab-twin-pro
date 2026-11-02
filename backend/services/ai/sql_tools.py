@@ -20,7 +20,9 @@ def query_fab_data(db, sql: str = "", row_limit: int = 200) -> Dict[str, Any]:
     安全约束由 services/ai_sql.py 保证：只能 SELECT、只能查白名单表、
     自动注入行数围栏、禁止多语句与注释藏毒。被拒时会把原因回给模型以便改写重试。
     """
-    from .ai_sql import execute_readonly, format_result_for_llm
+    # 批次2 把 ai_sql.py 更名为 sql.py 后，此处相对导入仍指旧名，
+    # 导致 query_fab_data 工具执行时 ModuleNotFoundError（AI 全链路退化为本地规则引擎）
+    from .sql import execute_readonly, format_result_for_llm
 
     if not sql or not str(sql).strip():
         return {"answer": "缺少 SQL。请用可用的表写一条只读 SELECT。", "sql": "", "table_data": []}
