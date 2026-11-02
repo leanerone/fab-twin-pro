@@ -1,0 +1,86 @@
+{
+  "name": "FabTwin 报警报表导出",
+  "nodes": [
+    {
+      "id": "f95c9545-f1a4-4729-a251-edbe2e6f9b25",
+      "name": "Webhook",
+      "webhookId": "fabtwin-export-alarm",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "export_alarm_report",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "08229c8b-1f48-40be-b133-1cd3a27f2b59",
+      "name": "Query FabTwin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        0
+      ],
+      "parameters": {
+        "url": "=http://host.docker.internal:8002/api/alarms?machine_id={{ $json.body.machine_id || 'OXE-51' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_FABTWIN_ADMIN_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a4cb843f-c505-4eb3-bb72-54e4c4bed816",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => i.json);\nlet list = [];\nif (items.length && items[0].id && items[0].alarm_code !== undefined) {\n  list = items;\n} else {\n  const resp = items[0] || {};\n  list = Array.isArray(resp) ? resp : (resp.alarms || resp.data || []);\n}\nreturn [{ json: {\n  answer: '报警报表导出完成：共 ' + list.length + ' 条告警（来源：FabTwin API 实时查询）',\n  data: list.slice(0, 10),\n  executionId: $execution.id,\n}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Query FabTwin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query FabTwin": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta_templateCredsSetupCompleted": true
+}

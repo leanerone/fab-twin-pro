@@ -1,0 +1,52 @@
+{
+  "name": "FabTwin 通用查询",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "general_query",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        0
+      ],
+      "webhookId": "fabtwin-general-query",
+      "id": "330e69fe-e6af-435c-b05d-66716d5daea4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nreturn [{ json: {\n  answer: 'N8N 工作流执行正常。收到问题：' + (body.question || ''),\n  workflow: 'general_query',\n  executionId: $execution.id,\n}}];"
+      },
+      "name": "Build",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        0
+      ],
+      "id": "04e17808-25b0-4df3-a4e5-19491a991f0d"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta_templateCredsSetupCompleted": true
+}
