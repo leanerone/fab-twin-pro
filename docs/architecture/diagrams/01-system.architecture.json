@@ -1,0 +1,381 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FabTwin Pro 当前系统架构",
+    "subtitle": "半导体 Fab 数字孪生：FastAPI + Vue + Oracle，外部智能体 Dify/n8n 可选接入（ver3 主线）",
+    "output": "01-system-architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "厂内用户",
+      "sublabel": "浏览器",
+      "pos": [
+        40,
+        240
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "eap",
+      "type": "external",
+      "label": "EAP / MES",
+      "sublabel": "量产设备事件（规划）",
+      "pos": [
+        40,
+        70
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "winform",
+      "type": "external",
+      "label": "WinForm 采集端",
+      "sublabel": "设备侧写库",
+      "pos": [
+        40,
+        420
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "motion",
+      "type": "frontend",
+      "label": "Motion2D 引擎",
+      "sublabel": "deriver 自动发现",
+      "pos": [
+        240,
+        70
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "iis",
+      "type": "cloud",
+      "label": "IIS / 静态托管",
+      "sublabel": "Vue 构建产物",
+      "pos": [
+        240,
+        240
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "vite",
+      "type": "cloud",
+      "label": "Vite Dev :5173",
+      "sublabel": "开发态",
+      "pos": [
+        240,
+        400
+      ],
+      "size": [
+        140,
+        56
+      ]
+    },
+    {
+      "id": "ws",
+      "type": "backend",
+      "label": "WebSocket 网关",
+      "sublabel": "services/realtime.py",
+      "pos": [
+        500,
+        70
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "FastAPI :8002",
+      "sublabel": "routers 按域 + core",
+      "pos": [
+        500,
+        235
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "poller",
+      "type": "backend",
+      "label": "db_poller",
+      "sublabel": "1s 轮询 raw 事件",
+      "pos": [
+        500,
+        405
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "ai_pkg",
+      "type": "backend",
+      "label": "services/ai 包",
+      "sublabel": "middleware · providers · sql",
+      "pos": [
+        700,
+        235
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "dify",
+      "type": "external",
+      "label": "Dify",
+      "sublabel": ":8080 本地 docker",
+      "pos": [
+        960,
+        40
+      ],
+      "size": [
+        130,
+        54
+      ]
+    },
+    {
+      "id": "n8n",
+      "type": "external",
+      "label": "n8n",
+      "sublabel": ":5678 工作流",
+      "pos": [
+        960,
+        120
+      ],
+      "size": [
+        130,
+        54
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "OpenAI 兼容 LLM",
+      "sublabel": "GLM/DeepSeek/Qwen",
+      "pos": [
+        960,
+        200
+      ],
+      "size": [
+        130,
+        54
+      ]
+    },
+    {
+      "id": "oracle",
+      "type": "database",
+      "label": "Oracle 19c (ORCLPDB)",
+      "sublabel": "机台/事件/AI 30+ 表",
+      "pos": [
+        950,
+        360
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "uploads",
+      "type": "database",
+      "label": "uploads/models/",
+      "sublabel": "六机台 SVG 资产",
+      "pos": [
+        950,
+        450
+      ],
+      "size": [
+        150,
+        54
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "前端：Vue3 + Vite（features/ 五域）",
+      "wraps": [
+        "motion",
+        "iis",
+        "vite"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "后端：FastAPI（ver3 模块化后）",
+      "wraps": [
+        "ws",
+        "backend",
+        "poller",
+        "ai_pkg"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "JWT Bearer + X-API-Key",
+      "wraps": [
+        "backend",
+        "ws"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "u-iis",
+      "from": "users",
+      "to": "iis",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "u-ws",
+      "from": "users",
+      "to": "ws",
+      "label": "WS 实时事件"
+    },
+    {
+      "id": "iis-be",
+      "from": "iis",
+      "to": "backend",
+      "label": "REST"
+    },
+    {
+      "id": "vite-be",
+      "from": "vite",
+      "to": "backend",
+      "label": "proxy",
+      "variant": "dashed"
+    },
+    {
+      "id": "wf-db",
+      "from": "winform",
+      "to": "oracle",
+      "label": "写 DT_EVENT_RAW"
+    },
+    {
+      "id": "eap-db",
+      "from": "eap",
+      "to": "oracle",
+      "label": "量产接入（规划）",
+      "variant": "dashed"
+    },
+    {
+      "id": "poller-db",
+      "from": "poller",
+      "to": "oracle",
+      "label": "增量轮询"
+    },
+    {
+      "id": "poller-ws",
+      "from": "poller",
+      "to": "ws",
+      "label": "broadcast"
+    },
+    {
+      "id": "be-db",
+      "from": "backend",
+      "to": "oracle",
+      "label": "SQLAlchemy"
+    },
+    {
+      "id": "be-uploads",
+      "from": "backend",
+      "to": "uploads",
+      "label": "uploads"
+    },
+    {
+      "id": "be-ai",
+      "from": "backend",
+      "to": "ai_pkg",
+      "label": "/api/ai"
+    },
+    {
+      "id": "ai-dify",
+      "from": "ai_pkg",
+      "to": "dify",
+      "label": "Dify API"
+    },
+    {
+      "id": "ai-n8n",
+      "from": "ai_pkg",
+      "to": "n8n",
+      "label": "webhook"
+    },
+    {
+      "id": "ai-llm",
+      "from": "ai_pkg",
+      "to": "llm",
+      "label": "OpenAI 兼容"
+    },
+    {
+      "id": "n8n-be",
+      "from": "n8n",
+      "to": "backend",
+      "label": "回环取数",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "实时链路",
+      "items": [
+        "WinForm/EAP → DT_EVENT_RAW → db_poller 1s 轮询 → WS raw_event → 前端动画",
+        "raw_id 去重，目标事件单投递"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "AI 数据真实",
+      "items": [
+        "物理数据字典反射 + 五层 SQL 围栏",
+        "硬门禁：答案 ≡ 直查 Oracle，21/21；协议全链 20/20"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "六机台资产",
+      "items": [
+        "OXE DRM / PODOPENER / AMAT METSPUT",
+        "LAM2300 / Centris Sym3 / TEL Synapse（26 步词表）"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "量产缺口",
+      "items": [
+        "真实 EAP 未通（影子运行是入口）",
+        "量产 n8n 10.30.116.151:5678 超时待开通"
+      ]
+    }
+  ]
+}

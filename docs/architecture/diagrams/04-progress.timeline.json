@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "timeline",
+  "meta": {
+    "title": "开发进度时间线：ver2.13 → ver3（2026-10-26 ~ 11-03）",
+    "subtitle": "依据 git 真实提交。四条泳道：平台机制 / 模型动画 / AI集成 / 数据量产。",
+    "output": "04-progress.html",
+    "evidence": "observed",
+    "timezone": "Asia/Shanghai",
+    "quality_profile": "showcase"
+  },
+  "layout": { "width": 1500 },
+  "lanes": [
+    { "id": "platform", "label": "平台/机制" },
+    { "id": "model", "label": "模型/动画" },
+    { "id": "ai", "label": "AI/集成" },
+    { "id": "data", "label": "数据/量产" }
+  ],
+  "events": [
+    { "id": "v213", "at": "2026-10-26T10:00:00+08:00", "title": "ver2.13 量产测试基线", "lane": "data", "kind": "change", "detail": "雷区A/B 治理：DT_EVENT_RAW 物化列+复合索引，14 处 LIKE 改等值，998 万行回填" },
+    { "id": "v214", "at": "2026-10-27T18:00:00+08:00", "title": "ver2.14 OXE 放射状重构", "lane": "model", "kind": "change", "detail": "顶视图改 ICP cluster 放射结构；修复 visibility 规则改写 transform 的引擎缺陷" },
+    { "id": "v216", "at": "2026-10-29T14:00:00+08:00", "title": "ver2.16 链路/安全/性能治理", "lane": "platform", "kind": "change", "detail": "db_poller 真启动、第一批 P0 鉴权加固、perf 预算、svg_kit 公共库初版" },
+    { "id": "lam_half", "at": "2026-10-30T06:24:00+08:00", "title": "LAM2300 SVG+Motion 建模", "lane": "model", "kind": "action", "detail": "139 id / 26 事件词表；deriver 与接线未做（C 盘写满中断）" },
+    { "id": "lam_done", "at": "2026-10-30T08:59:00+08:00", "title": "LAM2300 全链打通+2 个 P0 修复", "lane": "model", "kind": "recovery", "detail": "deriver 注册/入库/浏览器全链验证；Sym3/Synapse 俯视落地；ai.py 提权与 7 只读路由鉴权" },
+    { "id": "six_done", "at": "2026-10-30T16:31:00+08:00", "title": "六台动画资产与编辑器校验交付", "lane": "model", "kind": "change", "detail": "OXE/PODOPENER/METSPUT + 三台 cluster 全部 validate 0 error" },
+    { "id": "b0", "at": "2026-11-01T03:02:00+08:00", "title": "批次0 清障", "lane": "platform", "kind": "action", "detail": "删前端孤儿 3 个、routers/__init__ 最小化、41 个遗留脚本归档" },
+    { "id": "b1", "at": "2026-11-01T03:13:00+08:00", "title": "批次1 core 公共层", "lane": "platform", "kind": "action", "detail": "收拢 6 组重复实现，消除 3 类越权引用" },
+    { "id": "b2", "at": "2026-11-01T03:23:00+08:00", "title": "批次2 AI 拆包 services/ai", "lane": "ai", "kind": "action", "detail": "middleware 门面 + providers 四实现 + config_store/usage/conversations，旧路径 shim 兼容" },
+    { "id": "b3", "at": "2026-11-01T03:33:00+08:00", "title": "批次3 api 按域拆分", "lane": "platform", "kind": "action", "detail": "core+7 域；MachineDetail 1655→955 行" },
+    { "id": "b4", "at": "2026-11-01T03:37:00+08:00", "title": "批次4 features 五域落位", "lane": "platform", "kind": "action", "detail": "motion/ai/machines/editor/dashboard 17 组件归位，@ 别名化" },
+    { "id": "b5", "at": "2026-11-01T03:39:00+08:00", "title": "批次5 deriver 自动发现", "lane": "model", "kind": "change", "detail": "import.meta.glob：新机零注册表编辑，default 导出 {name,factory,aliases}" },
+    { "id": "owners", "at": "2026-11-01T07:29:00+08:00", "title": "CODEOWNERS + 分工重组", "lane": "platform", "kind": "change", "detail": "张亮零平台代码、AI 全包归朱明钊；推进机制三铁律与 12 周路线成文" },
+    { "id": "n8n_real", "at": "2026-11-01T09:06:00+08:00", "title": "n8n 真实链路 7/7", "lane": "ai", "kind": "recovery", "detail": "n8n 2.8.4 npm 直装本地链路；AI→n8n→FabTwin→Oracle→表格回传" },
+    { "id": "offsite", "at": "2026-11-01T14:44:00+08:00", "title": "异地开发交接 + Dify 套件", "lane": "ai", "kind": "action", "detail": "新机 40 分钟从 clone 到全功能；Dify 本地部署套件收编" },
+    { "id": "baseline", "at": "2026-11-02T14:49:00+08:00", "title": "ver3 交接基线", "lane": "platform", "kind": "change", "detail": "回放竞态与 AI 配置持久化收口；AI_CONVERSATIONS 迁移；真实 Oracle 21 passed" },
+    { "id": "seed_fix", "at": "2026-11-02T21:04:00+08:00", "title": "cluster 补接线（后证误建）", "lane": "model", "kind": "alert", "detail": "复核误判未入库而补 seed，产生并行重名行；11-03 已删除并改回正式脚本" },
+    { "id": "p0_ai", "at": "2026-11-03T00:22:00+08:00", "title": "query_fab_data 导入修复", "lane": "ai", "kind": "recovery", "detail": "旧模块路径致 AI 静默退化为规则引擎（10/21）；改 from .sql 后 21/21 恢复" },
+    { "id": "assets", "at": "2026-11-03T06:36:00+08:00", "title": "真实可导入 Dify/n8n 资产", "lane": "ai", "kind": "change", "detail": "docs/integration 下 DSL 与 workflow.json，含回环验证，token 脱敏" },
+    { "id": "login_fix", "at": "2026-11-03T07:06:00+08:00", "title": "AI 配置页登录误踢修复", "lane": "ai", "kind": "recovery", "detail": "MCP 配置调用未带鉴权 + 401 拦截器误清会话" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "已完成", "items": ["六机台 motion2d 全链", "六批次模块化重构", "AI 数据真实 21/21 + n8n 真实 7/7", "两个 P0 鉴权"] },
+    { "dot": "amber", "title": "进行中/待通电", "items": ["分支保护+真实账号+CODEOWNERS", "ModelEditor/FloorPlan 拆分", "E2E 进 CI"] },
+    { "dot": "rose", "title": "踩过的坑", "items": ["C 盘写满导致半成品交接", "复核漏查 scripts 误建重名机台", "AI 拆包漏改导入静默退化"] }
+  ]
+}

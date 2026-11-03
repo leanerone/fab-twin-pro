@@ -1,0 +1,242 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "后续展望：六个 Sprint 的垂直切片",
+    "subtitle": "主线一个 Sprint 只背一个可演示目标；影子运行是「演示→生产」的入口。",
+    "output": "05-roadmap.html",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Sprint 主线"
+    },
+    {
+      "id": "refactor",
+      "label": "平台重构"
+    },
+    {
+      "id": "quality",
+      "label": "质量 CI"
+    },
+    {
+      "id": "product",
+      "label": "量产演进"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "S1 通电",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p2",
+      "label": "S2~S4 影子→正式",
+      "fromCol": 1,
+      "toCol": 3
+    },
+    {
+      "id": "p3",
+      "label": "S5~S6 铺开演进",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "s5"
+  ],
+  "nodes": [
+    {
+      "id": "s1",
+      "lane": "main",
+      "col": 0,
+      "type": "security",
+      "label": "S1 机制通电",
+      "sublabel": "保护+账号"
+    },
+    {
+      "id": "s2",
+      "lane": "main",
+      "col": 1,
+      "type": "backend",
+      "label": "S2 VPO 影子",
+      "sublabel": "只读 2~4 周"
+    },
+    {
+      "id": "s3",
+      "lane": "main",
+      "col": 2,
+      "type": "external",
+      "label": "S3 Endura",
+      "sublabel": "SOP 试金石"
+    },
+    {
+      "id": "s4",
+      "lane": "main",
+      "col": 3,
+      "type": "cloud",
+      "label": "S4 转正式",
+      "sublabel": "整班次验证"
+    },
+    {
+      "id": "s5",
+      "lane": "main",
+      "col": 4,
+      "type": "cloud",
+      "label": "S5/6 铺开复盘",
+      "sublabel": "横向 2 台+"
+    },
+    {
+      "id": "r1",
+      "lane": "refactor",
+      "col": 0,
+      "type": "backend",
+      "label": "三大文件拆分",
+      "sublabel": "编辑器/Floor"
+    },
+    {
+      "id": "r2",
+      "lane": "refactor",
+      "col": 2,
+      "type": "backend",
+      "label": "双形态税评估",
+      "sublabel": "TIMESTAMP"
+    },
+    {
+      "id": "r3",
+      "lane": "refactor",
+      "col": 3,
+      "type": "database",
+      "label": "归档设计",
+      "sublabel": "月分区"
+    },
+    {
+      "id": "q1",
+      "lane": "quality",
+      "col": 1,
+      "type": "security",
+      "label": "E2E 进 CI",
+      "sublabel": "14 项冒烟"
+    },
+    {
+      "id": "q2",
+      "lane": "quality",
+      "col": 2,
+      "type": "security",
+      "label": "写路径测试",
+      "sublabel": "三域"
+    },
+    {
+      "id": "q3",
+      "lane": "quality",
+      "col": 3,
+      "type": "database",
+      "label": "CI 加 Oracle",
+      "sublabel": "容器"
+    },
+    {
+      "id": "q4",
+      "lane": "quality",
+      "col": 4,
+      "type": "database",
+      "label": "备份演练",
+      "sublabel": "expdp"
+    },
+    {
+      "id": "p1",
+      "lane": "product",
+      "col": 1,
+      "type": "database",
+      "label": "量产索引",
+      "sublabel": "DBA 窗口"
+    },
+    {
+      "id": "p2",
+      "lane": "product",
+      "col": 2,
+      "type": "external",
+      "label": "Dify 双向 MCP",
+      "sublabel": "Lot 追溯"
+    },
+    {
+      "id": "p3",
+      "lane": "product",
+      "col": 3,
+      "type": "cloud",
+      "label": "部署演练",
+      "sublabel": "离线包"
+    },
+    {
+      "id": "p4",
+      "lane": "product",
+      "col": 4,
+      "type": "external",
+      "label": "监控+工单",
+      "sublabel": "Fluent/EQAS"
+    }
+  ],
+  "edges": [
+    {
+      "from": "s1",
+      "to": "s2",
+      "variant": "emphasis"
+    },
+    {
+      "from": "s2",
+      "to": "s3",
+      "variant": "emphasis"
+    },
+    {
+      "from": "s3",
+      "to": "s4",
+      "variant": "emphasis"
+    },
+    {
+      "from": "s4",
+      "to": "s5",
+      "variant": "emphasis"
+    },
+    {
+      "from": "r1",
+      "to": "r2"
+    },
+    {
+      "from": "r2",
+      "to": "r3"
+    },
+    {
+      "from": "q1",
+      "to": "q2"
+    },
+    {
+      "from": "q2",
+      "to": "q3"
+    },
+    {
+      "from": "q3",
+      "to": "q4"
+    },
+    {
+      "from": "p1",
+      "to": "p2"
+    },
+    {
+      "from": "p2",
+      "to": "p3"
+    },
+    {
+      "from": "p3",
+      "to": "p4"
+    }
+  ]
+}
