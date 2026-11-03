@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>FabTwin 交接评审 · 2026-11-03</title>
+<style>
+  :root {
+    --bg: #0b1524; --panel: #101d31; --panel2: #14243c;
+    --accent: #00d4ff; --blue: #0068b7; --text: #e8eef5; --dim: #8fa3b8;
+    --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; overflow: hidden; }
+  .slide { display: none; position: absolute; inset: 0; padding: 56px 80px; flex-direction: column; }
+  .slide.active { display: flex; }
+  .slide.active .anim { animation: rise .5s ease both; }
+  .slide.active .anim:nth-child(2) { animation-delay: .08s; }
+  .slide.active .anim:nth-child(3) { animation-delay: .16s; }
+  .slide.active .anim:nth-child(4) { animation-delay: .24s; }
+  .slide.active .anim:nth-child(5) { animation-delay: .32s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  h1 { font-size: 52px; font-weight: 800; letter-spacing: 1px; }
+  h2 { font-size: 34px; font-weight: 800; margin-bottom: 6px; }
+  h2 .bar { display: inline-block; width: 10px; height: 30px; background: var(--accent); margin-right: 14px; vertical-align: -4px; border-radius: 2px; }
+  .sub { color: var(--dim); font-size: 16px; margin-bottom: 26px; }
+  table { border-collapse: collapse; width: 100%; font-size: 16.5px; }
+  th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid #22334d; }
+  th { color: var(--accent); font-weight: 700; font-size: 14.5px; }
+  td.dim2 { color: var(--dim); font-size: 14.5px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 13px; font-weight: 700; }
+  .b-ok { background: rgba(34,197,94,.15); color: #4ade80; }
+  .b-warn { background: rgba(245,158,11,.15); color: #fbbf24; }
+  .b-bad { background: rgba(239,68,68,.15); color: #f87171; }
+  .b-blue { background: rgba(0,212,255,.12); color: var(--accent); }
+  .cards { display: flex; gap: 18px; flex-wrap: wrap; }
+  .card { background: var(--panel); border: 1px solid #22334d; border-radius: 12px; padding: 18px 22px; flex: 1; min-width: 220px; }
+  .card h3 { font-size: 17px; color: var(--accent); margin-bottom: 8px; }
+  .card p, .card li { font-size: 14.5px; color: #c6d3e0; line-height: 1.55; }
+  .card ul { padding-left: 18px; }
+  .big { font-size: 44px; font-weight: 800; color: var(--ok); }
+  .kpi { text-align: center; }
+  .kpi .n { font-size: 46px; font-weight: 800; }
+  .kpi .l { font-size: 14px; color: var(--dim); margin-top: 4px; }
+  .footer { position: absolute; bottom: 22px; left: 80px; right: 80px; display: flex; justify-content: space-between; color: #55677d; font-size: 13px; }
+  .progress { position: absolute; top: 0; left: 0; height: 3px; background: var(--accent); transition: width .3s; }
+  .nav-hint { position: absolute; bottom: 22px; right: 30px; color: #55677d; font-size: 13px; }
+  code { background: #0d1a2c; border: 1px solid #22334d; border-radius: 5px; padding: 1px 8px; font-size: 14px; color: #7dd3fc; font-family: Consolas, monospace; }
+  .chain { display: flex; align-items: center; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+  .chain .node { background: var(--panel2); border: 1px solid #2c4260; border-radius: 10px; padding: 12px 18px; font-size: 15px; font-weight: 600; }
+  .chain .arr { color: var(--accent); font-size: 20px; font-weight: 800; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+
+<!-- S1 封面 -->
+<div class="slide active">
+  <div style="margin: auto; text-align: left; max-width: 900px;">
+    <div class="anim" style="display:flex; align-items:center; gap:14px; margin-bottom: 22px;">
+      <div style="width:12px; height:56px; background:linear-gradient(180deg,#00d4ff,#0068b7); border-radius:3px;"></div>
+      <div style="font-size: 20px; color: var(--dim); letter-spacing: 4px;">FABTWIN PRO · 数字孪生平台</div>
+    </div>
+    <h1 class="anim">交接评审</h1>
+    <p class="anim" style="font-size: 24px; color: #b9c9da; margin-top: 14px;">AI 智能链路（Dify / n8n / Text-to-SQL） ＋ 模型库与六台机台建模</p>
+    <div class="anim" style="margin-top: 42px; display: flex; gap: 16px;">
+      <span class="badge b-ok">数据真实硬门禁 21/21</span>
+      <span class="badge b-ok">SQL 红队 29/29</span>
+      <span class="badge b-ok">链路连通 20/20</span>
+      <span class="badge b-ok">n8n 真实链路 7/7</span>
+      <span class="badge b-blue">六台机台 motion2d</span>
+    </div>
+    <p class="anim" style="margin-top: 46px; color: var(--dim); font-size: 15px;">2026-11-03 ｜ 汇报人：________ ｜ 基线：ver3（c8c78c3）</p>
+  </div>
+</div>
+
+<!-- S2 现状总览 -->
+<div class="slide">
+  <h2><span class="bar"></span>一页现状：两个任务都已交付并实测</h2>
+  <p class="sub">基线 ver3 · 2026-11-03 复核（全部为本机实测，非口头结论）</p>
+  <div class="cards anim">
+    <div class="card kpi"><div class="n" style="color:var(--ok)">7 台</div><div class="l">机台 motion2d 统一管线</div></div>
+    <div class="card kpi"><div class="n">0 error</div><div class="l">六台 SVG×Motion 契约校验</div></div>
+    <div class="card kpi"><div class="n" style="color:var(--ok)">21/21</div><div class="l">AI 答案 ≡ 直查 Oracle</div></div>
+    <div class="card kpi"><div class="n" style="color:var(--ok)">7/7</div><div class="l">n8n 真实链路断言</div></div>
+    <div class="card kpi"><div class="n" style="color:var(--accent)">20/20</div><div class="l">AI 链路协议兼容</div></div>
+  </div>
+  <div class="two anim" style="margin-top: 26px;">
+    <div class="card">
+      <h3>任务 2 · 模型库（钱鸣线）</h3>
+      <ul>
+        <li>svg_kit 公共库（tokens/primitives/motion/validate/cluster_motion）</li>
+        <li>三张参考图 → LAM2300 / Centris Sym3 / TEL Synapse 新建模</li>
+        <li>六台契约 0 error；编辑器校验/保存阻断闭环</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>任务 1 · AI 链路（朱明钊线）</h3>
+      <ul>
+        <li>数据字典反射 + 受限 Text-to-SQL（五层安全围栏）</li>
+        <li>「AI 答案 ≡ 直查 Oracle」硬门禁成立</li>
+        <li>前端 SSE 流式 / 多轮 / Dify·n8n 真实对接</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- S3 AI 链路证据 -->
+<div class="slide">
+  <h2><span class="bar"></span>AI 链路：每一层数字都有证据</h2>
+  <p class="sub">测试判据：同一个问题，直连 Oracle 算标准答案 → 走完整 AI 链路 → 两条路径数字必须严格相等</p>
+  <div class="chain anim">
+    <div class="node">用户提问</div><div class="arr">→</div>
+    <div class="node">FabTwin 后端<br><span style="color:var(--dim);font-size:12px">ai/ 包 · 鉴权 · 意图路由</span></div><div class="arr">→</div>
+    <div class="node">Dify / OpenAI 兼容 LLM<br><span style="color:var(--dim);font-size:12px">编排 / Text-to-SQL</span></div><div class="arr">→</div>
+    <div class="node">安全围栏<br><span style="color:var(--dim);font-size:12px">白名单 · 围栏 · 行数封顶</span></div><div class="arr">→</div>
+    <div class="node">Oracle<br><span style="color:var(--dim);font-size:12px">只读真实执行</span></div>
+  </div>
+  <table class="anim">
+    <tr><th>测试套件</th><th>验证什么</th><th>结果</th></tr>
+    <tr><td>test_real_data.py</td><td>四类真实数据（聚合/TOP-N/工艺参数/台账）：AI 答案 ≡ 直查 Oracle；敏感表零外泄</td><td><span class="badge b-ok">21/21</span></td></tr>
+    <tr><td>test_sql_guard.py</td><td>SQL 红队：27 条攻击（多语句/注释藏毒/越权表）+ 3 条方言改写全部拦截</td><td><span class="badge b-ok">29/29</span></td></tr>
+    <tr><td>run_chain_tests.py</td><td>鉴权/脱敏/SSE 流式/Dify 多轮 conversation_id/上游 500 优雅降级</td><td><span class="badge b-ok">20/20</span></td></tr>
+    <tr><td>ai_real_test.sh（真实 n8n）</td><td>AI→n8n webhook→FabTwin API→Oracle→结构化表格回传（docker 实例实测）</td><td><span class="badge b-ok">7/7</span></td></tr>
+  </table>
+  <p class="anim" style="margin-top: 16px; color: var(--dim); font-size: 14px;">✔ 复测时间 2026-11-03（本机 docker Dify 8080 / n8n 5678 全部在线重跑通过）</p>
+</div>
+
+<!-- S4 Dify/n8n 实测 -->
+<div class="slide">
+  <h2><span class="bar"></span>Dify / n8n 真实实例：已部署 · 已初始化 · 已打通</h2>
+  <p class="sub">docker 实例本机运行：Dify 1.17.1 (8080) / n8n 2.x (5678)，机器重启后容器自启，今日复测通过</p>
+  <div class="two anim">
+    <div class="card">
+      <h3>Dify（http://localhost:8080）</h3>
+      <ul>
+        <li>管理员已初始化（admin@fabtwin.local）</li>
+        <li>应用「FabTwin 对话测试」+ App Key 已生成</li>
+        <li>OpenAI-API-compatible 插件已装（Marketplace）</li>
+        <li>FabTwin(provider=dify) → Dify → 模型 全链实测出答案</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>n8n（http://localhost:5678）</h3>
+      <ul>
+        <li>owner 已建；两个工作流已创建并激活</li>
+        <li>general_query：回显+executionId 实证</li>
+        <li>export_alarm_report：反查 FabTwin API → Oracle 真实告警 → 表格回传</li>
+        <li>7/7 断言含 sources 来源标记与用量回写</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card anim" style="margin-top: 22px;">
+    <h3>可导入资产（已回环验证：导出→导入→校验→清理）</h3>
+    <p><code>docs/integration/dify/fabtwin-chat-1.17.dsl.yml</code>　<code>docs/integration/n8n/*.workflow.json</code>（token 已脱敏）＋ 分步导入 README。<br>
+    凭据：<code>E:\AI\fab-ai-services\dify_credentials.json</code>（不入库）。接生产大模型 = Dify 控制台把模型供应商换成真实厂商 Key 即可。</p>
+  </div>
+</div>
+
+<!-- S5 交接路径 -->
+<div class="slide">
+  <h2><span class="bar"></span>同事怎么接：第一天 40 分钟从 clone 到全功能</h2>
+  <p class="sub">三条铁律的第一条：环境问题全部脚本化，不存在"在我机器上是好的"</p>
+  <table class="anim">
+    <tr><th>#</th><th>动作</th><th>命令 / 入口</th><th>验证</th></tr>
+    <tr><td>1</td><td>clone + 依赖</td><td><code>git clone → pip install -r backend/requirements.txt → npm ci</code></td><td>—</td></tr>
+    <tr><td>2</td><td>起后端（Oracle 服务名自动探测）</td><td><code>cd backend && python main.py</code></td><td>/health ok + poller ok</td></tr>
+    <tr><td>3</td><td>种子与六台接线</td><td><code>backend/seed_*.py</code> + <code>scripts/sync_cluster_models_to_db.py all</code></td><td>/api/models 7 行</td></tr>
+    <tr><td>4</td><td>静态契约</td><td><code>python models/svg_kit/validate.py …</code></td><td>六台 0 error</td></tr>
+    <tr><td>5</td><td>前端</td><td><code>cd frontend && npm ci && npm run dev</code></td><td>5173 打开</td></tr>
+    <tr><td>6</td><td>AI 链路验收</td><td><code>tests/ai/</code> 三套 + <code>ai_real_test.sh</code></td><td>21/29/20 + 7/7</td></tr>
+  </table>
+  <div class="two anim" style="margin-top: 22px;">
+    <div class="card">
+      <h3>交接必读（按顺序）</h3>
+      <ul>
+        <li><code>E:\AI\README.md</code> — 目录 → 任务 → 负责人映射</li>
+        <li><code>docs/specs/后端文件交接地图_20261103.md</code> — 后端逐文件归属 ⭐</li>
+        <li><code>frontend/src/modules/*/README.md</code> — 前端四模块自解释</li>
+        <li><code>docs/sops/</code> — 部署/建模/AI 测试/SVG 四本手册</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>分工五线（CODEOWNERS v4）</h3>
+      <ul>
+        <li>钱鸣 · 模型库｜季世庆 · 生产监控+数据链路</li>
+        <li>朱明钊 · AI 应用｜张亮 · Dify/n8n（零平台代码）</li>
+        <li>洪佳琪 · 平台内核（main/config/models/security/realtime…，动前要批）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- S6 遗留问题 -->
+<div class="slide">
+  <h2><span class="bar"></span>遗留问题清单（会议逐条拍板）</h2>
+  <p class="sub">按影响排序；每条已标注责任线与建议</p>
+  <table class="anim">
+    <tr><th>级</th><th>问题</th><th>影响</th><th>责任线</th><th>建议</th></tr>
+    <tr><td><span class="badge b-warn">P1</span></td><td>Dify 应用当前绑定本地替身模型</td><td>演示环境答案固定；生产需真 Key</td><td>朱明钊/张亮</td><td>Dify 控制台换真实厂商 Key（智谱/OpenAI），10 分钟</td></tr>
+    <tr><td><span class="badge b-warn">P1</span></td><td>ORM 与物理库漂移（Machine.type/status vs PROCESS_TYPE/STATE）</td><td>AI 读走反射已兜住；写入侧仍有隐患</td><td>洪佳琪/季世庆</td><td>排期对齐 ORM 或写入全面改反射</td></tr>
+    <tr><td><span class="badge b-warn">P1</span></td><td>n8n 报警工作流内嵌长效管理员 token</td><td>token 过期即断链；权限过大</td><td>张亮</td><td>改专用低权限账号 + 轮换机制</td></tr>
+    <tr><td><span class="badge b-blue">P2</span></td><td>/chat/stream 同步生成器 + 120s 超时</td><td>高并发线程池耗尽风险</td><td>朱明钊</td><td>改异步流（与 SSE 透传合并处理）</td></tr>
+    <tr><td><span class="badge b-blue">P2</span></td><td>Sym3/Synapse 为俯视降级建模（非等角）</td><td>与参考图视觉有差距</td><td>钱鸣</td><td>iso primitives 已就绪，排期补齐</td></tr>
+    <tr><td><span class="badge b-blue">P2</span></td><td>CODEOWNERS 真实账号未确认 / 分支保护未开 / 旧分支未归档</td><td>协作机制未生效</td><td>洪佳琪/季世庆</td><td>手册第四节 10 分钟启用步骤</td></tr>
+  </table>
+  <p class="anim" style="margin-top: 14px; color: var(--dim); font-size: 14px;">已修复归档（本次交接前完成）：SQL 装饰性假 SQL（真实执行上浮）、user_role 提权（服务端覆盖）、7 个只读路由零鉴权、WS 重复投递、query_fab_data 旧路径导入、AI 表缺失、vite 单栈监听</p>
+</div>
+
+<!-- S7 下一步 -->
+<div class="slide">
+  <h2><span class="bar"></span>下一步建议（Sprint 排序）</h2>
+  <p class="sub">建议按「让生产能用」优先于「让演示更漂亮」排序</p>
+  <table class="anim">
+    <tr><th>#</th><th>事项</th><th>线</th><th>预估</th></tr>
+    <tr><td>1</td><td>Dify 配真实 LLM Key + 数据字典注入回归（路线 B）</td><td>朱明钊</td><td>0.5 天</td></tr>
+    <tr><td>2</td><td>生产部署清单执行：AI 6 表 + cluster sync + 凭据落位</td><td>张亮/季世庆</td><td>0.5 天</td></tr>
+    <tr><td>3</td><td>n8n token 轮换 + 专用账号</td><td>张亮</td><td>0.5 天</td></tr>
+    <tr><td>4</td><td>CODEOWNERS 真实账号 + 分支保护 + 旧分支归档 tag</td><td>洪佳琪</td><td>0.5 天</td></tr>
+    <tr><td>5</td><td>Sym3/Synapse 等角补齐（iso primitives 实战）</td><td>钱鸣</td><td>1~2 天</td></tr>
+    <tr><td>6</td><td>stream 异步化 + 用量审计表补齐</td><td>朱明钊</td><td>1 天</td></tr>
+  </table>
+</div>
+
+<!-- S8 结尾 -->
+<div class="slide">
+  <div style="margin: auto; text-align: center;">
+    <h1 class="anim" style="font-size: 40px;">基线已收口 · 证据已留档 · 交接已就绪</h1>
+    <p class="anim" style="font-size: 20px; color: var(--dim); margin-top: 22px;">所有测试可重放：tests/ai/ 三套 + tests/ai/n8n_local/ + models/svg_kit/validate</p>
+    <p class="anim" style="font-size: 17px; color: #7dd3fc; margin-top: 34px;">交接入口：E:\AI\README.md → docs/specs/后端文件交接地图 → modules/*/README → docs/sops/</p>
+    <p class="anim" style="margin-top: 50px; color: #55677d; font-size: 15px;">Q & A</p>
+  </div>
+</div>
+
+<div class="footer"><span>FabTwin Pro · 交接评审</span><span>2026-11-03 · ver3 (c8c78c3)</span></div>
+<div class="nav-hint">← → 翻页</div>
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let cur = 0;
+  const prog = document.getElementById('prog');
+  function show(i) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => s.classList.toggle('active', k === cur));
+    prog.style.width = ((cur + 1) / slides.length * 100) + '%';
+  }
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { show(cur + 1); e.preventDefault(); }
+    if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { show(cur - 1); e.preventDefault(); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('a, button, input, select, textarea')) return;
+    show(cur + 1);
+  });
+  show(0);
+</script>
+</body>
+</html>
