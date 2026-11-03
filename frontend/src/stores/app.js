@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '../api'
-import { useWebSocket } from '../composables/useWebSocket'
+import { useWebSocket } from '@/platform/frontend/core/composables/useWebSocket'
 
 // 全局状态：机台列表、WebSocket 连接、事件总数等
 export const useAppStore = defineStore('app', {

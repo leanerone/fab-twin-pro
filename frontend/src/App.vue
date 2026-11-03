@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import AppHeader from './components/AppHeader.vue'
-import AIFloatingBall from '@/features/ai/AIFloatingBall.vue'
+import AppHeader from '@/platform/frontend/shell/components/AppHeader.vue'
+import AIFloatingBall from '@/modules/ai-assistant/frontend/components/AIFloatingBall.vue'
 import { useAppStore } from './stores/app'
 import { useModelStore } from './stores/model'
 import { useAuthStore } from './stores/auth'
