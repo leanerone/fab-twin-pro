@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>FabTwin 交接评审 v2 · 文件布局与链路图解</title>
+<style>
+  :root {
+    --bg:#0b1524; --panel:#101d31; --panel2:#152540;
+    --accent:#00d4ff; --blue:#0068b7; --text:#e8eef5; --dim:#8fa3b8;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+    --c-qian:#38bdf8; --c-ji:#a78bfa; --c-zhu:#34d399; --c-zhang:#fbbf24; --c-hong:#f472b6;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Microsoft YaHei',sans-serif; overflow:hidden; }
+  .slide { display:none; position:absolute; inset:0; padding:42px 64px; flex-direction:column; }
+  .slide.active { display:flex; }
+  h2 { font-size:30px; font-weight:800; margin-bottom:4px; }
+  h2 .bar { display:inline-block; width:9px; height:26px; background:var(--accent); margin-right:12px; vertical-align:-3px; border-radius:2px; }
+  .take { font-size:16px; color:#7dd3fc; margin:6px 0 18px; }
+  .take b { color:#e8eef5; }
+  .sub { color:var(--dim); font-size:14px; margin-bottom:14px; }
+  .footer { position:absolute; bottom:16px; left:64px; right:64px; display:flex; justify-content:space-between; color:#55677d; font-size:12.5px; }
+  .nav-hint { position:absolute; bottom:16px; right:26px; color:#55677d; font-size:12.5px; }
+  .progress { position:absolute; top:0; left:0; height:3px; background:var(--accent); transition:width .3s; z-index:9; }
+  table { border-collapse:collapse; width:100%; font-size:15px; }
+  th,td { padding:8px 12px; text-align:left; border-bottom:1px solid #22334d; }
+  th { color:var(--accent); font-size:13.5px; }
+  td.dim2 { color:var(--dim); font-size:13.5px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:20px; font-size:13px; font-weight:700; }
+  .b-ok { background:rgba(34,197,94,.15); color:#4ade80; }
+  .b-blue { background:rgba(0,212,255,.12); color:var(--accent); }
+  .b-warn { background:rgba(245,158,11,.15); color:#fbbf24; }
+  code { background:#0d1a2c; border:1px solid #22334d; border-radius:5px; padding:1px 7px; font-size:13.5px; color:#7dd3fc; font-family:Consolas,monospace; }
+  /* 流程链 */
+  .chain { display:flex; align-items:stretch; gap:0; margin:10px 0; }
+  .chain .node { background:var(--panel); border:1.5px solid #2c4260; border-radius:10px; padding:10px 14px; font-size:14.5px; font-weight:600; text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .chain .node small { color:var(--dim); font-weight:400; font-size:12px; margin-top:4px; }
+  .chain .arr { display:flex; align-items:center; padding:0 8px; color:var(--accent); font-size:22px; font-weight:800; }
+  /* 文件树（archify 风格） */
+  .tree { display:flex; gap:18px; align-items:stretch; }
+  .tree .root { background:var(--panel2); border:1.5px solid #3b5378; border-radius:10px; padding:12px 18px; font-weight:800; font-size:16px; align-self:center; white-space:nowrap; }
+  .tree .cols { display:flex; gap:16px; flex:1; }
+  .tree .col { flex:1; display:flex; flex-direction:column; }
+  .tree .owner { border-radius:9px 9px 0 0; padding:9px 12px; font-weight:800; font-size:14.5px; color:#0b1524; }
+  .tree .stack { border:1.5px solid #2c4260; border-top:none; border-radius:0 0 9px 9px; padding:8px 10px; flex:1; }
+  .tree .file { font-size:12.8px; color:#c6d3e0; padding:3.5px 6px; border-radius:4px; margin-bottom:2px; font-family:Consolas,monospace; }
+  .tree .file small { color:var(--dim); font-family:inherit; }
+  .tree .file.hl { background:rgba(0,212,255,.10); }
+  .legend { display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; }
+  .legend span { font-size:12.5px; color:var(--dim); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .caption { color:var(--dim); font-size:12.5px; margin-top:10px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+
+<!-- S1 封面 -->
+<div class="slide active" style="justify-content:center;">
+  <div style="max-width:960px; margin:0 auto;">
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:24px;">
+      <div style="width:12px; height:56px; background:linear-gradient(180deg,#00d4ff,#0068b7); border-radius:3px;"></div>
+      <div style="font-size:19px; color:var(--dim); letter-spacing:4px;">FABTWIN PRO · 数字孪生平台</div>
+    </div>
+    <h1 style="font-size:54px; font-weight:800;">交接评审 <span style="color:var(--accent)">v2 · 图解版</span></h1>
+    <p style="font-size:23px; color:#b9c9da; margin-top:16px;">文件怎么分布 · 链路怎么跑 · 同事怎么接 —— 全部用图讲</p>
+    <div style="margin-top:44px; display:flex; gap:14px; flex-wrap:wrap;">
+      <span class="badge b-ok">真实取数 21/21</span>
+      <span class="badge b-ok">SQL 红队 29/29</span>
+      <span class="badge b-ok">链路连通 20/20</span>
+      <span class="badge b-ok">n8n 真实链路 7/7</span>
+      <span class="badge b-blue">七台机台 motion2d</span>
+      <span class="badge b-blue">Dify / n8n 已部署打通</span>
+    </div>
+    <p style="margin-top:48px; color:var(--dim); font-size:15px;">2026-11-03 ｜ 基线 ver3（c8c78c3 + 交接修复）｜ ← → 翻页</p>
+  </div>
+</div>
+
+<!-- S2 全景运行链路 -->
+<div class="slide">
+  <h2><span class="bar"></span>先看全景：一个请求/一条事件在系统里怎么流</h2>
+  <p class="take">这张图是后面所有页的地图：<b>左边是"看动画的人"，右边是"存数据的库"，中间 8002 是唯一后端。</b></p>
+  <div class="chain">
+    <div class="node">浏览器<br><small>5173 · modules/ 四模块</small></div>
+    <div class="arr">⇄</div>
+    <div class="node" style="border-color:var(--accent)">FabTwin 后端<br><small>8002 · routers(16) + services(20) + main</small></div>
+    <div class="arr">⇄</div>
+    <div class="node">Oracle XE<br><small>1521 · xepdb1 · 29 张表</small></div>
+  </div>
+  <div style="height:22px"></div>
+  <div class="chain">
+    <div class="node" style="border-color:var(--c-zhu)">Dify 1.17.1<br><small>8080 · LLM 编排</small></div>
+    <div class="arr">⇄</div>
+    <div class="node" style="border-color:var(--c-zhang)">n8n<br><small>5678 · 工作流自动化</small></div>
+    <div class="arr">⇄</div>
+    <div class="node">db_proxy<br><small>8001 · 生产库只读代理</small></div>
+    <div class="arr">⇄</div>
+    <div class="node">生产 Oracle / MES<br><small>10.30.x 网段</small></div>
+  </div>
+  <div class="caption">
+    ① 实时动画走<b style="color:#7dd3fc">蓝链</b>：事件写进 DT_EVENT_RAW → db_poller 每秒扫 → WS 广播 raw_event → 前端 deriver 驱动 SVG（第 5 页展开）。<br>
+    ② AI 问答走<b style="color:#34d399">绿链</b>：问题 → 后端 ai/ 包 → Dify 或 OpenAI 兼容 LLM → SQL 安全围栏 → Oracle 只读执行 → 答案与直查比对（第 6 页展开）。<br>
+    ③ n8n 只在管理员自动化指令时被触发（如"导出报警报表"），由后端反查后回传表格。
+  </div>
+</div>
+
+<!-- S3 前端文件布局 -->
+<div class="slide">
+  <h2><span class="bar"></span>前端文件布局：四模块 + platform 内核</h2>
+  <p class="take"><b>交接规则一句话：改哪个业务就进哪个 modules/ 目录，目录里 README 即说明书。</b></p>
+  <div class="tree" style="margin-top:6px;">
+    <div class="root">frontend/src</div>
+    <div class="cols">
+      <div class="col">
+        <div class="owner" style="background:var(--c-qian)">model-library · 钱鸣</div>
+        <div class="stack">
+          <div class="file hl">engine/MachineMotion2D.vue <small>动画宿主</small></div>
+          <div class="file hl">engine/MotionPreview.vue <small>调试预览</small></div>
+          <div class="file hl">engine/useMotionPlayback.js <small>播放引擎</small></div>
+          <div class="file">engine/useExprEval(.motion).js</div>
+          <div class="file">derivers/ ×5 <small>自动发现注册</small></div>
+          <div class="file">editor/ModelEditorPage.vue</div>
+          <div class="file">editor/MachineManagementPage.vue</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="owner" style="background:var(--c-ji)">production-monitor · 季世庆</div>
+        <div class="stack">
+          <div class="file">pages/DashboardPage.vue</div>
+          <div class="file">pages/MachineDetailPage.vue</div>
+          <div class="file">components/floor/ ×4 <small>看板/平面图</small></div>
+          <div class="file">components/machine-3d/ ×2</div>
+          <div class="file">components/panels/ ×2 <small>告警/Lot</small></div>
+          <div class="file">components/playback/ ×2</div>
+          <div class="file">composables/ ×5 <small>回放/日期/请求取消</small></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="owner" style="background:var(--c-zhu)">ai-assistant · 朱明钊</div>
+        <div class="stack">
+          <div class="file">components/AiAssistant.vue</div>
+          <div class="file">components/AIConfigPanel.vue</div>
+          <div class="file">components/AIFloatingBall.vue</div>
+          <div class="file">components/VoiceInput.vue</div>
+          <div class="file">pages/AIConfigPage.vue</div>
+          <div class="file" style="margin-top:6px; color:var(--dim)">api/ai.js <small>（留在内核统一入口）</small></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="owner" style="background:var(--c-hong)">system-admin + platform · 洪佳琪</div>
+        <div class="stack">
+          <div class="file">system-admin/pages/LoginPage.vue</div>
+          <div class="file">system-admin/pages/UserManagement…</div>
+          <div class="file hl">platform/shell/AppHeader.vue</div>
+          <div class="file hl">platform/core/composables/ <small>useWebSocket / useThree / useRafLoop / threeDispose</small></div>
+          <div class="file" style="color:var(--dim)">api/core.js · stores/ · router/ <small>统一入口，消费方零改动</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="caption">
+    每个模块目录自带 README（公开接口 / 内部文件 / 自测方法）——同事接手先读 README 再动代码。
+    <b>改哪个业务进哪个目录，目录名即分工。</b>颜色即负责人，与后端一页同一套色标。
+  </div>
+</div>
+
+<!-- S4 后端文件布局 -->
+<div class="slide">
+  <h2><span class="bar"></span>后端文件布局：平铺但归属清晰（按人着色）</h2>
+  <p class="take"><b>后端是平铺的（团队决策：搬迁风险大于收益），但每个文件都有唯一主人。</b>颜色 = 负责人。</p>
+  <div class="tree" style="margin-top:4px;">
+    <div class="root">backend/</div>
+    <div class="cols">
+      <div class="col" style="flex:1.15">
+        <div class="owner" style="background:var(--c-ji)">routers/ · 季世庆（11 个数据链路）</div>
+        <div class="stack">
+          <div class="file">floors 847 · machines 449 · history 611</div>
+          <div class="file">lots 212 · alarms 131 · events 131 · oxe 159</div>
+          <div class="file">rvmessages 200 <small>RV注入+广播</small> · debug 94 <small>动画联调注入</small></div>
+          <div class="file">recipes 51 · oht 49</div>
+          <div class="file" style="color:var(--dim)">services/db_poller 319 · simulator 342 · ods 144</div>
+          <div class="file" style="color:var(--dim)">seed_data 1048 · seed_oxe_test_data · sql_runner · sql/</div>
+        </div>
+      </div>
+      <div class="col" style="flex:1.1">
+        <div class="owner" style="background:var(--c-zhu)">routers/ai + services/ai/ · 朱明钊</div>
+        <div class="stack">
+          <div class="file hl">routers/ai.py 722 <small>chat/stream/config/mcp/usage</small></div>
+          <div class="file hl">services/ai/middleware.py 910 <small>四路分发</small></div>
+          <div class="file hl">services/ai/tools.py 1468 <small>9 固定工具+query_fab_data</small></div>
+          <div class="file">services/ai/config_store 914 · schema 505</div>
+          <div class="file">services/ai/sql 335 <small>安全围栏</small> · sql_tools 127</div>
+          <div class="file">services/ai/mcp_client 310 · usage 306 · conversations 130</div>
+          <div class="file" style="color:var(--dim)">speech_service 126 · tests/ai/ 四套</div>
+        </div>
+      </div>
+      <div class="col" style="flex:0.95">
+        <div class="owner" style="background:var(--c-qian)">模型库 · 钱鸣</div>
+        <div class="stack">
+          <div class="file">routers/models.py 339 <small>机型配置 CRUD</small></div>
+          <div class="file">routers/uploads.py 755 <small>上传+部件提取</small></div>
+          <div class="file">services/html_parser.py 266</div>
+          <div class="file">seed_amat_metsput.py 132</div>
+          <div class="file">scripts/sync_*.py ×3 <small>入库正道</small></div>
+          <div class="file" style="color:var(--dim)">models/ + uploads/models/ 资产</div>
+        </div>
+      </div>
+      <div class="col" style="flex:1">
+        <div class="owner" style="background:var(--c-hong)">内核 · 洪佳琪</div>
+        <div class="stack">
+          <div class="file">main.py 337 <small>入口/16路由/WS/启动</small></div>
+          <div class="file">config · database 332 · models 568 · schemas 272</div>
+          <div class="file">routers/auth 327 · users 395</div>
+          <div class="file">services/security 117 · realtime 96 · cache 273</div>
+          <div class="file">services/perf 163 · time_utils 167 · core/</div>
+          <div class="file" style="color:var(--dim)">routers/auth+users、stores/router/api 也归洪佳琪</div>
+        </div>
+      </div>
+      <div class="col" style="flex:0.75">
+        <div class="owner" style="background:var(--c-zhang)">Dify/n8n · 张亮</div>
+        <div class="stack">
+          <div class="file">services/db_proxy/ <small>8001 只读代理</small></div>
+          <div class="file">scripts/generate_dify_dsl / generate_n8n_workflows</div>
+          <div class="file">scripts/check_dify_db · test_dify_direct</div>
+          <div class="file">backend/n8n_docker_setup.py</div>
+          <div class="file">backend/n8n_fix_alarm_node.py</div>
+          <div class="file">backend/diagnose_dify.py 462</div>
+          <div class="file" style="color:var(--dim)">docs/integration/ 可导入资产</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--c-qian)"></i>钱鸣·模型库</span>
+    <span><i style="background:var(--c-ji)"></i>季世庆·生产监控+数据链路</span>
+    <span><i style="background:var(--c-zhu)"></i>朱明钊·AI 助手</span>
+    <span><i style="background:var(--c-hong)"></i>洪佳琪·内核+系统管理</span>
+    <span><i style="background:var(--c-zhang)"></i>张亮·Dify/n8n</span>
+  </div>
+  <div class="caption">⚠️ services/ 根下的 ai_middleware / ai_schema / ai_sql / ai_sql_tools / mcp_client / mcp_registry 是拆包兼容 <b>shim（勿删）</b>；完整逐行版见 <b>docs/specs/后端文件交接地图_20261103.md</b>。</div>
+</div>
+
+<!-- S5 事件驱动链路 -->
+<div class="slide">
+  <h2><span class="bar"></span>机台动画是怎么被驱动的（流程图）</h2>
+  <p class="take"><b>六步闭环：任何一步断掉动画就不动，任何一步都能单独验证。</b></p>
+  <div class="chain">
+    <div class="node">① 事件写入<br><small>EAP / debug 注入<br>/api/rv/message · /api/debug/event</small></div>
+    <div class="arr">→</div>
+    <div class="node">② DT_EVENT_RAW<br><small>Oracle 事件表<br>（含当日演示数据）</small></div>
+    <div class="arr">→</div>
+    <div class="node">③ db_poller<br><small>每 1 秒扫描增量<br>raw_id 游标</small></div>
+    <div class="arr">→</div>
+    <div class="node">④ WS 广播<br><small>raw_event 单次投递<br>（realtime 去重）</small></div>
+    <div class="arr">→</div>
+    <div class="node">⑤ 前端 deriver<br><small>payload 归一<br>{PORT}/{CH} 参数</small></div>
+    <div class="arr">→</div>
+    <div class="node">⑥ SVG 动画<br><small>Motion JSON 规则<br>→ useMotionPlayback</small></div>
+  </div>
+  <div class="caption" style="margin-top:16px;">
+    <b>为什么这条链重要：</b>机台交接验收 = 六步逐段验证。①用 /api/debug/event 注入；②③④后端 health 自带 poller 状态；
+    ⑤⑥浏览器零警告即通过。<b>回放</b>是同一链条的时间平移：历史区段事件按 instant 模式批量补放，最后一条 animate。
+  </div>
+  <table class="anim" style="margin-top:10px;">
+    <tr><th>验证点</th><th>方法</th><th>通过标准</th></tr>
+    <tr><td>六台全链</td><td>每台注入 26 步标准词表（POD_PLACED→…→POD_REMOVED）</td><td>动画响应、零警告、状态复位</td></tr>
+    <tr><td>单投递</td><td>tests/perf/test_dup_delivery.py</td><td>同一 raw_id WS 上仅 1 次</td></tr>
+    <tr><td>竞态</td><td>快速切机台/日期（请求取消+代次校验）</td><td>旧响应不覆盖新状态</td></tr>
+  </table>
+</div>
+
+<!-- S6 AI 链路 -->
+<div class="slide">
+  <h2><span class="bar"></span>AI 问答是怎么保证"数字是真的"（流程图）</h2>
+  <p class="take"><b>判据是硬的：同一问题，直查 Oracle 的数字和 AI 答案必须严格相等。</b></p>
+  <div class="chain">
+    <div class="node">提问<br><small>前端 SSE / API</small></div>
+    <div class="arr">→</div>
+    <div class="node">ai/ 中间件<br><small>四路分发 · 鉴权<br>user_role 服务端覆盖</small></div>
+    <div class="arr">→</div>
+    <div class="node">数据字典注入<br><small>物理库反射<br>敏感表不可见</small></div>
+    <div class="arr">→</div>
+    <div class="node">模型写 SQL<br><small>受限 Text-to-SQL</small></div>
+    <div class="arr">→</div>
+    <div class="node" style="border-color:var(--ok)">安全围栏<br><small>白名单/单语句/围栏/行数封顶</small></div>
+    <div class="arr">→</div>
+    <div class="node" style="border-color:var(--ok)">Oracle 只读执行<br><small>真实 SQL 上浮展示</small></div>
+  </div>
+  <div class="caption" style="margin:14px 0 10px;">
+    修复记录：此前接口里的 sql 字段是<b>装饰性假字符串</b>（从未执行）；现已改为真实执行的 SQL 上浮。
+    另修复 query_fab_data 旧路径导入（ModuleNotFoundError 导致全链路静默退化）。
+  </div>
+  <table class="anim">
+    <tr><th>四类真实数据</th><th>AI 答案（节选）</th><th>直查结果</th></tr>
+    <tr><td>聚合标量：机台总数</td><td>"根据数据库查询，结果为 1 行：cnt=42"</td><td>cnt=42 ✓</td></tr>
+    <tr><td>分组 TOP-N：事件分布</td><td>"event_name=POD_PLACED, n=16"</td><td>一致 ✓</td></tr>
+    <tr><td>实时工艺参数</td><td>"id=WAT-01, state=idle, temp=22.0"</td><td>一致 ✓</td></tr>
+    <tr><td>明细台账</td><td>"id=LOT100131, product=Logic-7nm, status=done"</td><td>一致 ✓</td></tr>
+  </table>
+</div>
+
+<!-- S7 Dify/n8n 实测 -->
+<div class="slide">
+  <h2><span class="bar"></span>Dify / n8n 实测记录（昨晚首测 · 今晨复测通过）</h2>
+  <p class="take"><b>两个 docker 实例已部署初始化打通；机器重启后容器自启，复测数字与昨晚一致。</b></p>
+  <div class="two" style="display:grid; grid-template-columns:1fr 1fr; gap:22px;">
+    <div>
+      <table>
+        <tr><th>层</th><th>结果</th></tr>
+        <tr><td>数据真实硬门禁</td><td><span class="badge b-ok">21/21</span></td></tr>
+        <tr><td>SQL 安全围栏红队</td><td><span class="badge b-ok">29/29</span></td></tr>
+        <tr><td>链路协议兼容</td><td><span class="badge b-ok">20/20</span></td></tr>
+        <tr><td>n8n 真实链路</td><td><span class="badge b-ok">7/7</span></td></tr>
+        <tr><td>真实 Dify 应用</td><td><span class="badge b-ok">对话出答案</span></td></tr>
+      </table>
+      <p class="caption" style="margin-top:10px">链路测试 20/20 里已包含 Dify 流式聚合、多轮 conversation_id、n8n webhook 触发、上游 500 优雅降级四类协议级用例。</p>
+    </div>
+    <div>
+      <div class="card" style="background:var(--panel); border:1.5px solid #2c4260; border-radius:10px; padding:14px 18px; margin-bottom:14px;">
+        <h3 style="color:var(--accent); font-size:16px; margin-bottom:8px;">Dify（8080）已就绪</h3>
+        <p style="font-size:14px; color:#c6d3e0; line-height:1.6;">管理员 admin@fabtwin.local · 应用「FabTwin 对话测试」+ App Key · OpenAI-API-compatible 插件已装 · 模型当前指向<b>本地替身</b>（确定性应答，回归用）</p>
+      </div>
+      <div class="card" style="background:var(--panel); border:1.5px solid #2c4260; border-radius:10px; padding:14px 18px;">
+        <h3 style="color:var(--accent); font-size:16px; margin-bottom:8px;">n8n（5678）已就绪</h3>
+        <p style="font-size:14px; color:#c6d3e0; line-height:1.6;">owner admin@fabtwin.local · 两工作流已激活（general_query / export_alarm_report）· docker 版两坑已修：webhook 表达式 <b>{{ }}</b> 双花括号、HTTP 数组响应 <b>$input.all()</b> 聚合</p>
+      </div>
+      <p class="caption" style="margin-top:10px">凭据：<code>E:\AI\fab-ai-services\dify_credentials.json</code>（不入库）· 可导入资产：<code>docs/integration/</code>（已回环验证）</p>
+    </div>
+  </div>
+</div>
+
+<!-- S8 交接路径 -->
+<div class="slide">
+  <h2><span class="bar"></span>同事第一天：40 分钟从 clone 到全功能</h2>
+  <p class="take"><b>交接入口三件套：E:\AI\README.md（目录地图）→ docs/specs/后端文件交接地图 → modules/*/README。</b></p>
+  <table class="anim">
+    <tr><th>#</th><th>动作</th><th>命令 / 入口</th><th>验证</th></tr>
+    <tr><td>1</td><td>clone + 依赖</td><td><code>git clone → pip install -r backend/requirements.txt → npm ci</code></td><td>—</td></tr>
+    <tr><td>2</td><td>起后端（Oracle 服务名自动探测，本机 xepdb1）</td><td><code>cd backend && python main.py</code></td><td>/health ok + poller ok</td></tr>
+    <tr><td>3</td><td>种子 + 七台接线</td><td><code>backend/seed_*.py</code> + <code>scripts/sync_cluster_models_to_db.py all</code></td><td>/api/models 7 行</td></tr>
+    <tr><td>4</td><td>静态契约</td><td><code>python models/svg_kit/validate.py …</code></td><td>六台 0 error</td></tr>
+    <tr><td>5</td><td>前端</td><td><code>cd frontend && npm ci && npm run dev</code></td><td>5173 打开</td></tr>
+    <tr><td>6</td><td>AI 链路验收（三条路线）</td><td><code>tests/ai/</code> 三套 + <code>ai_real_test.sh</code></td><td>21 / 29 / 20 + 7/7</td></tr>
+  </table>
+  <div class="caption" style="margin-top:12px;">
+    交接入口三件套：<b>E:\AI\README.md</b>（目录→任务映射）→ <b>docs/specs/后端文件交接地图_20261103.md</b>（后端逐文件归属）→ <b>frontend/src/modules/*/README.md</b>（前端四模块）。
+    深度手册在 docs/sops/（部署 / 新机台建模 / AI 测试 / SVG 公共库）。
+  </div>
+</div>
+
+<!-- S9 遗留问题 -->
+<div class="slide">
+  <h2><span class="bar"></span>遗留问题清单（会议逐条拍板）</h2>
+  <p class="take"><b>按影响排序，每条已标责任线与建议；已修复项在底部归档。</b></p>
+  <table class="anim">
+    <tr><th>级</th><th>问题</th><th>影响</th><th>责任</th><th>建议</th></tr>
+    <tr><td><span class="badge b-warn">P1</span></td><td>Dify 应用绑定本地替身模型</td><td>演示固定应答；生产需真 Key</td><td>朱明钊/张亮</td><td>控制台换真实厂商 Key（10 分钟）</td></tr>
+    <tr><td><span class="badge b-warn">P1</span></td><td>ORM 与物理库漂移（type/status vs PROCESS_TYPE/STATE）</td><td>读已兜住；写入侧隐患</td><td>洪佳琪/季世庆</td><td>排期对齐或写入全面走反射</td></tr>
+    <tr><td><span class="badge b-warn">P1</span></td><td>n8n 工作流内嵌长效管理员 token</td><td>过期断链；权限过大</td><td>张亮</td><td>专用低权限账号 + 轮换</td></tr>
+    <tr><td><span class="badge b-blue">P2</span></td><td>/chat/stream 同步生成器 + 120s</td><td>高并发线程池耗尽</td><td>朱明钊</td><td>异步流改造</td></tr>
+    <tr><td><span class="badge b-blue">P2</span></td><td>Sym3/Synapse 俯视降级（非等角）</td><td>与参考图视觉差距</td><td>钱鸣</td><td>iso primitives 排期补齐</td></tr>
+    <tr><td><span class="badge b-blue">P2</span></td><td>CODEOWNERS 账号未确认 / 分支保护未开 / 旧分支未归档</td><td>协作机制未生效</td><td>洪佳琪/季世庆</td><td>手册第四节启用步骤（10 分钟）</td></tr>
+  </table>
+  <p class="anim" style="margin-top:12px; color:var(--dim); font-size:14px;">
+    已修复归档：SQL 装饰性假 SQL（真实执行上浮）、user_role 提权（服务端覆盖）、7 个只读路由零鉴权、WS 重复投递（realtime 去重）、query_fab_data 旧路径导入、AI 6 表缺失、vite 单栈监听。
+  </p>
+</div>
+
+<!-- S10 收尾 -->
+<div class="slide" style="justify-content:center;">
+  <div style="text-align:center;">
+    <h1 style="font-size:40px;">基线已收口 · 证据可重放 · 交接有地图</h1>
+    <p style="font-size:19px; color:var(--dim); margin-top:24px;">七台机台 · 六套测试 · 三个 docker 实例 · 一张后端地图</p>
+    <p style="font-size:16px; color:#7dd3fc; margin-top:40px;">同事入口：E:\AI\README.md → docs/specs/后端文件交接地图 → modules/*/README → docs/sops/</p>
+    <p style="margin-top:46px; color:#55677d; font-size:15px;">Q &amp; A</p>
+  </div>
+</div>
+
+<div class="footer"><span>FabTwin Pro · 交接评审 v2</span><span>2026-11-03 · ver3</span></div>
+<div class="nav-hint">← → 翻页</div>
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let cur = 0;
+  const prog = document.getElementById('prog');
+  function show(i) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => s.classList.toggle('active', k === cur));
+    prog.style.width = ((cur + 1) / slides.length * 100) + '%';
+  }
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { show(cur + 1); e.preventDefault(); }
+    if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { show(cur - 1); e.preventDefault(); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('a, button, input, select, textarea, code')) return;
+    show(cur + 1);
+  });
+  show(0);
+</script>
+</body>
+</html>
