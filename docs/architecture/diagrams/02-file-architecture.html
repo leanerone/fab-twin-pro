@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 3.2.0">
   <meta name="archify-reader-contract" content="declared-wide-v1">
-  <title>文件架构分类（ver3） Diagram</title>
+  <title>当前文件架构（2026-11-03 模块化后） Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -5194,9 +5194,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
            data-preset-badge-blueprint="BLUEPRINT / REV 01"
            data-preset-badge-editorial="EDITORIAL / FIELD NOTE">
         <div class="pulse-dot"></div>
-        <h1>文件架构分类（ver3）</h1>
+        <h1>当前文件架构（2026-11-03 模块化后）</h1>
       </div>
-      <p class="subtitle">目录即分工：公共层管制，业务域自治。每个目录只有一个归属负责人。</p>
+      <p class="subtitle">前端 modules 按功能分；后端 routers/services 平铺，用 CODEOWNERS 文件级归属界定负责人</p>
     </div>
 
 
@@ -5204,9 +5204,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 1725 826" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-tree-ui="" data-tree-direction="down" data-reader-fit="intrinsic-height" data-reader-min-text="7.5">
-        <title id="archify-diagram-title">文件架构分类（ver3）</title>
-        <desc id="archify-diagram-description">目录即分工：公共层管制，业务域自治。每个目录只有一个归属负责人。</desc>
+      <svg viewBox="0 0 893 809" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-tree-ui="" data-tree-direction="down" data-reader-fit="intrinsic-height" data-reader-min-text="7.5">
+        <title id="archify-diagram-title">当前文件架构（2026-11-03 模块化后）</title>
+        <desc id="archify-diagram-description">前端 modules 按功能分；后端 routers/services 平铺，用 CODEOWNERS 文件级归属界定负责人</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -5271,364 +5271,224 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Containment links -->
-        <path data-edge-from="root" data-edge-to="backend" data-edge-key="0" data-tree-ancestors="root" data-composition-points="811.5,105;811.5,133;102,133;102,161" d="M 811.5 105 L 811.5 123 Q 811.5 133 801.5 133 L 112 133 Q 102 133 102 143 L 102 161" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
-        <path data-edge-from="backend" data-edge-to="core" data-edge-key="1" data-tree-ancestors="backend root" data-composition-points="54,220;54,314;70,314" d="M 54 220 L 54 306 Q 54 314 62 314 L 70 314" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="backend" data-edge-to="be_public" data-edge-key="2" data-tree-ancestors="backend root" data-composition-points="54,220;54,400;70,400" d="M 54 220 L 54 392 Q 54 400 62 400 L 70 400" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="backend" data-edge-to="be_ai" data-edge-key="3" data-tree-ancestors="backend root" data-composition-points="54,220;54,486;70,486" d="M 54 220 L 54 478 Q 54 486 62 486 L 70 486" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="backend" data-edge-to="be_data" data-edge-key="4" data-tree-ancestors="backend root" data-composition-points="54,220;54,572;70,572" d="M 54 220 L 54 564 Q 54 572 62 572 L 70 572" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="backend" data-edge-to="be_model" data-edge-key="5" data-tree-ancestors="backend root" data-composition-points="54,220;54,658;70,658" d="M 54 220 L 54 650 Q 54 658 62 658 L 70 658" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="backend" data-edge-to="be_common" data-edge-key="6" data-tree-ancestors="backend root" data-composition-points="54,220;54,744;70,744" d="M 54 220 L 54 736 Q 54 744 62 744 L 70 744" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="root" data-edge-to="frontend" data-edge-key="7" data-tree-ancestors="root" data-composition-points="811.5,105;811.5,133;694,133;694,161" d="M 811.5 105 L 811.5 123 Q 811.5 133 801.5 133 L 704 133 Q 694 133 694 143 L 694 161" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
-        <path data-edge-from="frontend" data-edge-to="fe_shell" data-edge-key="8" data-tree-ancestors="frontend root" data-composition-points="694,220;694,248;474,248;474,276" d="M 694 220 L 694 238 Q 694 248 684 248 L 484 248 Q 474 248 474 258 L 474 276" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="frontend" data-edge-to="features" data-edge-key="9" data-tree-ancestors="frontend root" data-composition-points="694,220;694,276" d="M 694 220 L 694 276" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="features" data-edge-to="f_motion" data-edge-key="10" data-tree-ancestors="features frontend root" data-composition-points="630,335;630,420.5;646,420.5" d="M 630 335 L 630 412.5 Q 630 420.5 638 420.5 L 646 420.5" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:3" stroke-width="1.5"/>
-        <path data-edge-from="features" data-edge-to="f_editor" data-edge-key="11" data-tree-ancestors="features frontend root" data-composition-points="630,335;630,489.5;646,489.5" d="M 630 335 L 630 481.5 Q 630 489.5 638 489.5 L 646 489.5" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:3" stroke-width="1.5"/>
-        <path data-edge-from="features" data-edge-to="f_ai" data-edge-key="12" data-tree-ancestors="features frontend root" data-composition-points="630,335;630,558.5;646,558.5" d="M 630 335 L 630 550.5 Q 630 558.5 638 558.5 L 646 558.5" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:3" stroke-width="1.5"/>
-        <path data-edge-from="features" data-edge-to="f_dash" data-edge-key="13" data-tree-ancestors="features frontend root" data-composition-points="630,335;630,627.5;646,627.5" d="M 630 335 L 630 619.5 Q 630 627.5 638 627.5 L 646 627.5" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:3" stroke-width="1.5"/>
-        <path data-edge-from="features" data-edge-to="f_machines" data-edge-key="14" data-tree-ancestors="features frontend root" data-composition-points="630,335;630,696.5;646,696.5" d="M 630 335 L 630 688.5 Q 630 696.5 638 696.5 L 646 696.5" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:3" stroke-width="1.5"/>
-        <path data-edge-from="frontend" data-edge-to="fe_api" data-edge-key="15" data-tree-ancestors="frontend root" data-composition-points="694,220;694,248;939.5,248;939.5,276" d="M 694 220 L 694 238 Q 694 248 704 248 L 929.5 248 Q 939.5 248 939.5 258 L 939.5 276" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="root" data-edge-to="assets" data-edge-key="16" data-tree-ancestors="root" data-composition-points="811.5,105;811.5,133;1232.5,133;1232.5,161" d="M 811.5 105 L 811.5 123 Q 811.5 133 821.5 133 L 1222.5 133 Q 1232.5 133 1232.5 143 L 1232.5 161" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
-        <path data-edge-from="assets" data-edge-to="m_user" data-edge-key="17" data-tree-ancestors="assets root" data-composition-points="1232.5,220;1232.5,248;1130.5,248;1130.5,276" d="M 1232.5 220 L 1232.5 238 Q 1232.5 248 1222.5 248 L 1140.5 248 Q 1130.5 248 1130.5 258 L 1130.5 276" class="a-default tree-edge tree-edge-hued tree-hue-cloud" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="assets" data-edge-to="m_kit" data-edge-key="18" data-tree-ancestors="assets root" data-composition-points="1232.5,220;1232.5,248;1333.5,248;1333.5,276" d="M 1232.5 220 L 1232.5 238 Q 1232.5 248 1242.5 248 L 1323.5 248 Q 1333.5 248 1333.5 258 L 1333.5 276" class="a-default tree-edge tree-edge-hued tree-hue-cloud" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="root" data-edge-to="ops" data-edge-key="19" data-tree-ancestors="root" data-composition-points="811.5,105;811.5,133;1521,133;1521,161" d="M 811.5 105 L 811.5 123 Q 811.5 133 821.5 133 L 1511 133 Q 1521 133 1521 143 L 1521 161" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
-        <path data-edge-from="ops" data-edge-to="scripts" data-edge-key="20" data-tree-ancestors="ops root" data-composition-points="1473,220;1473,305.5;1489,305.5" d="M 1473 220 L 1473 297.5 Q 1473 305.5 1481 305.5 L 1489 305.5" class="a-default tree-edge tree-edge-hued tree-hue-frontend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="ops" data-edge-to="sql" data-edge-key="21" data-tree-ancestors="ops root" data-composition-points="1473,220;1473,374.5;1489,374.5" d="M 1473 220 L 1473 366.5 Q 1473 374.5 1481 374.5 L 1489 374.5" class="a-default tree-edge tree-edge-hued tree-hue-frontend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="ops" data-edge-to="integration" data-edge-key="22" data-tree-ancestors="ops root" data-composition-points="1473,220;1473,443.5;1489,443.5" d="M 1473 220 L 1473 435.5 Q 1473 443.5 1481 443.5 L 1489 443.5" class="a-default tree-edge tree-edge-hued tree-hue-frontend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="ops" data-edge-to="tests" data-edge-key="23" data-tree-ancestors="ops root" data-composition-points="1473,220;1473,512.5;1489,512.5" d="M 1473 220 L 1473 504.5 Q 1473 512.5 1481 512.5 L 1489 512.5" class="a-default tree-edge tree-edge-hued tree-hue-frontend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="ops" data-edge-to="cicd" data-edge-key="24" data-tree-ancestors="ops root" data-composition-points="1473,220;1473,581.5;1489,581.5" d="M 1473 220 L 1473 573.5 Q 1473 581.5 1481 581.5 L 1489 581.5" class="a-default tree-edge tree-edge-hued tree-hue-frontend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
-        <path data-edge-from="ops" data-edge-to="docs" data-edge-key="25" data-tree-ancestors="ops root" data-composition-points="1473,220;1473,650.5;1489,650.5" d="M 1473 220 L 1473 642.5 Q 1473 650.5 1481 650.5 L 1489 650.5" class="a-default tree-edge tree-edge-hued tree-hue-frontend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="root" data-edge-to="fe" data-edge-key="0" data-tree-ancestors="root" data-composition-points="373.5,105;373.5,133;130,133;130,161" d="M 373.5 105 L 373.5 123 Q 373.5 133 363.5 133 L 140 133 Q 130 133 130 143 L 130 161" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
+        <path data-edge-from="fe" data-edge-to="m1" data-edge-key="1" data-tree-ancestors="fe root" data-composition-points="54,219;54,320;70,320" d="M 54 219 L 54 312 Q 54 320 62 320 L 70 320" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="fe" data-edge-to="m2" data-edge-key="2" data-tree-ancestors="fe root" data-composition-points="54,219;54,420;70,420" d="M 54 219 L 54 412 Q 54 420 62 420 L 70 420" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="fe" data-edge-to="m3" data-edge-key="3" data-tree-ancestors="fe root" data-composition-points="54,219;54,520;70,520" d="M 54 219 L 54 512 Q 54 520 62 520 L 70 520" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="fe" data-edge-to="m4" data-edge-key="4" data-tree-ancestors="fe root" data-composition-points="54,219;54,620;70,620" d="M 54 219 L 54 612 Q 54 620 62 620 L 70 620" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="fe" data-edge-to="pf" data-edge-key="5" data-tree-ancestors="fe root" data-composition-points="54,219;54,720;70,720" d="M 54 219 L 54 712 Q 54 720 62 720 L 70 720" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="root" data-edge-to="be" data-edge-key="6" data-tree-ancestors="root" data-composition-points="373.5,105;373.5,133;428.5,133;428.5,161" d="M 373.5 105 L 373.5 123 Q 373.5 133 383.5 133 L 418.5 133 Q 428.5 133 428.5 143 L 428.5 161" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
+        <path data-edge-from="be" data-edge-to="b1" data-edge-key="7" data-tree-ancestors="be root" data-composition-points="340,219;340,304;356,304" d="M 340 219 L 340 296 Q 340 304 348 304 L 356 304" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="be" data-edge-to="b2" data-edge-key="8" data-tree-ancestors="be root" data-composition-points="340,219;340,372;356,372" d="M 340 219 L 340 364 Q 340 372 348 372 L 356 372" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="be" data-edge-to="b3" data-edge-key="9" data-tree-ancestors="be root" data-composition-points="340,219;340,440;356,440" d="M 340 219 L 340 432 Q 340 440 348 440 L 356 440" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="be" data-edge-to="b4" data-edge-key="10" data-tree-ancestors="be root" data-composition-points="340,219;340,508;356,508" d="M 340 219 L 340 500 Q 340 508 348 508 L 356 508" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="be" data-edge-to="b6" data-edge-key="11" data-tree-ancestors="be root" data-composition-points="340,219;340,576;356,576" d="M 340 219 L 340 568 Q 340 576 348 576 L 356 576" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step:2" stroke-width="1.5"/>
+        <path data-edge-from="root" data-edge-to="assets" data-edge-key="12" data-tree-ancestors="root" data-composition-points="373.5,105;373.5,133;616,133;616,199;632,199" d="M 373.5 105 L 373.5 123 Q 373.5 133 383.5 133 L 606 133 Q 616 133 616 143 L 616 191 Q 616 199 624 199 L 632 199" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
+        <path data-edge-from="root" data-edge-to="intg" data-edge-key="13" data-tree-ancestors="root" data-composition-points="373.5,105;373.5,133;616,133;616,285;632,285" d="M 373.5 105 L 373.5 123 Q 373.5 133 383.5 133 L 606 133 Q 616 133 616 143 L 616 277 Q 616 285 624 285 L 632 285" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
+        <path data-edge-from="root" data-edge-to="eng" data-edge-key="14" data-tree-ancestors="root" data-composition-points="373.5,105;373.5,133;616,133;616,371;632,371" d="M 373.5 105 L 373.5 123 Q 373.5 133 383.5 133 L 606 133 Q 616 133 616 143 L 616 363 Q 616 371 624 371 L 632 371" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
+        <path data-edge-from="root" data-edge-to="ci" data-edge-key="15" data-tree-ancestors="root" data-composition-points="373.5,105;373.5,133;616,133;616,457;632,457" d="M 373.5 105 L 373.5 123 Q 373.5 133 383.5 133 L 606 133 Q 616 133 616 143 L 616 449 Q 616 457 624 457 L 632 457" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step:1" stroke-width="1.8"/>
 
         <!-- Nodes -->
-        <g id="node-root" data-node-id="root" data-node-label="fab-twin-pro（ver3）" tabindex="0" role="button" aria-label="Focus fab-twin-pro（ver3）, Root" aria-pressed="false" data-node-kind="frontend" data-node-context="Root" data-tree-depth="0" class="tree-hue-root">
-          <title>fab-twin-pro（ver3） · Root</title>
-          <rect data-tree-stack="" x="709" y="69" width="215" height="41" rx="10" class="tree-stack-frontend" stroke-width="1.2"/>
-          <rect x="704" y="64" width="215" height="41" rx="10" class="c-mask"/>
-          <rect x="704" y="64" width="215" height="41" rx="10" class="c-frontend tree-root" data-animate="node" style="--step:0" stroke-width="0"/>
+        <g id="node-root" data-node-id="root" data-node-label="fab-twin-pro / ver3" tabindex="0" role="button" aria-label="Focus fab-twin-pro / ver3, Root" aria-pressed="false" data-node-kind="frontend" data-node-context="Root" data-tree-depth="0" class="tree-hue-root">
+          <title>fab-twin-pro / ver3 · Root</title>
+          <rect data-tree-stack="" x="276" y="69" width="205" height="41" rx="10" class="tree-stack-frontend" stroke-width="1.2"/>
+          <rect x="271" y="64" width="205" height="41" rx="10" class="c-mask"/>
+          <rect x="271" y="64" width="205" height="41" rx="10" class="c-frontend tree-root" data-animate="node" style="--step:0" stroke-width="0"/>
 
 
-          <text data-node-label="" x="811.5" class="t-primary tree-label" font-size="14.5" font-weight="750" text-anchor="middle"><tspan x="811.5" y="88.5">fab-twin-pro（ver3）</tspan></text>
-
-        </g>
-        <g id="node-backend" data-node-id="backend" data-node-label="backend 后端" tabindex="0" role="button" aria-label="Focus backend 后端, Branch" aria-pressed="false" data-node-kind="backend" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-backend">
-          <title>backend 后端 · Branch</title>
-          <rect data-tree-stack="" x="37" y="166" width="140" height="59" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="32" y="161" width="140" height="59" rx="10" class="c-mask"/>
-          <rect x="32" y="161" width="140" height="59" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:1" stroke-width="1.2"/>
-
-          <circle cx="102" cy="161" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="102" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="102" y="194.5">backend 后端</tspan></text>
+          <text data-node-label="" x="373.5" class="t-primary tree-label" font-size="14.5" font-weight="750" text-anchor="middle"><tspan x="373.5" y="88.5">fab-twin-pro / ver3</tspan></text>
 
         </g>
-        <g id="node-core" data-node-id="core" data-node-label="core 公共内核" tabindex="0" role="button" aria-label="Focus core 公共内核, 洪佳琪, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="洪佳琪" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="backend root" class="tree-hue-backend">
-          <title>core 公共内核 · 洪佳琪 · Leaf</title>
+        <g id="node-fe" data-node-id="fe" data-node-label="frontend 前端（按功能垂直拆）" tabindex="0" role="button" aria-label="Focus frontend 前端（按功能垂直拆）, Branch" aria-pressed="false" data-node-kind="backend" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-backend">
+          <title>frontend 前端（按功能垂直拆） · Branch</title>
+          <rect data-tree-stack="" x="37" y="166" width="196" height="58" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="32" y="161" width="196" height="58" rx="10" class="c-mask"/>
+          <rect x="32" y="161" width="196" height="58" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:1" stroke-width="1.2"/>
 
-          <rect x="70" y="276" width="270" height="76" rx="10" class="c-mask"/>
-          <rect x="70" y="276" width="270" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 74.5 285 V 343" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="70" cy="314" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="309">core 公共内核</tspan></text>
-          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="328">洪佳琪</tspan></text>
-        </g>
-        <g id="node-be_public" data-node-id="be_public" data-node-label="main/config/db/models/schemas" tabindex="0" role="button" aria-label="Focus main/config/db/models/schemas, 公共五文件, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="公共五文件" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="backend root" class="tree-hue-backend">
-          <title>main/config/db/models/schemas · 公共五文件 · Leaf</title>
-
-          <rect x="70" y="362" width="270" height="76" rx="10" class="c-mask"/>
-          <rect x="70" y="362" width="270" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 74.5 371 V 429" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="70" cy="400" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="395">main/config/db/models/schemas</tspan></text>
-          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="414">公共五文件</tspan></text>
-        </g>
-        <g id="node-be_ai" data-node-id="be_ai" data-node-label="services/ai + routers/ai" tabindex="0" role="button" aria-label="Focus services/ai + routers/ai, 朱明钊, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="朱明钊" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="backend root" class="tree-hue-backend">
-          <title>services/ai + routers/ai · 朱明钊 · Leaf</title>
-
-          <rect x="70" y="448" width="270" height="76" rx="10" class="c-mask"/>
-          <rect x="70" y="448" width="270" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 74.5 457 V 515" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="70" cy="486" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="472.5">services/ai +</tspan><tspan x="86" y="489.5">routers/ai</tspan></text>
-          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="508.5">朱明钊</tspan></text>
-        </g>
-        <g id="node-be_data" data-node-id="be_data" data-node-label="数据路由+poller/sql" tabindex="0" role="button" aria-label="Focus 数据路由+poller/sql, 季世庆, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="季世庆" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="backend root" class="tree-hue-backend">
-          <title>数据路由+poller/sql · 季世庆 · Leaf</title>
-
-          <rect x="70" y="534" width="270" height="76" rx="10" class="c-mask"/>
-          <rect x="70" y="534" width="270" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 74.5 543 V 601" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="70" cy="572" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="567">数据路由+poller/sql</tspan></text>
-          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="586">季世庆</tspan></text>
-        </g>
-        <g id="node-be_model" data-node-id="be_model" data-node-label="models/uploads 路由" tabindex="0" role="button" aria-label="Focus models/uploads 路由, 钱鸣, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="钱鸣" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="backend root" class="tree-hue-backend">
-          <title>models/uploads 路由 · 钱鸣 · Leaf</title>
-
-          <rect x="70" y="620" width="270" height="76" rx="10" class="c-mask"/>
-          <rect x="70" y="620" width="270" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 74.5 629 V 687" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="70" cy="658" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="653">models/uploads 路由</tspan></text>
-          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="672">钱鸣</tspan></text>
-        </g>
-        <g id="node-be_common" data-node-id="be_common" data-node-label="security/realtime/cache" tabindex="0" role="button" aria-label="Focus security/realtime/cache, 公共服务, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="公共服务" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="backend root" class="tree-hue-backend">
-          <title>security/realtime/cache · 公共服务 · Leaf</title>
-
-          <rect x="70" y="706" width="270" height="76" rx="10" class="c-mask"/>
-          <rect x="70" y="706" width="270" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 74.5 715 V 773" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="70" cy="744" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="739">security/realtime/cache</tspan></text>
-          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="758">公共服务</tspan></text>
-        </g>
-        <g id="node-frontend" data-node-id="frontend" data-node-label="frontend 前端" tabindex="0" role="button" aria-label="Focus frontend 前端, Branch" aria-pressed="false" data-node-kind="backend" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-database">
-          <title>frontend 前端 · Branch</title>
-          <rect data-tree-stack="" x="629" y="166" width="140" height="59" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="624" y="161" width="140" height="59" rx="10" class="c-mask"/>
-          <rect x="624" y="161" width="140" height="59" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:1" stroke-width="1.2"/>
-
-          <circle cx="694" cy="161" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="694" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="694" y="194.5">frontend 前端</tspan></text>
+          <circle cx="130" cy="161" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="130" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="130" y="185.5">frontend 前端（按功</tspan><tspan x="130" y="202.5">能垂直拆）</tspan></text>
 
         </g>
-        <g id="node-fe_shell" data-node-id="fe_shell" data-node-label="stores/router/api-core" tabindex="0" role="button" aria-label="Focus stores/router/api-core, 公共骨架, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="公共骨架" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="frontend root" class="tree-hue-database">
-          <title>stores/router/api-core · 公共骨架 · Leaf</title>
+        <g id="node-m1" data-node-id="m1" data-node-label="① model-library · 钱鸣" tabindex="0" role="button" aria-label="Focus ① model-library · 钱鸣, 引擎/derivers/编辑器, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="引擎/derivers/编辑器" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="fe root" class="tree-hue-backend">
+          <title>① model-library · 钱鸣 · 引擎/derivers/编辑器 · Leaf</title>
 
-          <rect x="368" y="276" width="212" height="59" rx="10" class="c-mask"/>
-          <rect x="368" y="276" width="212" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-
-          <circle cx="474" cy="276" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="474" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="474" y="300.5">stores/router/api-core</tspan></text>
-          <text data-detail="context" x="474" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="474" y="319.5">公共骨架</tspan></text>
+          <rect x="70" y="275" width="220" height="90" rx="10" class="c-mask"/>
+          <rect x="70" y="275" width="220" height="90" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 74.5 284 V 356" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="70" cy="320" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="315">① model-library · 钱鸣</tspan></text>
+          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="334">引擎/derivers/编辑器</tspan></text>
         </g>
-        <g id="node-features" data-node-id="features" data-node-label="features 业务五域" tabindex="0" role="button" aria-label="Focus features 业务五域, Branch" aria-pressed="false" data-node-kind="backend" data-node-context="Branch" data-tree-depth="2" data-tree-ancestors="frontend root" class="tree-hue-database">
-          <title>features 业务五域 · Branch</title>
-          <rect data-tree-stack="" x="613" y="281" width="171" height="59" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="608" y="276" width="171" height="59" rx="10" class="c-mask"/>
-          <rect x="608" y="276" width="171" height="59" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:2" stroke-width="1.2"/>
+        <g id="node-m2" data-node-id="m2" data-node-label="② production-monitor · 季世庆" tabindex="0" role="button" aria-label="Focus ② production-monitor · 季世庆, 详情/看板/回放/3D, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="详情/看板/回放/3D" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="fe root" class="tree-hue-backend">
+          <title>② production-monitor · 季世庆 · 详情/看板/回放/3D · Leaf</title>
 
-          <circle cx="693.5" cy="276" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="693.5" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="693.5" y="309.5">features 业务五域</tspan></text>
-
+          <rect x="70" y="375" width="220" height="90" rx="10" class="c-mask"/>
+          <rect x="70" y="375" width="220" height="90" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 74.5 384 V 456" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="70" cy="420" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="406.5">② production-monitor ·</tspan><tspan x="86" y="423.5">季世庆</tspan></text>
+          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="442.5">详情/看板/回放/3D</tspan></text>
         </g>
-        <g id="node-f_motion" data-node-id="f_motion" data-node-label="motion 动画域" tabindex="0" role="button" aria-label="Focus motion 动画域, 钱鸣, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="钱鸣" data-node-context="Leaf" data-tree-depth="3" data-tree-ancestors="features frontend root" class="tree-hue-database">
-          <title>motion 动画域 · 钱鸣 · Leaf</title>
+        <g id="node-m3" data-node-id="m3" data-node-label="③ ai-assistant · 朱明钊" tabindex="0" role="button" aria-label="Focus ③ ai-assistant · 朱明钊, 对话/配置/语音, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="对话/配置/语音" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="fe root" class="tree-hue-backend">
+          <title>③ ai-assistant · 朱明钊 · 对话/配置/语音 · Leaf</title>
 
-          <rect x="646" y="391" width="188" height="59" rx="10" class="c-mask"/>
-          <rect x="646" y="391" width="188" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:3" stroke-width="1"/>
-          <path class="tree-accent" d="M 650.5 400 V 441" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="646" cy="420.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="662" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="662" y="415.5">motion 动画域</tspan></text>
-          <text data-detail="context" x="662" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="662" y="434.5">钱鸣</tspan></text>
+          <rect x="70" y="475" width="220" height="90" rx="10" class="c-mask"/>
+          <rect x="70" y="475" width="220" height="90" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 74.5 484 V 556" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="70" cy="520" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="515">③ ai-assistant · 朱明钊</tspan></text>
+          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="534">对话/配置/语音</tspan></text>
         </g>
-        <g id="node-f_editor" data-node-id="f_editor" data-node-label="editor 编辑器域" tabindex="0" role="button" aria-label="Focus editor 编辑器域, 钱鸣, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="钱鸣" data-node-context="Leaf" data-tree-depth="3" data-tree-ancestors="features frontend root" class="tree-hue-database">
-          <title>editor 编辑器域 · 钱鸣 · Leaf</title>
+        <g id="node-m4" data-node-id="m4" data-node-label="④ system-admin · 洪佳琪" tabindex="0" role="button" aria-label="Focus ④ system-admin · 洪佳琪, 登录/用户, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="登录/用户" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="fe root" class="tree-hue-backend">
+          <title>④ system-admin · 洪佳琪 · 登录/用户 · Leaf</title>
 
-          <rect x="646" y="460" width="188" height="59" rx="10" class="c-mask"/>
-          <rect x="646" y="460" width="188" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:3" stroke-width="1"/>
-          <path class="tree-accent" d="M 650.5 469 V 510" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="646" cy="489.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="662" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="662" y="484.5">editor 编辑器域</tspan></text>
-          <text data-detail="context" x="662" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="662" y="503.5">钱鸣</tspan></text>
+          <rect x="70" y="575" width="220" height="90" rx="10" class="c-mask"/>
+          <rect x="70" y="575" width="220" height="90" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 74.5 584 V 656" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="70" cy="620" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="615">④ system-admin · 洪佳琪</tspan></text>
+          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="634">登录/用户</tspan></text>
         </g>
-        <g id="node-f_ai" data-node-id="f_ai" data-node-label="ai 助手域" tabindex="0" role="button" aria-label="Focus ai 助手域, 朱明钊, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="朱明钊" data-node-context="Leaf" data-tree-depth="3" data-tree-ancestors="features frontend root" class="tree-hue-database">
-          <title>ai 助手域 · 朱明钊 · Leaf</title>
+        <g id="node-pf" data-node-id="pf" data-node-label="⑥ platform 内核 · 洪佳琪" tabindex="0" role="button" aria-label="Focus ⑥ platform 内核 · 洪佳琪, shell/api/stores/router/共享件, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="shell/api/stores/router/共享件" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="fe root" class="tree-hue-backend">
+          <title>⑥ platform 内核 · 洪佳琪 · shell/api/stores/router/共享件 · Leaf</title>
 
-          <rect x="646" y="529" width="188" height="59" rx="10" class="c-mask"/>
-          <rect x="646" y="529" width="188" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:3" stroke-width="1"/>
-          <path class="tree-accent" d="M 650.5 538 V 579" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="646" cy="558.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="662" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="662" y="553.5">ai 助手域</tspan></text>
-          <text data-detail="context" x="662" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="662" y="572.5">朱明钊</tspan></text>
+          <rect x="70" y="675" width="220" height="90" rx="10" class="c-mask"/>
+          <rect x="70" y="675" width="220" height="90" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 74.5 684 V 756" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="70" cy="720" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="86" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="86" y="699.5">⑥ platform 内核 · 洪佳</tspan><tspan x="86" y="716.5">琪</tspan></text>
+          <text data-detail="context" x="86" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="86" y="735.5">shell/api/stores/router/共享</tspan><tspan x="86" y="749.5">件</tspan></text>
         </g>
-        <g id="node-f_dash" data-node-id="f_dash" data-node-label="dashboard 看板域" tabindex="0" role="button" aria-label="Focus dashboard 看板域, 朱明钊, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="朱明钊" data-node-context="Leaf" data-tree-depth="3" data-tree-ancestors="features frontend root" class="tree-hue-database">
-          <title>dashboard 看板域 · 朱明钊 · Leaf</title>
+        <g id="node-be" data-node-id="be" data-node-label="backend 后端（平铺+文件级归属）" tabindex="0" role="button" aria-label="Focus backend 后端（平铺+文件级归属）, Branch" aria-pressed="false" data-node-kind="backend" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-database">
+          <title>backend 后端（平铺+文件级归属） · Branch</title>
+          <rect data-tree-stack="" x="323" y="166" width="221" height="58" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="318" y="161" width="221" height="58" rx="10" class="c-mask"/>
+          <rect x="318" y="161" width="221" height="58" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:1" stroke-width="1.2"/>
 
-          <rect x="646" y="598" width="188" height="59" rx="10" class="c-mask"/>
-          <rect x="646" y="598" width="188" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:3" stroke-width="1"/>
-          <path class="tree-accent" d="M 650.5 607 V 648" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="646" cy="627.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="662" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="662" y="622.5">dashboard 看板域</tspan></text>
-          <text data-detail="context" x="662" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="662" y="641.5">朱明钊</tspan></text>
-        </g>
-        <g id="node-f_machines" data-node-id="f_machines" data-node-label="machines 机台详情域" tabindex="0" role="button" aria-label="Focus machines 机台详情域, 季世庆/朱明钊, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="季世庆/朱明钊" data-node-context="Leaf" data-tree-depth="3" data-tree-ancestors="features frontend root" class="tree-hue-database">
-          <title>machines 机台详情域 · 季世庆/朱明钊 · Leaf</title>
-
-          <rect x="646" y="667" width="188" height="59" rx="10" class="c-mask"/>
-          <rect x="646" y="667" width="188" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:3" stroke-width="1"/>
-          <path class="tree-accent" d="M 650.5 676 V 717" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="646" cy="696.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="662" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="662" y="691.5">machines 机台详情域</tspan></text>
-          <text data-detail="context" x="662" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="662" y="710.5">季世庆/朱明钊</tspan></text>
-        </g>
-        <g id="node-fe_api" data-node-id="fe_api" data-node-label="api 按域 8 文件" tabindex="0" role="button" aria-label="Focus api 按域 8 文件, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="frontend root" class="tree-hue-database">
-          <title>api 按域 8 文件 · Leaf</title>
-
-          <rect x="862" y="276" width="155" height="59" rx="10" class="c-mask"/>
-          <rect x="862" y="276" width="155" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-
-          <circle cx="939.5" cy="276" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="939.5" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="939.5" y="309.5">api 按域 8 文件</tspan></text>
+          <circle cx="428.5" cy="161" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="428.5" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="428.5" y="185.5">backend 后端（平铺+文件</tspan><tspan x="428.5" y="202.5">级归属）</tspan></text>
 
         </g>
-        <g id="node-assets" data-node-id="assets" data-node-label="模型资产 models/" tabindex="0" role="button" aria-label="Focus 模型资产 models/, 钱鸣, Branch" aria-pressed="false" data-node-kind="backend" data-node-sublabel="钱鸣" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-cloud">
-          <title>模型资产 models/ · 钱鸣 · Branch</title>
-          <rect data-tree-stack="" x="1156" y="166" width="163" height="59" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="1151" y="161" width="163" height="59" rx="10" class="c-mask"/>
-          <rect x="1151" y="161" width="163" height="59" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:1" stroke-width="1.2"/>
+        <g id="node-b1" data-node-id="b1" data-node-label="① models/uploads · 钱鸣" tabindex="0" role="button" aria-label="Focus ① models/uploads · 钱鸣, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="be root" class="tree-hue-database">
+          <title>① models/uploads · 钱鸣 · Leaf</title>
 
-          <circle cx="1232.5" cy="161" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1232.5" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="1232.5" y="185.5">模型资产 models/</tspan></text>
-          <text data-detail="context" x="1232.5" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="1232.5" y="204.5">钱鸣</tspan></text>
-        </g>
-        <g id="node-m_user" data-node-id="m_user" data-node-label="user 六机台三件套" tabindex="0" role="button" aria-label="Focus user 六机台三件套, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="assets root" class="tree-hue-cloud">
-          <title>user 六机台三件套 · Leaf</title>
-
-          <rect x="1045" y="276" width="171" height="59" rx="10" class="c-mask"/>
-          <rect x="1045" y="276" width="171" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-
-          <circle cx="1130.5" cy="276" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1130.5" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="1130.5" y="309.5">user 六机台三件套</tspan></text>
+          <rect x="356" y="275" width="220" height="58" rx="10" class="c-mask"/>
+          <rect x="356" y="275" width="220" height="58" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 360.5 284 V 324" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="356" cy="304" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="372" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="372" y="308">① models/uploads · 钱鸣</tspan></text>
 
         </g>
-        <g id="node-m_kit" data-node-id="m_kit" data-node-label="svg_kit 公共建模库" tabindex="0" role="button" aria-label="Focus svg_kit 公共建模库, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="assets root" class="tree-hue-cloud">
-          <title>svg_kit 公共建模库 · Leaf</title>
+        <g id="node-b2" data-node-id="b2" data-node-label="② 11 数据路由+poller · 季世庆" tabindex="0" role="button" aria-label="Focus ② 11 数据路由+poller · 季世庆, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="be root" class="tree-hue-database">
+          <title>② 11 数据路由+poller · 季世庆 · Leaf</title>
 
-          <rect x="1244" y="276" width="179" height="59" rx="10" class="c-mask"/>
-          <rect x="1244" y="276" width="179" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-
-          <circle cx="1333.5" cy="276" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1333.5" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="1333.5" y="309.5">svg_kit 公共建模库</tspan></text>
-
-        </g>
-        <g id="node-ops" data-node-id="ops" data-node-label="工程与交付" tabindex="0" role="button" aria-label="Focus 工程与交付, Branch" aria-pressed="false" data-node-kind="backend" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-frontend">
-          <title>工程与交付 · Branch</title>
-          <rect data-tree-stack="" x="1456" y="166" width="140" height="59" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="1451" y="161" width="140" height="59" rx="10" class="c-mask"/>
-          <rect x="1451" y="161" width="140" height="59" rx="10" class="c-backend tree-branch" data-animate="node" style="--step:1" stroke-width="1.2"/>
-
-          <circle cx="1521" cy="161" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1521" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="1521" y="194.5">工程与交付</tspan></text>
+          <rect x="356" y="343" width="220" height="58" rx="10" class="c-mask"/>
+          <rect x="356" y="343" width="220" height="58" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 360.5 352 V 392" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="356" cy="372" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="372" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="372" y="367.5">② 11 数据路由+poller ·</tspan><tspan x="372" y="384.5">季世庆</tspan></text>
 
         </g>
-        <g id="node-scripts" data-node-id="scripts" data-node-label="scripts 入库/运维脚本" tabindex="0" role="button" aria-label="Focus scripts 入库/运维脚本, 钱鸣/季世庆, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="钱鸣/季世庆" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="ops root" class="tree-hue-frontend">
-          <title>scripts 入库/运维脚本 · 钱鸣/季世庆 · Leaf</title>
+        <g id="node-b3" data-node-id="b3" data-node-label="③ ai 路由+services/ai · 朱明钊" tabindex="0" role="button" aria-label="Focus ③ ai 路由+services/ai · 朱明钊, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="be root" class="tree-hue-database">
+          <title>③ ai 路由+services/ai · 朱明钊 · Leaf</title>
 
-          <rect x="1489" y="276" width="204" height="59" rx="10" class="c-mask"/>
-          <rect x="1489" y="276" width="204" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 1493.5 285 V 326" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="1489" cy="305.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1505" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="1505" y="300.5">scripts 入库/运维脚本</tspan></text>
-          <text data-detail="context" x="1505" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="1505" y="319.5">钱鸣/季世庆</tspan></text>
-        </g>
-        <g id="node-sql" data-node-id="sql" data-node-label="sql 版本化迁移" tabindex="0" role="button" aria-label="Focus sql 版本化迁移, 季世庆, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="季世庆" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="ops root" class="tree-hue-frontend">
-          <title>sql 版本化迁移 · 季世庆 · Leaf</title>
-
-          <rect x="1489" y="345" width="204" height="59" rx="10" class="c-mask"/>
-          <rect x="1489" y="345" width="204" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 1493.5 354 V 395" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="1489" cy="374.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1505" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="1505" y="369.5">sql 版本化迁移</tspan></text>
-          <text data-detail="context" x="1505" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="1505" y="388.5">季世庆</tspan></text>
-        </g>
-        <g id="node-integration" data-node-id="integration" data-node-label="Dify/n8n 集成资产" tabindex="0" role="button" aria-label="Focus Dify/n8n 集成资产, 张亮, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="张亮" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="ops root" class="tree-hue-frontend">
-          <title>Dify/n8n 集成资产 · 张亮 · Leaf</title>
-
-          <rect x="1489" y="414" width="204" height="59" rx="10" class="c-mask"/>
-          <rect x="1489" y="414" width="204" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 1493.5 423 V 464" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="1489" cy="443.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1505" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="1505" y="438.5">Dify/n8n 集成资产</tspan></text>
-          <text data-detail="context" x="1505" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="1505" y="457.5">张亮</tspan></text>
-        </g>
-        <g id="node-tests" data-node-id="tests" data-node-label="tests 回归与门禁" tabindex="0" role="button" aria-label="Focus tests 回归与门禁, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="ops root" class="tree-hue-frontend">
-          <title>tests 回归与门禁 · Leaf</title>
-
-          <rect x="1489" y="483" width="204" height="59" rx="10" class="c-mask"/>
-          <rect x="1489" y="483" width="204" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 1493.5 492 V 533" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="1489" cy="512.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1505" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="1505" y="516.5">tests 回归与门禁</tspan></text>
+          <rect x="356" y="411" width="220" height="58" rx="10" class="c-mask"/>
+          <rect x="356" y="411" width="220" height="58" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 360.5 420 V 460" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="356" cy="440" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="372" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="372" y="435.5">③ ai 路由+services/ai ·</tspan><tspan x="372" y="452.5">朱明钊</tspan></text>
 
         </g>
-        <g id="node-cicd" data-node-id="cicd" data-node-label=".github + CODEOWNERS" tabindex="0" role="button" aria-label="Focus .github + CODEOWNERS, CI 门禁, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="CI 门禁" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="ops root" class="tree-hue-frontend">
-          <title>.github + CODEOWNERS · CI 门禁 · Leaf</title>
+        <g id="node-b4" data-node-id="b4" data-node-label="④ auth/users · 洪佳琪" tabindex="0" role="button" aria-label="Focus ④ auth/users · 洪佳琪, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="be root" class="tree-hue-database">
+          <title>④ auth/users · 洪佳琪 · Leaf</title>
 
-          <rect x="1489" y="552" width="204" height="59" rx="10" class="c-mask"/>
-          <rect x="1489" y="552" width="204" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 1493.5 561 V 602" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="1489" cy="581.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1505" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="1505" y="576.5">.github + CODEOWNERS</tspan></text>
-          <text data-detail="context" x="1505" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="1505" y="595.5">CI 门禁</tspan></text>
+          <rect x="356" y="479" width="220" height="58" rx="10" class="c-mask"/>
+          <rect x="356" y="479" width="220" height="58" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 360.5 488 V 528" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="356" cy="508" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="372" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="372" y="512">④ auth/users · 洪佳琪</tspan></text>
+
         </g>
-        <g id="node-docs" data-node-id="docs" data-node-label="docs 文档" tabindex="0" role="button" aria-label="Focus docs 文档, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="ops root" class="tree-hue-frontend">
-          <title>docs 文档 · Leaf</title>
+        <g id="node-b6" data-node-id="b6" data-node-label="⑥ main/core/公共service · 洪佳琪" tabindex="0" role="button" aria-label="Focus ⑥ main/core/公共service · 洪佳琪, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="be root" class="tree-hue-database">
+          <title>⑥ main/core/公共service · 洪佳琪 · Leaf</title>
 
-          <rect x="1489" y="621" width="204" height="59" rx="10" class="c-mask"/>
-          <rect x="1489" y="621" width="204" height="59" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
-          <path class="tree-accent" d="M 1493.5 630 V 671" stroke-width="3" stroke-linecap="round" fill="none"/>
-          <circle cx="1489" cy="650.5" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1505" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="1505" y="654.5">docs 文档</tspan></text>
+          <rect x="356" y="547" width="220" height="58" rx="10" class="c-mask"/>
+          <rect x="356" y="547" width="220" height="58" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:2" stroke-width="1"/>
+          <path class="tree-accent" d="M 360.5 556 V 596" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="356" cy="576" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="372" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="372" y="571.5">⑥ main/core/公共service</tspan><tspan x="372" y="588.5">· 洪佳琪</tspan></text>
+
+        </g>
+        <g id="node-assets" data-node-id="assets" data-node-label="models 资产（六机台三件套）· 钱鸣" tabindex="0" role="button" aria-label="Focus models 资产（六机台三件套）· 钱鸣, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-cloud">
+          <title>models 资产（六机台三件套）· 钱鸣 · Leaf</title>
+
+          <rect x="632" y="161" width="229" height="76" rx="10" class="c-mask"/>
+          <rect x="632" y="161" width="229" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:1" stroke-width="1"/>
+          <path class="tree-accent" d="M 636.5 170 V 228" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="632" cy="199" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="648" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="648" y="194.5">models 资产（六机台三件</tspan><tspan x="648" y="211.5">套）· 钱鸣</tspan></text>
+
+        </g>
+        <g id="node-intg" data-node-id="intg" data-node-label="⑤ docs/integration · 张亮" tabindex="0" role="button" aria-label="Focus ⑤ docs/integration · 张亮, Dify/n8n 零平台代码, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Dify/n8n 零平台代码" data-node-context="Leaf" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-frontend">
+          <title>⑤ docs/integration · 张亮 · Dify/n8n 零平台代码 · Leaf</title>
+
+          <rect x="632" y="247" width="229" height="76" rx="10" class="c-mask"/>
+          <rect x="632" y="247" width="229" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:1" stroke-width="1"/>
+          <path class="tree-accent" d="M 636.5 256 V 314" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="632" cy="285" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="648" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="648" y="271.5">⑤ docs/integration · 张</tspan><tspan x="648" y="288.5">亮</tspan></text>
+          <text data-detail="context" x="648" class="t-muted tree-sublabel" font-size="11" text-anchor="start"><tspan x="648" y="307.5">Dify/n8n 零平台代码</tspan></text>
+        </g>
+        <g id="node-eng" data-node-id="eng" data-node-label="sql/deploy/scripts · 季世庆" tabindex="0" role="button" aria-label="Focus sql/deploy/scripts · 季世庆, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-messagebus">
+          <title>sql/deploy/scripts · 季世庆 · Leaf</title>
+
+          <rect x="632" y="333" width="229" height="76" rx="10" class="c-mask"/>
+          <rect x="632" y="333" width="229" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:1" stroke-width="1"/>
+          <path class="tree-accent" d="M 636.5 342 V 400" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="632" cy="371" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="648" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="648" y="366.5">sql/deploy/scripts · 季</tspan><tspan x="648" y="383.5">世庆</tspan></text>
+
+        </g>
+        <g id="node-ci" data-node-id="ci" data-node-label=".github/CODEOWNERS/tests · 洪佳琪" tabindex="0" role="button" aria-label="Focus .github/CODEOWNERS/tests · 洪佳琪, Leaf" aria-pressed="false" data-node-kind="external" data-node-context="Leaf" data-tree-depth="1" data-tree-ancestors="root" class="tree-hue-external">
+          <title>.github/CODEOWNERS/tests · 洪佳琪 · Leaf</title>
+
+          <rect x="632" y="419" width="229" height="76" rx="10" class="c-mask"/>
+          <rect x="632" y="419" width="229" height="76" rx="10" class="c-external tree-leaf" data-animate="node" style="--step:1" stroke-width="1"/>
+          <path class="tree-accent" d="M 636.5 428 V 486" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <circle cx="632" cy="457" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="648" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="start"><tspan x="648" y="452.5">.github/CODEOWNERS/tests</tspan><tspan x="648" y="469.5">· 洪佳琪</tspan></text>
 
         </g>
 
         <!-- Branch toggles -->
-        <g data-tree-toggle="root" data-tree-count="26" data-tree-label-collapse="Collapse fab-twin-pro（ver3） (26 below)" data-tree-label-expand="Expand fab-twin-pro（ver3） (26 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse fab-twin-pro（ver3） (26 below)" class="tree-hue-root">
-          <circle cx="811.5" cy="105" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="811.5" cy="105" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 808.35 105 H 814.65" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 811.5 101.85 V 108.15" stroke-width="1.5" stroke-linecap="round"/>
+        <g data-tree-toggle="root" data-tree-count="16" data-tree-label-collapse="Collapse fab-twin-pro / ver3 (16 below)" data-tree-label-expand="Expand fab-twin-pro / ver3 (16 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse fab-twin-pro / ver3 (16 below)" class="tree-hue-root">
+          <circle cx="373.5" cy="105" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="373.5" cy="105" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 370.35 105 H 376.65" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 373.5 101.85 V 108.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="822" y="97.5" width="23.4" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="833.7" y="108.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">26</text>
+            <rect x="384" y="97.5" width="23.4" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="395.7" y="108.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">16</text>
           </g>
         </g>
-        <g data-tree-toggle="backend" data-tree-count="6" data-tree-ancestors="root" data-tree-label-collapse="Collapse backend 后端 (6 below)" data-tree-label-expand="Expand backend 后端 (6 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse backend 后端 (6 below)" class="tree-hue-backend">
-          <circle cx="54" cy="220" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="54" cy="220" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 50.85 220 H 57.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 54 216.85 V 223.15" stroke-width="1.5" stroke-linecap="round"/>
+        <g data-tree-toggle="fe" data-tree-count="5" data-tree-ancestors="root" data-tree-label-collapse="Collapse frontend 前端（按功能垂直拆） (5 below)" data-tree-label-expand="Expand frontend 前端（按功能垂直拆） (5 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse frontend 前端（按功能垂直拆） (5 below)" class="tree-hue-backend">
+          <circle cx="54" cy="219" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="54" cy="219" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 50.85 219 H 57.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 54 215.85 V 222.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="64.5" y="212.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="73.1" y="223.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">6</text>
+            <rect x="64.5" y="211.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="73.1" y="222.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">5</text>
           </g>
         </g>
-        <g data-tree-toggle="frontend" data-tree-count="8" data-tree-ancestors="root" data-tree-label-collapse="Collapse frontend 前端 (8 below)" data-tree-label-expand="Expand frontend 前端 (8 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse frontend 前端 (8 below)" class="tree-hue-database">
-          <circle cx="694" cy="220" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="694" cy="220" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 690.85 220 H 697.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 694 216.85 V 223.15" stroke-width="1.5" stroke-linecap="round"/>
+        <g data-tree-toggle="be" data-tree-count="5" data-tree-ancestors="root" data-tree-label-collapse="Collapse backend 后端（平铺+文件级归属） (5 below)" data-tree-label-expand="Expand backend 后端（平铺+文件级归属） (5 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse backend 后端（平铺+文件级归属） (5 below)" class="tree-hue-database">
+          <circle cx="340" cy="219" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="340" cy="219" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 336.85 219 H 343.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 340 215.85 V 222.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="704.5" y="212.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="713.1" y="223.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">8</text>
-          </g>
-        </g>
-        <g data-tree-toggle="features" data-tree-count="5" data-tree-ancestors="frontend root" data-tree-label-collapse="Collapse features 业务五域 (5 below)" data-tree-label-expand="Expand features 业务五域 (5 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse features 业务五域 (5 below)" class="tree-hue-database">
-          <circle cx="630" cy="335" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="630" cy="335" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 626.85 335 H 633.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 630 331.85 V 338.15" stroke-width="1.5" stroke-linecap="round"/>
-          <g class="tree-toggle-count">
-            <rect x="640.5" y="327.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="649.1" y="338.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">5</text>
-          </g>
-        </g>
-        <g data-tree-toggle="assets" data-tree-count="2" data-tree-ancestors="root" data-tree-label-collapse="Collapse 模型资产 models/ (2 below)" data-tree-label-expand="Expand 模型资产 models/ (2 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse 模型资产 models/ (2 below)" class="tree-hue-cloud">
-          <circle cx="1232.5" cy="220" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="1232.5" cy="220" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 1229.35 220 H 1235.65" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 1232.5 216.85 V 223.15" stroke-width="1.5" stroke-linecap="round"/>
-          <g class="tree-toggle-count">
-            <rect x="1243" y="212.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="1251.6" y="223.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
-          </g>
-        </g>
-        <g data-tree-toggle="ops" data-tree-count="6" data-tree-ancestors="root" data-tree-label-collapse="Collapse 工程与交付 (6 below)" data-tree-label-expand="Expand 工程与交付 (6 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse 工程与交付 (6 below)" class="tree-hue-frontend">
-          <circle cx="1473" cy="220" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="1473" cy="220" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 1469.85 220 H 1476.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 1473 216.85 V 223.15" stroke-width="1.5" stroke-linecap="round"/>
-          <g class="tree-toggle-count">
-            <rect x="1483.5" y="212.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="1492.1" y="223.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">6</text>
+            <rect x="350.5" y="211.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="359.1" y="222.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">5</text>
           </g>
         </g>
 

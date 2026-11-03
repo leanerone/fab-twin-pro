@@ -2,8 +2,8 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "迁移流向预览：现有文件 → 功能模块（按负责人）",
-    "subtitle": "左=现在散在哪，右=以后归哪个模块。仅搬家不改语义，URL/API/表名不变。",
+    "title": "迁移流向（已完成·历史记录）",
+    "subtitle": "2026-11-03 M1~M4 已执行：左旧散落→右功能模块，全部 build/回归通过",
     "output": "08-migration-map.html",
     "quality_profile": "showcase"
   },

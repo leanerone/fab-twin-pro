@@ -15,9 +15,9 @@
 - **已经部署过**：每台离线机器**重启后启动**、**环境变量改动**、**schema 升级**、**AI 子系统独立安装**等
 - 整个流程分 **3 大段、9 个步骤**，每步有明确产物和验证命令
 
-**如果你要看每个脚本的功能**，请读 [`../deploy/README.md`](../deploy/README.md)。
+**如果你要看每个脚本的功能**，请读 [`../deploy/README.md`](../../deploy/README.md)。
 
-**如果你要部署 Dify / n8n / db_proxy 等 AI 子系统**，请读第 7 章并跳转到 [`./integration/DEPLOY_SOP.md`](./integration/DEPLOY_SOP.md)。
+**如果你要部署 Dify / n8n / db_proxy 等 AI 子系统**，请读第 7 章并跳转到 [`./integration/DEPLOY_SOP.md`](../integration/DEPLOY_SOP.md)。
 
 ---
 
@@ -134,7 +134,7 @@ cd deploy
 .\package_offline.bat
 ```
 
-**做了什么**（详见 [deploy/README.md §A](../deploy/README.md)）：
+**做了什么**（详见 [deploy/README.md §A](../../deploy/README.md)）：
 
 1. 复制 `backend/`（含源码、routers、services）
 2. `pip download` 把 Python 依赖拉到 `backend\wheels\`
@@ -255,7 +255,7 @@ cd deploy
 .\deploy_iis_nt_final.bat
 ```
 
-**做了什么**（详见 [deploy/README.md §B](../deploy/README.md)）：
+**做了什么**（详见 [deploy/README.md §B](../../deploy/README.md)）：
 
 1. 检查 4 个 IIS feature 是否齐全
 2. 复制 `frontend\dist\` 到 `C:\inetpub\wwwroot\FabTwin\`
@@ -280,7 +280,7 @@ cd deploy
 
 `start_iis.bat` 是一个薄包装，会委托 `start_iis.ps1` 实际工作。
 
-**start_iis.ps1 做了什么**（详见 [deploy/README.md §B](../deploy/README.md)）：
+**start_iis.ps1 做了什么**（详见 [deploy/README.md §B](../../deploy/README.md)）：
 
 1. 解析 `env.bat`，把 Oracle 连接 + 端口注入环境变量
 2. 动态生成 `backend\_run_iis.ps1`
@@ -309,7 +309,7 @@ netsh advfirewall firewall add rule name="FabTwin Backend" dir=in action=allow p
 
 ## 五、Step 10（可选）：部署 AI 子系统
 
-**默认情况不需要**，只有需要 AI 助手 / 智能查询时才装。详见 [`./integration/DEPLOY_SOP.md`](./integration/DEPLOY_SOP.md)。
+**默认情况不需要**，只有需要 AI 助手 / 智能查询时才装。详见 [`./integration/DEPLOY_SOP.md`](../integration/DEPLOY_SOP.md)。
 
 | 子系统 | 用途 | 部署命令 | 端口 |
 |---|---|---|---|
@@ -393,7 +393,7 @@ cd deploy
 
 ### 7.5 把后端注册成 Windows 服务（开机自启）
 
-参考 [`integration/DEPLOY_SOP.md` 第 5 节 NSSM](./integration/DEPLOY_SOP.md)（用 NSSM 把 `start_iis.ps1` 注册成服务）。
+参考 [`integration/DEPLOY_SOP.md` 第 5 节 NSSM](../integration/DEPLOY_SOP.md)（用 NSSM 把 `start_iis.ps1` 注册成服务）。
 
 ### 7.6 看后端日志
 
@@ -458,10 +458,10 @@ set DB_PROXY_PORT=8001
 
 ### 附录 C：相关文档交叉索引
 
-- 脚本功能分类：[`deploy/README.md`](../deploy/README.md)
-- 系统架构总览：[`系统架构说明书.md`](./系统架构说明书.md)
+- 脚本功能分类：[`deploy/README.md`](../../deploy/README.md)
+- 系统架构总览：[`系统架构说明书.md`](../specs/系统架构说明书.md)
 - 架构图：[`FabTwin_系统架构图.svg`](./FabTwin_系统架构图.svg)
-- AI 集成部署：[`docs/integration/DEPLOY_SOP.md`](./integration/DEPLOY_SOP.md)
+- AI 集成部署：[`docs/integration/DEPLOY_SOP.md`](../integration/DEPLOY_SOP.md)
 - 业务文档（机台接入、新机台开发）：[`docs/business/`](./business/)
 - 归档历史：[`docs/archive/`](./archive/)
 

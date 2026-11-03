@@ -2,42 +2,31 @@
   "schema_version": 1,
   "diagram_type": "tree",
   "meta": {
-    "title": "文件架构分类（ver3）",
-    "subtitle": "目录即分工：公共层管制，业务域自治。每个目录只有一个归属负责人。",
+    "title": "当前文件架构（2026-11-03 模块化后）",
+    "subtitle": "前端 modules 按功能分；后端 routers/services 平铺，用 CODEOWNERS 文件级归属界定负责人",
     "output": "02-file-architecture.html",
     "quality_profile": "showcase"
   },
   "nodes": [
-    { "id": "root", "label": "fab-twin-pro（ver3）" },
+    { "id": "root", "label": "fab-twin-pro / ver3" },
 
-    { "id": "backend", "label": "backend 后端", "parent": "root" },
-    { "id": "core", "label": "core 公共内核", "parent": "backend", "sublabel": "洪佳琪" },
-    { "id": "be_public", "label": "main/config/db/models/schemas", "parent": "backend", "sublabel": "公共五文件" },
-    { "id": "be_ai", "label": "services/ai + routers/ai", "parent": "backend", "sublabel": "朱明钊" },
-    { "id": "be_data", "label": "数据路由+poller/sql", "parent": "backend", "sublabel": "季世庆" },
-    { "id": "be_model", "label": "models/uploads 路由", "parent": "backend", "sublabel": "钱鸣" },
-    { "id": "be_common", "label": "security/realtime/cache", "parent": "backend", "sublabel": "公共服务" },
+    { "id": "fe", "label": "frontend 前端（按功能垂直拆）", "parent": "root" },
+    { "id": "m1", "label": "① model-library · 钱鸣", "parent": "fe", "sublabel": "引擎/derivers/编辑器" },
+    { "id": "m2", "label": "② production-monitor · 季世庆", "parent": "fe", "sublabel": "详情/看板/回放/3D" },
+    { "id": "m3", "label": "③ ai-assistant · 朱明钊", "parent": "fe", "sublabel": "对话/配置/语音" },
+    { "id": "m4", "label": "④ system-admin · 洪佳琪", "parent": "fe", "sublabel": "登录/用户" },
+    { "id": "pf", "label": "⑥ platform 内核 · 洪佳琪", "parent": "fe", "sublabel": "shell/api/stores/router/共享件" },
 
-    { "id": "frontend", "label": "frontend 前端", "parent": "root" },
-    { "id": "fe_shell", "label": "stores/router/api-core", "parent": "frontend", "sublabel": "公共骨架" },
-    { "id": "features", "label": "features 业务五域", "parent": "frontend" },
-    { "id": "f_motion", "label": "motion 动画域", "parent": "features", "sublabel": "钱鸣" },
-    { "id": "f_editor", "label": "editor 编辑器域", "parent": "features", "sublabel": "钱鸣" },
-    { "id": "f_ai", "label": "ai 助手域", "parent": "features", "sublabel": "朱明钊" },
-    { "id": "f_dash", "label": "dashboard 看板域", "parent": "features", "sublabel": "朱明钊" },
-    { "id": "f_machines", "label": "machines 机台详情域", "parent": "features", "sublabel": "季世庆/朱明钊" },
-    { "id": "fe_api", "label": "api 按域 8 文件", "parent": "frontend" },
+    { "id": "be", "label": "backend 后端（平铺+文件级归属）", "parent": "root" },
+    { "id": "b1", "label": "① models/uploads · 钱鸣", "parent": "be" },
+    { "id": "b2", "label": "② 11 数据路由+poller · 季世庆", "parent": "be" },
+    { "id": "b3", "label": "③ ai 路由+services/ai · 朱明钊", "parent": "be" },
+    { "id": "b4", "label": "④ auth/users · 洪佳琪", "parent": "be" },
+    { "id": "b6", "label": "⑥ main/core/公共service · 洪佳琪", "parent": "be" },
 
-    { "id": "assets", "label": "模型资产 models/", "parent": "root", "sublabel": "钱鸣" },
-    { "id": "m_user", "label": "user 六机台三件套", "parent": "assets" },
-    { "id": "m_kit", "label": "svg_kit 公共建模库", "parent": "assets" },
-
-    { "id": "ops", "label": "工程与交付", "parent": "root" },
-    { "id": "scripts", "label": "scripts 入库/运维脚本", "parent": "ops", "sublabel": "钱鸣/季世庆" },
-    { "id": "sql", "label": "sql 版本化迁移", "parent": "ops", "sublabel": "季世庆" },
-    { "id": "integration", "label": "Dify/n8n 集成资产", "parent": "ops", "sublabel": "张亮" },
-    { "id": "tests", "label": "tests 回归与门禁", "parent": "ops" },
-    { "id": "cicd", "label": ".github + CODEOWNERS", "parent": "ops", "sublabel": "CI 门禁" },
-    { "id": "docs", "label": "docs 文档", "parent": "ops" }
+    { "id": "assets", "label": "models 资产（六机台三件套）· 钱鸣", "parent": "root" },
+    { "id": "intg", "label": "⑤ docs/integration · 张亮", "parent": "root", "sublabel": "Dify/n8n 零平台代码" },
+    { "id": "eng", "label": "sql/deploy/scripts · 季世庆", "parent": "root" },
+    { "id": "ci", "label": ".github/CODEOWNERS/tests · 洪佳琪", "parent": "root" }
   ]
 }

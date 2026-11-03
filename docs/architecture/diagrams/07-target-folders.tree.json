@@ -2,44 +2,159 @@
   "schema_version": 1,
   "diagram_type": "tree",
   "meta": {
-    "title": "目标目录结构（预览·未动代码）：功能模块 × 负责人",
-    "subtitle": "一个功能=一个文件夹=一个负责人；模块只依赖 platform 内核，模块之间只走公开接口",
+    "title": "功能模块落地结构（2026-11-03 已完成）",
+    "subtitle": "前端 modules 四模块+platform 已迁移并 build/浏览器回归通过；后端维持平铺由 CODEOWNERS 文件级归属",
     "output": "07-target-folders.html",
     "quality_profile": "showcase"
   },
   "nodes": [
-    { "id": "root", "label": "fab-twin-pro / ver3" },
-
-    { "id": "modules", "label": "modules/ 四大功能模块", "parent": "root", "sublabel": "前后端垂直自包含" },
-
-    { "id": "m1", "label": "① model-library 模型库", "parent": "modules", "sublabel": "负责人：钱鸣" },
-    { "id": "m1fe", "label": "frontend/", "parent": "m1", "sublabel": "编辑器页·上传·动画引擎·derivers" },
-    { "id": "m1be", "label": "backend/", "parent": "m1", "sublabel": "models/uploads 路由" },
-    { "id": "m1asset", "label": "assets + scripts", "parent": "m1", "sublabel": "models/ 三件套·sync 入库脚本" },
-
-    { "id": "m2", "label": "② production-monitor 生产监控", "parent": "modules", "sublabel": "负责人：季世庆" },
-    { "id": "m2fe", "label": "frontend/", "parent": "m2", "sublabel": "机台详情·回放·看板·告警/批次·3D" },
-    { "id": "m2be", "label": "backend/", "parent": "m2", "sublabel": "history/events/lots/alarms 等 11 路由 + poller" },
-    { "id": "m2sql", "label": "sql + deploy", "parent": "m2", "sublabel": "版本化 DDL·部署备份" },
-
-    { "id": "m3", "label": "③ ai-assistant AI 助手", "parent": "modules", "sublabel": "负责人：朱明钊" },
-    { "id": "m3fe", "label": "frontend/", "parent": "m3", "sublabel": "对话·浮球·配置页·语音" },
-    { "id": "m3be", "label": "backend/", "parent": "m3", "sublabel": "services/ai 包 + ai 路由" },
-
-    { "id": "m4", "label": "④ system-admin 系统管理", "parent": "modules", "sublabel": "负责人：洪佳琪（过渡）" },
-    { "id": "m4fe", "label": "frontend/", "parent": "m4", "sublabel": "登录·用户管理" },
-    { "id": "m4be", "label": "backend/", "parent": "m4", "sublabel": "auth/users 路由" },
-
-    { "id": "m5", "label": "⑤ integration 智能体集成", "parent": "root", "sublabel": "张亮·零平台代码" },
-    { "id": "m5doc", "label": "docs/integration", "parent": "m5", "sublabel": "Dify DSL·n8n workflow" },
-    { "id": "m5dep", "label": "deploy + 联调脚本", "parent": "m5", "sublabel": "部署/凭据/联通验证" },
-
-    { "id": "platform", "label": "⑥ platform 平台内核", "parent": "root", "sublabel": "负责人：洪佳琪" },
-    { "id": "pf_shell", "label": "前端 shell + core", "parent": "platform", "sublabel": "main/App/router 装配·api/core·stores" },
-    { "id": "pf_core", "label": "后端 core + 公共服务", "parent": "platform", "sublabel": "deps·security/cache/realtime/perf/time" },
-    { "id": "pf_boot", "label": "启动与数据底座", "parent": "platform", "sublabel": "main/config/database·ORM 总表" },
-    { "id": "pf_ci", "label": ".github + CI 边界检查", "parent": "platform", "sublabel": "禁止模块互引内部文件" },
-
-    { "id": "tests", "label": "tests 回归", "parent": "root", "sublabel": "pytest·ai 门禁·smoke（洪佳琪共管）" }
+    {
+      "id": "root",
+      "label": "fab-twin-pro / ver3"
+    },
+    {
+      "id": "modules",
+      "label": "modules/ 四大功能模块",
+      "parent": "root",
+      "sublabel": "前后端垂直自包含"
+    },
+    {
+      "id": "m1",
+      "label": "① model-library 模型库",
+      "parent": "modules",
+      "sublabel": "负责人：钱鸣"
+    },
+    {
+      "id": "m1fe",
+      "label": "frontend/",
+      "parent": "m1",
+      "sublabel": "编辑器页·上传·动画引擎·derivers"
+    },
+    {
+      "id": "m1be",
+      "label": "backend/",
+      "parent": "m1",
+      "sublabel": "models/uploads 路由"
+    },
+    {
+      "id": "m1asset",
+      "label": "assets + scripts",
+      "parent": "m1",
+      "sublabel": "models/ 三件套·sync 入库脚本"
+    },
+    {
+      "id": "m2",
+      "label": "② production-monitor 生产监控",
+      "parent": "modules",
+      "sublabel": "负责人：季世庆"
+    },
+    {
+      "id": "m2fe",
+      "label": "frontend/",
+      "parent": "m2",
+      "sublabel": "机台详情·回放·看板·告警/批次·3D"
+    },
+    {
+      "id": "m2be",
+      "label": "backend/",
+      "parent": "m2",
+      "sublabel": "history/events/lots/alarms 等 11 路由 + poller"
+    },
+    {
+      "id": "m2sql",
+      "label": "sql + deploy",
+      "parent": "m2",
+      "sublabel": "版本化 DDL·部署备份"
+    },
+    {
+      "id": "m3",
+      "label": "③ ai-assistant AI 助手",
+      "parent": "modules",
+      "sublabel": "负责人：朱明钊"
+    },
+    {
+      "id": "m3fe",
+      "label": "frontend/",
+      "parent": "m3",
+      "sublabel": "对话·浮球·配置页·语音"
+    },
+    {
+      "id": "m3be",
+      "label": "backend/",
+      "parent": "m3",
+      "sublabel": "services/ai 包 + ai 路由"
+    },
+    {
+      "id": "m4",
+      "label": "④ system-admin 系统管理",
+      "parent": "modules",
+      "sublabel": "负责人：洪佳琪（过渡）"
+    },
+    {
+      "id": "m4fe",
+      "label": "frontend/",
+      "parent": "m4",
+      "sublabel": "登录·用户管理"
+    },
+    {
+      "id": "m4be",
+      "label": "backend/",
+      "parent": "m4",
+      "sublabel": "auth/users 路由"
+    },
+    {
+      "id": "m5",
+      "label": "⑤ integration 智能体集成",
+      "parent": "root",
+      "sublabel": "张亮·零平台代码"
+    },
+    {
+      "id": "m5doc",
+      "label": "docs/integration",
+      "parent": "m5",
+      "sublabel": "Dify DSL·n8n workflow"
+    },
+    {
+      "id": "m5dep",
+      "label": "deploy + 联调脚本",
+      "parent": "m5",
+      "sublabel": "部署/凭据/联通验证"
+    },
+    {
+      "id": "platform",
+      "label": "⑥ platform 平台内核",
+      "parent": "root",
+      "sublabel": "负责人：洪佳琪"
+    },
+    {
+      "id": "pf_shell",
+      "label": "前端 shell + core",
+      "parent": "platform",
+      "sublabel": "main/App/router 装配·api/core·stores"
+    },
+    {
+      "id": "pf_core",
+      "label": "后端 core + 公共服务",
+      "parent": "platform",
+      "sublabel": "deps·security/cache/realtime/perf/time"
+    },
+    {
+      "id": "pf_boot",
+      "label": "启动与数据底座",
+      "parent": "platform",
+      "sublabel": "main/config/database·ORM 总表"
+    },
+    {
+      "id": "pf_ci",
+      "label": ".github + CI 边界检查",
+      "parent": "platform",
+      "sublabel": "禁止模块互引内部文件"
+    },
+    {
+      "id": "tests",
+      "label": "tests 回归",
+      "parent": "root",
+      "sublabel": "pytest·ai 门禁·smoke（洪佳琪共管）"
+    }
   ]
 }

@@ -2,47 +2,40 @@
   "schema_version": 1,
   "diagram_type": "tree",
   "meta": {
-    "title": "分工架构：一人一域，目录即边界",
-    "subtitle": "目录内自由提交 CI 绿自合；跨域 PR 由 owner 批准；公共层洪佳琪批准；总控只做仓库设置与仲裁。",
+    "title": "分工架构（模块化后）：一人一域，前端目录/后端文件级归属",
+    "subtitle": "目录内 CI 绿自合；跨域走公开接口；公共层洪佳琪审；总控只做仓库设置与仲裁",
     "output": "03-ownership.html",
     "quality_profile": "showcase"
   },
   "nodes": [
     { "id": "root", "label": "FabTwin 团队" },
 
-    { "id": "lead", "label": "总控（leanerone）", "parent": "root", "sublabel": "拍板/仲裁/仓库设置" },
-    { "id": "lead1", "label": "分支保护与账号管理", "parent": "lead" },
-    { "id": "lead2", "label": "跨模块冲突仲裁", "parent": "lead" },
-    { "id": "lead3", "label": "Sprint 目标与演示", "parent": "lead" },
+    { "id": "lead", "label": "总控 leanerone", "parent": "root", "sublabel": "拍板/仲裁/仓库设置" },
+    { "id": "l1", "label": "分支保护+账号+看板", "parent": "lead" },
+    { "id": "l2", "label": "跨模块冲突仲裁", "parent": "lead" },
 
-    { "id": "kernel", "label": "平台内核 / 洪佳琪", "parent": "root", "sublabel": "评审与质量" },
-    { "id": "k1", "label": "core/ 与公共五文件", "parent": "kernel" },
-    { "id": "k2", "label": "stores/router/api-core", "parent": "kernel" },
-    { "id": "k3", "label": "CI 门禁与 smoke_baseline", "parent": "kernel" },
-    { "id": "k4", "label": "E2E 进 CI（下阶段）", "parent": "kernel" },
+    { "id": "kernel", "label": "平台内核 · 洪佳琪", "parent": "root" },
+    { "id": "k1", "label": "platform 前端 shell/core", "parent": "kernel" },
+    { "id": "k2", "label": "main/core/公共service", "parent": "kernel" },
+    { "id": "k3", "label": "CI 门禁/E2E/CODEOWNERS", "parent": "kernel" },
+    { "id": "k4", "label": "④系统管理(过渡) auth/users", "parent": "kernel" },
 
-    { "id": "model", "label": "机台建模动画 / 钱鸣", "parent": "root", "sublabel": "王牌产线" },
-    { "id": "m1", "label": "models/ 三件套与 svg_kit", "parent": "model" },
-    { "id": "m2", "label": "features/motion + editor", "parent": "model" },
-    { "id": "m3", "label": "routers/models+uploads", "parent": "model" },
-    { "id": "m4", "label": "ModelEditor 四 Tab 拆分", "parent": "model" },
+    { "id": "qian", "label": "① 模型库 · 钱鸣", "parent": "root" },
+    { "id": "q1", "label": "model-library: engine/derivers/editor", "parent": "qian" },
+    { "id": "q2", "label": "models/ 六机台资产+svg_kit", "parent": "qian" },
+    { "id": "q3", "label": "routers models/uploads", "parent": "qian" },
 
-    { "id": "data", "label": "数据链路 EAP / 季世庆", "parent": "root", "sublabel": "量产接入" },
-    { "id": "d1", "label": "history/events/lots 等 9 路由", "parent": "data" },
-    { "id": "d2", "label": "db_poller/simulator/sql", "parent": "data" },
-    { "id": "d3", "label": "VPO 影子运行与归档", "parent": "data" },
-    { "id": "d4", "label": "部署与备份定时化", "parent": "data" },
+    { "id": "ji", "label": "② 生产监控 · 季世庆", "parent": "root" },
+    { "id": "j1", "label": "production-monitor: 详情/看板/回放", "parent": "ji" },
+    { "id": "j2", "label": "11 数据路由 + db_poller", "parent": "ji" },
+    { "id": "j3", "label": "sql/deploy/量产影子运行", "parent": "ji" },
 
-    { "id": "ai", "label": "AI 代码+看板 / 朱明钊", "parent": "root", "sublabel": "双域" },
-    { "id": "a1", "label": "services/ai 全包", "parent": "ai" },
-    { "id": "a2", "label": "features/ai + dashboard", "parent": "ai" },
-    { "id": "a3", "label": "routers/ai + floors", "parent": "ai" },
-    { "id": "a4", "label": "真实 Dify 凭据联调", "parent": "ai" },
+    { "id": "zhu", "label": "③ AI 助手 · 朱明钊", "parent": "root" },
+    { "id": "z1", "label": "ai-assistant: 对话/浮球/配置", "parent": "zhu" },
+    { "id": "z2", "label": "services/ai 全包 + routers/ai", "parent": "zhu" },
 
-    { "id": "integ", "label": "Dify/n8n 对接 / 张亮", "parent": "root", "sublabel": "零平台代码" },
-    { "id": "i1", "label": "docs/integration 可导入资产", "parent": "integ" },
-    { "id": "i2", "label": "部署脚本与工作流 DSL", "parent": "integ" },
-    { "id": "i3", "label": "量产 n8n 网络开通", "parent": "integ" },
-    { "id": "i4", "label": "MCP provider 凭据", "parent": "integ" }
+    { "id": "zhang", "label": "⑤ 智能体集成 · 张亮", "parent": "root", "sublabel": "零平台代码" },
+    { "id": "z51", "label": "docs/integration Dify/n8n 资产", "parent": "zhang" },
+    { "id": "z52", "label": "部署脚本+真实链路联调", "parent": "zhang" }
   ]
 }

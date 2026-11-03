@@ -2,49 +2,297 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "功能模块化目标结构：6 功能模块 + 平台内核",
-    "subtitle": "一个功能=一个文件夹=一个负责人；模块只依赖内核，模块间仅公开接口单向连接",
+    "title": "功能模块边界与依赖方向（已落地）",
+    "subtitle": "前端 modules 四模块已自包含；模块只依赖 platform 内核，跨模块仅公开接口（②详情页用①动画组件）",
     "output": "06-functional-modules.html",
     "quality_profile": "showcase"
   },
   "components": [
-    { "id": "m1", "type": "frontend", "label": "① 模型库 · 钱鸣", "sublabel": "建模/动画/编辑器/素材", "pos": [40, 60], "size": [210, 80] },
-    { "id": "m2", "type": "frontend", "label": "② 生产监控 · 季世庆", "sublabel": "机台详情/回放/看板/告警", "pos": [40, 200], "size": [210, 80] },
-    { "id": "m3", "type": "frontend", "label": "③ AI 助手 · 朱明钊", "sublabel": "问数/对话/配置/语音", "pos": [40, 340], "size": [210, 80] },
-    { "id": "m4", "type": "security", "label": "④ 系统管理 · 洪佳琪", "sublabel": "登录/用户/权限", "pos": [40, 480], "size": [210, 70] },
-
-    { "id": "m5", "type": "external", "label": "⑤ 智能体集成 · 张亮", "sublabel": "Dify/n8n 资产，零平台代码", "pos": [830, 340], "size": [210, 70] },
-
-    { "id": "shell", "type": "backend", "label": "shell/ 前端装配", "sublabel": "main/App/router/Header", "pos": [420, 70], "size": [200, 64] },
-    { "id": "core_fe", "type": "backend", "label": "前端 core", "sublabel": "api/core.js · stores", "pos": [420, 180], "size": [200, 58] },
-    { "id": "core_be", "type": "backend", "label": "后端 core+公共服务", "sublabel": "deps/security/cache/realtime", "pos": [420, 300], "size": [200, 70] },
-    { "id": "app_boot", "type": "backend", "label": "main/config/database", "sublabel": "ORM 总表，建表 review", "pos": [420, 420], "size": [200, 60] },
-
-    { "id": "oracle", "type": "database", "label": "Oracle", "sublabel": "各模块读写自己的表", "pos": [830, 90], "size": [180, 64] },
-    { "id": "ci", "type": "messagebus", "label": "CI 模块边界检查", "sublabel": "modules 互引内部文件即红", "pos": [830, 200], "size": [210, 64] }
+    {
+      "id": "m1",
+      "type": "frontend",
+      "label": "① 模型库 · 钱鸣",
+      "sublabel": "建模/动画/编辑器/素材",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        210,
+        80
+      ]
+    },
+    {
+      "id": "m2",
+      "type": "frontend",
+      "label": "② 生产监控 · 季世庆",
+      "sublabel": "机台详情/回放/看板/告警",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        210,
+        80
+      ]
+    },
+    {
+      "id": "m3",
+      "type": "frontend",
+      "label": "③ AI 助手 · 朱明钊",
+      "sublabel": "问数/对话/配置/语音",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        210,
+        80
+      ]
+    },
+    {
+      "id": "m4",
+      "type": "security",
+      "label": "④ 系统管理 · 洪佳琪",
+      "sublabel": "登录/用户/权限",
+      "pos": [
+        40,
+        480
+      ],
+      "size": [
+        210,
+        70
+      ]
+    },
+    {
+      "id": "m5",
+      "type": "external",
+      "label": "⑤ 智能体集成 · 张亮",
+      "sublabel": "Dify/n8n 资产，零平台代码",
+      "pos": [
+        830,
+        340
+      ],
+      "size": [
+        210,
+        70
+      ]
+    },
+    {
+      "id": "shell",
+      "type": "backend",
+      "label": "shell/ 前端装配",
+      "sublabel": "main/App/router/Header",
+      "pos": [
+        420,
+        70
+      ],
+      "size": [
+        200,
+        64
+      ]
+    },
+    {
+      "id": "core_fe",
+      "type": "backend",
+      "label": "前端 core",
+      "sublabel": "api/core.js · stores",
+      "pos": [
+        420,
+        180
+      ],
+      "size": [
+        200,
+        58
+      ]
+    },
+    {
+      "id": "core_be",
+      "type": "backend",
+      "label": "后端 core+公共服务",
+      "sublabel": "deps/security/cache/realtime",
+      "pos": [
+        420,
+        300
+      ],
+      "size": [
+        200,
+        70
+      ]
+    },
+    {
+      "id": "app_boot",
+      "type": "backend",
+      "label": "main/config/database",
+      "sublabel": "ORM 总表，建表 review",
+      "pos": [
+        420,
+        420
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "oracle",
+      "type": "database",
+      "label": "Oracle",
+      "sublabel": "各模块读写自己的表",
+      "pos": [
+        830,
+        90
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "ci",
+      "type": "messagebus",
+      "label": "CI 模块边界检查",
+      "sublabel": "modules 互引内部文件即红",
+      "pos": [
+        830,
+        200
+      ],
+      "size": [
+        210,
+        64
+      ]
+    }
   ],
   "boundaries": [
-    { "kind": "region", "label": "功能模块 modules/（单一 owner，前后端垂直自包含）", "wraps": ["m1", "m2", "m3", "m4"] },
-    { "kind": "region", "label": "平台内核（洪佳琪 review）", "wraps": ["shell", "core_fe", "core_be", "app_boot"] }
+    {
+      "kind": "region",
+      "label": "功能模块 modules/（单一 owner，前后端垂直自包含）",
+      "wraps": [
+        "m1",
+        "m2",
+        "m3",
+        "m4"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "平台内核（洪佳琪 review）",
+      "wraps": [
+        "shell",
+        "core_fe",
+        "core_be",
+        "app_boot"
+      ]
+    }
   ],
   "connections": [
-    { "id": "m1-shell", "from": "m1", "to": "shell", "label": "注册页面" },
-    { "id": "m2-shell", "from": "m2", "to": "shell", "label": "注册页面" },
-    { "id": "m3-shell", "from": "m3", "to": "shell", "label": "注册页面" },
-    { "id": "m4-shell", "from": "m4", "to": "shell", "label": "注册页面" },
-    { "id": "m2-m1", "from": "m2", "to": "m1", "label": "仅用公开动画组件", "variant": "dashed" },
-    { "id": "m3-m5", "from": "m3", "to": "m5", "label": "调 Dify/n8n", "variant": "dashed" },
-    { "id": "fe-core", "from": "shell", "to": "core_fe" },
-    { "id": "core-link", "from": "core_fe", "to": "core_be", "label": "REST/WS" },
-    { "id": "be-boot", "from": "core_be", "to": "app_boot" },
-    { "id": "m2-db", "from": "m2", "to": "oracle", "label": "事件/告警" },
-    { "id": "m1-db", "from": "m1", "to": "oracle", "label": "模型配置" },
-    { "id": "m3-db", "from": "m3", "to": "oracle", "label": "AI 配置" },
-    { "id": "ci-guard", "from": "ci", "to": "core_be", "label": "越界即红", "variant": "security" }
+    {
+      "id": "m1-shell",
+      "from": "m1",
+      "to": "shell",
+      "label": "注册页面"
+    },
+    {
+      "id": "m2-shell",
+      "from": "m2",
+      "to": "shell",
+      "label": "注册页面"
+    },
+    {
+      "id": "m3-shell",
+      "from": "m3",
+      "to": "shell",
+      "label": "注册页面"
+    },
+    {
+      "id": "m4-shell",
+      "from": "m4",
+      "to": "shell",
+      "label": "注册页面"
+    },
+    {
+      "id": "m2-m1",
+      "from": "m2",
+      "to": "m1",
+      "label": "仅用公开动画组件",
+      "variant": "dashed"
+    },
+    {
+      "id": "m3-m5",
+      "from": "m3",
+      "to": "m5",
+      "label": "调 Dify/n8n",
+      "variant": "dashed"
+    },
+    {
+      "id": "fe-core",
+      "from": "shell",
+      "to": "core_fe"
+    },
+    {
+      "id": "core-link",
+      "from": "core_fe",
+      "to": "core_be",
+      "label": "REST/WS"
+    },
+    {
+      "id": "be-boot",
+      "from": "core_be",
+      "to": "app_boot"
+    },
+    {
+      "id": "m2-db",
+      "from": "m2",
+      "to": "oracle",
+      "label": "事件/告警"
+    },
+    {
+      "id": "m1-db",
+      "from": "m1",
+      "to": "oracle",
+      "label": "模型配置"
+    },
+    {
+      "id": "m3-db",
+      "from": "m3",
+      "to": "oracle",
+      "label": "AI 配置"
+    },
+    {
+      "id": "ci-guard",
+      "from": "ci",
+      "to": "core_be",
+      "label": "越界即红",
+      "variant": "security"
+    }
   ],
   "cards": [
-    { "dot": "cyan", "title": "模块定义", "items": ["一个文件夹=一个功能=一个负责人", "前后端页面/API/资产都在本模块", "README 写公开接口与自测"] },
-    { "dot": "emerald", "title": "依赖规则", "items": ["模块→内核：允许", "模块→模块内部：CI 禁止", "生产者→消费者只走公开组件"] },
-    { "dot": "rose", "title": "重新划开的交叉", "items": ["动画引擎(钱鸣)/机台页面(季世庆)", "看板归生产监控", "朱明钊只做 AI"] }
+    {
+      "dot": "cyan",
+      "title": "模块定义",
+      "items": [
+        "一个文件夹=一个功能=一个负责人",
+        "前后端页面/API/资产都在本模块",
+        "README 写公开接口与自测"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "依赖规则",
+      "items": [
+        "模块→内核：允许",
+        "模块→模块内部：CI 禁止",
+        "生产者→消费者只走公开组件"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "重新划开的交叉",
+      "items": [
+        "动画引擎(钱鸣)/机台页面(季世庆)",
+        "看板归生产监控",
+        "朱明钊只做 AI"
+      ]
+    }
   ]
 }
