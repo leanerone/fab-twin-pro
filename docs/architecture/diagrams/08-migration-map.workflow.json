@@ -1,0 +1,216 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "迁移流向预览：现有文件 → 功能模块（按负责人）",
+    "subtitle": "左=现在散在哪，右=以后归哪个模块。仅搬家不改语义，URL/API/表名不变。",
+    "output": "08-migration-map.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "model",
+      "label": "钱鸣 · 模型库"
+    },
+    {
+      "id": "monitor",
+      "label": "季世庆 · 生产监控"
+    },
+    {
+      "id": "ai",
+      "label": "朱明钊 · AI"
+    },
+    {
+      "id": "admin",
+      "label": "洪佳琪 · 系统/内核"
+    },
+    {
+      "id": "integ",
+      "label": "张亮 · 集成"
+    }
+  ],
+  "phases": [
+    {
+      "id": "now",
+      "label": "现在（散落）",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "m",
+      "label": "M1~M4 搬家",
+      "fromCol": 1,
+      "toCol": 2
+    },
+    {
+      "id": "future",
+      "label": "以后（功能模块）",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "cur_m",
+      "lane": "model",
+      "col": 0,
+      "type": "frontend",
+      "label": "motion+editor",
+      "sublabel": "引擎/编辑器"
+    },
+    {
+      "id": "cur_q",
+      "lane": "monitor",
+      "col": 0,
+      "type": "frontend",
+      "label": "machines+dashboard",
+      "sublabel": "面板/看板"
+    },
+    {
+      "id": "cur_z",
+      "lane": "ai",
+      "col": 0,
+      "type": "backend",
+      "label": "features/ai+services/ai",
+      "sublabel": "对话/shim"
+    },
+    {
+      "id": "cur_h",
+      "lane": "admin",
+      "col": 0,
+      "type": "security",
+      "label": "views+stores",
+      "sublabel": "登录/壳"
+    },
+    {
+      "id": "cur_l",
+      "lane": "integ",
+      "col": 0,
+      "type": "external",
+      "label": "deploy/integration",
+      "sublabel": "已独立"
+    },
+    {
+      "id": "m1",
+      "lane": "model",
+      "col": 2,
+      "type": "backend",
+      "label": "M2 收编",
+      "sublabel": "models/uploads"
+    },
+    {
+      "id": "m2",
+      "lane": "monitor",
+      "col": 2,
+      "type": "backend",
+      "label": "M3 收编最大",
+      "sublabel": "11路由+poller"
+    },
+    {
+      "id": "m3",
+      "lane": "ai",
+      "col": 1,
+      "type": "backend",
+      "label": "M1 先试删shim",
+      "sublabel": "最干净"
+    },
+    {
+      "id": "m4",
+      "lane": "admin",
+      "col": 2,
+      "type": "security",
+      "label": "M4+M5",
+      "sublabel": "系统/内核+CI"
+    },
+    {
+      "id": "new_m",
+      "lane": "model",
+      "col": 3,
+      "type": "frontend",
+      "label": "① 模型库",
+      "sublabel": "前后端+资产"
+    },
+    {
+      "id": "new_q",
+      "lane": "monitor",
+      "col": 3,
+      "type": "frontend",
+      "label": "② 生产监控",
+      "sublabel": "详情/看板/数据"
+    },
+    {
+      "id": "new_z",
+      "lane": "ai",
+      "col": 3,
+      "type": "backend",
+      "label": "③ AI 助手",
+      "sublabel": "对话/配置/语音"
+    },
+    {
+      "id": "new_h",
+      "lane": "admin",
+      "col": 3,
+      "type": "security",
+      "label": "④系统+⑥内核",
+      "sublabel": "权限/底座"
+    },
+    {
+      "id": "new_l",
+      "lane": "integ",
+      "col": 3,
+      "type": "external",
+      "label": "⑤ 集成",
+      "sublabel": "Dify/n8n"
+    }
+  ],
+  "edges": [
+    {
+      "from": "cur_m",
+      "to": "m1"
+    },
+    {
+      "from": "m1",
+      "to": "new_m",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cur_q",
+      "to": "m2"
+    },
+    {
+      "from": "m2",
+      "to": "new_q",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cur_z",
+      "to": "m3"
+    },
+    {
+      "from": "m3",
+      "to": "new_z",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cur_h",
+      "to": "m4"
+    },
+    {
+      "from": "m4",
+      "to": "new_h",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cur_l",
+      "to": "new_l",
+      "variant": "dashed"
+    },
+    {
+      "from": "new_m",
+      "to": "new_q",
+      "label": "公开组件",
+      "variant": "dashed"
+    }
+  ]
+}
