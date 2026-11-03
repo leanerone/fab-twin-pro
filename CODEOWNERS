@@ -1,20 +1,76 @@
-# CODEOWNERS v3（2026-11-02）
+# CODEOWNERS v4（2026-11-03）
 #
-# 当前停用自动分配：以下姓名是团队职责标识，不是已确认的 GitHub 账号。
-# 在取得真实账号前，不保留任何生效规则，避免 GitHub 将变更分配给不存在的用户。
-# 职责与路径分工以 docs/团队分工与协作手册_20261101.md 为准；分支保护仍需人工审核。
+# 现状：停用自动分配——下面是中文职责标识，不是已确认的 GitHub 账号。
+# 取得真实账号后，把 @owner 占位换成用户名并取消注释，再开 Require review from Code Owners。
+# 规则顺序：具体文件规则放在目录规则之后；后匹配的规则生效。
 #
-# 启用步骤：
-# 1. 由每位负责人确认其真实 GitHub 用户名，并为对应路径添加有效规则。
-# 2. 本地确认无占位账号后，再开启 Require review from Code Owners。
-# 3. 同一文件匹配多条规则时，最后一条规则生效；具体文件规则放在目录规则之后。
+# 代码已按功能垂直拆分为 modules/（前端）与后端文件域：
+#   前端：frontend/src/modules/<功能>/ 与 frontend/src/platform/
+#   后端：FastAPI 维持 routers/services 平铺（测试与脚本大量平铺 import，物理搬迁风险高），
+#         归属用下面的文件级 glob 精确守护。
 #
-# 职责对照（仅供配置时参考，不是 CODEOWNERS 规则）：
-#   季世庆：总控、数据链路、历史查询、PODOPENER
-#   钱鸣：机台建模、动画管线、模型编辑器
-#   朱明钊：界面、看板、机台详情、AI 全链路代码
-#   张亮：Dify/n8n 部署、DSL 与联调，不拥有平台后端代码
-#   洪佳琪：平台内核与最终审核
+# ── ① 模型库（钱鸣）──────────────────────────────────────────────
+# frontend/src/modules/model-library/        @owner-qianming
+# /models/                                    @owner-qianming
+# /backend/routers/models.py                  @owner-qianming
+# /backend/routers/uploads.py                 @owner-qianming
+# /backend/services/html_parser.py            @owner-qianming
+# /scripts/sync_*.py                           @owner-qianming
 #
-# 示例（仅为注释，不会生效）：
-# /backend/database.py @confirmed-github-username
+# ── ② 生产监控（季世庆）──────────────────────────────────────────
+# frontend/src/modules/production-monitor/    @owner-jishiqing
+# /backend/routers/history.py                 @owner-jishiqing
+# /backend/routers/events.py                  @owner-jishiqing
+# /backend/routers/lots.py                    @owner-jishiqing
+# /backend/routers/alarms.py                  @owner-jishiqing
+# /backend/routers/oht.py                     @owner-jishiqing
+# /backend/routers/oxe.py                     @owner-jishiqing
+# /backend/routers/recipes.py                 @owner-jishiqing
+# /backend/routers/machines.py                @owner-jishiqing
+# /backend/routers/floors.py                  @owner-jishiqing
+# /backend/routers/rvmessages.py             @owner-jishiqing
+# /backend/routers/debug.py                   @owner-jishiqing
+# /backend/services/db_poller.py              @owner-jishiqing
+# /backend/services/simulator.py             @owner-jishiqing
+# /backend/services/ods.py                    @owner-jishiqing
+# /sql/                                       @owner-jishiqing
+# /deploy/                                    @owner-jishiqing
+#
+# ── ③ AI 助手（朱明钊）───────────────────────────────────────────
+# frontend/src/modules/ai-assistant/          @owner-zhumingzhao
+# /backend/routers/ai.py                      @owner-zhumingzhao
+# /backend/services/ai/                       @owner-zhumingzhao
+# /backend/services/speech_service.py         @owner-zhumingzhao
+# /tests/ai/                                  @owner-zhumingzhao
+# 注：backend/services 根下的 ai_*.py / mcp_*.py 是批次2 拆包兼容 shim，同归③，勿删
+#
+# ── ④ 系统管理（洪佳琪过渡）──────────────────────────────────────
+# frontend/src/modules/system-admin/          @owner-hongjiaqi
+# /backend/routers/auth.py                    @owner-hongjiaqi
+# /backend/routers/users.py                   @owner-hongjiaqi
+#
+# ── ⑤ 智能体集成（张亮，零平台代码）──────────────────────────────
+# /docs/integration/                          @owner-zhangliang
+# /deploy/                                    @owner-zhangliang
+#
+# ── ⑥ 平台内核（洪佳琪）──────────────────────────────────────────
+# frontend/src/platform/                      @owner-hongjiaqi
+# frontend/src/api/core.js                    @owner-hongjiaqi
+# frontend/src/stores/                        @owner-hongjiaqi
+# frontend/src/router/                        @owner-hongjiaqi
+# /backend/main.py                            @owner-hongjiaqi
+# /backend/config.py                          @owner-hongjiaqi
+# /backend/database.py                        @owner-hongjiaqi
+# /backend/models.py                          @owner-hongjiaqi
+# /backend/schemas.py                        @owner-hongjiaqi
+# /backend/core/                              @owner-hongjiaqi
+# /backend/services/security.py               @owner-hongjiaqi
+# /backend/services/cache.py                  @owner-hongjiaqi
+# /backend/services/realtime.py              @owner-hongjiaqi
+# /backend/services/perf.py                   @owner-hongjiaqi
+# /backend/services/time_utils.py             @owner-hongjiaqi
+# /.github/                                   @owner-hongjiaqi
+# /tests/smoke_baseline.py                    @owner-hongjiaqi
+#
+# 说明：/deploy/ 同时出现在②（平台部署）与⑤（dify/n8n）下，取具体文件规则——
+#       deploy_deploy_{dify,n8n}* 归张亮，其余归季世庆；启用时按“具体规则在后”排列。
