@@ -136,7 +136,7 @@ Dify 工具位从 10 个降到 2 个，腾出 8 个位置给 LOG 捞取等新工
 
 **Step 1｜后端新增统一取数函数**
 
-在 `backend/services/ai_tools.py` 新增：
+在 `backend/modules/ai_assistant/services/tools.py` 新增：
 
 ```
 get_lot_run_history(db, machine_id=None, lot_id=None,
@@ -456,10 +456,10 @@ Dify Agent（chat-messages，conversation_id 维持多轮）
 前端 AIFloatingBall.vue / AiAssistant.vue
     │  POST /api/ai/chat
     ▼
-backend/routers/ai.py（26 个端点，AI 唯一入口）
+backend/modules/ai_assistant/routes/ai.py（AI 唯一入口）
     │  ai_middleware.chat()
     ▼
-backend/services/ai_middleware.py（路由分发中枢）
+backend/modules/ai_assistant/services/middleware.py（路由分发中枢）
     ├─ local            → 本地规则引擎 → ai_tools.py 直查 Oracle
     ├─ openai/zhipu/…   → Function Calling → ai_tools.TOOL_HANDLERS
     ├─ dify             → SSE 流式 → Dify Agent → n8n Webhook → db_proxy:8001 → Oracle

@@ -13,7 +13,7 @@
 |---|---|---|---|
 | A. **在线打包** | 1 | 在联网机器上把项目打成离线部署包 | `package_offline.bat` |
 | B. **离线启动（生产环境）** | 8 | 在离线/量产机上启动后端 + 前端 | `deploy_iis_nt_final.bat` → `start_iis.bat` |
-| C. **离线启动（开发模式）** | 1 | 带热更新的开发启动（Vite dev + FastAPI） | `start-dev.bat` |
+| C. **离线启动（开发模式）** | 1 | 带热更新的开发启动（Vite dev + FastAPI，并尝试启动 db_proxy） | `start-dev.bat` |
 | D. **数据库初始化** | 1 | 用 sqlplus 初始化 Oracle 库 | `init_db.bat` |
 | E. **AI 子系统部署** | 2 | Dify / n8n 的 Docker Compose 一键部署 | `deploy_dify.ps1` / `deploy_n8n.ps1` |
 | F. **共享资源** | 2 | 环境变量 / IIS 反代配置 | `env.bat` / `web.config` |
@@ -70,12 +70,12 @@
 - **作用**：薄包装，委托给 `start_direct.ps1`
 
 #### `start_direct.ps1`
-- **作用**：**直连模式**启动（无需 IIS），同时启动 Vite preview (5173) + FastAPI (8002)
+- **作用**：**直连模式**启动（无需 IIS），同时启动 Vite preview（脚本未传端口，默认 4173）+ FastAPI (8002)
 - **做了什么**：
   1. 解析 `env.bat`
   2. 自动检测 `backend\wheels\` 目录（若有则离线 pip install）
   3. 在两个新窗口里分别启动前后端
-- **架构**：浏览器 → Vite 5173（同时代理 /api + /ws 到 FastAPI 8002）
+- **架构**：浏览器 → Vite preview（默认 4173，同时代理 /api + /ws 到 FastAPI 8002）
 - **何时用**：不想装 IIS；或在内网做临时部署
 - **见 SOP**：[docs/DEPLOY_SOP.md 第 7 章（直连模式）](../docs/DEPLOY_SOP.md)
 
@@ -101,7 +101,7 @@
 ### C. 离线启动 — 开发模式（1 个）
 
 #### `start-dev.bat`
-- **作用**：**开发模式**启动（带热更新），同时启动 Vite dev (5173) + FastAPI (8002)
+- **作用**：**开发模式**启动（带热更新），同时启动 Vite dev (3000) + FastAPI (8002)，并尝试启动 db_proxy (8001)
 - **与 start_direct.ps1 的区别**：用 `npm run dev` 而非 `npm run build && npx vite preview`
 - **何时用**：本地写代码、调前端 Vue 组件时
 - **不要在生产服务器上用**
@@ -156,7 +156,7 @@
   set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
   set ORACLE_PORT=1521
   set FABTWIN_BACKEND_PORT=8002
-  set FABTWIN_FRONTEND_PORT=5173
+  set FABTWIN_FRONTEND_PORT=3000
   ```
 - **被谁读**：`start_iis.ps1` / `start_direct.ps1` / `start_backend.ps1` / `init_db.bat` / `package_offline.bat`
 - **何时改**：换数据库 / 换端口 / 换 Client 路径时
@@ -185,7 +185,7 @@
 |---|---|---|---|
 | **db_proxy**（db 转抛服务） | `../services/db_proxy/` | 8001 | AI 集成用，独立部署，详见 [docs/integration/DEPLOY_SOP.md](../../docs/integration/DEPLOY_SOP.md) 第 1 步 |
 | **后端** | `../backend/` | 8002 | FastAPI 主服务 |
-| **前端** | `../frontend/` | 5173 (dev) / 4173 (preview) | Vue 3 + Vite |
+| **前端** | `../frontend/` | 3000 (dev) / 4173 (preview 默认) | Vue 3 + Vite |
 | **Dify**（可选） | Docker Compose | 8088 | AI Agent 编排 |
 | **n8n**（可选） | Docker Compose | 5678 | 工作流引擎 |
 

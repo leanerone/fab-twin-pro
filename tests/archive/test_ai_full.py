@@ -21,7 +21,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
-from services.ai_middleware import AIMiddleware
+from modules.ai_assistant.services.middleware import AIMiddleware
 
 # ============ 测试报告收集 ============
 TEST_RESULTS = []
@@ -74,7 +74,7 @@ def diagnose_environment():
 
         # 3. MCP / MES 配置
         try:
-            from services.mcp_client import get_mcp_config
+            from modules.ai_assistant.services.mcp_client import get_mcp_config
             cfg = get_mcp_config()
             diagnostics["mcp_enabled"] = cfg.get("enabled", False)
             diagnostics["mcp_has_token"] = bool(cfg.get("token"))

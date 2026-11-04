@@ -15,8 +15,8 @@ r"""
   - PODOPENER : frontend/src/configs/machine-animations/podopener.json
 
 后端读取契约：
-  - backend/routers/oxe.py      : 只取 parse_status == 'PARSED'，按 raw_id DESC
-  - backend/routers/history.py  : ts = event_ts_utc or received_ts_utc
+  - backend/modules/production_monitor/routes/oxe.py      : 只取 parse_status == 'PARSED'，按 raw_id DESC
+  - backend/modules/production_monitor/routes/history.py  : ts = event_ts_utc or received_ts_utc
 
 写入表：DT_EVENT_RAW / DT_EVENT_RAW_CUR / DT_EVENT_REALTIMELOT / DT_STATE_SNAPSHOT
 

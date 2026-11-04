@@ -63,8 +63,9 @@ echo [1/8] 打包 backend/...
 mkdir "%DEPLOY_DIR%\backend"
 xcopy "%BASE_DIR%\backend\*.py" "%DEPLOY_DIR%\backend\" /Y /Q >nul
 xcopy "%BASE_DIR%\backend\*.txt" "%DEPLOY_DIR%\backend\" /Y /Q >nul
-xcopy "%BASE_DIR%\backend\routers" "%DEPLOY_DIR%\backend\routers\" /E /I /Y /Q >nul
-xcopy "%BASE_DIR%\backend\services" "%DEPLOY_DIR%\backend\services\" /E /I /Y /Q >nul
+xcopy "%BASE_DIR%\backend\modules" "%DEPLOY_DIR%\backend\modules\" /E /I /Y /Q >nul
+xcopy "%BASE_DIR%\backend\core" "%DEPLOY_DIR%\backend\core\" /E /I /Y /Q >nul
+xcopy "%BASE_DIR%\backend\integrations" "%DEPLOY_DIR%\backend\integrations\" /E /I /Y /Q >nul
 if exist "%DEPLOY_DIR%\backend\__pycache__" rmdir /s /q "%DEPLOY_DIR%\backend\__pycache__"
 if exist "%DEPLOY_DIR%\backend\.pytest_cache" rmdir /s /q "%DEPLOY_DIR%\backend\.pytest_cache"
 echo       backend 源码完成。

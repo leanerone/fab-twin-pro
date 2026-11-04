@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from routers.uploads import require_model_edit, router  # noqa: E402
+from modules.model_library.routes.uploads import require_model_edit, router  # noqa: E402
 from svg_kit.validate import validate_content  # noqa: E402
 
 

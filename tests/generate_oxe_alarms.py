@@ -18,7 +18,7 @@ payload 形态照抄真实 OXE ALARM_REPORT 报文（port_id/smif_id/chamber_id 
 是 bridge 误填的告警描述词，保持原样以免影响 OXE 看板的动画解析），
 仅 alarm_text / event_value / alarm_id / alarm_code / lot_id 为演示内容。
 
-严重等级由 backend/routers/history.py 按 alarm_id 映射：
+严重等级由 backend/modules/production_monitor/routes/history.py 按 alarm_id 映射：
   9004 / 0201 → crit(严重)   9003 / 20011 → warn(警告)   0411 → info(提示)
 
 用法：

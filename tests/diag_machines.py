@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from sqlalchemy import and_, func, or_
 from database import SessionLocal
 from models import Machine, DT_STATE_SNAPSHOT, DT_ALARM_EVENT, DT_EVENT_RAW, DT_EVENT_STD
-from routers.machines import _day_clause, _today_str
+from modules.production_monitor.routes.machines import _day_clause, _today_str
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diag_machines.json")
 
@@ -77,7 +77,7 @@ def q4():
     return q.limit(5000).all()
 timed("q4_today_alarms", q4)
 
-# Q5 今日产量（修复后口径：双分支各查，与 routers/machines.py 保持一致）
+# Q5 今日产量（修复后口径：双分支各查，与 modules/production_monitor/routes/machines.py 保持一致）
 def q5():
     raw_rows = []
     for col in (DT_EVENT_RAW.received_ts_utc, DT_EVENT_RAW.event_ts_utc):

@@ -13,7 +13,7 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from services.mcp_client import MCPClient, MCPError
+from modules.ai_assistant.services.mcp_client import MCPClient, MCPError
 
 
 def main():

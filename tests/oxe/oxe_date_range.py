@@ -4,7 +4,7 @@ from collections import Counter
 sys.path.insert(0, r'C:\Users\A\AppData\Roaming\TRAE SOLO CN\ModularData\ai-agent\work-mode-projects\6a558d0e1709fecd225c0cc2\fab-twin-pro\backend')
 from database import SessionLocal
 from models import DT_EVENT_RAW
-from services.time_utils import parse_ts, build_date_like_patterns
+from core.services.time_utils import parse_ts, build_date_like_patterns
 
 db = SessionLocal()
 
@@ -89,7 +89,7 @@ if dates:
             filtered = []
             for r in matched2:
                 ts = r.event_ts_utc or r.received_ts_utc
-                from services.time_utils import normalize_ts
+                from core.services.time_utils import normalize_ts
                 norm_ts = normalize_ts(ts)
                 ev_dt = parse_ts(norm_ts)
                 if not ev_dt:

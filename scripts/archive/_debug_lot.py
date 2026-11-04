@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from database import SessionLocal
 from models import Machine, DT_EVENT_RAW
-from services.time_utils import parse_ts
+from core.services.time_utils import parse_ts
 import json
 
 db = SessionLocal()

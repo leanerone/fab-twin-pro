@@ -10,14 +10,22 @@ platform/frontend/
   shell/        AppHeader；App.vue/router/main.js 仍在 src/ 根（应用装配表）
   core/composables/  useThree、useRafLoop、threeDispose、useWebSocket（跨模块共享）
 ```
-另有内核入口（在 src/ 根，归此模块）：`api/`（barrel，{ api } 统一出口）、
-`stores/{app,auth,model}`、`router/`、`utils/`、`styles/`、`configs/`。
+另有内核入口（在 src/ 根，归此模块）：`frontend/src/App.vue`、`frontend/src/main.js`、
+`frontend/src/router/`、`frontend/src/stores/{app,auth,model}.js`、`frontend/src/utils/`、
+`frontend/src/styles/`、`frontend/src/configs/`。
+`frontend/src/api/` 是现有统一出口：`core.js` 与 `index.js` 属公共代码，业务接口文件按根 README 责任表归属。
 
-## 后端（平铺在 backend/，CODEOWNERS 按文件归此模块）
+## 后端（根公共入口 + core/services，当前真实目录）
 
-`main.py / config.py / database.py / models.py(ORM 总表) / schemas.py`、
-`core/`（events_query、deps）、
-`services/{security,cache,realtime,perf,time_utils}.py`；工程文件 requirements、.github、CI。
+根公共入口与模型：`backend/main.py`、`backend/config.py`、`backend/database.py`、`backend/models.py`（ORM 总表）、`backend/schemas.py`；
+另有根级 `backend/seed_data.py`、`backend/sql_runner.py`。
+公共依赖与查询：`backend/core/{deps,events_query}.py`。
+公共服务：`backend/core/services/{security,cache,realtime,perf,time_utils}.py`。
+工程文件 requirements、.github、CI 仍属公共审核范围。
+
+后端公共入口保留在 `backend/` 根，公共服务已经在 `backend/core/services/`；不要引用旧平铺服务目录，也不要另建平台后端目录。旧平铺路由、服务与 7 个 AI 兼容 shim 已移除。
+`backend/integrations/dify_n8n/` 是张亮的集成资产；Dify/n8n 平台 Provider 仍在 `backend/modules/ai_assistant/services/providers/`，归朱明钊。
+以上公共代码和前端 platform 的改动都必须在 PR 说明影响范围，并由洪佳琪最终审核；季世庆的总控协调不替代公共代码审核。
 
 ## 纪律
 

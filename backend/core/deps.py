@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from routers.auth import get_current_user, check_permission
+from modules.system_admin.routes.auth import get_current_user, check_permission
 
 
 def require_model_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from models import Machine, Lot, Recipe, ChamberSnapshot, OHTPosition, Floor, FloorArea, MachineModelConfig, EventActionMapping, DT_EVENT_RAW, User, Role, Permission, RolePermission, MachineToolMapping, Alarm, MachineEvent
-from services.ods import seed_ods_data
+from modules.production_monitor.services.ods import seed_ods_data
 
 product_names = ["DRAM-1X", "NAND-3D", "Logic-7nm", "Logic-5nm", "CMOS-Image", "Power-IC"]
 

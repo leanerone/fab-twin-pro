@@ -146,7 +146,7 @@ def test_middleware_directly():
     """直接调用中间件，确认不是中间件逻辑问题"""
     print_section("直接调用中间件验证")
     try:
-        from services.ai_middleware import ai_middleware
+        from modules.ai_assistant.services.middleware import ai_middleware
         result = ai_middleware.chat("PODOPENER-1状态", session_id="test_direct")
         print(f"  中间件返回成功: answer={result.get('answer', '')[:60]}...")
         print(f"  tool_calls: {result.get('tool_calls')}")

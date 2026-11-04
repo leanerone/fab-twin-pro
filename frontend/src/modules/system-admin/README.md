@@ -10,8 +10,10 @@ frontend/
   pages/ LoginPage（/login）、UserManagementPage（/users）
 ```
 
-后端对应：`routers/auth.py`、`routers/users.py`；
-表 `users、roles、role_permissions、perm_data`。
+后端对应（当前真实目录）：`backend/modules/system_admin/routes/auth.py`、
+`backend/modules/system_admin/routes/users.py`；共享认证安全底座是 `backend/core/services/security.py`。
+系统管理目前只有这两个模块路由文件，不要虚构模块 `services/`。
+表 `users、roles、role_permissions、perm_data`。旧平铺 routers/services 与兼容 shim 已移除。
 
 ## 公开接口
 

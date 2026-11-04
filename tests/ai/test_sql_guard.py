@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend"))
 
-from services.ai_sql import SqlSafetyError, validate_and_normalize, check_tables  # noqa: E402
+from modules.ai_assistant.services.sql import SqlSafetyError, validate_and_normalize, check_tables  # noqa: E402
 
 # (用例名, SQL, 期望: "pass"=应放行 / "block"=应拦截)
 CASES = [

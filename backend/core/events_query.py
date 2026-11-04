@@ -14,7 +14,7 @@ from typing import Set
 
 from sqlalchemy import DateTime, and_, inspect, or_
 
-from services.time_utils import build_date_like_patterns
+from core.services.time_utils import build_date_like_patterns
 
 logger = logging.getLogger("fabtwin.core.events_query")
 

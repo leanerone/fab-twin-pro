@@ -89,7 +89,7 @@ Oracle (DT_EVENT_RAW + DT_EVENT_REALTIMELOT)
   ├── /api/oxe/history-events → 历史回放
   └── /api/ai/...             → AI 分析（参考 PODOPENER）
                     ↓
-平台前端 (5173)
+平台前端 (3000)
   ├── 阶段1: iframe 嵌入 HTML
   └── 阶段2: <OxeCanvasEngine> Vue 组件（统一样式）
 ```
@@ -132,7 +132,7 @@ Oracle (DT_EVENT_RAW + DT_EVENT_REALTIMELOT)
 
 | 文件 | 作用 | 步骤 |
 |---|---|---|
-| `backend/routers/oxe.py` | OXE 适配接口 | Step 1 |
+| `backend/modules/production_monitor/routes/oxe.py` | OXE 适配接口 | Step 1 |
 | `frontend/src/components/OxeCanvasEngine.vue` | Canvas 引擎 Vue 组件 | Step 4 |
 
 ### 4.4 待修改文件（Step 1+）

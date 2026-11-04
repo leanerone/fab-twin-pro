@@ -13,10 +13,13 @@ frontend/
   editor/      pages/ModelEditorPage、pages/MachineManagementPage、components/ModelUpload
 ```
 
-后端对应（平铺在 backend/，由 CODEOWNERS 按文件归此模块）：
-`routers/models.py`、`routers/uploads.py`、`services/html_parser.py`；
-资产 `models/`、`scripts/sync_*`、`backend/uploads/models/`；
+后端对应（当前真实目录，由 CODEOWNERS 按模块归此负责人）：
+`backend/modules/model_library/routes/{models,uploads}.py`、
+`backend/modules/model_library/services/html_parser.py`、
+`backend/modules/model_library/seeds/{seed_amat_metsput,seed_oxe_motion}.py`；
+资产 `models/`、`frontend/public/models/`、`scripts/sync_*`、`backend/uploads/models/`；
 表 `machine_model_configs / machine_tool_mappings / event_action_mappings`。
+`backend/models.py` 是公共 ORM，改动由洪佳琪最终审核。旧平铺 routers/services 与兼容 shim 已移除，不要恢复旧路径。
 
 ## 公开接口（别的模块只准用这些）
 

@@ -181,7 +181,7 @@ def main() -> int:
     # 3) 直查 Oracle 建立标准答案
     try:
         from database import SessionLocal
-        from services.ai_sql import execute_readonly
+        from modules.ai_assistant.services.sql import execute_readonly
     except Exception as exc:
         print(f"\n无法导入后端数据层：{exc}")
         return 1

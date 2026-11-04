@@ -1,0 +1,722 @@
+"""AI 中间适配层 API（统一接口）
+
+包含：
+- /api/ai/chat - 统一聊天接口（推荐）
+- /api/ai/query - 旧版查询接口（兼容）
+- /api/ai/config - Dify/N8N配置管理
+- /api/ai/config/test - 连接测试
+- /api/ai/providers - 可用Provider预设列表
+- /api/ai/model-configs - LLM多配置管理（CRUD）
+- /api/ai/model-configs/{id}/switch - 切换当前配置
+- /api/ai/usage/stats - Token使用量统计
+- /api/ai/usage/logs - 使用日志
+- /api/ai/sessions - 会话管理
+"""
+from typing import Optional
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from database import get_db
+from schemas import (
+    AIQueryRequest, AIQueryResponse,
+    AIChatRequest, AIChatResponse,
+    AIConfigUpdate, AIConfigOut, AIConnectionTest,
+    AIProviderConfigIn, AIProviderConfigOut, AIProviderConfigUpdate,
+    AIUsageStats, AIUsageLogOut,
+)
+from modules.ai_assistant.services.middleware import ai_middleware, PROVIDER_PRESETS
+from modules.ai_assistant.services import speech_service
+# 2026-10-29 安全修复：本模块此前 32 个端点全部零鉴权，任何人可改 AI Provider/Key、
+# 读取全部会话与用量日志、免登录消耗 LLM token。现统一要求登录。
+from modules.system_admin.routes.auth import get_current_user
+from models import User
+
+router = APIRouter(
+    prefix="/api/ai",
+    tags=["ai"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+# ========== 统一聊天接口（新版） ==========
+
+@router.post("/chat", response_model=AIChatResponse)
+def ai_chat(req: AIChatRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """统一AI聊天接口 - 支持多模型、配置切换、Dify、N8N联动
+
+    - 本地规则引擎（默认，无需配置）
+    - OpenAI兼容模型（GLM、GPT、DeepSeek、Qwen等）
+    - Dify 应用对接
+    - N8N 工作流联动（管理员权限）
+    """
+    result = ai_middleware.chat(
+        question=req.question,
+        session_id=req.session_id,
+        machine_id=req.machine_id,
+        context=req.context,
+        # P0 提权修复：角色只认服务端登录态，请求体里的 user_role 一律忽略
+        # （此前任意登录用户改 body 字段即可冒充 admin 触发 n8n / 导出 / 工单）
+        user_role=user.role,
+        config_id=req.config_id,
+    )
+    return AIChatResponse(**result)
+
+
+@router.post("/chat/stream")
+async def ai_chat_stream(req: AIChatRequest, user: User = Depends(get_current_user)):
+    """统一AI聊天接口 - SSE 流式版（T4：打字机输出 + 工具调用过程可见）
+
+    - Dify 路由：逐 chunk 透传（agent_message / agent_thought / message_end）
+    - 非 Dify 路由（本地规则 / OpenAI兼容）：同步执行后包装单帧，前端一套渲染逻辑
+    - 收尾帧 event=final 携带 answer/jump/table_data/sources/usage 等结构化字段
+    - Dify Key 仅后端读取（ai_configs 表），前端永不接触
+    """
+    return StreamingResponse(
+        ai_middleware.chat_stream(
+            question=req.question,
+            session_id=req.session_id,
+            machine_id=req.machine_id,
+            context=req.context,
+            user_role=user.role,  # 同 /chat：服务端角色覆盖
+            config_id=req.config_id,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # 提示反代关闭响应缓冲（nginx 识别；IIS ARR 见 deploy/web.config responseBufferLimit）
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ========== 旧版兼容接口 ==========
+
+@router.post("/query", response_model=AIQueryResponse)
+def ai_query(req: AIQueryRequest, db: Session = Depends(get_db)):
+    """旧版AI查询接口（兼容保留）"""
+    result = ai_middleware.chat(
+        question=req.question,
+        machine_id=req.machine_id,
+        user_role="user",
+    )
+    return AIQueryResponse(
+        answer=result.get("answer", ""),
+        sql=result.get("sql", ""),
+        jump_timestamp=result.get("jump_timestamp"),
+    )
+
+
+# ========== Dify/N8N 配置管理 ==========
+
+@router.get("/config", response_model=AIConfigOut)
+def get_ai_config():
+    """获取当前AI配置（脱敏）- 含当前LLM配置 + Dify/N8N"""
+    config = ai_middleware.get_config()
+    return AIConfigOut(**config)
+
+
+@router.put("/config", response_model=dict)
+def update_ai_config(config: AIConfigUpdate):
+    """更新Dify/N8N配置（运行时更新 + 持久化到DB）"""
+    config_dict = config.model_dump(exclude_none=True)
+    success = ai_middleware.update_config(config_dict)
+    if not success:
+        raise HTTPException(status_code=400, detail="配置更新失败")
+    return {"success": True, "message": "配置已更新并保存"}
+
+
+@router.post("/config/test", response_model=dict)
+def test_ai_connection(test_req: AIConnectionTest):
+    """测试AI服务连接"""
+    result = ai_middleware.test_connection(
+        provider_type=test_req.provider_type,
+        config=test_req.config,
+    )
+    return result
+
+
+# ========== Provider 预设管理 ==========
+
+@router.get("/providers")
+def list_providers():
+    """获取可用AI Provider预设列表（含默认配置）"""
+    return {
+        "providers": PROVIDER_PRESETS,
+        "current": ai_middleware.provider,
+        "current_name": ai_middleware.provider_name or ai_middleware._infer_provider_name(),
+        "current_config_id": ai_middleware.current_config_id,
+    }
+
+
+# ========== LLM 多配置管理 ==========
+
+@router.get("/model-configs")
+def list_model_configs():
+    """列出所有LLM配置"""
+    configs = ai_middleware.list_provider_configs()
+    return {"configs": configs, "total": len(configs)}
+
+
+@router.post("/model-configs", response_model=dict)
+def create_model_config(config: AIProviderConfigIn):
+    """创建新的LLM配置"""
+    result = ai_middleware.create_provider_config(config.model_dump())
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
+
+
+@router.put("/model-configs/{config_id}", response_model=dict)
+def update_model_config(config_id: int, config: AIProviderConfigUpdate):
+    """更新LLM配置"""
+    result = ai_middleware.update_provider_config(config_id, config.model_dump(exclude_none=True))
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
+
+
+@router.delete("/model-configs/{config_id}", response_model=dict)
+def delete_model_config(config_id: int):
+    """删除LLM配置"""
+    result = ai_middleware.delete_provider_config(config_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
+
+
+@router.put("/model-configs/{config_id}/default", response_model=dict)
+def set_default_model_config(config_id: int):
+    """设为默认配置"""
+    result = ai_middleware.set_default_provider_config(config_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
+
+
+@router.put("/model-configs/{config_id}/toggle", response_model=dict)
+def toggle_model_config(config_id: int):
+    """启用/禁用配置"""
+    result = ai_middleware.toggle_provider_config(config_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
+
+
+@router.post("/model-configs/switch", response_model=dict)
+def switch_model_config(config_id: int = Query(..., description="要切换到的配置ID")):
+    """切换当前使用的LLM配置"""
+    result = ai_middleware.switch_config(config_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    return result
+
+
+# ========== 使用量统计 ==========
+
+@router.get("/usage/stats")
+def get_usage_stats(days: int = Query(30, ge=1, le=365)):
+    """获取Token使用量统计"""
+    stats = ai_middleware.get_usage_stats(days=days)
+    return stats
+
+
+@router.get("/usage/logs")
+def get_usage_logs(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    provider: Optional[str] = Query(None, description="Provider 名称"),
+    success: Optional[bool] = Query(None, description="True只查成功, False只查失败"),
+):
+    """获取使用日志列表（支持日期/Provider/成功失败筛选 + 分页）"""
+    logs, total = ai_middleware.get_usage_logs(
+        limit=limit, offset=offset, include_details=False,
+        start_date=start_date, end_date=end_date,
+        provider=provider, success=success,
+    )
+    return {"logs": logs, "total": total}
+
+
+@router.get("/usage/logs/{log_id}")
+def get_usage_log_detail(log_id: int):
+    """获取单条使用日志详情（含 execution_log / tool_calls / answer_preview 全字段）"""
+    log = ai_middleware.get_usage_log_by_id(log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="日志不存在")
+    return log
+
+
+# ========== 会话管理 ==========
+
+@router.get("/sessions")
+def list_sessions(limit: int = 20, current_user: User = Depends(get_current_user)):
+    """列出当前用户最近的AI会话（不再返回所有人的会话）"""
+    sessions = ai_middleware.list_sessions(limit=limit, user_id=current_user.id)
+    return {"sessions": sessions, "total": len(sessions)}
+
+
+@router.get("/sessions/{session_id}")
+def get_session(session_id: str):
+    """获取指定会话详情"""
+    session = ai_middleware.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return session
+
+
+@router.delete("/sessions/{session_id}")
+def clear_session(session_id: str):
+    """清除指定会话"""
+    success = ai_middleware.clear_session(session_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"success": True, "message": "会话已清除"}
+
+
+# ========== MCP (N8N) 配置与工具发现 ==========
+
+@router.get("/mcp/config")
+def get_mcp_config():
+    """获取 N8N MCP Server 配置（Token 脱敏）"""
+    from modules.ai_assistant.services.mcp_client import get_mcp_config as _get_cfg
+    cfg = _get_cfg()
+    # Token 脱敏：只返回是否已配置
+    token_set = bool(cfg["token"])
+    return {
+        "enabled": cfg["enabled"],
+        "url": cfg["url"],
+        "token_set": token_set,
+        "token_preview": (cfg["token"][:4] + "****" + cfg["token"][-4:]) if token_set and len(cfg["token"]) > 8 else ("****" if token_set else ""),
+        "timeout": cfg["timeout"],
+    }
+
+
+@router.put("/mcp/config")
+def update_mcp_config(config: dict):
+    """更新 N8N MCP Server 配置"""
+    from modules.ai_assistant.services.mcp_client import _get_db
+    from models import AIConfig
+    from datetime import datetime
+
+    allowed_keys = {"mcp_n8n_enabled", "mcp_n8n_url", "mcp_n8n_token", "mcp_n8n_timeout"}
+    updates = {k: v for k, v in config.items() if k in allowed_keys}
+    if not updates:
+        raise HTTPException(status_code=400, detail="无有效配置项")
+
+    db = _get_db()
+    try:
+        for key, value in updates.items():
+            # enabled 转 true/false 字符串
+            if key == "mcp_n8n_enabled":
+                value = "true" if value else "false"
+            elif key == "mcp_n8n_timeout":
+                value = str(int(value))
+            else:
+                value = str(value)
+
+            existing = db.query(AIConfig).filter(AIConfig.config_key == key).first()
+            if existing:
+                existing.config_value = value
+                existing.updated_at = datetime.utcnow()
+                existing.updated_by = "admin"
+            else:
+                new_cfg = AIConfig(
+                    config_key=key,
+                    config_value=value,
+                    description=f"MCP N8N 配置: {key}",
+                    updated_at=datetime.utcnow(),
+                    updated_by="admin",
+                )
+                db.add(new_cfg)
+        db.commit()
+        return {"success": True, "message": "MCP 配置已更新", "updated_keys": list(updates.keys())}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
+    finally:
+        db.close()
+
+
+@router.post("/mcp/test")
+def test_mcp_connection():
+    """测试 N8N MCP Server 连接并返回已发现工具列表"""
+    from modules.ai_assistant.services.mcp_client import get_mcp_client, get_mcp_config, MCPError
+
+    cfg = get_mcp_config()
+    if not cfg["enabled"]:
+        return {"success": False, "message": "MCP 未启用", "tools": []}
+    if not cfg["url"]:
+        return {"success": False, "message": "MCP Server URL 未配置", "tools": []}
+    if not cfg["token"]:
+        return {"success": False, "message": "MCP Token 未配置", "tools": []}
+
+    try:
+        client = get_mcp_client()
+        if not client:
+            return {"success": False, "message": "客户端初始化失败", "tools": []}
+        tools = client.list_tools()
+        return {
+            "success": True,
+            "message": f"连接成功，发现 {len(tools)} 个工具",
+            "tools": tools,
+            "server_url": cfg["url"],
+        }
+    except MCPError as e:
+        return {"success": False, "message": f"MCP 连接失败: {e}", "tools": []}
+    except Exception as e:
+        return {"success": False, "message": f"测试失败: {e}", "tools": []}
+
+
+@router.get("/mcp/tools")
+def list_registered_mcp_tools():
+    """列出 FabTwin 后端已注册的 MCP 工具（来自 mcp_registry.py）"""
+    from modules.ai_assistant.services.mcp_registry import list_registered_mcp_tools as _list
+    tools = _list()
+    return {"tools": tools, "total": len(tools)}
+
+
+# ========== 语音识别接口（本地 Whisper，离线运行） ==========
+
+@router.post("/speech-to-text")
+async def speech_to_text(
+    audio: UploadFile = File(...),
+    language: str = Form("zh"),
+):
+    """
+    语音转文字 - 基于本地 faster-whisper，无需网络
+
+    接收前端上传的音频文件（webm/wav/mp3 等），返回识别文本。
+    模型在服务启动时后台预载（tiny 约 75MB），首次调用不再有下载等待。
+
+    test31 修复 P0：transcribe 是 CPU 密集同步调用（ffmpeg 解码 + 推理数秒），
+    原实现直接跑在 async 路由里，识别期间整个后端（所有 HTTP/WS/SSE）停摆；
+    现在经 asyncio.to_thread 放入工作线程执行。
+    """
+    try:
+        audio_bytes = await audio.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="音频文件为空")
+
+        # 限制音频大小（10MB）
+        if len(audio_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="音频文件过大（>10MB）")
+
+        text = await asyncio.to_thread(
+            speech_service.transcribe, audio_bytes, language=language or "zh"
+        )
+        return {
+            "success": True,
+            "text": text,
+            "language": language,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        # 模型未下载/加载失败等
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "text": "",
+                "error": str(e),
+                "hint": "可能是首次加载需下载模型，或缺少 ffmpeg。请查看后端日志。",
+            },
+        )
+
+
+@router.get("/speech/status")
+def speech_status():
+    """检查语音识别服务状态"""
+    return {
+        "available": speech_service.is_available(),
+        "engine": "faster-whisper (local)",
+        "model_size": speech_service._model_size,
+        "device": speech_service._device,
+    }
+
+
+# ========== 机台专属 Dify 配置管理 ==========
+
+@router.get("/machine-dify")
+def list_machine_dify_configs(db: Session = Depends(get_db)):
+    """获取所有机台专属 Dify 配置"""
+    from models import MachineDifyConfig
+    rows = db.query(MachineDifyConfig).order_by(MachineDifyConfig.id).all()
+    return [
+        {
+            "id": r.id,
+            "config_name": r.config_name,
+            "model_id": r.model_id,
+            "dify_base_url": r.dify_base_url,
+            "dify_api_key": r.dify_api_key[:8] + "****" if r.dify_api_key else "",
+            "is_active": r.is_active,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/machine-dify")
+def create_machine_dify_config(body: dict, db: Session = Depends(get_db)):
+    """新增机台专属 Dify 配置"""
+    from models import MachineDifyConfig
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        row = MachineDifyConfig(
+            config_name=body.get("config_name", ""),
+            model_id=body.get("model_id", ""),
+            dify_base_url=body.get("dify_base_url", ""),
+            dify_api_key=body.get("dify_api_key", ""),
+            is_active=body.get("is_active", 1),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return {
+            "id": row.id,
+            "config_name": row.config_name,
+            "model_id": row.model_id,
+            "dify_base_url": row.dify_base_url,
+            "is_active": row.is_active,
+            "created_at": row.created_at,
+        }
+    except Exception as e:
+        db.rollback()
+        err_msg = str(e).lower()
+        if "table" in err_msg and "does not exist" in err_msg:
+            raise HTTPException(
+                status_code=500,
+                detail="MACHINE_DIFY_CONFIGS 表不存在，请执行 sql/create_ai_tables.sql 中的建表语句"
+            )
+        if "sequence" in err_msg or "trigger" in err_msg:
+            raise HTTPException(
+                status_code=500,
+                detail="序列或触发器不存在，请执行 sql/create_ai_tables.sql 中的 SEQ_MACHINE_DIFY_CONFIGS 和 TRG_MACHINE_DIFY_CONFIGS_ID"
+            )
+        raise HTTPException(status_code=500, detail=f"新增失败: {str(e)}")
+
+
+@router.put("/machine-dify/{config_id}")
+def update_machine_dify_config(config_id: int, body: dict, db: Session = Depends(get_db)):
+    """修改机台专属 Dify 配置（含重命名）"""
+    from models import MachineDifyConfig
+    from datetime import datetime
+    try:
+        row = db.query(MachineDifyConfig).filter(MachineDifyConfig.id == config_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="配置不存在")
+        if "config_name" in body:
+            row.config_name = body["config_name"]
+        if "model_id" in body:
+            row.model_id = body["model_id"]
+        if "dify_base_url" in body:
+            row.dify_base_url = body["dify_base_url"]
+        if "dify_api_key" in body and body["dify_api_key"]:
+            row.dify_api_key = body["dify_api_key"]
+        if "is_active" in body:
+            row.is_active = body["is_active"]
+        row.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.commit()
+        return {"id": row.id, "config_name": row.config_name, "updated_at": row.updated_at}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"修改失败: {str(e)}")
+
+
+@router.delete("/machine-dify/{config_id}")
+def delete_machine_dify_config(config_id: int, db: Session = Depends(get_db)):
+    """删除机台专属 Dify 配置"""
+    from models import MachineDifyConfig
+    row = db.query(MachineDifyConfig).filter(MachineDifyConfig.id == config_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    db.delete(row)
+    db.commit()
+    return {"status": "success", "message": f"配置 {config_id} 已删除"}
+
+
+# ========== 机台级 AI 路由诊断（前端显示AI来源用） ==========
+
+@router.get("/machine-routing/{machine_id}")
+def get_machine_ai_routing(machine_id: str, db: Session = Depends(get_db)):
+    """查询指定机台的AI路由决策结果（前端机台详情页显示"当前AI来源"）
+
+    返回优先级：
+    1. 机台专属 Dify → source='machine_dify'
+    2. 全局 Dify（dify_enabled + 有key）且 ai_configs.provider=='dify' → source='global_dify'
+    3. 默认 LLM 配置（ai_provider_configs 中默认/启用的第一条） → source='llm'
+    4. 回退本地规则 → source='local'
+    """
+    from models import Machine, MachineDifyConfig, AIProviderConfig
+
+    # 1) 查机台型号
+    model_id = None
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if machine and machine.model:
+        model_id = machine.model.strip().upper()
+    else:
+        mid = str(machine_id or "").strip().upper()
+        if "-" in mid:
+            model_id = mid.split("-")[0]
+        elif mid:
+            model_id = mid
+
+    machine_dify = None
+    if model_id:
+        row = db.query(MachineDifyConfig).filter(
+            MachineDifyConfig.model_id == model_id,
+            MachineDifyConfig.is_active == 1,
+        ).first()
+        if not row:
+            row = db.query(MachineDifyConfig).filter(
+                MachineDifyConfig.model_id.like(f"{model_id}%"),
+                MachineDifyConfig.is_active == 1,
+            ).first()
+        if row:
+            machine_dify = {
+                "id": row.id,
+                "config_name": row.config_name,
+                "model_id": row.model_id,
+                "dify_base_url": row.dify_base_url,
+                "dify_api_key_preview": (row.dify_api_key[:8] + "****") if row.dify_api_key else "",
+                "is_active": row.is_active,
+                "updated_at": row.updated_at,
+            }
+
+    if machine_dify:
+        return {
+            "source": "machine_dify",
+            "source_label": f"机台专属 Dify · {machine_dify['config_name']}",
+            "provider": "dify",
+            "provider_name": machine_dify["config_name"],
+            "model": f"dify-{machine_dify['config_name']}",
+            "config_id": None,
+            "machine_dify": machine_dify,
+            "global_dify": None,
+            "llm_config": None,
+            "machine_model_id": model_id,
+        }
+
+    # 2) 全局 Dify
+    global_cfg = ai_middleware.get_config()
+    global_dify_summary = {
+        "enabled": global_cfg.get("dify_enabled", False),
+        "base_url": global_cfg.get("dify_base_url", ""),
+        "has_api_key": global_cfg.get("dify_has_api_key", False),
+        "api_key_preview": global_cfg.get("dify_api_key_preview", ""),
+        "app_id": global_cfg.get("dify_app_id", ""),
+    }
+    if (ai_middleware.provider == "dify"
+            and global_dify_summary["enabled"]
+            and global_dify_summary["has_api_key"]
+            and global_dify_summary["base_url"]):
+        return {
+            "source": "global_dify",
+            "source_label": "全局 Dify",
+            "provider": "dify",
+            "provider_name": global_cfg.get("provider_name") or "Dify",
+            "model": "dify-global",
+            "config_id": None,
+            "machine_dify": None,
+            "global_dify": global_dify_summary,
+            "llm_config": None,
+            "machine_model_id": model_id,
+        }
+
+    # 3) 默认 LLM 配置
+    llm_cfg = (db.query(AIProviderConfig).filter(
+        AIProviderConfig.is_default == True,
+        AIProviderConfig.is_enabled == True,
+    ).first()
+        or db.query(AIProviderConfig).filter(
+        AIProviderConfig.is_enabled == True,
+    ).order_by(AIProviderConfig.sort_order, AIProviderConfig.id).first())
+    if llm_cfg:
+        return {
+            "source": "llm",
+            "source_label": f"LLM · {llm_cfg.name}",
+            "provider": llm_cfg.provider,
+            "provider_name": llm_cfg.name,
+            "model": llm_cfg.model,
+            "config_id": llm_cfg.id,
+            "machine_dify": None,
+            "global_dify": global_dify_summary,
+            "llm_config": {
+                "id": llm_cfg.id,
+                "name": llm_cfg.name,
+                "provider": llm_cfg.provider,
+                "model": llm_cfg.model,
+                "base_url_masked": ai_middleware._mask_url(llm_cfg.base_url),
+                "has_api_key": bool(llm_cfg.api_key),
+                "is_default": llm_cfg.is_default,
+            },
+            "machine_model_id": model_id,
+        }
+
+    # 4) 本地规则
+    return {
+        "source": "local",
+        "source_label": "本地规则引擎（兜底）",
+        "provider": "local",
+        "provider_name": "本地规则引擎",
+        "model": "",
+        "config_id": None,
+        "machine_dify": None,
+        "global_dify": global_dify_summary,
+        "llm_config": None,
+        "machine_model_id": model_id,
+    }
+
+
+# ========== 切换全局 AI Provider（含切换到"全局Dify"） ==========
+
+@router.post("/switch-global")
+def switch_global_ai(body: dict):
+    """切换全局AI路由（用于浮动球/AI配置面板的"切换到Dify全局/切回LLM"按钮）
+
+    body.target: 'dify' | 'llm_default'
+      - 'dify': 使用全局 Dify（要求 dify_enabled + dify_base_url + dify_api_key）
+      - 'llm_default': 使用当前默认 LLM 配置
+    """
+    target = (body or {}).get("target", "")
+    if target == "dify":
+        cfg = ai_middleware.get_config()
+        if not cfg.get("dify_enabled") or not cfg.get("dify_base_url") or not cfg.get("dify_has_api_key"):
+            raise HTTPException(status_code=400,
+                                detail="请先在 AI 配置页面启用并填写 Dify URL + API Key")
+        # 用 update_config 持久化 provider=dify（下次重启仍生效）
+        ok = ai_middleware.update_config({"provider": "dify", "dify_enabled": True})
+        if not ok:
+            raise HTTPException(status_code=500, detail="切换失败，配置写入错误")
+        return {
+            "success": True,
+            "message": "已切换到 全局Dify",
+            "provider": ai_middleware.provider,
+            "provider_name": "全局 Dify",
+            "model": "dify-global",
+            "config_id": None,
+        }
+    if target == "llm_default":
+        ai_middleware._load_llm_config()
+        # 同步落库 provider 字段（与当前实际一致，避免持久化是 dify 重启仍然走 dify）
+        if not ai_middleware._save_to_db("provider", ai_middleware.provider):
+            raise HTTPException(status_code=500, detail="切换失败，配置写入错误")
+        return {
+            "success": True,
+            "message": f"已切回默认 LLM: {ai_middleware.provider_name or ai_middleware.provider}/{ai_middleware.model}",
+            "provider": ai_middleware.provider,
+            "provider_name": ai_middleware.provider_name or ai_middleware.provider,
+            "model": ai_middleware.model,
+            "config_id": ai_middleware.current_config_id,
+        }
+    raise HTTPException(status_code=400, detail="target 仅支持：dify | llm_default")

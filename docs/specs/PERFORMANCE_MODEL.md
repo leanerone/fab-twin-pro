@@ -22,7 +22,7 @@
 
 | 层级 | 采集方式 | 用途 |
 |---|---|---|
-| **服务端耗时** | `services/perf.py` 的 HTTP 中间件 | 排除网络与客户端噪声，反映真实处理耗时 |
+| **服务端耗时** | `backend/core/services/perf.py` 的 HTTP 中间件 | 排除网络与客户端噪声，反映真实处理耗时 |
 | **服务端 SQL** | SQLAlchemy `before/after_cursor_execute` 钩子 | 定位慢查询、统计每请求 SQL 次数（发现 N+1） |
 | **客户端耗时** | `tests/perf/benchmark.py` | 用户实际感受到的端到端耗时 |
 
@@ -119,12 +119,12 @@ python tests/perf/test_poller_e2e.py
 
 | # | 风险 | 位置 | 影响 |
 |---|---|---|---|
-| 1 | `ai_middleware.py` 13 处同步 `requests`，timeout 最高 120s | `services/ai_middleware.py` | 占满 FastAPI 默认 40 线程池，拖垮所有同步端点。应改 `httpx.AsyncClient` |
-| 2 | `machine_state_ttl` 缓存 key 为全机台 id 拼接，`maxsize=32` | `routers/machines.py:113` | 浏览 32+ 台机台后全量缓存被逐出，冷态重算 |
-| 3 | 写后不失效 | `services/cache.py` | 新事件写入后状态最长 60s 陈旧 |
-| 4 | 7 个 async 端点在事件循环里做同步 DB/文件 IO | `routers/uploads.py` | 上传期间冻结整个后端 |
-| 5 | KPI 用 `LIMIT 5000/10000` 截断 | `routers/machines.py:210/244` | 千万级库上 KPI 静默偏低；应改 SQL 聚合 |
-| 6 | N+1 查询 | `floors.py:28`、`users.py:254/383` | 列表接口随数据量线性变慢 |
+| 1 | `middleware.py` 13 处同步 `requests`，timeout 最高 120s | `backend/modules/ai_assistant/services/middleware.py` | 占满 FastAPI 默认 40 线程池，拖垮所有同步端点。应改 `httpx.AsyncClient` |
+| 2 | `machine_state_ttl` 缓存 key 为全机台 id 拼接，`maxsize=32` | `backend/modules/production_monitor/routes/machines.py:113` | 浏览 32+ 台机台后全量缓存被逐出，冷态重算 |
+| 3 | 写后不失效 | `backend/core/services/cache.py` | 新事件写入后状态最长 60s 陈旧 |
+| 4 | 7 个 async 端点在事件循环里做同步 DB/文件 IO | `backend/modules/model_library/routes/uploads.py` | 上传期间冻结整个后端 |
+| 5 | KPI 用 `LIMIT 5000/10000` 截断 | `backend/modules/production_monitor/routes/machines.py:210/244` | 千万级库上 KPI 静默偏低；应改 SQL 聚合 |
+| 6 | N+1 查询 | `backend/modules/production_monitor/routes/floors.py:28`、`backend/modules/system_admin/routes/users.py:254/383` | 列表接口随数据量线性变慢 |
 
 ---
 

@@ -205,10 +205,10 @@ def diagnose():
         traceback.print_exc()
     print()
 
-    # 11. 检查 ai_middleware.py 中的 _log_usage
-    print("【11】ai_middleware.py 日志记录方法检查")
+    # 11. 检查 middleware.py 中的 _log_usage
+    print("【11】middleware.py 日志记录方法检查")
     try:
-        with open('services/ai_middleware.py', 'r', encoding='utf-8') as f:
+        with open('modules/ai_assistant/services/middleware.py', 'r', encoding='utf-8') as f:
             content = f.read()
 
         has_log_usage = '_log_usage' in content

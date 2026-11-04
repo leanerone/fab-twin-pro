@@ -35,8 +35,8 @@ assert config.SIMULATION_ENABLED is False, "SIMULATION_ENABLED 必须为 False"
 
 from main import app as fastapi_app  # noqa: E402
 from database import SessionLocal  # noqa: E402
-from routers.history import _history_ttl, _timeline_ttl  # noqa: E402
-from services.cache import machine_state_ttl, kpi_stats_ttl  # noqa: E402
+from modules.production_monitor.routes.history import _history_ttl, _timeline_ttl  # noqa: E402
+from core.services.cache import machine_state_ttl, kpi_stats_ttl  # noqa: E402
 
 TEST_TOOL_PREFIX = "TEST-RW-"
 TEST_RAW_PREFIX = "TIDZ.TEST."

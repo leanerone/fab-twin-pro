@@ -172,7 +172,7 @@ def table(headers, rows):
 # 另外量产 EVENT_TS_UTC 绝大多数为 NULL（真实时间在 RECEIVED_TS_UTC），
 # 直接拿 event_ts_utc 过滤会一行都取不到 —— 这是「alarm/lot/产量都查不到」的另一半原因。
 
-# 哪些事件名算告警。与 backend/services/ai_tools.py 的 ALARM_EVENT_NAMES 保持一致：
+# 哪些事件名算告警。与 backend/modules/ai_assistant/services/tools.py 的 ALARM_EVENT_NAMES 保持一致：
 # 量产 OXE 上报的是 ALARM_REPORT，旧版只认 EC_ALARM_REPORT，真实告警会被整批漏掉。
 ALARM_EVENT_NAMES = {"ALARM_REPORT", "EC_ALARM_REPORT"}
 

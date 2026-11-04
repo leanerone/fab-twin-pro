@@ -371,8 +371,8 @@ VALUES ('VPO-01', 'PODOPENER-1', 'VPO-2200', 1, 2, 'PODOPENER', 'idle');
 #### 4.5 验证文件可访问
 
 启动前端后，浏览器打开以下 URL 确认文件可加载：
-- `http://localhost:5173/models/machines/vpo-2200/2d.svg`
-- `http://localhost:5173/models/machines/vpo-2200/3d.glb`
+- `http://localhost:3000/models/machines/vpo-2200/2d.svg`
+- `http://localhost:3000/models/machines/vpo-2200/3d.glb`
 
 ---
 
@@ -663,7 +663,7 @@ npm install three @types/three    # Three.js（已安装）
 | [MachineVpo3DView.vue](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/frontend/src/components/MachineVpo3DView.vue) | 3D 组件（改造：JSON 拼装 → GLB 加载） |
 | [MachineDetail.vue](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/frontend/src/views/MachineDetail.vue) | 机台详情页（组件选择逻辑） |
 | [models.py](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/backend/models.py) | ORM 模型定义（machine_model_configs 表） |
-| [models.py (router)](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/backend/routers/models.py) | 机型 CRUD API |
+| [models.py (router)](../../backend/modules/model_library/routes/models.py) | 机型 CRUD API |
 | [seed_data.py](file:///C:/Users/A/AppData/Roaming/TRAE%20SOLO%20CN/ModularData/ai-agent/work-mode-projects/6a558d0e1709fecd225c0cc2/fab-twin-pro/backend/seed_data.py) | 种子数据（含现有 PODOPENER 配置） |
 
 ---

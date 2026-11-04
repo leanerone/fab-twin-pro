@@ -1,16 +1,22 @@
 # FabTwin Pro 项目进度文档
 
-> 更新日期：2026-11-02
+> 更新日期：2026-11-04
 > 当前交接版本：ver3
 > 正式主线：**ver3**
 
 ---
 
-## 〇、当前状态速览（2026-11-02）
+## 〇、当前状态速览（2026-11-04）
 
-**ver3 交接修复与回归已完成**：当前正式主线为 `ver3`，源分支为 `test31`。部署步骤、完整证据和分支处置建议见 [ver3 正式交接说明](docs/交接说明_2026-11-02_ver3.md)。本版已达到可交接状态，但不等于真实外部系统或量产现场验收通过。
+**新人唯一入口是 [根 README](README.md)，下一步只读对应模块 README。** 本文件用于查询进度和历史验证，不是第二套交接导航。
 
-**2026-11-03 复核与修复（AI-A）**：对 ver3 做四层独立复核全通过（静态契约/新机台端到端/存量回归/生产构建），发现并修复 `services/ai/sql_tools.py` 旧模块路径导入（AI 真实取数静默退化，`test_real_data.py` 21/21 恢复）、本机 AI 表缺失（按 ORM 补建 6 表）、vite 仅绑 IPv6；真实 Dify(8080)/n8n(5678) docker 实例完成初始化与全链实测（n8n 真实性断言 7/7）；可导入资产（Dify DSL + n8n 工作流）已入库 `docs/integration/`。详见 [交接说明 §8 复核记录](docs/交接说明_2026-11-02_ver3.md)。**更正**：三台 cluster 入库正道是 `scripts/sync_cluster_models_to_db.py all`（复核中误判为缺口的结论已更正，误建重名行已清理）。
+当前后端已经按 `backend/modules/{model_library,production_monitor,ai_assistant,system_admin}/` 落地；公共入口保留在 `backend/` 根，公共服务位于 `backend/core/`，集成资产位于 `backend/integrations/dify_n8n/`。旧平铺后端路由、服务及 7 个 AI 兼容 shim 已移除。生产监控的 `seed_vpo_motion.py` 位于 `backend/modules/production_monitor/seeds/`。
+
+**2026-11-04 文档核验**：已按实际文件、CI 和脚本核对目录与启动命令。本轮只整理文档，没有重跑下表业务测试；下表仍是 2026-11-02 的验证记录，不代表本次重新验收。
+
+**ver3 交接修复与回归已完成**：当前正式主线为 `ver3`，源分支为 `test31`。部署步骤、完整证据和分支处置建议见 [ver3 正式交接说明（已归档）](docs/archive/2026-11/交接说明_2026-11-02_ver3.md)。本版已达到可交接状态，但不等于真实外部系统或量产现场验收通过。
+
+**2026-11-03 复核与修复（AI-A）**：对 ver3 做四层独立复核全通过（静态契约/新机台端到端/存量回归/生产构建），发现并修复 AI `sql_tools.py` 旧模块路径导入（AI 真实取数静默退化，`test_real_data.py` 21/21 恢复）、本机 AI 表缺失（按 ORM 补建 6 表）、vite 仅绑 IPv6；真实 Dify(8080)/n8n(5678) docker 实例完成初始化与全链实测（n8n 真实性断言 7/7）；可导入资产（Dify DSL + n8n 工作流）已入库 `docs/integration/`。详见 [交接说明 §8 复核记录（已归档）](docs/archive/2026-11/交接说明_2026-11-02_ver3.md)。**更正**：三台 cluster 入库正道是 `scripts/sync_cluster_models_to_db.py all`（复核中误判为缺口的结论已更正，误建重名行已清理）。
 
 ### 本版收口
 
@@ -40,13 +46,13 @@
 
 ## 历史状态速览（2026-10-27）
 
-> **2026-10-27 ver2.14.2**：**OXE 2D 视图 AMAT 金属风格重绘 + 旧 Canvas 看板两块面板迁移落地**——顶视图改 amat_metsput 同款金属质感（法兰螺栓/彩虹晶圆/金属片槽/SMIF 金属壳），并把随归档丢失的**左右「材料详情」25 槽 Wafer Map**（等待灰/加工绿/完成黄三态 + LOT/状态/完成徽章）与**左右「告警消息」面板**（计数 + 最近 3 行）以 SVG 部件 + Motion JSON 规则形式做进统一管线；晶舟片条随取放片逐槽亮灭，deriver 维护 25 槽状态机/告警队列/完成计数，mapping 值（25 位 0/1/2/3）直接驱动。端到端 debug 注入实测通过，零告警。生成器：`models/user/gen_oxe_svg.py`、`build_oxe_motion.py`（幂等，从 git 基线重建）。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部 ver2.14.2。
+> **2026-10-27 ver2.14.2**：**OXE 2D 视图 AMAT 金属风格重绘 + 旧 Canvas 看板两块面板迁移落地**——顶视图改 amat_metsput 同款金属质感（法兰螺栓/彩虹晶圆/金属片槽/SMIF 金属壳），并把随归档丢失的**左右「材料详情」25 槽 Wafer Map**（等待灰/加工绿/完成黄三态 + LOT/状态/完成徽章）与**左右「告警消息」面板**（计数 + 最近 3 行）以 SVG 部件 + Motion JSON 规则形式做进统一管线；晶舟片条随取放片逐槽亮灭，deriver 维护 25 槽状态机/告警队列/完成计数，mapping 值（25 位 0/1/2/3）直接驱动。端到端 debug 注入实测通过，零告警。生成器：`models/user/gen_oxe_svg.py`、`build_oxe_motion.py`（幂等，从 git 基线重建）。详细变更见 [`docs/changelog/变更更改版记录.md`](docs/changelog/变更更改版记录.md) 顶部 ver2.14.2。
 >
-> **2026-10-27 ver2.14**：**2D 视图统一 SVG 完成**——PODOPENER（开盖机）与 OXE DRM（刻蚀机）2D 视图全部迁入 motion2d 统一管线（静态 SVG 资产 + Motion JSON v1.1 + deriver），MachineMotion2D 成为唯一 2D 组件；旧 MachineVpoView/MachineOxeView/MachineModel2D/MachineIsoView 归档至 `archive/2026-10-27-svg-unify/`。SVG 外观参考 TEL 真机样式（浅灰钣金+TEL蓝+三色塔灯/DRM cluster 顶视布局）。全 14+20 事件语义经浏览器端到端实测（debug 注入→DB→轮询→WS→deriver→动画）通过。机型接入成本降为「SVG 资产 + Motion JSON + deriver 三件套，零组件开发」。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部 ver2.14。
+> **2026-10-27 ver2.14**：**2D 视图统一 SVG 完成**——PODOPENER（开盖机）与 OXE DRM（刻蚀机）2D 视图全部迁入 motion2d 统一管线（静态 SVG 资产 + Motion JSON v1.1 + deriver），MachineMotion2D 成为唯一 2D 组件；旧 MachineVpoView/MachineOxeView/MachineModel2D/MachineIsoView 归档至 `archive/2026-10-27-svg-unify/`。SVG 外观参考 TEL 真机样式（浅灰钣金+TEL蓝+三色塔灯/DRM cluster 顶视布局）。全 14+20 事件语义经浏览器端到端实测（debug 注入→DB→轮询→WS→deriver→动画）通过。机型接入成本降为「SVG 资产 + Motion JSON + deriver 三件套，零组件开发」。详细变更见 [`docs/changelog/变更更改版记录.md`](docs/changelog/变更更改版记录.md) 顶部 ver2.14。
 >
 > **当前开发主线**：①DB 性能三步走落地 ②Dify MCP 形态 A 接入。
 >
-> **2026-10-20 ver2.11.1**：AMAT METSPUT 动画修复轮收尾（ARM_2 下层杆镜像方案推翻→恢复单边出片 + z-order 修正，DB 配置已同步 16604→19835 chars）；文档同步刷新（系统架构说明书 ver2.6.1→ver2.11.1）；两项架构规划定案：**DB 查询卡顿三步走**（DBA 复合索引/SQL 改写 → cachetools 进程内缓存 → Garnet xcopy 免安装部署，见系统架构说明书 §7.10）、**AI Agent 标准化两步走**（形态 A：Dify 1.6+ 双向 MCP 薄接入 + 前端 SSE 多轮 → 形态 B：独立 Fab MCP 工具网关，见 §7.11）。详细变更见 [`docs/变更更改版记录.md`](docs/变更更改版记录.md) 顶部。
+> **2026-10-20 ver2.11.1**：AMAT METSPUT 动画修复轮收尾（ARM_2 下层杆镜像方案推翻→恢复单边出片 + z-order 修正，DB 配置已同步 16604→19835 chars）；文档同步刷新（系统架构说明书 ver2.6.1→ver2.11.1）；两项架构规划定案：**DB 查询卡顿三步走**（DBA 复合索引/SQL 改写 → cachetools 进程内缓存 → Garnet xcopy 免安装部署，见系统架构说明书 §7.10）、**AI Agent 标准化两步走**（形态 A：Dify 1.6+ 双向 MCP 薄接入 + 前端 SSE 多轮 → 形态 B：独立 Fab MCP 工具网关，见 §7.11）。详细变更见 [`docs/changelog/变更更改版记录.md`](docs/changelog/变更更改版记录.md) 顶部。
 >
 > **当前开发主线**：AMAT METSPUT（第四机型，配置驱动 motion2d）→ 下一步为 ①DB 性能三步走落地 ②Dify MCP 形态 A 接入 ③AMAT 双盘就近抓取（deriver 决定出哪侧臂）。
 
@@ -57,7 +63,7 @@
 | Oracle | 1521 | 本地库 `fabtwin / fabtwin @ localhost:1521/orclpdb` |
 | db_proxy | 8001 | `cd services\db_proxy` → 先设 `$env:ORACLE_DSN_TYPE="service_name"` → `python main.py` |
 | backend | 8002 | `cd backend` → `python main.py` |
-| frontend | 5173 | `cd frontend` → `npm run dev` |
+| frontend | 3000 | `cd frontend` → `npm run dev` |
 
 **坑**：本地连的是 PDB（orclpdb），db_proxy 默认 `ORACLE_DSN_TYPE=sid`，**不设成 `service_name` 会连不上**。backend 的 config 已经默认 `service_name`，不用管。
 
@@ -296,7 +302,7 @@ DB_POLLER_INTERVAL_MS = 1000
 
 ### 5.1 启动后端
 ```powershell
-cd n:\AI\fab-twin-pro-ver1\backend
+cd backend
 .\venv\Scripts\python.exe main.py
 ```
 - 后端地址: http://localhost:8002
@@ -304,20 +310,19 @@ cd n:\AI\fab-twin-pro-ver1\backend
 
 ### 5.2 启动前端
 ```powershell
-cd n:\AI\fab-twin-pro-ver1\frontend
+cd frontend
 npm run dev
 ```
-- 前端地址: http://localhost:5173
+- 前端地址: http://localhost:3000
 
 ### 5.3 启动WinForm模拟器
 ```powershell
-cd n:\AI\fab-twin-pro-ver1
 python winform_simulator.py
 ```
 
 ### 5.4 重新生成历史数据
 ```powershell
-cd n:\AI\fab-twin-pro-ver1\backend
+cd backend
 .\venv\Scripts\python.exe gen_podopener_history.py
 ```
 
@@ -503,13 +508,10 @@ cd n:\AI\fab-twin-pro-ver1\backend
 ## 九、参考文档
 
 - [README.md](README.md) - 项目说明
-- [docs/项目总结.md](docs/项目总结.md) - 详细项目总结
-- [docs/项目统一架构规划.md](docs/项目统一架构规划.md) - 架构设计与规范
-- [docs/项目计划说明书.md](docs/项目计划说明书.md) - 项目计划与里程碑
-- [docs/3D模型集成指南.md](docs/3D模型集成指南.md) - 3D模型接入规范
-- [docs/对接规范文档.md](docs/对接规范文档.md) - 与世庆的协作规范
-- [docs/PODOPENER.docx](docs/PODOPENER.docx) - PODOPENER机台业务流程
-- [docs/alarmnew.docx](docs/alarmnew.docx) - 告警事件说明
+- 项目总结、项目统一架构规划、项目计划说明书、3D模型集成指南：历史引用，对应文件已不在仓库
+- [docs/business/对接规范文档.md](docs/business/对接规范文档.md) - 与世庆的协作规范
+- [docs/archive/PODOPENER.docx](docs/archive/PODOPENER.docx) - PODOPENER机台业务流程（归档）
+- [docs/archive/alarmnew.docx](docs/archive/alarmnew.docx) - 告警事件说明（归档）
 
 ---
 

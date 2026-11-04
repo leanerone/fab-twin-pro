@@ -24,7 +24,7 @@ def load_global_dify_from_db():
     返回 (base_url, api_key) 或 (None, None)
     """
     try:
-        from services.ai_middleware import AIMiddleware
+        from modules.ai_assistant.services.middleware import AIMiddleware
         mw = AIMiddleware()
         base = (mw.dify_base_url or "").rstrip("/")
         key = mw.dify_api_key or ""

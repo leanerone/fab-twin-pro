@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 os.environ.setdefault("ORACLE_SERVICE", "XEPDB1")
 
-import services.ai_middleware as ai_middleware_module
-from services.ai_middleware import AIMiddleware
+import modules.ai_assistant.services.middleware as ai_middleware_module
+from modules.ai_assistant.services.middleware import AIMiddleware
 
 
 def _chat_middleware(provider):
@@ -219,8 +219,8 @@ def test_usage_stats_compile_oracle_substr_and_iso_string_bounds(monkeypatch):
         def close(self):
             pass
 
-    # 批次2拆包后 get_usage_stats 在 services.ai.usage，_get_db 需补丁到实现的命名空间
-    from services.ai import usage as ai_usage_module
+    # 批次2拆包后 get_usage_stats 在 modules.ai_assistant.services.usage，_get_db 需补丁到实现的命名空间
+    from modules.ai_assistant.services import usage as ai_usage_module
     monkeypatch.setattr(ai_usage_module, "_get_db", lambda: FakeDB())
     middleware = AIMiddleware.__new__(AIMiddleware)
 
@@ -330,7 +330,7 @@ def test_update_config_persists_once_before_applying_normalized_values():
 
 
 def test_save_configs_rolls_back_and_closes_session_on_commit_failure(monkeypatch):
-    from services.ai import config_store as ai_config_store
+    from modules.ai_assistant.services import config_store as ai_config_store
 
     class FakeQuery:
         def filter(self, *args):

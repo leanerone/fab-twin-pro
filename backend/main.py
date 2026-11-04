@@ -34,14 +34,20 @@ from config import API_HOST, API_PORT, CORS_ORIGINS, SIMULATION_ENABLED, DB_POLL
 from database import init_db, SessionLocal
 from models import Machine, AIConfig, AIProviderConfig, AIUsageLog
 from seed_data import init_seed_data
-from routers import machines, events, lots, alarms, ai, oht, recipes, floors, models, history, auth, users, uploads, oxe, debug
-from routers.rvmessages import router as rv_router
-from services.realtime import manager
-from services.simulator import start_simulator
-from services.db_poller import start_db_poller
-from services.cache import cache
-from services.perf import router as perf_router
-from services.perf import install as install_perf, install_sql_timing
+from modules.model_library.routes import models, uploads
+from modules.production_monitor.routes import (
+    machines, events, lots, alarms, oht, recipes, floors, history, oxe,
+    debug,
+)
+from modules.production_monitor.routes.rvmessages import router as rv_router
+from modules.system_admin.routes import auth, users
+from modules.ai_assistant.routes import ai
+from core.services.realtime import manager
+from modules.production_monitor.services.simulator import start_simulator
+from modules.production_monitor.services.db_poller import start_db_poller
+from core.services.cache import cache
+from core.services.perf import router as perf_router
+from core.services.perf import install as install_perf, install_sql_timing
 
 # T8：operation_id 统一用函数名（默认会拼路径后缀，如 list_machines_api_machines_get），
 # 让 MCP 工具名保持 list_machines / get_machine 这种干净命名。
@@ -74,7 +80,7 @@ def _startup_blocking():
     # 疑似多 DLL 线程竞态）；默认关闭保稳定，首次语音请求时在工作线程内加载。
     if os.getenv("WHISPER_PRELOAD", "").strip().lower() in ("1", "true", "yes"):
         try:
-            from services.speech_service import preload_in_background
+            from modules.ai_assistant.services.speech_service import preload_in_background
             preload_in_background()
             print("[ASR] whisper 模型后台预载已启动")
         except Exception as _asr_err:
@@ -93,8 +99,8 @@ def _startup_blocking():
         # 要 inspect 数据字典（Oracle 单表 400-800ms），不预热会全部叠加到第一个
         # 用户请求上（本地实测 /api/machines 冷态因此多耗 ~2s）。
         try:
-            from routers.machines import _col_is_temporal
-            from routers.history import _ts_columns_are_temporal
+            from modules.production_monitor.routes.machines import _col_is_temporal
+            from modules.production_monitor.routes.history import _ts_columns_are_temporal
             _pw_db = SessionLocal()
             try:
                 _ts_columns_are_temporal(_pw_db)
@@ -270,7 +276,7 @@ else:
 @app.middleware("http")
 async def _mcp_auth_middleware(request, call_next):
     if request.url.path.startswith("/mcp"):
-        from routers.rvmessages import _ingest_key, _client_is_local
+        from modules.production_monitor.routes.rvmessages import _ingest_key, _client_is_local
         import hmac as _hmac
         expected = _ingest_key()
         if expected:
@@ -323,7 +329,7 @@ async def health():
         status_code = 503
 
     if DB_POLLER_ENABLED:
-        from services.db_poller import poller_health
+        from modules.production_monitor.services.db_poller import poller_health
         ph = poller_health()
         checks["db_poller"] = ph
         if ph.get("status") != "ok":

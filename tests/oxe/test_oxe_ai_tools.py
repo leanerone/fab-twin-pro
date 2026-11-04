@@ -2,7 +2,7 @@
 import sys, json
 sys.path.insert(0, r'C:\Users\A\AppData\Roaming\TRAE SOLO CN\ModularData\ai-agent\work-mode-projects\6a558d0e1709fecd225c0cc2\fab-twin-pro\backend')
 from database import SessionLocal
-from services.ai_tools import get_wafer_flow, get_chamber_status, get_oxe_lot_summary, _resolve_tool_ids
+from modules.ai_assistant.services.tools import get_wafer_flow, get_chamber_status, get_oxe_lot_summary, _resolve_tool_ids
 
 db = SessionLocal()
 

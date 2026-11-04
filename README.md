@@ -1,468 +1,239 @@
-# FabTwin Pro - 半导体工厂数字孪生平台
+# FabTwin Pro
 
-半导体工厂数字孪生平台，支持机台实时监控、历史数据回放、楼层平面图编辑、OHT天车调度可视化、AI辅助查询、语音识别及统一动画配置管理。
+> **新人只看这一条阅读路径：先读本文件 → 再读自己模块的 README。** 不要先翻 `docs/`，也不要照搬历史归档里的目录和命令。
 
-**当前交接版本**：ver3（2026-11-02）　|　正式主线：`ver3`
+## 1. 先知道自己在做什么
 
-> 当前进展、遗留待办、本地环境常见坑，见 [PROJECT_STATUS.md](PROJECT_STATUS.md) 的「〇、当前状态速览」；部署核对与验证边界见 [ver3 正式交接说明](docs/交接说明_2026-11-02_ver3.md)。
+FabTwin Pro 是半导体机台数字孪生监控系统，包含：
 
-## 技术栈
+- **模型库**：SVG / 2D Motion / 3D 模型资产，模型编辑、上传和动画预览。
+- **生产监控**：总览、楼层、机台详情、历史回放、Lot、告警、配方、OHT 和实时事件。
+- **AI 助手**：问答、流式输出、Text-to-SQL、Provider 配置、语音和 AI 配置界面。
+- **系统管理**：登录、用户、角色和权限。
+- **外部集成**：Dify / n8n 集成资产、运维脚本和 Oracle 只读 `db_proxy`。
 
-### 后端
-- Python 3.10+
-- FastAPI - Web框架
-- SQLAlchemy 2.0 - ORM
-- Oracle 19c（生产）/ SQLite（Demo）
-- Redis（可选，缓存）
-- WebSocket - 实时推送
-- faster-whisper - 本地语音识别（CPU/int8离线）
-- imageio-ffmpeg - 音频解码
+前端是 Vue 3 + Vite，后端是 FastAPI + SQLAlchemy。**后端当前只支持 Oracle，不是 SQLite/mock；本地启动前必须先有可连接的开发 Oracle。**
 
-### 前端
-- Vue 3.4 + Vite 5
-- Pinia - 状态管理
-- Vue Router 4 - 路由
-- Three.js 0.160 - 3D可视化
-- 原生HTML/CSS - UI组件（替代Element Plus）
+## 2. 找对自己的负责人和目录
 
-## 功能特性
+每个人都纵向负责一个业务模块的前端和后端，不是一个人只写前端、另一个人再接手同模块后端。
 
-- ✅ 主页看板 - 7个KPI卡片 + 楼层选择 + 机台列表
-- ✅ 楼层3D视图 - 机台/区域/轨迹/天车 3D可视化
-- ✅ 2D平面图编辑器 - 拖拽标注机台/区域/轨迹/天车
-- ✅ 机台详情 - 多机型精细模型 + 工艺动画
-- ✅ PODOPENER 完整业务流程 - 14步穿入 + 6步脱出 + 报警事件
-- ✅ 历史回放 - 实时/回放双模式 + 6档倍速 + 时间轴拖拽
-- ✅ WebSocket实时推送 - DB轮询 + 模拟器双模式驱动
-- ✅ 统一动画配置层 - podopener.json + useAnimationConfig.js，2D/3D视图共用配置消除偏差
-- ✅ 模型编辑器 - 动画配置可视化编辑 + 手动调试触发 + JSON导出 + 开发SOP
-- ✅ AI中间适配层 - 规则引擎 + Dify/n8n扩展 + 上下文感知
-- ✅ AI配置面板 - 参数热编辑 + 系统Prompt自定义 + 温度/Token调节
-- ✅ AI悬浮球 - 全局快速AI对话入口
-- ✅ 语音识别 - 本地faster-whisper离线识别，MediaRecorder录音，无需联网
-- ✅ 语音播报 - 机台状态/报警语音播报
-- ✅ WinForm模拟器 - tkinter GUI，按钮控制流程事件写入DB
-- ✅ 一键部署 - [deploy/](deploy/README.md)（详见 [docs/DEPLOY_SOP.md](docs/DEPLOY_SOP.md)）
+| 人员 | 负责什么 | 主要目录 |
+|---|---|---|
+| **钱鸣** | 模型库；模型与资产 | `backend/modules/model_library/`、`frontend/src/modules/model-library/`、`models/`、`frontend/public/models/`、`frontend/src/api/{models,uploads}.js` |
+| **季世庆** | 生产监控 + 团队总控；协调进度与合并冲突 | `backend/modules/production_monitor/`、`frontend/src/modules/production-monitor/`、`backend/seed_oxe_test_data.py`、`frontend/src/api/{machines,history,floors}.js`；其中 `seed_vpo_motion.py` 也归季世庆 |
+| **朱明钊** | AI 助手，包括 Dify/n8n 的**平台 Provider 代码** | `backend/modules/ai_assistant/`、`frontend/src/modules/ai-assistant/`、`frontend/src/api/ai.js` |
+| **洪佳琪** | 系统管理过渡、平台内核、公共代码与最终审核 | `backend/modules/system_admin/`、`frontend/src/modules/system-admin/`、后端根公共文件、`backend/core/`、`frontend/src/platform/`、`frontend/src/api/{core,index,auth}.js` |
+| **张亮** | 集成资产、运维脚本和 `db_proxy`，**不负责平台业务代码** | `backend/integrations/dify_n8n/`、`services/db_proxy/`、Dify/n8n 相关 `deploy/` 与 `scripts/` 资产 |
 
-## 快速开始
+特别分清两件事：
 
-### 环境要求
-- Python 3.10+
-- Node.js 16+
-- Git
-- Oracle客户端（生产环境）
-- ffmpeg（语音识别需要，通过pip install imageio-ffmpeg自动安装）
+- `backend/modules/ai_assistant/services/providers/` 里的 Dify/n8n Provider 是平台业务代码，归**朱明钊**。
+- Dify/n8n 工作流、部署运维、集成脚本和 `services/db_proxy/` 归**张亮**；不要让他另写一套业务路由或业务服务。
 
-### 安装依赖
+公共代码不是“谁顺手谁改”。后端根入口、公共配置/模型/Schema、`backend/core/`、前端 `platform/` 和全局构建配置，改动都必须交给**洪佳琪审核**。涉及别的业务模块时，还要该模块负责人审核。
 
-```bash
-# 后端
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+## 3. 现在真实的目录
 
-# 前端
-cd frontend
-npm install
+下面是放代码时要看的位置，不是未来规划。
+
+```text
+backend/
+├── main.py                         # FastAPI 总入口：注册各模块路由
+├── config.py / database.py         # 公共配置、Oracle 连接
+├── models.py / schemas.py          # 公共 ORM 与 Pydantic 模型
+├── seed_data.py / sql_runner.py    # 根级公共种子入口、SQL 执行工具
+├── seed_oxe_test_data.py           # 生产监控 OXE 测试种子，归季世庆
+├── core/
+│   ├── deps.py / events_query.py   # 公共依赖、事件查询
+│   └── services/                   # cache / perf / realtime / security / time_utils
+├── modules/
+│   ├── model_library/
+│   │   ├── routes/                 # models.py / uploads.py
+│   │   ├── services/               # html_parser.py
+│   │   └── seeds/                  # seed_amat_metsput.py / seed_oxe_motion.py
+│   ├── production_monitor/
+│   │   ├── routes/                 # alarms / debug / events / floors / history / lots
+│   │   │                           # machines / oht / oxe / recipes / rvmessages
+│   │   ├── services/               # db_poller.py / ods.py / simulator.py
+│   │   └── seeds/                  # seed_vpo_motion.py
+│   ├── ai_assistant/
+│   │   ├── routes/                 # ai.py
+│   │   └── services/               # middleware / tools / sql / config_store / ...
+│   │       └── providers/          # openai / dify / n8n 等 Provider
+│   └── system_admin/
+│       └── routes/                 # auth.py / users.py
+└── integrations/
+    └── dify_n8n/                   # 集成设置与连接资产；不是新业务模块
+
+frontend/src/
+├── main.js / App.vue               # 前端公共入口与应用装配
+├── api/                            # 现有接口文件，按责任表分模块归属
+├── stores/ / router/               # 全局状态与路由，公共代码
+├── utils/ / styles/ / configs/     # 公共工具、样式、配置
+├── modules/
+│   ├── model-library/
+│   │   ├── frontend/               # engine / derivers / editor
+│   │   └── README.md               # 钱鸣模块说明
+│   ├── production-monitor/
+│   │   ├── frontend/               # components / composables / pages
+│   │   └── README.md               # 季世庆模块说明
+│   ├── ai-assistant/
+│   │   ├── frontend/               # components / pages
+│   │   └── README.md               # 朱明钊模块说明
+│   └── system-admin/
+│       ├── frontend/pages/         # LoginPage / UserManagementPage
+│       └── README.md               # 洪佳琪模块说明
+└── platform/
+    ├── frontend/core/composables/  # three / RafLoop / WebSocket 等共享组合函数
+    ├── frontend/shell/components/  # AppHeader
+    └── README.md                   # 公共平台边界
 ```
 
-### 开发模式
+**旧的平铺后端路由、服务目录和 7 个 AI 兼容 shim 已移除。不要再按旧路径建文件。**
 
-```bash
-# 方式一：使用启动脚本（Windows）
-start-dev.bat
+## 4. 新需求、新文件到底放哪里
 
-# 方式二：手动启动（AI 相关功能需要 3 个服务，各开一个终端）
+先判断属于哪个模块，再把前后端放在同名业务模块里。下面是可直接对照的例子：
 
-# 1) 后端  http://localhost:8002
-cd backend
-venv\Scripts\activate
-python main.py
+| 新需求 | 后端放这里 | 前端放这里 |
+|---|---|---|
+| 增加模型上传校验 | `backend/modules/model_library/routes/` 或 `backend/modules/model_library/services/` | 组件放 `frontend/src/modules/model-library/frontend/editor/components/`；上传接口改 `frontend/src/api/uploads.js` |
+| 新增一个机台的 SVG / Motion 资产 | 资产放 `models/` 下已有对应位置；模型库专属 seed 放 `backend/modules/model_library/seeds/` | 展示引擎确需修改时放 `frontend/src/modules/model-library/frontend/engine/` |
+| 增加告警筛选或 Lot 查询 | `backend/modules/production_monitor/routes/`；可复用业务逻辑放 `backend/modules/production_monitor/services/` | Lot 接口改 `frontend/src/api/history.js`；界面放 `frontend/src/modules/production-monitor/frontend/components/` 或 `frontend/src/modules/production-monitor/frontend/pages/` |
+| 增加 AI 查询工具或调整 Provider | `backend/modules/ai_assistant/services/`；Provider 放 `backend/modules/ai_assistant/services/providers/` | 界面放 `frontend/src/modules/ai-assistant/frontend/components/` 或 `frontend/src/modules/ai-assistant/frontend/pages/`；现有接口改 `frontend/src/api/ai.js` |
+| 增加用户角色字段或登录规则 | `backend/modules/system_admin/routes/`；共享认证底座在 `backend/core/services/security.py`，必须洪佳琪审核 | 页面放 `frontend/src/modules/system-admin/frontend/pages/`；现有登录接口在 `frontend/src/api/auth.js` |
+| 更新 Dify 工作流或 n8n 运维 | 集成资产放 `backend/integrations/dify_n8n/`，运维脚本沿用 `deploy/` / `scripts/` 的现有分类 | 不改平台业务页面；需要平台 Provider 改动时另交给朱明钊 |
 
-# 2) 前端  http://localhost:5173
-cd frontend
-npm run dev
+再放两个“不要放错”的例子：
 
-# 3) db_proxy  http://localhost:8001  ← AI 助手/工具查询的出口，不启动则 AI 查数据全部失败
-cd services\db_proxy
-# PowerShell 下先设这一句：本地 Oracle 连的是 PDB，默认 sid 会连不上
-$env:ORACLE_DSN_TYPE = "service_name"
-python main.py
-```
+- 改告警页面时，不要把组件塞进 `frontend/src/platform/`；它属于生产监控。
+- 改 AI Provider 时，不要把代码塞进 `backend/integrations/dify_n8n/`；它属于 AI 助手模块。
 
-### 访问地址
-- 前端：http://localhost:5173
-- 后端API：http://localhost:8002/api
-- API文档：http://localhost:8002/docs
-- WebSocket：ws://localhost:8002/ws/realtime
-- db_proxy 健康检查：http://localhost:8001/health
+如果一个文件同时被多个模块使用，或者你判断不了归属，**先问洪佳琪，不要自己新建 `common/`、`utils2/` 或另一套目录。**
 
-### 本地测试
+## 5. 新人第一次开发，照这个顺序做
+
+1. 在上面责任表找到自己的名字。
+2. 只打开自己模块的第二份文档：
+   - 钱鸣：[模型库 README](frontend/src/modules/model-library/README.md)
+   - 季世庆：[生产监控 README](frontend/src/modules/production-monitor/README.md)
+   - 朱明钊：[AI 助手 README](frontend/src/modules/ai-assistant/README.md)
+   - 洪佳琪：[系统管理 README](frontend/src/modules/system-admin/README.md)；维护公共底座时再看 [platform README](frontend/src/platform/README.md)
+   - 张亮：按本文件第 2、4 节确认集成边界，平台业务代码仍回到对应模块负责人。
+3. 从 `ver3` 建分支，只改本需求需要的一个模块。
+4. 按第 8 节运行与改动有关的测试。
+5. 发 PR 到 `ver3`，在 PR 里写清改了哪个模块、运行了哪条命令、是否碰了公共文件。
+
+## 6. 启动项目（Windows）
+
+### 6.1 第一次安装
+
+先安装 **Python 3.10+、Node.js 20、可用的 Oracle 开发库和 Oracle Client**。Node.js 20 与当前 CI 一致。
 
 ```powershell
-# AI 工具层：只测 db_proxy（推荐先跑，排除 n8n 干扰）
-python tests\test_n8n_f1_f10.py --layer proxy --proxy http://localhost:8001 --machine OXE-51 --lot V394K
-
-# 完整两层（n8n + db_proxy）
-python tests\test_n8n_f1_f10.py --merged --proxy http://10.30.5.216:8001 --json-out tests\n8n_result.json
-
-# 演示数据生成：数据库内容不在仓库里（含敏感数据被 .gitignore 排除），换机器后需重建
-python tests\generate_today_demo.py                        # 生成"今天"的完整演示数据
-python tests\generate_oxe_alarms.py --date 2026-09-11      # OXE-1 告警演示数据
-
-# 千万级灌库（性能验收用，约 43 分钟灌满 1000 万行；小数据量性能实测会严重失真）
-python tests\seed_10m.py
-python tests\diag_machines.py    # 首页/详情/统计慢查询逐条定位（Q1~Q5 独立计时）
-python tests\perf_matrix.py      # 全端点冷/暖态耗时矩阵（权威计时用 curl.exe 直测）
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+cd ..\frontend
+npm ci
 ```
 
-### WinForm 模拟器
+后端没有通用 mock 开关。启动前请找季世庆确认开发 Oracle 连接参数，并核对 `deploy/env.bat` 中的 `ORACLE_*`、`ORACLE_DSN_TYPE` 和 `ORACLE_CLIENT_DIR`。**真实密码不要写进文档，也不要把本机凭据提交到仓库。**
 
-```bash
-# 在项目根目录运行
-python winform_simulator.py
+### 6.2 一键启动前后端
+
+在仓库根目录执行：
+
+```powershell
+.\deploy\start-dev.bat
 ```
 
-功能：
-- 单步执行穿入/脱出流程每个事件
-- 自动执行完整流程（每步间隔1.5秒）
-- 5种报警模拟
-- 实时事件日志
+脚本会启动后端、前端，并尝试启动 `db_proxy`。普通业务开发如果不需要 `db_proxy`，先按 [deploy/README.md](deploy/README.md) 核对本机配置，不要把代理配置错误当成前端或后端代码错误。
 
-### 一键部署
+也可以开两个 PowerShell 窗口分别启动。手动后端窗口必须已经设置同样的 `ORACLE_*` 会话或系统环境变量；`deploy/env.bat` 只由 deploy 脚本读取，不会由 `main.py` 自动加载：
 
-> ⚠️ 2026-09-23 起：`deploy.bat` 已废弃（旧脚本与新部署脚本重复，且引用了不存在的文件）。
->
-> 现在的部署入口统一在 [`deploy/`](deploy/) 目录下，每个脚本的用途见 [`deploy/README.md`](deploy/README.md)。
->
-> **从在线机器打包 → 离线量产机安装 → 启动**，完整流程见 [`docs/DEPLOY_SOP.md`](docs/DEPLOY_SOP.md)。
-
-## 项目结构
-
-```
-fab-twin-pro-ver1/
-├── backend/                    # FastAPI 后端
-│   ├── main.py                # 入口（路由注册+WS+启动）
-│   ├── config.py              # 配置中心（DB/Redis/AI/ODS/模拟器/轮询）
-│   ├── models.py              # 19张表 ORM 模型
-│   ├── schemas.py             # Pydantic 模型
-│   ├── database.py            # 数据库连接
-│   ├── seed_data.py           # 种子数据生成
-│   ├── gen_podopener_history.py # 生成PODOPENER 7天历史数据
-│   ├── create_cur_table.py    # 创建DT_EVENT_RAW_CUR表
-│   ├── import_sql.py          # SQL导入工具
-│   ├── rvsimulator.py         # RV消息模拟器
-│   ├── requirements.txt       # Python依赖
-│   ├── routers/               # 12个API路由模块
-│   │   ├── machines.py        # 机台+KPI统计
-│   │   ├── history.py         # 历史数据回放API
-│   │   ├── events.py          # 事件+趋势时间轴
-│   │   ├── lots.py            # 批次查询
-│   │   ├── alarms.py          # 告警统计
-│   │   ├── ai.py              # AI自然语言查询+语音识别
-│   │   ├── floors.py          # 楼层/区域/轨迹/天车CRUD
-│   │   ├── oht.py             # 天车位置
-│   │   ├── recipes.py         # 工艺配方
-│   │   ├── models.py          # 机台型号配置CRUD
-│   │   ├── auth.py            # 认证
-│   │   └── rvmessages.py      # RV消息接收API
-│   └── services/              # 业务服务层
-│       ├── cache.py           # Redis缓存（含内存回退）
-│       ├── realtime.py        # WebSocket连接管理
-│       ├── simulator.py       # 工艺模拟器+PODOPENER流程模拟器
-│       ├── db_poller.py       # DB事件轮询服务（外部写入驱动）
-│       ├── ods.py             # ODS数据中台
-│       ├── ai_mcp.py          # AI MCP调用框架
-│       ├── ai_middleware.py   # AI中间适配层（规则引擎+Dify+n8n）
-│       └── speech_service.py  # 本地Whisper语音识别服务
-├── frontend/                   # Vue3 前端
-│   └── src/
-│       ├── views/             # 4个页面
-│       │   ├── Dashboard.vue      # 主页看板
-│       │   ├── MachineDetail.vue # 机台详情
-│       │   ├── ModelEditor.vue   # 模型编辑器（配置+调试+指南）
-│       │   └── Login.vue         # 登录页
-│       ├── components/        # 组件
-│       │   ├── FloorView3D.vue       # 楼层3D视图
-│       │   ├── FloorPlan.vue         # 2D平面图编辑器
-│       │   ├── MachineModel3D.vue    # TEL DRM UNITY精细模型
-│       │   ├── MachineModel2D.vue    # 2D原理图
-│       │   ├── MachineIsoView.vue    # OXE等角2.5D视图
-│       │   ├── MachineVpoView.vue    # PODOPENER 2D视图
-│       │   ├── MachineVpo3DView.vue  # PODOPENER 3D视图
-│       │   ├── HistoryReplay.vue     # 历史回放时间轴
-│       │   ├── PlaybackBar.vue       # 播放控制条
-│       │   ├── KpiCards.vue          # KPI卡片
-│       │   ├── AiAssistant.vue       # AI助手面板
-│       │   ├── AIConfigPanel.vue     # AI配置面板（参数热编辑）
-│       │   ├── AIFloatingBall.vue    # AI全局悬浮球
-│       │   ├── VoiceInput.vue        # 语音输入组件
-│       │   ├── EventAnimationDebugger.vue # 动画调试面板
-│       │   ├── EventList.vue         # 事件列表
-│       │   ├── AlarmStats.vue        # 告警统计
-│       │   └── ...
-│       ├── composables/       # 组合式函数
-│       │   ├── useThree.js            # Three.js封装
-│       │   ├── useIsoProjection.js    # 等角投影
-│       │   ├── useWebSocket.js        # WebSocket管理
-│       │   ├── useEventActionMapping.js # 事件动作映射
-│       │   ├── useAnimationConfig.js  # 统一动画配置加载器
-│       │   └── useAuth.js             # 认证
-│       ├── configs/             # 配置文件
-│       │   └── machine-animations/  # 机台动画配置
-│       │       ├── podopener.json    # VPO事件-阶段-动画映射
-│       │       └── _schema.json     # 配置Schema校验
-│       ├── stores/            # Pinia状态管理
-│       │   ├── app.js         # 全局状态
-│       │   ├── model.js       # 机台型号配置
-│       │   └── auth.js        # 认证状态（支持*通配符权限）
-│       └── api/index.js       # API统一封装
-├── docs/                       # 归档文档
-│   ├── 系统架构说明书.md       # 系统架构详细说明
-│   ├── 变更更改版记录.md       # 版本变更记录
-│   ├── DEPLOY_SOP.md           # ⭐ 端到端部署 SOP（在线打包→离线安装→启动）
-│   ├── README.md               # docs/ 目录导航
-│   ├── FabTwin_系统架构图.drawio
-│   ├── FabTwin_系统架构图.svg
-│   ├── integration/            # AI 子系统文档
-│   │   ├── DEPLOY_SOP.md       # Dify/n8n/db_proxy 集成 SOP
-│   │   ├── AI能力说明与规划.md
-│   │   ├── dify_n8n_format_reference.md
-│   │   ├── dify/
-│   │   └── n8n/
-│   ├── business/               # 业务文档（与部署解耦）
-│   │   ├── 对接规范文档.md
-│   │   ├── OXE接入指南.md
-│   │   └── 新机台开发SOP_v3.md
-│   └── archive/                # 归档历史（不删，留底）
-│       ├── WIN2022_DEPLOY_SOP.md
-│       ├── IIS_WINDOWS_AUTH_GUIDE.md
-│       ├── FabTwin_项目报告.html
-│       ├── PODOPENER.docx
-│       ├── VPO_2D.docx
-│       ├── alarmnew.docx
-│       └── 项目.txt
-├── scripts/                    # 工具脚本
-│   └── extract_vpo_model.py   # VPO模型提取工具
-├── sql/                        # SQL脚本
-│   └── init_oracle_db.sql     # Oracle初始化脚本
-├── winform_simulator.py       # WinForm(tkinter)模拟器
-├── PROJECT_STATUS.md          # 项目进度文档
-├── deploy/                    # 部署脚本集合（15 个）
-│   ├── README.md                # 脚本功能分类速查
-│   ├── package_offline.bat      # 在线机器打包离线部署包
-│   ├── deploy_iis_nt_final.bat  # IIS 站点+ASP+Windows Auth 部署
-│   ├── start_iis.bat/.ps1       # IIS 模式启动后端（主入口）
-│   ├── start_direct.bat/.ps1    # 直连模式启动（无 IIS）
-│   ├── start_backend.bat/.ps1   # 仅启动后端
-│   ├── start-dev.bat            # 开发模式启动（带热更新）
-│   ├── init_db.bat              # sqlplus 初始化 Oracle
-│   ├── deploy_dify.ps1          # Dify Docker Compose 部署
-│   ├── deploy_n8n.ps1           # n8n Docker Compose 部署
-│   ├── env.bat                  # 共享环境变量
-│   └── web.config               # IIS URL Rewrite
+```powershell
+# 窗口 1：后端，http://localhost:8002
+cd backend
+.\venv\Scripts\python.exe main.py
 ```
 
-## 统一动画配置架构
-
-### 四层架构
-
-```
-设备模型描述层 → 统一映射配置层 → 动画动作原语层 → 可视化调试层
-   (JSON)          (podopener.json)    (translate/rotate)   (模型编辑器)
+```powershell
+# 窗口 2：前端，http://localhost:3000
+cd frontend
+npm run dev
 ```
 
-### 配置文件结构（podopener.json）
+后端接口文档：`http://localhost:8002/docs`。`services/db_proxy/` 默认端口是 `8001`，只有集成联调需要时才配置和启动。
 
-```json
-{
-  "machine_type": "podopener",
-  "version": "2.0",
-  "flows": {
-    "PACKING": {
-      "phases": [{ "key": "POD_PLACE", "label": "空POD放置", "duration_ms": 2000 }],
-      "event_to_phase": { "POD_PLACED": { "phase": "POD_PLACE", "anim": "pod.enter" } }
-    }
-  },
-  "animations": {
-    "pod.enter": { "action": "translate", "target": "pod", "axis": "x", "from": -120, "to": 0, "duration_ms": 2000 }
-  },
-  "targets": {
-    "pod": { "view_2d": "pod2dLayer", "view_3d": "podShell", "desc": "POD外壳" }
-  }
-}
+## 7. 怎么提交，不走丢
+
+### 分支和 PR
+
+```powershell
+git switch ver3
+git pull
+git switch -c feature/qianming-model-library-upload-check
 ```
 
-### 模型编辑器工作流
+分支名用 `feature/你的名字-模块-事情`；修 bug 用 `fix/你的名字-模块-事情`。例如 `fix/jishiqing-production-monitor-alarm-filter`。
 
-1. **模型管理** - 查看机台型号、创建新型号
-2. **动画配置** - 可视化编辑阶段/事件映射/动画原语/部件目标（4个子Tab）
-3. **动画调试** - 手动触发事件、阶段跳转、时间轴可视化
-4. **导出上线** - 导出JSON覆盖到configs目录，2D/3D视图自动加载
+- PR 的目标分支选 **`ver3`**，不要直接推 `ver3`。
+- **一个 PR 聚焦一个模块、一件事。** 不要把模型库、AI、部署脚本捆在一起。
+- 只改自己模块：由模块负责人安排人工审核。
+- 改到别人模块：PR 里说明原因，请对方人工审核。
+- 改到公共代码、内核、工程配置或拿不准的共享文件：必须请**洪佳琪最终审核**。
+- PR 描述按 [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) 填，自测结果不要只写“本地没问题”。
 
-## AI功能
+### CI 和人工审核都要看
 
-### AI中间适配层
+当前 `.github/workflows/ci.yml` 有三个检查：
 
-```
-用户输入 → ai_middleware.py → 规则引擎(本地) / Dify(云端) / n8n(编排)
-                              ↓
-                         上下文感知（当前机台/状态/事件）
-```
+1. `backend-tests`：安装后端依赖并运行指定回归 pytest。
+2. `frontend-build`：执行前端生产构建。
+3. `svg-motion-contract`：校验六台机台的 SVG / Motion 契约。
 
-- 本地规则引擎：Lot查询、机台状态、告警统计、温度趋势、产量统计、异常检测
-- Dify扩展：对话管理 + RAG知识库
-- n8n扩展：工具编排（Oracle/MES/RCMS/FDC）
+**CI 全绿仍需要人工审核。当前 `CODEOWNERS` 的规则全部保持注释，自动 Code Owner 审核尚未启用。** 所以要在 PR 里主动找对应负责人，不能等系统自动分配，也不能把“没人被自动指派”理解成无需审核。真实 GitHub 账号确认前，不要自行取消 CODEOWNERS 注释。
 
-### AI配置面板
+## 8. 测试命令
 
-- 系统Prompt自定义
-- 温度/最大Token/Top-P 调节
-- AI模式切换（规则引擎/Dify/n8n）
-- 语音播报开关
+以下命令都按仓库现有 CI、脚本和模块 README 写，路径以仓库根目录为起点。
 
-### 语音识别
+### 后端回归（CI 同款）
 
-- 前端：MediaRecorder API 录音 → webm/opus 格式上传
-- 后端：faster-whisper (CPU/int8) + imageio-ffmpeg 解码
-- 完全离线，国内网络可用
-- 模型：`openai/whisper-small`（通过 hf-mirror.com 镜像下载）
-
-## 数据库
-
-### 表结构（19张表）
-
-**5张Oracle对齐表**：
-| 表名 | 说明 |
-|------|------|
-| `dt_event_raw` | 原始事件表（RV报文，TIBRV来源） |
-| `dt_event_raw_cur` | 当前状态表（每台机台最新RV消息） |
-| `dt_event_std` | 标准化事件表 |
-| `dt_state_snapshot` | 状态快照表 |
-| `dt_alarm_event` | 告警事件表 |
-
-**14张扩展表**：
-machines, machine_events, lots, recipes, chamber_snapshots, oht_positions, ai_insights, alarms, dashboard_kpi, floors, floor_areas, tracks, vehicles, machine_model_configs, event_action_mappings
-
-### 切换到Oracle
-
-修改 `backend/config.py`：
-```python
-DATABASE_URL = "oracle+oracledb://username:password@host:port/service_name"
+```powershell
+.\backend\venv\Scripts\python.exe -m pytest tests/test_ai_middleware_regressions.py tests/test_model_draft_validation.py -q
 ```
 
-## PODOPENER 业务流程
+### 前端构建（CI 同款）
 
-### 穿入流程（PACKING）- 14个事件
-
-| 序号 | 事件名 | 说明 | 对应动画阶段 |
-|------|--------|------|-------------|
-| 1 | POD_PLACED | POD放置到位 | 空POD放置 |
-| 2 | COMPLETED_PORT_LOCK | 端口锁定完成 | POD锁定 |
-| 3 | READ_BATTERY | 读取电池状态 | 扫描标签 |
-| 4 | READ_TAG | 读取RFID标签 | 扫描标签 |
-| 5 | BATCH_INFO_FROM_ECUI | 获取批次信息 | 批次开始 |
-| 6 | OPEN_POD | 打开POD盖 | POD上升 |
-| 7 | REACH_STAGE | 机械臂到达平台 | POD到达平台 |
-| 8 | UI_CONFIRM | 操作员确认 | UI确认 |
-| 9 | CLOSE_POD | 关闭POD盖 | POD下降 |
-| 10 | ACK_UI_DOUBLECHECK | 二次确认 | UI二次确认 |
-| 11 | REACH_POS | 机械臂到位 | POD到位 |
-| 12 | WRITE_TAG | 写入RFID标签 | 写入标签 |
-| 13 | COMPLETED_PORT_UNLOCK | 端口解锁完成 | POD解锁 |
-| 14 | POD_REMOVED | POD移走 | 满POD移走 |
-
-### 脱出流程（UNPACKING）- 6个事件
-
-| 序号 | 事件名 | 说明 |
-|------|--------|------|
-| 1 | UI_CONFIRM | 操作员确认 |
-| 2 | CLOSE_POD | 关闭POD盖 |
-| 3 | REACH_POS | 机械臂到位 |
-| 4 | WRITE_TAG | 写入RFID标签 |
-| 5 | COMPLETED_PORT_UNLOCK | 端口解锁完成 |
-| 6 | POD_REMOVED | POD移走 |
-
-## 双模式实时驱动架构
-
-### 模式一：内部模拟器（Demo用）
-
-```
-simulator.py 定时器 → 写入DT_EVENT_RAW → db_poller轮询 → WebSocket → 前端动画
+```powershell
+cd frontend
+npm run build
 ```
 
-配置开关（config.py）：
-```python
-SIMULATION_ENABLED = True
-SIMULATION_INTERVAL_MS = 2000
+### 改了模型资产
+
+把文件名换成你实际修改的 SVG / Motion：
+
+```powershell
+python models/svg_kit/validate.py models/user/你的模型.svg models/user/你的模型.motion.json
 ```
 
-### 模式二：外部DB写入（生产/WinForm用）
+### 核心链路冒烟
 
-```
-WinForm模拟器/EAP系统 → 写入DT_EVENT_RAW → db_poller轮询 → WebSocket → 前端动画
-```
+先启动后端并确保开发 Oracle 数据就绪，再执行：
 
-配置开关（config.py）：
-```python
-DB_POLLER_ENABLED = True
-DB_POLLER_INTERVAL_MS = 1000
+```powershell
+.\backend\venv\Scripts\python.exe tests/smoke_baseline.py
 ```
 
-## 机台型号配置
+真实库读写测试位于 `tests/pytest/`，会使用真实 Oracle，不是无依赖单元测试；运行前先按该目录 README 和季世庆确认环境。AI 专属测试按 [AI 助手 README](frontend/src/modules/ai-assistant/README.md) 执行。
 
-| 型号ID | 型号名称 | 工艺类型 | 视图模式 | 机台实例 |
-|--------|---------|---------|---------|---------|
-| VPO-2200 | PODOPENER 开盖机 | PODOPENER | vpo/vpo3d | PODOPENER-1 |
-| TEL-DRM-UNIT | TEL DRM UNITY 刻蚀机 | ETCH | isometric | T01, T09, T11, T15 |
-| GENERIC-ETCH | 通用刻蚀机 | ETCH | threejs | 其他ETCH机台 |
+## 9. 还需要查什么
 
-## 楼层说明
-
-| 楼层 | 名称 | 机台数 |
-|------|------|--------|
-| 1F | 测试与分选区 | ~10台 |
-| 2F | 电梯与通道(办公区) | ~5台 |
-| 3F | 主生产楼层 | ~15台 |
-| 4F | 刻蚀区扩展 | ~12台 |
-
-## 文档
-
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) - **当前状态速览、遗留待办、开发里程碑**
-- [变更更改版记录.md](docs/变更更改版记录.md) - 逐版本变更与根因分析（排查问题先看这个）
-- [系统架构说明书.md](docs/系统架构说明书.md) - 系统架构详细说明
-- [新机台开发SOP_v3.md](docs/新机台开发SOP_v3.md) - 新机台开发标准流程
-- [OXE接入指南.md](docs/OXE接入指南.md) - OXE 机台接入说明
-- [对接规范文档.md](docs/对接规范文档.md) - 协作规范
-
-### AI 集成（Dify / n8n）
-
-- [集成总览](docs/integration/README.md) - 文档索引与阅读顺序
-- [AI 集成部署 SOP](docs/integration/DEPLOY_SOP.md) - 8 步手把手部署
-- [AI 能力说明与规划.md](docs/integration/AI能力说明与规划.md)
-- [fabtwin-ai-assistant.dsl.yml](docs/integration/dify/fabtwin-ai-assistant.dsl.yml) - Dify 助手应用模板
-- [fabtwin-tools-openapi.yaml](docs/integration/dify/fabtwin-tools-openapi.yaml) - Dify Custom Tool 的 OpenAPI Schema
-
-### 生产部署
-
-- [DEPLOY_SOP.md](docs/DEPLOY_SOP.md) - ⭐ 上线部署标准流程（在线打包 → 离线安装 → 离线启动）
-- [deploy/README.md](deploy/README.md) - 部署脚本功能分类速查
-- 旧文档已归档：[docs/archive/](docs/archive/)
-
-## 开发规范
-
-### 分支策略
-- `main` - 稳定版本
-- `ver1` / `ver2` - 版本迭代
-- `feature/*` - 功能分支
-- `bugfix/*` - 修复分支
-
-### 代码规范
-- Python: PEP8
-- JavaScript: ESLint + Prettier
-- Vue: Vue官方风格指南
-
-## License
-
-MIT
+- 部署任务：看 [deploy/README.md](deploy/README.md)。
+- 当前进度和历史验证：看 [PROJECT_STATUS.md](PROJECT_STATUS.md)，其中旧日期条目是历史记录，不作为当前目录依据。
+- `docs/archive/` 与 `docs/architecture/archive/` 是历史材料，**不是新人操作手册，也不要照着里面的旧路径开发**。

@@ -16,10 +16,15 @@ frontend/
   composables/ useMachinePlayback、useRunState、timeFormat、useAnimationConfig、useEventActionMapping
 ```
 
-后端对应：`routers/{history,events,lots,alarms,oht,oxe,recipes,machines,floors,rvmessages,debug}.py`、
-`services/{db_poller,simulator,ods}.py`；`sql/`、`deploy/`（dify/n8n 除外）；
+后端对应（当前真实目录）：
+`backend/modules/production_monitor/routes/{history,events,lots,alarms,oht,oxe,recipes,machines,floors,rvmessages,debug}.py`、
+`backend/modules/production_monitor/services/{db_poller,simulator,ods}.py`、
+`backend/modules/production_monitor/seeds/seed_vpo_motion.py`，以及根级生产种子 `backend/seed_oxe_test_data.py`；
+这两个生产种子都归季世庆。`sql/`、`deploy/`（dify/n8n 除外）沿用现有边界；
+根级 `backend/seed_data.py` 是公共入口，改动由洪佳琪最终审核。
 表 `dt_event_raw/_cur/_std、machine_events、alarms、lots、recipes、chamber_snapshots、machines、
 floors、floor_areas、oht_positions、tracks、vehicles、dashboard_kpi、dt_state_snapshot、dt_alarm_event`。
+旧平铺 routers/services 与兼容 shim 已移除，不要恢复旧路径。
 
 ## 公开接口
 

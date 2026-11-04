@@ -3,7 +3,7 @@
 > 最后更新：2026-09-23
 > 适用版本：ver2.10.21
 > 维护人：项目组
-> 文档位置：`docs/DEPLOY_SOP.md`（旧名 `deploy-sop.md` 已废弃）
+> 文档位置：`docs/sops/DEPLOY_SOP.md`（旧名 `deploy-sop.md` 已废弃）
 
 ---
 
@@ -59,7 +59,7 @@
 | 1521 | Oracle | 系统服务 | 必选 |
 | 8001 | db_proxy | `services\db_proxy\start.bat` | AI 用，**否则可省** |
 | 8002 | backend（FastAPI） | `deploy\start_iis.bat` | 必选 |
-| 5173/4173 | frontend（开发/直连模式预览） | `deploy\start-dev.bat` 或 `start_direct.ps1` | 直连模式用 |
+| 3000/4173 | frontend（开发/直连模式预览） | `deploy\start-dev.bat` 或 `start_direct.ps1` | 直连模式用 |
 | 80/443 | IIS | `iisreset` | 必选（生产） |
 | 5678 | n8n | `deploy\deploy_n8n.ps1 -Action start` | 可选 |
 | 8088 | Dify | `deploy\deploy_dify.ps1 -Action start` | 可选 |
@@ -100,7 +100,7 @@ Step 10.（可选）deploy_dify.ps1 + deploy_n8n.ps1
 
 ```powershell
 # 在 fab-twin-pro 项目根
-git checkout test1
+git switch ver3
 git pull
 ```
 
@@ -136,7 +136,7 @@ cd deploy
 
 **做了什么**（详见 [deploy/README.md §A](../../deploy/README.md)）：
 
-1. 复制 `backend/`（含源码、routers、services）
+1. 复制 `backend/`（含根公共入口、`modules/`、`core/`、`integrations/`）
 2. `pip download` 把 Python 依赖拉到 `backend\wheels\`
 3. 复制 `frontend\dist\` + `frontend\src\` + `frontend\node_modules\`
 4. 复制 `services\db_proxy/`（8001 端口的 db 转抛）
@@ -205,7 +205,7 @@ set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
 
 REM === 应用端口 ===
 set FABTWIN_BACKEND_PORT=8002
-set FABTWIN_FRONTEND_PORT=5173
+set FABTWIN_FRONTEND_PORT=3000
 ```
 
 > **ORACLE_DSN_TYPE 怎么选**：
@@ -238,13 +238,13 @@ sqlplus <user>/<pwd>@<dsn> @create_ai_tables.sql
 
 **会创建**：4 张 AI 表（`AI_CONFIGS` / `AI_PROVIDER_CONFIGS` / `AI_USAGE_LOGS` / `MACHINE_DIFY_CONFIGS`）+ 1 个默认 Provider（本地规则引擎）+ 7 个 Dify/N8N 键值对 + 4 个 MCP 配置。
 
-**为什么必须单独跑**：`backend/database.py:init_db()` 显式 exclude 了 3 张 AI 表（`ai_configs` / `ai_provider_configs` / `ai_usage_logs`），由 DBA 手动跑 SQL 建表+注 KV（详见 [sql/create_ai_tables.sql](../sql/create_ai_tables.sql) 头部注释）。第 4 张 `MACHINE_DIFY_CONFIGS` 虽然 ORM 会自动建（用 Identity 列），但**这条 SQL 会同时建它的 sequence + trigger**，让 SQL/手工 INSERT 走老接口也兼容。
+**为什么必须单独跑**：`backend/database.py:init_db()` 显式 exclude 了 3 张 AI 表（`ai_configs` / `ai_provider_configs` / `ai_usage_logs`），由 DBA 手动跑 SQL 建表+注 KV（详见 [sql/create_ai_tables.sql](../../sql/create_ai_tables.sql) 头部注释）。第 4 张 `MACHINE_DIFY_CONFIGS` 虽然 ORM 会自动建（用 Identity 列），但**这条 SQL 会同时建它的 sequence + trigger**，让 SQL/手工 INSERT 走老接口也兼容。
 
 **漏跑后果**：AI 配置中心、AI 助手、调用量统计全部 500；机台详情页 AI 自动路由不可用。
 
 #### 7.3 DT 时序表（无需手工）
 
-5 张 DT 表（`DT_EVENT_RAW` / `DT_EVENT_RAW_CUR` / `DT_EVENT_STD` / `DT_STATE_SNAPSHOT` / `DT_ALARM_EVENT`）由 backend 启动时 `database.init_db()` 通过 SQLAlchemy `Base.metadata.create_all()` 自动建（init_db.bat **不**调用 [sql/create_dt_tables.sql](../sql/create_dt_tables.sql)）。时序数据本身由生产系统写入，本机测试需要模拟数据时再单独执行该 SQL。
+5 张 DT 表（`DT_EVENT_RAW` / `DT_EVENT_RAW_CUR` / `DT_EVENT_STD` / `DT_STATE_SNAPSHOT` / `DT_ALARM_EVENT`）由 backend 启动时 `database.init_db()` 通过 SQLAlchemy `Base.metadata.create_all()` 自动建（init_db.bat **不**调用 [sql/create_dt_tables.sql](../../sql/create_dt_tables.sql)）。时序数据本身由生产系统写入，本机测试需要模拟数据时再单独执行该 SQL。
 
 ### Step 8. 部署 IIS 站点（仅新机器）
 
@@ -437,7 +437,7 @@ set ORACLE_CLIENT_DIR=C:\app\client\...  REM 仅 sid 模式必填
 
 REM === 应用端口 ===
 set FABTWIN_BACKEND_PORT=8002
-set FABTWIN_FRONTEND_PORT=5173
+set FABTWIN_FRONTEND_PORT=3000
 
 REM === AI（可选）===
 set DIFY_PORT=8088
@@ -460,10 +460,10 @@ set DB_PROXY_PORT=8001
 
 - 脚本功能分类：[`deploy/README.md`](../../deploy/README.md)
 - 系统架构总览：[`系统架构说明书.md`](../specs/系统架构说明书.md)
-- 架构图：[`FabTwin_系统架构图.svg`](./FabTwin_系统架构图.svg)
+- 历史架构图（仅归档参考，非当前结构依据）：[`docs/architecture/archive/`](../architecture/archive/)
 - AI 集成部署：[`docs/integration/DEPLOY_SOP.md`](../integration/DEPLOY_SOP.md)
-- 业务文档（机台接入、新机台开发）：[`docs/business/`](./business/)
-- 归档历史：[`docs/archive/`](./archive/)
+- 业务文档（机台接入、新机台开发）：[`docs/business/`](../business/)
+- 归档历史：[`docs/archive/`](../archive/)
 
 ---
 
