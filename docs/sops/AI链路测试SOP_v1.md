@@ -1,6 +1,6 @@
 # AI 智能化「数据真实」测试 SOP v1
 
-> 编写日期：2026-10-30　|　适用分支：`feature/full-unified`（基线 `test3@8a74590`）
+> 编写日期：2026-10-30　|　**2026-11-04 复核**：路线 A/B/C 在本机全部复测通过（21/21、29/29、20/20 + n8n 7/7）；下表「已知遗留」中两条 P0 已在 ver3 修复并标注；示例端口 8003 可换成实际后端端口　|　适用分支：`feature/full-unified`（基线 `test3@8a74590`）
 >
 > **这份 SOP 要解决的事**：怎么证明 AI 回答里的每个数字，都真的来自 Oracle，而不是模型编的。
 > 好消息是：**验证这件事不需要先把 dify / n8n 搭起来**——替身服务可以在本地替代它们，
@@ -153,7 +153,7 @@ AI 现在会自己调 `query_fab_data` 写 SQL 取数，而不是瞎答或回答
 
 | 优先级 | 问题 | 位置 |
 |---|---|---|
-| P0 | `user_role` 由请求体决定，任意登录用户可改字段提权触发 n8n/导出/工单 | `routers/ai.py:59,80` 应用服务端 `current_user.role` 覆盖 |
+| ~~P0~~ ✅已修复 | `user_role` 提权 | 已改为应用服务端 `current_user.role` 覆盖（2026-10-30 c282491，`modules/ai_assistant/routes/ai.py`） |
 | P0 | 多个生产数据只读端点零鉴权 | `alarms/events/history/lots/oht/oxe/recipes` 的 GET 端点 |
 | P1 | ORM 与物理库漂移严重：`models.Machine` 声明 `type/status`，真实表是 `PROCESS_TYPE/STATE`。已用物理库反射兜住 AI 字典，但**写入侧仍按 ORM**，存在隐患 | `models.py` vs 物理 `MACHINES` |
 | P1 | `ai_usage_logs` 表在物理库不存在，用量审计落盘失败 | 需补表或改 ORM |
