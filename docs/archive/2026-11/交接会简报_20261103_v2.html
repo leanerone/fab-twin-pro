@@ -83,7 +83,7 @@
   <div class="chain">
     <div class="node">浏览器<br><small>5173 · modules/ 四模块</small></div>
     <div class="arr">⇄</div>
-    <div class="node" style="border-color:var(--accent)">FabTwin 后端<br><small>8002 · routers(16) + services(20) + main</small></div>
+    <div class="node" style="border-color:var(--accent)">FabTwin 后端<br><small>8002 · modules 四业务 + core + integrations</small></div>
     <div class="arr">⇄</div>
     <div class="node">Oracle XE<br><small>1521 · xepdb1 · 29 张表</small></div>
   </div>
@@ -166,65 +166,64 @@
 
 <!-- S4 后端文件布局 -->
 <div class="slide">
-  <h2><span class="bar"></span>后端文件布局：平铺但归属清晰（按人着色）</h2>
-  <p class="take"><b>后端是平铺的（团队决策：搬迁风险大于收益），但每个文件都有唯一主人。</b>颜色 = 负责人。</p>
+  <h2><span class="bar"></span>后端文件布局：已按业务模块化（与前端对称）</h2>
+  <p class="take"><b>2026-11-04 起，后端也按业务模块归位——前后端目录结构对称，每个模块 routes/services/seeds 自包含。颜色 = 负责人。</b></p>
   <div class="tree" style="margin-top:4px;">
     <div class="root">backend/</div>
     <div class="cols">
-      <div class="col" style="flex:1.15">
-        <div class="owner" style="background:var(--c-ji)">routers/ · 季世庆（11 个数据链路）</div>
+      <div class="col" style="flex:1.1">
+        <div class="owner" style="background:var(--c-ji)">modules/production_monitor · 季世庆</div>
         <div class="stack">
+          <div class="file">routes/ ×11 <small>数据链路</small></div>
           <div class="file">floors 847 · machines 449 · history 611</div>
           <div class="file">lots 212 · alarms 131 · events 131 · oxe 159</div>
-          <div class="file">rvmessages 200 <small>RV注入+广播</small> · debug 94 <small>动画联调注入</small></div>
-          <div class="file">recipes 51 · oht 49</div>
-          <div class="file" style="color:var(--dim)">services/db_poller 319 · simulator 342 · ods 144</div>
-          <div class="file" style="color:var(--dim)">seed_data 1048 · seed_oxe_test_data · sql_runner · sql/</div>
+          <div class="file">rvmessages 200 · debug 94 · recipes 51 · oht 49</div>
+          <div class="file">services/ db_poller 319 · simulator 342 · ods 144</div>
+          <div class="file">seeds/ seed_oxe_test_data 308</div>
+          <div class="file" style="color:var(--dim)">seed_data 1048 · sql_runner · sql/ · deploy/（dify/n8n 外）</div>
         </div>
       </div>
       <div class="col" style="flex:1.1">
-        <div class="owner" style="background:var(--c-zhu)">routers/ai + services/ai/ · 朱明钊</div>
+        <div class="owner" style="background:var(--c-zhu)">modules/ai_assistant · 朱明钊</div>
         <div class="stack">
-          <div class="file hl">routers/ai.py 722 <small>chat/stream/config/mcp/usage</small></div>
-          <div class="file hl">services/ai/middleware.py 910 <small>四路分发</small></div>
-          <div class="file hl">services/ai/tools.py 1468 <small>9 固定工具+query_fab_data</small></div>
-          <div class="file">services/ai/config_store 914 · schema 505</div>
-          <div class="file">services/ai/sql 335 <small>安全围栏</small> · sql_tools 127</div>
-          <div class="file">services/ai/mcp_client 310 · usage 306 · conversations 130</div>
-          <div class="file" style="color:var(--dim)">speech_service 126 · tests/ai/ 四套</div>
+          <div class="file hl">routes/ai.py 722 <small>chat/stream/config/mcp/usage</small></div>
+          <div class="file hl">services/middleware.py 910 <small>四路分发</small></div>
+          <div class="file hl">services/tools.py 1468 <small>9 固定工具+query_fab_data</small></div>
+          <div class="file">services/config_store 914 · schema 505</div>
+          <div class="file">services/sql 335 <small>安全围栏</small> · sql_tools 127</div>
+          <div class="file">services/mcp_client 310 · usage 306 · conversations 130</div>
+          <div class="file">services/providers/ ×3 · speech_service 126</div>
         </div>
       </div>
       <div class="col" style="flex:0.95">
-        <div class="owner" style="background:var(--c-qian)">模型库 · 钱鸣</div>
+        <div class="owner" style="background:var(--c-qian)">modules/model_library · 钱鸣</div>
         <div class="stack">
-          <div class="file">routers/models.py 339 <small>机型配置 CRUD</small></div>
-          <div class="file">routers/uploads.py 755 <small>上传+部件提取</small></div>
+          <div class="file">routes/models.py 339 <small>机型配置 CRUD</small></div>
+          <div class="file">routes/uploads.py 755 <small>上传+部件提取</small></div>
           <div class="file">services/html_parser.py 266</div>
-          <div class="file">seed_amat_metsput.py 132</div>
-          <div class="file">scripts/sync_*.py ×3 <small>入库正道</small></div>
-          <div class="file" style="color:var(--dim)">models/ + uploads/models/ 资产</div>
+          <div class="file">seeds/seed_amat_metsput.py 132</div>
+          <div class="file">seeds/seed_oxe_motion.py</div>
+          <div class="file" style="color:var(--dim)">scripts/sync_*.py ×3 入库正道</div>
         </div>
       </div>
       <div class="col" style="flex:1">
-        <div class="owner" style="background:var(--c-hong)">内核 · 洪佳琪</div>
+        <div class="owner" style="background:var(--c-hong)">system_admin + core · 洪佳琪</div>
         <div class="stack">
-          <div class="file">main.py 337 <small>入口/16路由/WS/启动</small></div>
+          <div class="file">system_admin/ 登录 · 用户管理</div>
+          <div class="file">main.py 337 <small>入口/模块路由注册/WS</small></div>
           <div class="file">config · database 332 · models 568 · schemas 272</div>
-          <div class="file">routers/auth 327 · users 395</div>
-          <div class="file">services/security 117 · realtime 96 · cache 273</div>
-          <div class="file">services/perf 163 · time_utils 167 · core/</div>
-          <div class="file" style="color:var(--dim)">routers/auth+users、stores/router/api 也归洪佳琪</div>
+          <div class="file">core/services/ security 117 · realtime 96</div>
+          <div class="file">cache 273 · perf 163 · time_utils 167</div>
+          <div class="file" style="color:var(--dim)">seed_data.py 根级公共种子入口</div>
         </div>
       </div>
-      <div class="col" style="flex:0.75">
-        <div class="owner" style="background:var(--c-zhang)">Dify/n8n · 张亮</div>
+      <div class="col" style="flex:0.8">
+        <div class="owner" style="background:var(--c-zhang)">integrations/dify_n8n · 张亮</div>
         <div class="stack">
           <div class="file">services/db_proxy/ <small>8001 只读代理</small></div>
-          <div class="file">scripts/generate_dify_dsl / generate_n8n_workflows</div>
-          <div class="file">scripts/check_dify_db · test_dify_direct</div>
-          <div class="file">backend/n8n_docker_setup.py</div>
-          <div class="file">backend/n8n_fix_alarm_node.py</div>
-          <div class="file">backend/diagnose_dify.py 462</div>
+          <div class="file">diagnose_dify.py 462</div>
+          <div class="file">n8n_docker_setup.py</div>
+          <div class="file">n8n_fix_alarm_node.py</div>
           <div class="file" style="color:var(--dim)">docs/integration/ 可导入资产</div>
         </div>
       </div>
@@ -237,7 +236,7 @@
     <span><i style="background:var(--c-hong)"></i>洪佳琪·内核+系统管理</span>
     <span><i style="background:var(--c-zhang)"></i>张亮·Dify/n8n</span>
   </div>
-  <div class="caption">⚠️ services/ 根下的 ai_middleware / ai_schema / ai_sql / ai_sql_tools / mcp_client / mcp_registry 是拆包兼容 <b>shim（勿删）</b>；完整逐行版见 <b>docs/specs/后端文件交接地图_20261103.md</b>。</div>
+  <div class="caption">传输模块对称：前端 <b>modules/ 四模块</b> ↔ 后端 <b>modules/ 四业务</b>；公共件 前端 platform/ ↔ 后端 core/。⚠️ 旧平铺 routers/、services/（含 AI 兼容 shim）已删除，细节见 <b>README.md 第 2/3 节</b>。</div>
 </div>
 
 <!-- S5 事件驱动链路 -->
@@ -276,7 +275,7 @@
   <div class="chain">
     <div class="node">提问<br><small>前端 SSE / API</small></div>
     <div class="arr">→</div>
-    <div class="node">ai/ 中间件<br><small>四路分发 · 鉴权<br>user_role 服务端覆盖</small></div>
+    <div class="node">modules/ai_assistant<br><small>四路分发 · 鉴权<br>user_role 服务端覆盖</small></div>
     <div class="arr">→</div>
     <div class="node">数据字典注入<br><small>物理库反射<br>敏感表不可见</small></div>
     <div class="arr">→</div>
