@@ -54,7 +54,7 @@ def query_fab_data(db, sql: str = "", row_limit: int = 200) -> Dict[str, Any]:
 
 def describe_fab_table(db, table_name: str = "") -> Dict[str, Any]:
     """查询某张表的全部字段定义，用于写 SQL 前确认列名、类型与业务含义。"""
-    from .ai_schema import schema_catalog
+    from .schema import schema_catalog
 
     if not table_name:
         names = schema_catalog.table_names()

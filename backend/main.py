@@ -42,6 +42,7 @@ from modules.production_monitor.routes import (
 from modules.production_monitor.routes.rvmessages import router as rv_router
 from modules.system_admin.routes import auth, users
 from modules.ai_assistant.routes import ai
+from modules.ai_assistant.routes import ai_tools_bridge
 from core.services.realtime import manager
 from modules.production_monitor.services.simulator import start_simulator
 from modules.production_monitor.services.db_poller import start_db_poller
@@ -211,6 +212,7 @@ app.include_router(events.router, tags=["events"])
 app.include_router(lots.router, tags=["lots"])
 app.include_router(alarms.router, tags=["alarms"])
 app.include_router(ai.router, tags=["ai"])
+app.include_router(ai_tools_bridge.router, tags=["ai-tools"])
 app.include_router(oht.router, tags=["oht"])
 app.include_router(recipes.router, tags=["recipes"])
 app.include_router(floors.router, tags=["floors"])
