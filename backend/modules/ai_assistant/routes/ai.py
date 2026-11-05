@@ -60,6 +60,7 @@ def ai_chat(req: AIChatRequest, db: Session = Depends(get_db), user: User = Depe
         # （此前任意登录用户改 body 字段即可冒充 admin 触发 n8n / 导出 / 工单）
         user_role=user.role,
         config_id=req.config_id,
+        force_provider=req.force_provider,
     )
     return AIChatResponse(**result)
 
@@ -81,6 +82,7 @@ async def ai_chat_stream(req: AIChatRequest, user: User = Depends(get_current_us
             context=req.context,
             user_role=user.role,  # 同 /chat：服务端角色覆盖
             config_id=req.config_id,
+            force_provider=req.force_provider,
         ),
         media_type="text/event-stream",
         headers={

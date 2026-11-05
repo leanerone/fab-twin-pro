@@ -122,10 +122,12 @@ watch(() => props.prefillQuestion, (newQ) => {
 // 流式开关（T4）：默认开；localStorage.fabtwin_ai_stream = '0' 切回旧整段返回
 const useStream = localStorage.getItem('fabtwin_ai_stream') !== '0'
 
-async function ask(questionText) {
+async function ask(questionText, opts = {}) {
   const q = (questionText || input.value || '').trim()
   if (!q || loading.value) return
   input.value = ''
+  // T2 2026-11-06：换个引擎重答——force_provider 由重试按钮传入（'dify' | 'llm'）
+  const forceProvider = opts.forceProvider || null
 
   // 用户消息
   messages.value.push({
@@ -155,6 +157,7 @@ async function ask(questionText) {
         session_id: sessionId.value,
         machine_id: props.machineId,
         user_role: 'user',
+        force_provider: forceProvider,
       }, {
         onChunk: (t) => {
           msg.content += t
@@ -175,6 +178,7 @@ async function ask(questionText) {
           msg.tool_calls = evt.tool_calls
           msg.sources = evt.sources
           msg.provider_name = evt.provider_name
+          msg.provider = evt.provider
           msg.model = evt.model
           msg.config_id = evt.config_id
           msg.usage = evt.usage
@@ -204,6 +208,7 @@ async function ask(questionText) {
       session_id: sessionId.value,
       machine_id: props.machineId,
       user_role: 'user',
+      force_provider: forceProvider,
     })
 
     sessionId.value = resp.session_id || sessionId.value
@@ -217,6 +222,7 @@ async function ask(questionText) {
       tool_calls: resp.tool_calls,
       sources: resp.sources,
       provider_name: resp.provider_name,
+      provider: resp.provider,
       model: resp.model,
       config_id: resp.config_id,
       usage: resp.usage,
@@ -268,6 +274,26 @@ function onSpeechError(msg) {
 // 跳转到回放时间（T4 统一契约：与悬浮球一致传对象 { machine_id, timestamp }）
 function jumpToTime(ts) {
   emit('jump', { machine_id: props.machineId || '', timestamp: ts })
+}
+
+// T2 2026-11-06：换个引擎重答
+// 引擎选择：上一答走 Dify 系（dify/机台专属）→ 换本地 LLM；其余 → 换 Dify
+function nextForceProvider(m) {
+  return m.provider === 'dify' ? 'llm' : 'dify'
+}
+
+async function retryAsk(m) {
+  if (loading.value) return
+  const idx = messages.value.indexOf(m)
+  let q = ''
+  for (let i = idx - 1; i >= 0; i--) {
+    if (messages.value[i] && messages.value[i].role === 'user') {
+      q = messages.value[i].content
+      break
+    }
+  }
+  if (!q) return
+  await ask(q, { forceProvider: nextForceProvider(m) })
 }
 
 function scrollToBottom() {
@@ -334,6 +360,12 @@ function clearChat() {
             <span v-if="m.usage && m.usage.total_tokens" class="token-badge" title="输入/输出/总Token">
               {{ m.usage.prompt_tokens || 0 }} / {{ m.usage.completion_tokens || 0 }} / {{ m.usage.total_tokens }} token
             </span>
+            <button
+              v-if="!m.streaming"
+              class="retry-engine-btn"
+              :title="'当前引擎：' + m.provider_name + '，换' + (m.provider === 'dify' ? '本地 LLM' : 'Dify') + '重新回答'"
+              @click="retryAsk(m)"
+            >⇄ 换引擎重答</button>
           </div>
         </div>
       </template>
@@ -631,6 +663,20 @@ function clearChat() {
   background: rgba(255,255,255,0.05);
   padding: 2px 6px;
   border-radius: 4px;
+}
+/* T2：换引擎重答按钮 */
+.retry-engine-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.retry-engine-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .token-badge {
   font-size: 10px;

@@ -320,10 +320,12 @@ function closeChat() {
 // 流式开关（T4）：默认开；localStorage.fabtwin_ai_stream = '0' 切回旧整段返回
 const useStream = localStorage.getItem('fabtwin_ai_stream') !== '0'
 
-async function sendMessage(text) {
+async function sendMessage(text, opts = {}) {
   const q = (text || input.value || '').trim()
   if (!q || loading.value) return
   input.value = ''
+  // T2 2026-11-06：换个引擎重答——force_provider 由重试按钮传入（'dify' | 'llm'）
+  const forceProvider = opts.forceProvider || null
 
   messages.value.push({
     role: 'user',
@@ -353,6 +355,7 @@ async function sendMessage(text) {
         user_role: 'user',
         config_id: currentConfig.value.config_id,
         machine_id: currentMachineId.value || null,
+        force_provider: forceProvider,
       }, {
         onChunk: (t) => {
           msg.content += t
@@ -373,6 +376,7 @@ async function sendMessage(text) {
           msg.tool_calls = evt.tool_calls
           msg.sources = evt.sources
           msg.provider_name = evt.provider_name
+          msg.provider = evt.provider
           msg.model = evt.model
           msg.config_id = evt.config_id
           msg.usage = evt.usage
@@ -403,6 +407,7 @@ async function sendMessage(text) {
       user_role: 'user',
       config_id: currentConfig.value.config_id,
       machine_id: currentMachineId.value || null,
+      force_provider: forceProvider,
     })
 
     sessionId.value = resp.session_id || sessionId.value
@@ -418,6 +423,7 @@ async function sendMessage(text) {
       tool_calls: resp.tool_calls,
       sources: resp.sources,
       provider_name: resp.provider_name,
+      provider: resp.provider,
       model: resp.model,
       config_id: resp.config_id,
       usage: resp.usage,
@@ -435,6 +441,26 @@ async function sendMessage(text) {
     await nextTick()
     scrollToBottom()
   }
+}
+
+// T2 2026-11-06：换个引擎重答（与 AiAssistant 同一契约）
+// 上一答走 Dify 系 → 换本地 LLM；其余 → 换 Dify
+function nextForceProvider(m) {
+  return m.provider === 'dify' ? 'llm' : 'dify'
+}
+
+async function retryAsk(m) {
+  if (loading.value) return
+  const idx = messages.value.indexOf(m)
+  let q = ''
+  for (let i = idx - 1; i >= 0; i--) {
+    if (messages.value[i] && messages.value[i].role === 'user') {
+      q = messages.value[i].content
+      break
+    }
+  }
+  if (!q) return
+  await sendMessage(q, { forceProvider: nextForceProvider(m) })
 }
 
 function onSpeechResult(text) {
@@ -717,6 +743,12 @@ function jumpToTime(payload, machineOnline = null) {
                 <span v-if="msg.usage && msg.usage.total_tokens" class="token-badge" title="输入/输出/总Token">
                   {{ msg.usage.prompt_tokens || 0 }} / {{ msg.usage.completion_tokens || 0 }} / {{ msg.usage.total_tokens }} token
                 </span>
+                <button
+                  v-if="msg.provider !== '系统' && !msg.streaming"
+                  class="retry-engine-btn"
+                  :title="'当前引擎：' + msg.provider_name + '，换' + (msg.provider === 'dify' ? '本地 LLM' : 'Dify') + '重新回答'"
+                  @click="retryAsk(msg)"
+                >⇄ 换引擎重答</button>
               </div>
             </div>
           </div>
@@ -1472,6 +1504,20 @@ function jumpToTime(payload, machineOnline = null) {
   background: rgba(255,255,255,0.05);
   padding: 2px 6px;
   border-radius: 4px;
+}
+/* T2：换引擎重答按钮 */
+.retry-engine-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.retry-engine-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .token-badge {
   font-size: 10px;

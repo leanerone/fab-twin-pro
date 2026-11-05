@@ -98,6 +98,7 @@ class AIChatRequest(BaseModel):
     user_role: Optional[str] = "user"  # user / admin
     stream: Optional[bool] = False
     config_id: Optional[int] = None  # 指定使用的AI配置ID（None则使用默认配置）
+    force_provider: Optional[str] = None  # T2 2026-11-06: 强制引擎 "dify"|"llm"|"local"（前端"换个引擎再答"）
 
 
 class AITableData(BaseModel):
