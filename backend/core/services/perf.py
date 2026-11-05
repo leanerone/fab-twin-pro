@@ -20,6 +20,7 @@ import os
 import threading
 import time
 from collections import defaultdict, deque
+from contextvars import ContextVar
 from typing import Deque, Dict
 
 from fastapi import APIRouter
@@ -38,8 +39,11 @@ _samples: Dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=SAMPLE_LIMI
 _meta: Dict[str, Dict[str, float]] = defaultdict(lambda: {"count": 0, "errors": 0, "last_ms": 0.0})
 # 慢查询最近 20 条
 _slow_sql: Deque[Dict] = deque(maxlen=20)
-# 每请求 SQL 计数（线程本地，中间件与 SQL 钩子共享）
-_tls = threading.local()
+# 每请求 SQL 计数（R3 2026-11-06：threading.local → ContextVar + 可变 dict。
+# 旧实现 sql 计数恒为 0：中间件在事件循环线程 set，SQL 钩子在 anyio worker 线程自增——
+# threading.local 跨线程不可见；ContextVar 虽会随 to_thread 复制上下文，但 dict 是
+# 共享对象引用，worker 里的 += 对中间件侧同样可见）
+_req_ctx: ContextVar = ContextVar("fabtwin_perf_req", default=None)
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
@@ -108,7 +112,8 @@ def install(app) -> None:
     @app.middleware("http")
     async def _perf_middleware(request, call_next):
         start = time.perf_counter()
-        _tls.sql_count = 0
+        state = {"sql_count": 0}
+        _req_ctx.set(state)
         status = 500
         try:
             response = await call_next(request)
@@ -122,7 +127,7 @@ def install(app) -> None:
             if ms >= SLOW_REQUEST_MS:
                 logger.warning(
                     "[perf] 慢请求 %s %.0fms (status=%s, sql=%d)",
-                    key, ms, status, getattr(_tls, "sql_count", 0),
+                    key, ms, status, (state or {}).get("sql_count", 0),
                 )
 
 
@@ -135,7 +140,9 @@ def install_sql_timing(engine) -> None:
     @event.listens_for(engine, "before_cursor_execute")
     def _before(conn, cursor, statement, parameters, context, executemany):
         conn.info.setdefault("query_start", []).append(time.perf_counter())
-        _tls.sql_count = getattr(_tls, "sql_count", 0) + 1
+        state = _req_ctx.get()
+        if state is not None:
+            state["sql_count"] += 1
 
     @event.listens_for(engine, "after_cursor_execute")
     def _after(conn, cursor, statement, parameters, context, executemany):

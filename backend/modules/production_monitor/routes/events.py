@@ -64,6 +64,16 @@ def get_events(
 
     events = q.limit(5000).all()
 
+    # R3 2026-11-06：静默截断显性化——不带 date 且命中 5000 上限时，
+    # 说明该机台窗口内事件超过回放拉取上限（旧版无任何提示，回放会缺数据无感知）。
+    # 前端推荐走 page 分页路径（真分页无上限）。
+    if len(events) == 5000:
+        import logging as _logging
+        _logging.getLogger("fabtwin.events").warning(
+            "机台 %s 无date查询命中5000条上限，历史回放数据可能不完整（建议走 page 分页）",
+            machine_id,
+        )
+
     if date:
         filtered = []
         for ev in events:

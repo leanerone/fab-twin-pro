@@ -382,6 +382,9 @@ def update_external_link(
     m.use_external_url = 1 if payload.use_external_url else 0
     db.commit()
     db.refresh(m)
+    # R3 2026-11-06：机台写路径主动失效状态/KPI缓存（此前要等60s TTL自然过期）
+    machine_state_ttl.invalidate()
+    kpi_stats_ttl.invalidate()
     return m
 
 
@@ -417,6 +420,9 @@ def update_machine(
         m.chamber_count = payload.chamber_count
     db.commit()
     db.refresh(m)
+    # R3 2026-11-06：机台写路径主动失效状态/KPI缓存
+    machine_state_ttl.invalidate()
+    kpi_stats_ttl.invalidate()
     return m
 
 
@@ -446,4 +452,7 @@ def delete_machine_record(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除失败：{e}")
+    # R3 2026-11-06：机台写路径主动失效状态/KPI缓存
+    machine_state_ttl.invalidate()
+    kpi_stats_ttl.invalidate()
     return {"message": f"机台 {machine_id} 已彻底删除", "id": machine_id}
