@@ -179,7 +179,10 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         try:
             # 管理员显式自动化指令统一前置到 N8N，避免 custom/OpenAI 路由绕过；
             # 命中后直接返回，不再进入本地规则或 LLM，确保只触发一次。
-            if user_role == "admin" and self._is_n8n_command(question.lower()):
+            # T1 2026-11-06：把「是否有智能引擎可用」传给识别器——有 Dify/LLM 接得住时，
+            # 弱关键词（批量/自动/单独的导出推送）不再抢答成 n8n 工作流。
+            _smart_ready = self._smart_route_ready(route_provider, machine_dify)
+            if user_role == "admin" and self._is_n8n_command(question.lower(), llm_ready=_smart_ready):
                 execution_log.append({"step": "match_intent", "intent": "n8n_command"})
                 result = self._trigger_n8n_workflow(
                     question, machine_id, user_role,
@@ -897,10 +900,47 @@ Lot ID 格式说明：
                 return lot
         return None
 
-    def _is_n8n_command(self, question: str) -> bool:
-        """判断是否为N8N自动化指令"""
-        keywords = ["导出", "报表", "工单", "批量", "自动", "推送", "生成报告", "生成工单"]
-        return any(k in question for k in keywords)
+    # ==================== N8N 指令识别（T1 2026-11-06 收紧） ====================
+    # 旧实现 8 个宽泛关键词（导出/报表/工单/批量/自动/推送/...）只要命中一个就直通 n8n，
+    # 管理员随口一句"批量看下这几台的告警"也会被抢答成工作流、绕过 LLM 智能路由。
+    # 新设计三层：
+    #   ① 显式前缀  n8n: / n8n：  → 无条件命中（管理员明确指令）
+    #   ② 强匹配    动词+名词共现（导出/生成/推送 … 报表/报告/工单/日报/周报）
+    #   ③ 弱关键词  仅在「没有任何智能引擎可用」时兜底命中（保持无 LLM 场景旧体验）
+    _N8N_EXPLICIT_PREFIXES = ("n8n:", "n8n：")
+    _N8N_STRONG_VERBS = ("导出", "生成", "推送", "发送", "发一下", "发个")
+    _N8N_STRONG_NOUNS = ("报表", "报告", "工单", "日报", "周报")
+    _N8N_WEAK_KEYWORDS = ("导出", "报表", "工单", "批量", "自动", "推送", "生成报告", "生成工单")
+
+    def _is_n8n_command(self, question: str, llm_ready: bool = False) -> bool:
+        """判断是否为 N8N 自动化指令（仅 admin 会走到这里，角色检查在调用方）
+
+        Args:
+            question: 用户问题（建议已 lower）
+            llm_ready: 是否有智能引擎可用（机台Dify/全局Dify/OpenAI兼容LLM）。
+                       有智能引擎时弱关键词不再直通 n8n，交给正常路由。
+        """
+        q = (question or "").strip().lower()
+        if not q:
+            return False
+        if any(q.startswith(p) for p in self._N8N_EXPLICIT_PREFIXES):
+            return True
+        has_verb = any(v in q for v in self._N8N_STRONG_VERBS)
+        has_noun = any(n in q for n in self._N8N_STRONG_NOUNS)
+        if has_verb and has_noun:
+            return True
+        if not llm_ready and any(k in q for k in self._N8N_WEAK_KEYWORDS):
+            return True
+        return False
+
+    def _smart_route_ready(self, route_provider: str, machine_dify: Optional[Dict]) -> bool:
+        """当前请求是否有智能引擎接得住（用于 n8n 弱关键词让路判断）"""
+        if machine_dify:
+            return True
+        if route_provider in ("dify", "hybrid"):
+            return True
+        return route_provider in {"openai", "zhipu", "deepseek", "qwen", "custom"} \
+            and bool(self.base_url) and bool(self.api_key)
 
     # ==================== Provider: OpenAI 兼容模型 ====================
 
