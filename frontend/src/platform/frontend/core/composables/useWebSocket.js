@@ -47,7 +47,9 @@ function parseVfeiEvent(rawEvent) {
   event.event_category = VFEI_EVENT_TYPES[evtName] || 'other'
   
   // 解析告警
-  if (evtName === 'EC_ALARM_REPORT' || event.event_type === 'ALARM') {
+  // R8 2026-11-06 修复：普通 ALARM_REPORT 事件此前不置 is_alarm（只认 EC_ALARM_REPORT），
+  // 依赖 is_alarm 的消费方（告警通知等）对最常见的 ALARM_REPORT 全部漏判
+  if (evtName === 'ALARM_REPORT' || evtName === 'EC_ALARM_REPORT' || event.event_type === 'ALARM') {
     event.is_alarm = true
     event.alarm_id = event.alarm_id || event.alarm_code || ''
     event.alarm_text = event.alarm_text || event.description || ''

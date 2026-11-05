@@ -23,7 +23,9 @@ from collections import defaultdict, deque
 from contextvars import ContextVar
 from typing import Deque, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from modules.system_admin.routes.auth import get_current_user
 
 logger = logging.getLogger("fabtwin.perf")
 
@@ -45,7 +47,8 @@ _slow_sql: Deque[Dict] = deque(maxlen=20)
 # 共享对象引用，worker 里的 += 对中间件侧同样可见）
 _req_ctx: ContextVar = ContextVar("fabtwin_perf_req", default=None)
 
-router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+# R7 2026-11-06：性能快照含各路由延迟画像与慢 SQL 原文（暴露表名列名），补齐登录鉴权
+router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
 
 def _percentile(values, pct: float) -> float:

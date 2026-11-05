@@ -2,7 +2,10 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api'
+import { useWebSocket } from '@/platform/frontend/core/composables/useWebSocket'
 import VoiceInput from './VoiceInput.vue'
+
+const ws = useWebSocket()
 
 const STORAGE_KEY = 'fabtwin_ai_floating_session'
 const POSITION_KEY = 'fabtwin_ai_floating_pos'
@@ -103,14 +106,46 @@ onMounted(() => {
   // 加载当前AI配置
   loadCurrentConfig()
 
+  // R8 2026-11-06：主动告警通知——订阅 WS 原始事件流，告警发生且对话未展开时
+  // 球上挂未读徽标 + 右下角轻提示（从"人问 AI 答"向"AI 主动报"迈第一步）
+  ws.subscribeRawEvent(onRawAlarmEvent)
+
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)
 })
 
 onUnmounted(() => {
+  ws.unsubscribeRawEvent(onRawAlarmEvent)
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
 })
+
+// ==================== 主动告警通知（R8 2026-11-06） ====================
+
+const alarmUnread = ref(0)
+const alarmToasts = ref([])
+let _alarmToastSeq = 0
+
+function onRawAlarmEvent(evt) {
+  if (!evt || !evt.is_alarm) return
+  // 对话窗口展开中：用户正在看 AI，不打扰（消息流里能看到）
+  if (chatOpen.value && !minimized.value) return
+  alarmUnread.value++
+  const id = ++_alarmToastSeq
+  const mid = evt.machine_id || evt.tool_id || ''
+  const text = evt.alarm_text || evt.alarm_id || '告警'
+  alarmToasts.value.push({ id, mid, text: `${mid} ${String(text).slice(0, 40)}` })
+  if (alarmToasts.value.length > 3) alarmToasts.value.shift()
+  setTimeout(() => {
+    alarmToasts.value = alarmToasts.value.filter(t => t.id !== id)
+  }, 8000)
+}
+
+function openChatFromAlarm() {
+  alarmUnread.value = 0
+  if (minimized.value) restoreChat()
+  else if (!chatOpen.value) toggleChat()
+}
 
 // ==================== AI配置管理 ====================
 
@@ -589,9 +624,27 @@ function jumpToTime(payload, machineOnline = null) {
     <div class="ball-inner">
       <span class="ball-icon">🤖</span>
       <span class="ball-pulse"></span>
+      <!-- R8：未读告警徽标 -->
+      <span v-if="alarmUnread > 0" class="ball-alarm-badge">{{ alarmUnread > 99 ? '99+' : alarmUnread }}</span>
     </div>
     <div class="ball-tooltip">AI 助手</div>
   </div>
+
+  <!-- R8：主动告警轻提示（右下角，8秒自散，点击打开 AI 询问） -->
+  <Teleport to="body">
+    <div class="alarm-toast-stack">
+      <div
+        v-for="t in alarmToasts"
+        :key="t.id"
+        class="alarm-toast"
+        @click="openChatFromAlarm(); t.id = -1"
+      >
+        <span class="alarm-toast-icon">⚠️</span>
+        <span class="alarm-toast-text">{{ t.text }}</span>
+        <span class="alarm-toast-action">问 AI →</span>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- 聊天窗口 -->
   <Teleport to="body">
@@ -1518,6 +1571,72 @@ function jumpToTime(payload, machineOnline = null) {
 .retry-engine-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+/* R8：未读告警徽标 + 主动告警轻提示 */
+.ball-alarm-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #ff4757;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(255, 71, 87, 0.5);
+  animation: alarm-badge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes alarm-badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+.alarm-toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+}
+.alarm-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(30, 34, 44, 0.96);
+  border: 1px solid #ff4757;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text, #e8e8e8);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  animation: alarm-toast-in 0.25s ease-out;
+  max-width: 340px;
+}
+.alarm-toast:hover {
+  border-color: #ff6b81;
+}
+@keyframes alarm-toast-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.alarm-toast-icon { flex-shrink: 0; }
+.alarm-toast-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alarm-toast-action {
+  flex-shrink: 0;
+  color: #00d4ff;
+  font-size: 11px;
+  font-weight: 600;
 }
 .token-badge {
   font-size: 10px;

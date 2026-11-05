@@ -78,7 +78,10 @@ API_HOST = "0.0.0.0"
 API_PORT = 8002
 
 # ========== CORS 配置 ==========
-CORS_ORIGINS = ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177", "http://localhost:3000"]
+# R7 2026-11-06：支持环境变量覆盖（FABTWIN_CORS_ORIGINS="https://fab.example.com,https://a.b"），
+# 未设置时保持原 localhost 开发白名单——产线部署不再需要改源码
+CORS_ORIGINS = [o.strip() for o in os.getenv("FABTWIN_CORS_ORIGINS", "").split(",") if o.strip()] or \
+    ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177", "http://localhost:3000"]
 
 # ========== 模拟配置 ==========
 SIMULATION_ENABLED = False       # 是否启用模拟器（Demo用）
