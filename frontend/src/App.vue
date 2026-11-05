@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, defineAsyncComponent } from 'vue'
 import AppHeader from '@/platform/frontend/shell/components/AppHeader.vue'
-import AIFloatingBall from '@/modules/ai-assistant/frontend/components/AIFloatingBall.vue'
+// T7 2026-11-06：悬浮球（1483行，含语音输入）异步化——不再进首屏包，登录后首次渲染才加载
+const AIFloatingBall = defineAsyncComponent(() => import('@/modules/ai-assistant/frontend/components/AIFloatingBall.vue'))
 import { useAppStore } from './stores/app'
 import { useModelStore } from './stores/model'
 import { useAuthStore } from './stores/auth'

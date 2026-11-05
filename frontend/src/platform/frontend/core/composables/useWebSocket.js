@@ -107,19 +107,34 @@ export function useWebSocket() {
       }
 
       this.ws.onopen = () => {
+        const isReconnect = this._everConnected
         reconnectAttempts = 0
         store.wsConnected = true
-        console.log('[WS] 已连接实时事件流')
-        // 启动心跳 ping（每 25 秒），防止 IIS/代理因空闲断开
+        this.lastMessageAt = Date.now()
+        console.log('[WS] 已连接实时事件流' + (isReconnect ? '（重连）' : ''))
+        // T7 2026-11-06：重连成功后主动重拉一次机台快照——断连期间错过的状态变更
+        // 不再永久丢失（此前后端重启后界面停留旧值，需手动刷新页面）
+        if (isReconnect && typeof store.fetchMachines === 'function') {
+          try { store.fetchMachines() } catch (e) { console.warn('[WS] 重连重拉失败:', e) }
+        }
+        this._everConnected = true
+        // 心跳 ping（每 25 秒）防止 IIS/代理空闲断开；
+        // T7 看门狗：>90s 未收到任何消息判定半开连接（休眠唤醒/网络切换），主动断开触发重连
         if (this.pingTimer) clearInterval(this.pingTimer)
         this.pingTimer = setInterval(() => {
           if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            if (Date.now() - (this.lastMessageAt || 0) > 90000) {
+              console.warn('[WS] 超过90s未收到消息，判定半开连接，主动重连')
+              try { this.ws.close() } catch (_) {}
+              return
+            }
             this.ws.send(JSON.stringify({ type: 'ping' }))
           }
         }, 25000)
       }
 
       this.ws.onmessage = (evt) => {
+        this.lastMessageAt = Date.now()  // T7：看门狗依据——任何消息（含 pong）都刷新存活时间
         try {
           const msg = JSON.parse(evt.data)
           // 消息格式: { type: "event" | "machines" | "raw_event" | "cur_status", data: {...} }

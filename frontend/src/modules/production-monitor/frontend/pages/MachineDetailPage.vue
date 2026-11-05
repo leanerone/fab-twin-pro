@@ -6,12 +6,14 @@ import { useModelStore } from '@/stores/model'
 import { api } from '@/api'
 import { stateLabels } from '@/platform/frontend/core/composables/useThree'
 import { parseEventAction } from '@/modules/production-monitor/frontend/composables/useEventActionMapping.js'
-import MachineModel3D from '@/modules/production-monitor/frontend/components/machine-3d/MachineModel3D.vue'
-import MachineVpo3DView from '@/modules/production-monitor/frontend/components/machine-3d/MachineVpo3DView.vue'
-import MachineMotion2D from '@/modules/model-library/frontend/engine/MachineMotion2D.vue'
 import PlaybackBar from '@/modules/production-monitor/frontend/components/playback/PlaybackBar.vue'
-import AiAssistant from '@/modules/ai-assistant/frontend/components/AiAssistant.vue'
-import HistoryReplay from '@/modules/production-monitor/frontend/components/playback/HistoryReplay.vue'
+// T7 2026-11-06：详情页重视图异步化——3D/动画引擎/AI/回放按需加载，页面 chunk 不再全量打包
+import { defineAsyncComponent } from 'vue'
+const MachineModel3D = defineAsyncComponent(() => import('@/modules/production-monitor/frontend/components/machine-3d/MachineModel3D.vue'))
+const MachineVpo3DView = defineAsyncComponent(() => import('@/modules/production-monitor/frontend/components/machine-3d/MachineVpo3DView.vue'))
+const MachineMotion2D = defineAsyncComponent(() => import('@/modules/model-library/frontend/engine/MachineMotion2D.vue'))
+const AiAssistant = defineAsyncComponent(() => import('@/modules/ai-assistant/frontend/components/AiAssistant.vue'))
+const HistoryReplay = defineAsyncComponent(() => import('@/modules/production-monitor/frontend/components/playback/HistoryReplay.vue'))
 import { parseTs, fmtHM, hmToMs, msToHM, fmtDateMs, fmtLocalTs, HOUR_MS, MAX_RANGE_MS } from '@/modules/production-monitor/frontend/composables/timeFormat.js'
 import { calcRunState, createRunState } from '@/modules/production-monitor/frontend/composables/useRunState.js'
 import { useMachinePlayback } from '@/modules/production-monitor/frontend/composables/useMachinePlayback.js'

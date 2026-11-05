@@ -1,6 +1,7 @@
 """Redis缓存服务：实时状态缓存、热点数据加速"""
 import json
 import threading
+import logging
 import time
 
 import redis
@@ -9,6 +10,8 @@ from redis.backoff import NoBackoff
 from redis.retry import Retry
 
 from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_ENABLED
+
+logger = logging.getLogger("fabtwin.cache")  # T7 2026-11-06: 热路径日志从 stdout print 改为 logger.debug
 
 # 禁掉 redis-py 8.x 默认的 3 次指数退避重试（本机无监听时单次 ping 实测 47.9s，
 # 直接拖死 /api/machines）。缓存只是加速层，连接必须快速失败、由 30s 惰性重连兜底。
@@ -147,7 +150,7 @@ class LocalTTLCache:
         with self._lock:
             hit = key in self._store
             value = self._store.get(key) if hit else None
-        print(f"[TTLCache:{self.name}] {'HIT' if hit else 'MISS'} key={key}", flush=True)
+        logger.debug("[TTLCache:%s] %s key=%s", self.name, "HIT" if hit else "MISS", key)
         return value
 
     def set(self, key, value):
@@ -159,10 +162,10 @@ class LocalTTLCache:
         with self._lock:
             if key is None:
                 self._store.clear()
-                print(f"[TTLCache:{self.name}] INVALIDATE ALL", flush=True)
+                logger.debug("[TTLCache:%s] INVALIDATE ALL", self.name)
             else:
                 existed = self._store.pop(key, None) is not None
-                print(f"[TTLCache:{self.name}] INVALIDATE key={key} existed={existed}", flush=True)
+                logger.debug("[TTLCache:%s] INVALIDATE key=%s existed=%s", self.name, key, existed)
 
 
 # ============== T7 双层缓存（Garnet 优先、内存兜底）==============
@@ -231,7 +234,7 @@ class HybridTTLCache:
             try:
                 raw = self._r.get(self._key(key))
                 if raw is not None:
-                    print(f"[HybridCache:{self.name}] HIT(redis) key={key}", flush=True)
+                    logger.debug("[HybridCache:%s] HIT(redis) key=%s", self.name, key)
                     return json.loads(raw)
             except Exception as e:
                 self._redis_up = False
@@ -258,10 +261,10 @@ class HybridTTLCache:
                 if key is None:
                     for k in self._r.scan_iter(match=self._key("*"), count=100):
                         self._r.delete(k)
-                    print(f"[HybridCache:{self.name}] INVALIDATE ALL(redis)", flush=True)
+                    logger.debug("[HybridCache:%s] INVALIDATE ALL(redis)", self.name)
                 else:
                     self._r.delete(self._key(key))
-                    print(f"[HybridCache:{self.name}] INVALIDATE(redis) key={key}", flush=True)
+                    logger.debug("[HybridCache:%s] INVALIDATE(redis) key=%s", self.name, key)
             except Exception as e:
                 self._redis_up = False
                 print(f"[HybridCache:{self.name}] redis 失效失败: {e}", flush=True)
