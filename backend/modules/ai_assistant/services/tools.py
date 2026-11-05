@@ -534,14 +534,57 @@ def _extract_n8n_output(run_data: dict) -> dict:
     return None
 
 
-def get_mes_lot_info(db: Session, lot_id: str) -> dict:
-    """通过 MCP 调用 N8N MES_LotInfo_Query 查询 Lot MES 信息（异步 execute_workflow + get_execution）
+def _format_mes_lot_answer(lot_id: str, row: dict, sql_note: str) -> dict:
+    """MES Lot 行 → 统一回答结构（MCP 通道与直连通道共用，T5 2026-11-06 抽取）"""
+    answer = f"📦 Lot **{lot_id}** MES 信息：\n"
+    answer += f"• 产品型号：{row.get('product', 'N/A')}\n"
+    answer += f"• 工艺：{row.get('process', 'N/A')}（版本 {row.get('processversion', 'N/A')}）\n"
+    answer += f"• 工艺路线：{row.get('route', 'N/A')}\n"
+    answer += f"• 当前步骤：{row.get('step', 'N/A')}\n"
 
-    数据源：N8N MCP Server（MES_ExecuteQuery_Tool）
+    status = row.get("lotjobstatus", "N/A")
+    status_cn = {"RUN": "运行中", "HOLD": "暂停", "COMPLETE": "已完成", "WAIT": "等待中"}.get(status, status)
+    answer += f"• 状态：{status}（{status_cn}）\n"
+    answer += f"• 晶圆数量：{row.get('currentquantity', 'N/A')}\n"
+    answer += f"• 花篮号：{row.get('cassette', 'N/A')}\n"
+    answer += f"• Lot 类型：{row.get('lottype', 'N/A')}\n"
+    answer += f"• Wafer 类型：{row.get('wafertype', 'N/A')}\n"
+    answer += f"• 是否返工：{row.get('isrework', 'N/A')}\n"
+
+    table_data = {
+        "headers": list(row.keys()),
+        "rows": [[str(v) if v is not None else "" for v in row.values()]],
+    }
+
+    return {
+        "answer": answer,
+        "sql": sql_note,
+        "table_data": table_data,
+    }
+
+
+def get_mes_lot_info(db: Session, lot_id: str) -> dict:
+    """查询 Lot MES 信息（T5 2026-11-06：直连优先，MCP 兜底）
+
+    数据源优先级：
+      1. MES 直连（mes_adapter：MES_DB_* 环境变量齐全时，oracledb thin 直查 MES 库）
+      2. N8N MCP Server（MES_LotInfo_Query，旧行为不变——未配置直连时零变化）
     返回字段：product / process / route / step / lotjobstatus / currentquantity / cassette 等
     """
     if not lot_id:
         return {"answer": "请提供 Lot ID。", "sql": ""}
+
+    # ---- 直连通道（未配置/失败返回 None，自动落到下面的 MCP 路径） ----
+    try:
+        from modules.ai_assistant.services.mes_adapter import query_lot_direct
+        direct = query_lot_direct(lot_id)
+    except Exception as _e:
+        direct = None
+    if direct and direct.get("row"):
+        return _format_mes_lot_answer(
+            lot_id, direct["row"],
+            f"-- MES 直连: {direct.get('sql', '')}",
+        )
 
     try:
         from modules.ai_assistant.services.mcp_client import get_mcp_client, get_mcp_config, MCPError
@@ -631,32 +674,8 @@ def get_mes_lot_info(db: Session, lot_id: str) -> dict:
 
     row = rows[0] if isinstance(rows[0], dict) else {}
 
-    # 构造自然语言回答
-    answer = f"📦 Lot **{lot_id}** MES 信息：\n"
-    answer += f"• 产品型号：{row.get('product', 'N/A')}\n"
-    answer += f"• 工艺：{row.get('process', 'N/A')}（版本 {row.get('processversion', 'N/A')}）\n"
-    answer += f"• 工艺路线：{row.get('route', 'N/A')}\n"
-    answer += f"• 当前步骤：{row.get('step', 'N/A')}\n"
-
-    status = row.get("lotjobstatus", "N/A")
-    status_cn = {"RUN": "运行中", "HOLD": "暂停", "COMPLETE": "已完成", "WAIT": "等待中"}.get(status, status)
-    answer += f"• 状态：{status}（{status_cn}）\n"
-    answer += f"• 晶圆数量：{row.get('currentquantity', 'N/A')}\n"
-    answer += f"• 花篮号：{row.get('cassette', 'N/A')}\n"
-    answer += f"• Lot 类型：{row.get('lottype', 'N/A')}\n"
-    answer += f"• Wafer 类型：{row.get('wafertype', 'N/A')}\n"
-    answer += f"• 是否返工：{row.get('isrework', 'N/A')}\n"
-
-    table_data = {
-        "headers": list(row.keys()),
-        "rows": [[str(v) if v is not None else "" for v in row.values()]],
-    }
-
-    return {
-        "answer": answer,
-        "sql": f"-- MCP execute_workflow: MES_LotInfo_Query(lot='{lot_id}')",
-        "table_data": table_data,
-    }
+    # 构造自然语言回答（T5：与直连通道共用同一构造器）
+    return _format_mes_lot_answer(lot_id, row, f"-- MCP execute_workflow: MES_LotInfo_Query(lot='{lot_id}')")
 
 
 def get_lot_info(db: Session, lot_id: str = None, machine_id: str = None,
