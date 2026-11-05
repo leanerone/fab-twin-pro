@@ -22,7 +22,7 @@ from core.services.time_utils import parse_ts, build_date_like_patterns
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/machines", tags=["machines"])
+router = APIRouter(prefix="/api/machines", tags=["machines"], dependencies=[Depends(get_current_user)])  # T6 2026-11-06: 读接口也要求登录
 
 
 # 依赖统一收拢到 core.deps（批次1去重），保留原名供既有 import 使用

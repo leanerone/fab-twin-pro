@@ -297,7 +297,14 @@ async def _mcp_auth_middleware(request, call_next):
 
 # ========== WebSocket 端点 ==========
 @app.websocket("/ws/realtime")
-async def websocket_realtime(websocket: WebSocket):
+async def websocket_realtime(websocket: WebSocket, token: str = None):
+    # T6 2026-11-06：WS 要求登录态——浏览器端 WebSocket 无法带 Authorization 头，
+    # 约定 query 参数 ?token=<登录token>（前端 useWebSocket 同步带上）。
+    # 校验失败直接拒绝握手（Starlette close-before-accept → HTTP 403）。
+    from core.services.security import parse_token
+    if not token or not parse_token(token):
+        await websocket.close(code=1008, reason="unauthorized")
+        return
     await manager.connect(websocket)
     try:
         # 发送连接成功确认，防止代理因无双向通信而断开

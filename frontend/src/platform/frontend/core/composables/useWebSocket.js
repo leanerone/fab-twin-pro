@@ -90,11 +90,13 @@ export function useWebSocket() {
       // WebSocket 连接策略：
       // - IIS 部署（port 80/443）：直连后端 8002（URL Rewrite 不支持 WebSocket 升级握手）
       // - Vite dev/preview（其他端口）：走 Vite proxy（原生支持 ws 升级）
+      // T6 2026-11-06：后端要求登录态，query 带 ?token=（浏览器 WS 无法自定义头）
       const isIIS = (location.port === '80' || location.port === '443' || location.port === '')
       const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const wsUrl = isIIS
+      const token = localStorage.getItem('fabtwin_token') || ''
+      const wsUrl = (isIIS
         ? `${wsProto}//${location.hostname}:8002/ws/realtime`
-        : `${wsProto}//${location.host}/ws/realtime`
+        : `${wsProto}//${location.host}/ws/realtime`) + (token ? `?token=${encodeURIComponent(token)}` : '')
       console.log('[WS] Connecting to:', wsUrl, isIIS ? '(IIS mode, direct to backend)' : '(Vite proxy mode)')
       try {
         this.ws = new WebSocket(wsUrl)

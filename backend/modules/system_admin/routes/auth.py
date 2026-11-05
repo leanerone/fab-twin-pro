@@ -31,8 +31,11 @@ def _sso_header_trusted(request: Request) -> bool:
 
     2026-10-29 加固：原先无条件信任该头，一旦后端被直接访问（不经 IIS），
     任何人 `curl -H "X-Forwarded-User: admin"` 即可自动建号并登录。
-    现在只在"请求来自本机/内网"或显式设置 FABTWIN_TRUST_SSO_HEADER=1 时才信任。
-    标准部署（IIS 与后端同机反代）走 127.0.0.1，行为不变。
+    2026-11-06 二次收紧（T6）：内网段不再默认信任——内网主机同样能伪造该头，
+    扫描结论"SSO 头内网提权"。现在默认仅信任本机回环（标准 IIS 同机反代部署不受影响）；
+    跨机反代需显式声明：
+      FABTWIN_TRUST_SSO_HEADER=1                全部信任（原语义）
+      FABTWIN_TRUST_SSO_NETS=192.168.1.0/24,... 仅信任声明网段
     """
     flag = os.getenv("FABTWIN_TRUST_SSO_HEADER", "").strip().lower()
     if flag in ("1", "true", "yes"):
@@ -45,9 +48,18 @@ def _sso_header_trusted(request: Request) -> bool:
     try:
         import ipaddress
         ip = ipaddress.ip_address(host)
-        return ip.is_private or ip.is_loopback
     except Exception:
         return False
+    nets = os.getenv("FABTWIN_TRUST_SSO_NETS", "").strip()
+    if nets:
+        try:
+            for net in nets.split(","):
+                net = net.strip()
+                if net and ip in ipaddress.ip_network(net, strict=False):
+                    return True
+        except Exception:
+            pass
+    return False
 
 
 def _user_payload(user: User, db: Session) -> dict:
@@ -219,15 +231,53 @@ def check_user_permission(permission_id: str, user: User = Depends(get_current_u
     return {"permission_id": permission_id, "allowed": has_perm}
 
 
+# ==================== 登录防爆破（T6 2026-11-06） ====================
+# 同一 用户名+IP 连续失败 5 次 → 锁 5 分钟。内存实现（单进程部署够用），
+# 多实例部署时可换 Redis。PBKDF2 12 万次迭代本身可被当 CPU DoS 用，此闸也保护它。
+_LOGIN_MAX_FAILS = 5
+_LOGIN_LOCK_SECONDS = 300
+_login_failures: dict = {}  # key: (username_lower, ip) -> list[fail_timestamp]
+
+
+def _login_gate_check(key) -> None:
+    """超限则抛 429；顺带清理过期记录"""
+    import time as _time
+    now = _time.time()
+    fails = [t for t in _login_failures.get(key, []) if now - t < _LOGIN_LOCK_SECONDS]
+    _login_failures[key] = fails
+    if len(fails) >= _LOGIN_MAX_FAILS:
+        remain = int(_LOGIN_LOCK_SECONDS - (now - fails[0]))
+        raise HTTPException(
+            status_code=429,
+            detail=f"登录失败次数过多，请 {max(remain, 1) // 60 + 1} 分钟后再试",
+        )
+
+
+def _login_gate_record(key) -> None:
+    import time as _time
+    _login_failures.setdefault(key, []).append(_time.time())
+
+
+def _login_gate_reset(key) -> None:
+    _login_failures.pop(key, None)
+
+
 @router.post("/login-password")
-def login_with_password(data: LoginPasswordRequest, db: Session = Depends(get_db)):
+def login_with_password(data: LoginPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """用户名密码登录
 
     test31：优先校验 PBKDF2 哈希；无哈希的存量用户回退旧规则（用户名+"123"）
     并在成功后透明升级为哈希存储。
+    T6 2026-11-06：同 用户名+IP 5 次失败锁 5 分钟（防爆破 / 防 PBKDF2 CPU DoS）。
     """
+    client_ip = (request.client.host if request.client else "") or ""
+    gate_key = ((data.username or "").lower(), client_ip)
+    _login_gate_check(gate_key)
+
     user = db.query(User).filter(User.username == data.username).first()
     if not user:
+        # 用户不存在同样计入失败（爆破者会轮换用户名，别让枚举免检）
+        _login_gate_record(gate_key)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
     if user.password_hash:
@@ -238,8 +288,10 @@ def login_with_password(data: LoginPasswordRequest, db: Session = Depends(get_db
         if ok:
             user.password_hash = hash_password(data.password)
     if not ok:
+        _login_gate_record(gate_key)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
+    _login_gate_reset(gate_key)
     user.last_login_at = datetime.now().isoformat()
     db.commit()
 

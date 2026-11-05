@@ -30,6 +30,9 @@ class DebugEventIn(BaseModel):
 
 @router.post("/event")
 def inject_event(body: DebugEventIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    # T6 2026-11-06：注入事件会写生产表，收口为 admin-only（此前任意登录用户可注入）
+    if getattr(user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="仅管理员可注入调试事件")
     tool_id = (body.tool_id or "").strip()
     event_name = (body.event_name or "").strip().upper()
     if not tool_id or not event_name:

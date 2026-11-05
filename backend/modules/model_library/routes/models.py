@@ -11,7 +11,7 @@ from models import MachineModelConfig, EventActionMapping, User
 from modules.system_admin.routes.auth import get_current_user, check_permission
 from core.services.cache import models_config_ttl
 
-router = APIRouter(prefix="/api/models", tags=["机台型号配置"])
+router = APIRouter(prefix="/api/models", tags=["机台型号配置"], dependencies=[Depends(get_current_user)])  # T6 2026-11-06: 读接口也要求登录
 
 
 from core.deps import require_model_edit  # noqa: E402,F811  批次1：依赖收拢

@@ -12,7 +12,7 @@ from models import Floor, FloorArea, Machine, Track, Vehicle
 from modules.system_admin.routes.auth import get_current_user, check_permission
 from models import User
 
-router = APIRouter(prefix="/api/floors", tags=["floors"])
+router = APIRouter(prefix="/api/floors", tags=["floors"], dependencies=[Depends(get_current_user)])  # T6 2026-11-06: 读接口也要求登录
 
 
 def require_floor_edit(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
