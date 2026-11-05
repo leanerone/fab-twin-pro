@@ -386,6 +386,34 @@ class _ConfigMixin:
         """保存单个配置项到 ai_configs 键值对表"""
         return self._save_configs_to_db({key: value})
 
+    def _read_kv(self, key: str) -> str:
+        """读取单个配置项（CLOB 兼容；不存在/异常返回空串）——R6 2026-11-06"""
+        try:
+            db = _get_db()
+            try:
+                from models import AIConfig
+                row = db.query(AIConfig).filter(AIConfig.config_key == key).first()
+            finally:
+                db.close()
+            if row is None:
+                return ""
+            val = row.config_value
+            if hasattr(val, "read"):
+                try:
+                    val = val.read()
+                except Exception:
+                    val = str(val)
+            if isinstance(val, bytes):
+                try:
+                    val = val.decode("utf-8")
+                except Exception:
+                    val = str(val)
+            if isinstance(val, str) and val == "None":
+                val = ""
+            return val if isinstance(val, str) else str(val or "")
+        except Exception:
+            return ""
+
     def _save_dify_n8n_key(self, key: str, value: str) -> bool:
         """保存单个Dify/N8N配置项到 ai_configs"""
         return self._save_to_db(key, value)

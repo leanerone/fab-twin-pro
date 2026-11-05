@@ -318,6 +318,12 @@ async def websocket_realtime(websocket: WebSocket, token: str = None):
         manager.disconnect(websocket)
     except Exception:
         manager.disconnect(websocket)
+        # R5 2026-11-06：异常断开补一个显式 close——此前只从 active 移除，
+        # 可能残留半关闭连接（对端 FIN 未完成握手）
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
 
 # ========== 健康检查 ==========
 @app.get("/health")

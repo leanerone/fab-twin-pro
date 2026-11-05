@@ -86,6 +86,16 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         # 启动时加载配置
         self._load_dify_n8n_from_db()  # 加载Dify/N8N
         self._load_llm_config()         # 加载LLM默认配置
+        # R6 2026-11-06：全局引擎选择（switch-global 持久化的 kv 'provider'）重启后生效。
+        # 旧缺陷：_load_llm_config 只读 ai_provider_configs 多配置表，kv 的 provider=dify
+        # 从不被读取 → 重启后静默回退本地规则引擎，与 switch-global "重启仍生效"承诺不符。
+        try:
+            _kv_provider = (self._read_kv("provider") or "").strip().lower()
+            if _kv_provider == "dify" and self.dify_enabled and self.dify_base_url and self.dify_api_key:
+                self.provider = "dify"
+                print("[AI] R6: 全局引擎选择(dify)已从持久化配置恢复")
+        except Exception as e:
+            print(f"[AI] R6: 全局引擎选择恢复跳过（不影响启动）: {e}")
         self._cleanup_old_conversations()  # T5: 清理7天未更新的会话映射（表未建则跳过）
         self._cleanup_old_chat_sessions(30)  # T3: 清理30天未更新的聊天会话持久化记录
 

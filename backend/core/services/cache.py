@@ -271,6 +271,6 @@ class HybridTTLCache:
 
 
 # T2 三处缓存点（T7 统一切换为双层缓存：Garnet 优先、内存兜底）
-machine_state_ttl = HybridTTLCache("machine_state", ttl=60, maxsize=32)   # derive_machines_state 结果
+machine_state_ttl = HybridTTLCache("machine_state", ttl=60, maxsize=256)  # R5 2026-11-06: 32→256 —— 键按 tool_ids 组合生成，详情页单机查询会把列表键逐出导致命中率抖动
 kpi_stats_ttl = HybridTTLCache("kpi_stats", ttl=60, maxsize=4)            # GET /api/machines/stats
 models_config_ttl = HybridTTLCache("models_config", ttl=300, maxsize=8)   # GET /api/models（保存时主动失效）
