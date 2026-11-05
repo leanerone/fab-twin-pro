@@ -301,6 +301,20 @@ watch(paramKeys, (keys) => {
   }
 }, { immediate: true })
 
+function resetParamValues() {
+  const next = {}
+  for (const key of paramKeys.value) {
+    const fallback = key === 'CHAMBER' && deriverName.value ? 'A' : DEFAULT_PARAM_VALUES[key]
+    next[key] = paramDefaults.value[key] ?? fallback ?? ''
+  }
+  paramValues.value = next
+}
+
+function initDemo() {
+  resetParamValues()
+  resetAll()
+}
+
 // === 触发事件 ===
 async function triggerStep(stepName, eventPayload = null) {
   if (stepPlaying) logEvent(stepName, '已排队，等待上一个事件播完', 'info')
@@ -736,8 +750,10 @@ watch(() => props.svgUrl, () => {
   if (props.svgUrl) loadSvg()
 })
 
-watch(() => props.motionConfig, () => {
-  // 配置变更时重置
+watch(() => props.motionConfig, (cfg, prevCfg) => {
+  // 机型/配置变更时清除上一套参数、deriver 与动画状态
+  getMotionDeriver(prevCfg?.ext?.deriver || '')?.reset()
+  resetParamValues()
   resetAll()
   eventLog.value = []
   refreshSvgIds()
@@ -779,7 +795,7 @@ onMounted(() => {
       <!-- 中列：初始化 + 参数 + 事件触发 -->
       <div class="control-panel">
         <div class="init-section">
-          <button class="btn-small btn-reset-canvas" @click="resetAll" :disabled="!svgInline">初始化</button>
+          <button class="btn-small btn-reset-canvas" @click="initDemo" :disabled="!svgInline">初始化</button>
         </div>
         <div v-if="paramKeys.length > 0" class="param-section">
           <h4>参数</h4>
