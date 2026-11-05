@@ -19,7 +19,7 @@ import json
 import re
 import time
 from datetime import datetime
-from sqlalchemy import func, text
+from sqlalchemy import func, text, bindparam
 from sqlalchemy.orm import Session
 
 from models import Machine, DT_EVENT_RAW
@@ -171,6 +171,8 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
     try:
         if tool_ids:
             # 查有告警的事件
+            # R1 修复：IN 列表用 expanding 绑定（此前 tuple 直传 oracledb 报 DPY-3002，
+            # 异常被 except 吞掉静默走慢速 fallback——物化列快速通道从未真正生效）
             sql = text("""
                 SELECT raw_id, tool_id, received_ts_utc, payload_json
                 FROM dt_event_raw
@@ -178,8 +180,8 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
                   AND alarm_code IS NOT NULL
                   AND rownum <= :limit
                 ORDER BY raw_id DESC
-            """)
-            rows = db.execute(sql, {"tool_ids": tuple(tool_ids) if len(tool_ids) > 1 else tool_ids[0],
+            """).bindparams(bindparam("tool_ids", expanding=True))
+            rows = db.execute(sql, {"tool_ids": list(tool_ids),
                                     "limit": limit * 3}).fetchall()
         else:
             sql = text("""
@@ -198,6 +200,9 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
     alarms = []
     for r in rows:
         payload = _parse_payload(r.payload_json)
+        # R1 修复：兼容 VFEI 信封结构——告警字段在 data 子对象（与 extract_payload_fields 同约定）
+        if isinstance(payload.get("data"), dict):
+            payload = payload["data"]
         # 清理 ALARM_REPORT/EC_ALARM_REPORT 事件中被错误填充的字段（与 oxe.py 保持一致）
         payload = clean_alarm_event(payload)
         alarm_code = payload.get("alarm_code")
@@ -207,7 +212,7 @@ def get_machine_alarms(db: Session, machine_id: str = None, limit: int = 20) -> 
             "timestamp": r.received_ts_utc,
             "tool_id": r.tool_id,
             "alarm_code": alarm_code,
-            "alarm_text": payload.get("alarm_text", ""),
+            "alarm_text": payload.get("alarm_text") or payload.get("message") or "",
             "lot_id": payload.get("lot_id", ""),
             "machine_state": payload.get("machine_state", ""),
         })
@@ -308,6 +313,169 @@ def _get_alarms_fallback(db: Session, machine_id: str = None, limit: int = 20) -
 
 
 # ==================== 工具3: 事件时间线（替代温度趋势） ====================
+
+# ==================== 告警智能诊断（R1 2026-11-06 夜班） ====================
+# 告警码/文本关键词 → (可能原因, 建议动作)。fab 场景常见告警的通用领域知识，
+# 关键词匹配命中即给建议；未命中走默认建议。后续可由知识库(RAG)替代升级。
+_ALARM_KB = [
+    ("DOOR", "腔体门/传输门开合异常", "检查门传感器与气缸动作；确认无异物阻挡后复位告警"),
+    ("VAC", "真空度异常", "检查真空泵运行与腔体密封；确认工艺前本底真空达标"),
+    ("RF", "射频系统异常", "检查 RF 电源/匹配器与反射功率；确认腔体负载状态"),
+    ("TEMP", "温度超限", "检查冷却水流量/温度与加热器反馈；核对热电偶读数"),
+    ("MFC", "气体流量异常", "检查 MFC 实际/设定流量偏差与气源压力"),
+    ("FLOW", "气体流量异常", "检查流量设定与实际值、气路阀门状态"),
+    ("LOAD", "装载异常", "检查 Wafer 在位与机械手 handoff 对位；确认端口锁定状态"),
+    ("UNLOAD", "卸载异常", "检查机械手取片与端口释放；确认花篮位置"),
+    ("CHAMBER", "腔体状态异常", "确认腔体工序与状态机是否卡住，必要时手动复位"),
+    ("COMM", "通信异常", "检查设备与 Host/事件链路；确认上报是否恢复"),
+    ("TIMEOUT", "超时", "定位超时的动作环节；检查前序步骤是否完成"),
+    ("PRESSURE", "压力异常", "检查压力计读数与节气阀；确认工艺压力窗口"),
+]
+_ALARM_DEFAULT_ADVICE = "结合告警时间点的上下文事件（get_event_timeline）排查；反复出现建议按告警码检索历史规律"
+
+
+def _alarm_advice(code: str, text: str):
+    """按告警码/描述关键词匹配领域知识库"""
+    blob = f"{code or ''} {text or ''}".upper()
+    for kw, cause, advice in _ALARM_KB:
+        if kw in blob:
+            return cause, advice
+    return None, _ALARM_DEFAULT_ADVICE
+
+
+def diagnose_alarm(db: Session, machine_id: str = None, lookback_hours: int = 24) -> dict:
+    """告警智能诊断（R1 2026-11-06）：聚合近期告警 → 频次/趋势 → 领域知识给原因与建议
+
+    与 get_machine_alarms 的区别：那条是"列出告警"，这条是"读出规律并给处置建议"——
+    回答包含频次排序、趋势（最近1小时 vs 之前）、可能原因与建议动作、优先处置项。
+    """
+    tool_ids = _resolve_tool_ids(db, machine_id) if machine_id else None
+
+    # 取最近告警事件（raw_id desc 拉取后在 Python 侧按时间过滤；
+    # 本地/中等数据量足够；超大库可改 SQL 层时间过滤，见 ver2.13 物化列索引）
+    try:
+        if tool_ids:
+            # R1：IN 列表 expanding 绑定（同 get_machine_alarms 修复）
+            sql = text("""
+                SELECT raw_id, tool_id, received_ts_utc, payload_json
+                FROM dt_event_raw
+                WHERE tool_id IN :tool_ids AND alarm_code IS NOT NULL
+                  AND raw_id IN (SELECT raw_id FROM (SELECT raw_id FROM dt_event_raw
+                                  WHERE alarm_code IS NOT NULL ORDER BY raw_id DESC)
+                                  WHERE rownum <= 500)
+                ORDER BY raw_id DESC
+            """).bindparams(bindparam("tool_ids", expanding=True))
+            rows = db.execute(sql, {"tool_ids": list(tool_ids)}).fetchall()
+        else:
+            sql = text("""
+                SELECT raw_id, tool_id, received_ts_utc, payload_json
+                FROM dt_event_raw
+                WHERE raw_id IN (SELECT raw_id FROM (SELECT raw_id FROM dt_event_raw
+                                  WHERE alarm_code IS NOT NULL ORDER BY raw_id DESC)
+                                  WHERE rownum <= 500)
+                ORDER BY raw_id DESC
+            """)
+            rows = db.execute(sql).fetchall()
+    except Exception as e:
+        return {"answer": f"⚠️ 告警诊断查询失败：{str(e)[:150]}", "sql": ""}
+
+    try:
+        lookback = max(1, int(lookback_hours or 24))
+    except Exception:
+        lookback = 24
+
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.now()
+    cutoff = now - _td(hours=lookback)
+    hour_ago = now - _td(hours=1)
+
+    def _ts(v):
+        if v is None:
+            return None
+        if isinstance(v, _dt):
+            return v
+        try:
+            return _dt.fromisoformat(str(v).replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            return None
+
+    alarms = []
+    for r in rows:
+        ts = _ts(r.received_ts_utc)
+        if ts and ts < cutoff:
+            continue
+        payload = _parse_payload(r.payload_json)
+        # 兼容 VFEI 信封结构——告警字段在 data 子对象（与 extract_payload_fields 同约定）
+        if isinstance(payload.get("data"), dict):
+            payload = payload["data"]
+        payload = clean_alarm_event(payload)
+        code = payload.get("alarm_code")
+        if _is_null(code):
+            continue
+        alarms.append({
+            "ts": ts or _ts(str(r.received_ts_utc)),
+            "tool_id": r.tool_id,
+            "alarm_code": str(code),
+            "alarm_text": payload.get("alarm_text") or payload.get("message") or "",
+            "machine_state": payload.get("machine_state", ""),
+        })
+
+    scope = f"机台 {machine_id}" if machine_id else "全厂"
+    if not alarms:
+        return {"answer": f"{scope} 最近 {lookback} 小时内无告警记录，无需诊断。", "sql": ""}
+
+    # 聚合：按告警码
+    agg = {}
+    for a in alarms:
+        g = agg.setdefault(a["alarm_code"], {
+            "count": 0, "count_1h": 0, "first": None, "last": None,
+            "tools": set(), "text": "", "state": "",
+        })
+        g["count"] += 1
+        if a["ts"] and a["ts"] >= hour_ago:
+            g["count_1h"] += 1
+        g["first"] = min(g["first"], a["ts"]) if g["first"] and a["ts"] else (a["ts"] or g["first"])
+        g["last"] = max(g["last"], a["ts"]) if g["last"] and a["ts"] else (a["ts"] or g["last"])
+        g["tools"].add(a["tool_id"])
+        if not g["text"] and a["alarm_text"]:
+            g["text"] = a["alarm_text"]
+        if not g["state"] and a["machine_state"]:
+            g["state"] = a["machine_state"]
+
+    ordered = sorted(agg.items(), key=lambda kv: (-kv[1]["count"], -(kv[1]["count_1h"])))
+
+    answer = f"🔍 {scope} 告警诊断（近 {lookback} 小时，共 {len(alarms)} 条 / {len(agg)} 类）：\n"
+    table_rows = []
+    for i, (code, g) in enumerate(ordered[:8], 1):
+        cause, advice = _alarm_advice(code, g["text"])
+        trend = "仍在发生⚠️" if g["count_1h"] > 0 else "近1小时未复发"
+        answer += f"\n{i}. {code} × {g['count']}（最近1小时 {g['count_1h']} 次，{trend}）\n"
+        if g["text"]:
+            answer += f"   描述：{g['text']}\n"
+        if cause:
+            answer += f"   可能原因：{cause}\n"
+        answer += f"   建议：{advice}\n"
+        last_s = g["last"].strftime("%m-%d %H:%M") if g["last"] else "N/A"
+        answer += f"   最近发生：{last_s}" + (f"（状态：{g['state']}）" if g["state"] else "") + "\n"
+        table_rows.append([code, g["count"], g["count_1h"], last_s, cause or "-", advice])
+
+    top_code, top_g = ordered[0]
+    if top_g["count_1h"] > 0:
+        answer += f"\n⚡ 优先处置：{top_code}（频次最高且最近1小时仍在发生，涉及 {len(top_g['tools'])} 台机台）"
+    else:
+        answer += f"\n⚡ 优先关注：{top_code}（观察期内频次最高；当前暂未复发，建议核实根因是否闭环）"
+
+    return {
+        "answer": answer,
+        "sql": "SELECT ... FROM dt_event_raw WHERE alarm_code IS NOT NULL ORDER BY raw_id DESC（聚合诊断见 answer）",
+        "table_data": {
+            "headers": ["告警码", "次数", "近1h", "最近发生", "可能原因", "建议"],
+            "rows": table_rows,
+        },
+        "jump_timestamp": (alarms[0]["ts"].isoformat() if alarms and alarms[0]["ts"] else None),
+        "jump_machine_id": machine_id,
+    }
+
 
 def get_event_timeline(db: Session, machine_id: str = None, limit: int = 20) -> dict:
     """查询事件时间线（DB 无传感器数据，用事件分布替代温度趋势）"""
@@ -1466,6 +1634,32 @@ TOOL_DEFINITIONS = [
             }
         }
     },
+    # R1 2026-11-06：告警智能诊断——列出告警之外的"读规律+给建议"
+    {
+        "type": "function",
+        "function": {
+            "name": "diagnose_alarm",
+            "description": (
+                "告警智能诊断：聚合指定机台（或全厂）近期告警，输出频次排序、趋势（近1小时是否复发）、"
+                "可能原因与处置建议、优先处置项。"
+                "适用：用户问『告警怎么样/有什么异常/告警分析/怎么处理』等需要诊断而非仅罗列的场景。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {
+                        "type": "string",
+                        "description": "机台ID。不传则诊断全厂。"
+                    },
+                    "lookback_hours": {
+                        "type": "integer",
+                        "description": "回看小时数，默认24。"
+                    }
+                },
+                "required": []
+            }
+        }
+    },
 ]
 
 # 工具名 → 处理函数映射
@@ -1475,6 +1669,7 @@ TOOL_DEFINITIONS.extend(TOOL_DEFINITIONS_SQL)
 TOOL_HANDLERS = {
     "get_machine_status": get_machine_status,
     "get_machine_alarms": get_machine_alarms,
+    "diagnose_alarm": diagnose_alarm,
     "get_event_timeline": get_event_timeline,
     "get_yield_stats": get_yield_stats,
     "get_lot_info": get_lot_info,
