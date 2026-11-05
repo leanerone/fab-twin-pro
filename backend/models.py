@@ -566,3 +566,22 @@ class AIConversation(Base):
     provider = Column(String(32), default="dify")
     created_at = Column(String(255))
     updated_at = Column(String(255), index=True)
+
+
+class AIChatSession(Base):
+    """AI 聊天会话消息持久化（T3 2026-11-06 夜班）
+
+    此前对话消息只存 AIMiddleware.sessions 内存字典：
+      - 后端重启 → 前端 localStorage 消息还在、后端上下文已失忆，多轮对话断裂
+      - self.sessions 无淘汰 → 长运行内存无界增长
+    现在：内存字典作 LRU 缓存（上限 _MAX_MEMORY_SESSIONS），每轮对话落库本表；
+    内存未命中时从这里恢复。建表：sql/v2.21_add_ai_chat_sessions.sql
+    """
+    __tablename__ = "ai_chat_sessions"
+
+    session_id = Column(String(64), primary_key=True)   # 前端 sess_xxx
+    machine_id = Column(String(64), default="")
+    messages = Column(Text)                             # JSON 数组（role/content/timestamp/metadata）
+    message_count = Column(Integer, default=0)
+    created_at = Column(String(255))
+    updated_at = Column(String(255), index=True)

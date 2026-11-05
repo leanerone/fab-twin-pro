@@ -87,6 +87,7 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         self._load_dify_n8n_from_db()  # 加载Dify/N8N
         self._load_llm_config()         # 加载LLM默认配置
         self._cleanup_old_conversations()  # T5: 清理7天未更新的会话映射（表未建则跳过）
+        self._cleanup_old_chat_sessions(30)  # T3: 清理30天未更新的聊天会话持久化记录
 
 
     def chat(self, question: str, session_id: str = None, machine_id: str = None,
@@ -159,14 +160,8 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
                 self._load_default_config()
                 route_provider = self.provider
 
-        # 获取或创建会话
-        if session_id not in self.sessions:
-            self.sessions[session_id] = {
-                "messages": [],
-                "created_at": datetime.now().isoformat(),
-                "machine_id": machine_id,
-            }
-        session = self.sessions[session_id]
+        # 获取或创建会话（T3：内存未命中先试 DB 恢复，重启后多轮不丢）
+        session = self._get_or_create_session(session_id, machine_id)
 
         # 保存用户消息
         session["messages"].append({
@@ -296,6 +291,9 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         # 限制会话历史长度
         if len(session["messages"]) > 100:
             session["messages"] = session["messages"][-100:]
+
+        # T3：本轮对话落库（重启后可恢复；失败不影响主链路）
+        self._persist_session(session_id, session)
 
         result["session_id"] = session_id
 
@@ -488,14 +486,8 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
             # T2：force=dify 时明确标记为 dify（provider 可能是 hybrid，日志/前端徽标要如实）
             route_provider = "dify" if _force == "dify" else self.provider  # dify / hybrid
 
-        # 会话：保存用户消息
-        if session_id not in self.sessions:
-            self.sessions[session_id] = {
-                "messages": [],
-                "created_at": datetime.now().isoformat(),
-                "machine_id": machine_id,
-            }
-        session = self.sessions[session_id]
+        # 会话：内存未命中先试 DB 恢复（T3），再保存用户消息
+        session = self._get_or_create_session(session_id, machine_id)
         session["messages"].append({
             "role": "user", "content": question, "timestamp": datetime.now().isoformat(),
         })
@@ -619,6 +611,8 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
             })
             if len(session["messages"]) > 100:
                 session["messages"] = session["messages"][-100:]
+            # T3：流式本轮落库（失败不影响 final 帧发送）
+            self._persist_session(session_id, session)
 
             # 使用量与执行日志
             try:
