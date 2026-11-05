@@ -693,22 +693,26 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
 
 6. get_event_timeline: 查询机台事件时间线（事件类型分布和运行模式分布）
 
-7. get_yield_stats: 查询产量统计（Lot数量、晶圆总数）
+7. compare_machines: 多机台横向对比（事件量/告警数/告警率/取放片/最近活动+分析结论）
+   - 参数：machine_ids（逗号分隔，不传取最活跃6台）、lookback_hours（默认24）
+   - 适用：对比类问题（"谁更忙/哪台告警多/哪台没在跑"），一次调用替代多次单机查询
 
-8. get_recipe_info: 查询工艺配方（当前返回提示信息）
+8. get_yield_stats: 查询产量统计（Lot数量、晶圆总数）
+
+9. get_recipe_info: 查询工艺配方（当前返回提示信息）
 
 OXE 机台专用工具（仅适用于 OXE 系列机台，如 OXE-51/OXE-61/OXE-65A）：
 
-9. get_wafer_flow: 查询 OXE 机台某 Lot 的晶圆流向（25片晶圆在 PORT→PA→CHAMBER 间的加工流转）
+10. get_wafer_flow: 查询 OXE 机台某 Lot 的晶圆流向（25片晶圆在 PORT→PA→CHAMBER 间的加工流转）
    - 必填参数：machine_id (OXE机台ID)
    - 可选参数：lot_id (不传则查最新Lot)
    - 适用：用户问"晶圆流向"、"第几片在加工"、"晶圆进度"、"W07加工了多久"
 
-10. get_chamber_status: 查询 OXE 机台 3 个 Chamber 的实时状态
+11. get_chamber_status: 查询 OXE 机台 3 个 Chamber 的实时状态
    - 必填参数：machine_id
    - 适用：用户问"Chamber状态"、"3个腔体在做什么"、"当前加工情况"
 
-11. get_oxe_lot_summary: 查询 OXE 机台某日加工汇总（多Lot对比、产量趋势、利用率）
+12. get_oxe_lot_summary: 查询 OXE 机台某日加工汇总（多Lot对比、产量趋势、利用率）
     - 必填参数：machine_id
     - 可选参数：date (YYYY-MM-DD)、lot_id
     - 适用：用户问"今天加工了几个Lot"、"产量汇总"、"机台利用率"

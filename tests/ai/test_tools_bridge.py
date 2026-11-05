@@ -2,7 +2,7 @@
 """T4 回归：AI 工具桥 REST 暴露（2026-11-06）
 
 验证：
-  1. GET  /api/ai/tools         工具清单 13 个（11 固定 + 2 SQL）
+  1. GET  /api/ai/tools         工具清单 14 个（12 固定 + 2 SQL）
   2. POST /api/ai/tools/{name}  固定工具与 SQL 工具可执行、结果为 dict
   3. SQL 工具安全边界：DELETE/非白名单表被 sql guard 拒（200+executed=false，按工具设计）
   4. 未知工具 404；未登录 401
@@ -62,7 +62,7 @@ def main():
     st, body = http("GET", "/api/ai/tools", token=token)
     tools = body.get("tools", []) if isinstance(body, dict) else []
     names = {t.get("name") for t in tools}
-    check("GET /tools 200 且 13 个工具", st == 200 and len(tools) == 13,
+    check("GET /tools 200 且 14 个工具", st == 200 and len(tools) == 14,
           f"HTTP {st} count={len(tools)}")
     check("SQL 工具在列", {"describe_fab_table", "query_fab_data"} <= names)
     check("OXE 专用工具在列", "get_wafer_flow" in names and "get_chamber_status" in names)
@@ -118,7 +118,7 @@ def main():
     paths = spec.get("paths", {}) if isinstance(spec, dict) else {}
     check("openapi 3.x", st == 200 and str(spec.get("openapi", "")).startswith("3."),
           f"HTTP {st} openapi={spec.get('openapi')}")
-    check("全部13个工具都有 path", len(paths) == 13, f"paths={len(paths)}")
+    check("全部14个工具都有 path", len(paths) == 14, f"paths={len(paths)}")
     ok_schema = all(
         isinstance(p.get("post", {}).get("requestBody", {})
                    .get("content", {}).get("application/json", {}).get("schema"), dict)

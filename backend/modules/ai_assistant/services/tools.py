@@ -477,6 +477,108 @@ def diagnose_alarm(db: Session, machine_id: str = None, lookback_hours: int = 24
     }
 
 
+def compare_machines(db: Session, machine_ids=None, lookback_hours: int = 24) -> dict:
+    """多机台横向对比（R2 2026-11-06）：事件量/告警数/取放片/最近活动 一条 GROUP BY 取回
+
+    支撑"对比 OXE-51 和 OXE-61 谁更忙/哪台告警多"这类多跳分析问题。
+    machine_ids 支持逗号分隔字符串或列表；不传则自动取窗口内最活跃的 6 台。
+    """
+    # 参数归一：接受 "A,B" / ["A","B"] / None
+    ids = []
+    if machine_ids:
+        if isinstance(machine_ids, str):
+            ids = [x.strip().upper() for x in machine_ids.split(",") if x.strip()]
+        elif isinstance(machine_ids, (list, tuple)):
+            ids = [str(x).strip().upper() for x in machine_ids if str(x).strip()]
+    ids = ids[:8]  # 对比上限，防止超长 IN
+    try:
+        lookback = max(1, int(lookback_hours or 24))
+    except Exception:
+        lookback = 24
+
+    # 时间过滤：received_ts_utc 为 ISO 字符串（'T'/空格两种分隔），按"日"前缀比较与分隔符无关
+    from datetime import datetime as _dt, timedelta as _td
+    since = (_dt.now() - _td(hours=lookback)).strftime("%Y-%m-%d")
+
+    try:
+        base_where = "SUBSTR(received_ts_utc,1,10) >= :since"
+        if ids:
+            sql = text("""
+                SELECT tool_id,
+                       COUNT(*) AS total_events,
+                       SUM(CASE WHEN alarm_code IS NOT NULL THEN 1 ELSE 0 END) AS alarm_count,
+                       SUM(CASE WHEN event_name = 'WAFERLOADED' THEN 1 ELSE 0 END) AS wafer_loaded,
+                       SUM(CASE WHEN event_name = 'WAFERUNLOADED' THEN 1 ELSE 0 END) AS wafer_unloaded,
+                       MAX(received_ts_utc) AS last_event_ts
+                FROM dt_event_raw
+                WHERE """ + base_where + """
+                  AND tool_id IN :ids
+                GROUP BY tool_id
+                ORDER BY total_events DESC
+            """).bindparams(bindparam("ids", expanding=True))
+            rows = db.execute(sql, {"since": since, "ids": ids}).fetchall()
+        else:
+            sql = text("""
+                SELECT tool_id,
+                       COUNT(*) AS total_events,
+                       SUM(CASE WHEN alarm_code IS NOT NULL THEN 1 ELSE 0 END) AS alarm_count,
+                       SUM(CASE WHEN event_name = 'WAFERLOADED' THEN 1 ELSE 0 END) AS wafer_loaded,
+                       SUM(CASE WHEN event_name = 'WAFERUNLOADED' THEN 1 ELSE 0 END) AS wafer_unloaded,
+                       MAX(received_ts_utc) AS last_event_ts
+                FROM dt_event_raw
+                WHERE """ + base_where + """
+                GROUP BY tool_id
+                ORDER BY total_events DESC
+                FETCH FIRST 6 ROWS ONLY
+            """)
+            rows = db.execute(sql, {"since": since}).fetchall()
+    except Exception as e:
+        return {"answer": f"⚠️ 对比查询失败：{str(e)[:150]}", "sql": ""}
+
+    if not rows:
+        return {"answer": f"最近 {lookback} 小时内所选机台均无事件，无法对比。", "sql": ""}
+
+    stats = []
+    for r in rows:
+        total = int(r.total_events or 0)
+        alarm = int(r.alarm_count or 0)
+        stats.append({
+            "tool_id": r.tool_id,
+            "total": total,
+            "alarm": alarm,
+            "loaded": int(r.wafer_loaded or 0),
+            "unloaded": int(r.wafer_unloaded or 0),
+            "last": str(r.last_event_ts or "")[:19],
+            "alarm_rate": f"{(alarm / total * 100):.1f}%" if total else "-",
+        })
+
+    answer = f"📊 机台对比（近 {lookback} 小时，共 {len(stats)} 台）：\n\n"
+    answer += "机台 | 事件数 | 告警数 | 告警率 | 取片 | 放片 | 最近活动\n"
+    for s in stats:
+        answer += (f"{s['tool_id']} | {s['total']} | {s['alarm']} | {s['alarm_rate']}"
+                   f" | {s['loaded']} | {s['unloaded']} | {s['last'][:16]}\n")
+
+    busiest = max(stats, key=lambda s: s["total"])
+    most_alarm = max(stats, key=lambda s: s["alarm"])
+    idle = [s["tool_id"] for s in stats if s["total"] == 0]
+    answer += f"\n• 最活跃：{busiest['tool_id']}（{busiest['total']} 事件）"
+    if most_alarm["alarm"] > 0:
+        answer += f"\n• 告警最多：{most_alarm['tool_id']}（{most_alarm['alarm']} 次，告警率 {most_alarm['alarm_rate']}）——建议 diagnose_alarm 深查"
+    if idle:
+        answer += f"\n• 疑似空闲/断连：{', '.join(idle)}（窗口内无任何事件）"
+    answer += "\n\n提示：告警率 = 告警事件 / 总事件，>10% 建议关注；取放片差值大说明可能有 Wafer 滞留。"
+
+    return {
+        "answer": answer,
+        "sql": "SELECT tool_id, COUNT(*), SUM(alarm), SUM(WAFERLOADED/UNLOADED) ... FROM dt_event_raw GROUP BY tool_id（聚合对比）",
+        "table_data": {
+            "headers": ["机台", "事件数", "告警数", "告警率", "取片", "放片", "最近活动"],
+            "rows": [[s["tool_id"], s["total"], s["alarm"], s["alarm_rate"],
+                      s["loaded"], s["unloaded"], s["last"]] for s in stats],
+        },
+    }
+
+
 def get_event_timeline(db: Session, machine_id: str = None, limit: int = 20) -> dict:
     """查询事件时间线（DB 无传感器数据，用事件分布替代温度趋势）"""
     if not machine_id:
@@ -1660,6 +1762,32 @@ TOOL_DEFINITIONS = [
             }
         }
     },
+    # R2 2026-11-06：多机台横向对比——支撑对比/谁更忙/哪台告警多类多跳问题
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_machines",
+            "description": (
+                "多机台横向对比：一次取回各机台的事件量、告警数、告警率、取放片数、最近活动，"
+                "并给出最活跃/告警最多/疑似空闲的分析结论。"
+                "适用：用户问『对比这几台机台/谁更忙/哪台告警多/哪台没在跑』。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_ids": {
+                        "type": "string",
+                        "description": "逗号分隔的机台ID，如 'OXE-51,OXE-61,OXE-65A'。不传则自动取窗口内最活跃的6台。"
+                    },
+                    "lookback_hours": {
+                        "type": "integer",
+                        "description": "回看小时数，默认24。"
+                    }
+                },
+                "required": []
+            }
+        }
+    },
 ]
 
 # 工具名 → 处理函数映射
@@ -1670,6 +1798,7 @@ TOOL_HANDLERS = {
     "get_machine_status": get_machine_status,
     "get_machine_alarms": get_machine_alarms,
     "diagnose_alarm": diagnose_alarm,
+    "compare_machines": compare_machines,
     "get_event_timeline": get_event_timeline,
     "get_yield_stats": get_yield_stats,
     "get_lot_info": get_lot_info,
