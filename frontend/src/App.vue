@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, defineAsyncComponent } from 'vue'
+import { computed, ref, watch, defineAsyncComponent } from 'vue'
 import AppHeader from '@/platform/frontend/shell/components/AppHeader.vue'
-// T7 2026-11-06：悬浮球（1483行，含语音输入）异步化——不再进首屏包，登录后首次渲染才加载
+// T7 2026-11-06：悬浮球（内嵌完整 AI 聊天面板，含语音输入）异步化——
+// 不进首屏包，登录后首次渲染才加载
 const AIFloatingBall = defineAsyncComponent(() => import('@/modules/ai-assistant/frontend/components/AIFloatingBall.vue'))
 import { useAppStore } from './stores/app'
 import { useModelStore } from './stores/model'
@@ -14,8 +15,21 @@ const modelStore = useModelStore()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-appStore.connectWs()
-modelStore.loadModels()
+const isLoginRoute = computed(() => route.name === 'login')
+
+// 未登录不拉取受保护接口，避免登录页出现 No token 噪音错误；
+// 登录成功后再预热模型库与机台列表，并建立实时连接。
+watch(() => authStore.isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    appStore.connectWs()
+    modelStore.loadModels()
+    if (!appStore.machines.length) {
+      appStore.fetchMachines().catch(e => console.warn('[AI Jump] 加载机台列表失败:', e))
+    }
+  } else {
+    appStore.disconnectWs()
+  }
+}, { immediate: true })
 
 // Toast 通知
 const toasts = ref([])
@@ -78,27 +92,16 @@ function handleAIJump(payload) {
   // 同机台或未指定机台：把跳转请求放入全局 store，由 MachineDetail 消费
   appStore.setPendingJump({ machine_id: mid || currentId || '', timestamp: ts })
 }
-
-// 确保机台列表已加载
-onMounted(async () => {
-  if (!appStore.machines.length) {
-    try {
-      await appStore.fetchMachines()
-    } catch (e) {
-      console.warn('[AI Jump] 加载机台列表失败:', e)
-    }
-  }
-})
 </script>
 
 <template>
   <div class="app-shell">
-    <AppHeader />
-    <main class="app-main">
+    <AppHeader v-if="!isLoginRoute" />
+    <main class="app-main" :class="{ 'app-main--login': isLoginRoute }">
       <router-view />
     </main>
     <!-- 全局悬浮AI球（登录后显示） -->
-    <AIFloatingBall v-if="authStore.isLoggedIn" @jump="handleAIJump" />
+    <AIFloatingBall v-if="!isLoginRoute && authStore.isLoggedIn" @jump="handleAIJump" />
     <!-- 全局 Toast 通知 -->
     <div class="toast-container">
       <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">{{ t.msg }}</div>
@@ -120,6 +123,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+.app-main--login {
+  overflow: auto;
 }
 .toast-container {
   position: fixed;

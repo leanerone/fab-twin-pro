@@ -1,7 +1,7 @@
 """数据模型（SQLAlchemy ORM）- 整合用户现有4张表 + 扩展新表"""
 import json
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, Identity, event
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, Identity, Index, event
 
 from database import Base
 
@@ -557,11 +557,14 @@ class AIConversation(Base):
     sql/v2.12_add_ai_conversations.sql 完成。
     """
     __tablename__ = "ai_conversations"
+    __table_args__ = (
+        Index("ix_ai_conv_user_session", "user_id", "session_id"),
+        Index("ix_ai_conv_user_updated", "user_id", "updated_at"),
+    )
 
-    id = Column(Integer, Identity(start=1, increment=1), primary_key=True)
-    session_id = Column(String(64), nullable=False, index=True)  # 前端 sess_xxx
-    user_id = Column(Integer, nullable=True)                     # 预留：登录用户ID
-    machine_id = Column(String(64), default="")                  # 机台详情页会话按机台隔离
+    session_id = Column(String(64), primary_key=True)            # 前端 sess_xxx
+    user_id = Column(String(255), nullable=True)                 # 与 users.id 一致；历史 NULL 仅审计
+    machine_id = Column(String(64), default="")                  # 首次绑定后不得换绑
     dify_conv_id = Column(String(64), default="")                # Dify 返回的 UUID
     provider = Column(String(32), default="dify")
     created_at = Column(String(255))
@@ -580,6 +583,7 @@ class AIChatSession(Base):
     __tablename__ = "ai_chat_sessions"
 
     session_id = Column(String(64), primary_key=True)   # 前端 sess_xxx
+    user_id = Column(String(64), nullable=True)         # ver3 属主隔离：写入必填；NULL=历史遗留，仅审计不恢复
     machine_id = Column(String(64), default="")
     messages = Column(Text)                             # JSON 数组（role/content/timestamp/metadata）
     message_count = Column(Integer, default=0)

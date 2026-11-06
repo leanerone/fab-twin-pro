@@ -53,18 +53,32 @@ def query_fab_data(db, sql: str = "", row_limit: int = 200) -> Dict[str, Any]:
 
 
 def describe_fab_table(db, table_name: str = "") -> Dict[str, Any]:
-    """查询某张表的全部字段定义，用于写 SQL 前确认列名、类型与业务含义。"""
+    """查询某张表的全部字段定义，用于写 SQL 前确认列名、类型与业务含义。
+
+    统一复用 .schema.schema_catalog（与 query_fab_data 同一白名单事实源），
+    非法标识符 / 未知表 / 受限表一律明确拒绝，绝不返回敏感表结构。
+    """
+    import re as _re
+
     from .schema import schema_catalog
 
-    if not table_name:
+    name = (table_name or "").strip()
+    if not name:
         names = schema_catalog.table_names()
         return {
             "answer": "可用表清单：\n" + "\n".join(f"- {n}" for n in names),
             "sql": "",
             "tables": names,
         }
-    detail = schema_catalog.to_table_ddl_text(table_name)
-    return {"answer": detail, "sql": "", "table": table_name}
+    if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$#]*", name):
+        return {"answer": f"非法表名 {name!r}，已拒绝。", "sql": "", "error": "invalid_table_name"}
+    low = name.lower()
+    if low in set(schema_catalog.forbidden_table_names()):
+        return {"answer": f"表 {name} 属于受限表，禁止通过 AI 通道查询。", "sql": "", "error": "forbidden_table"}
+    detail = schema_catalog.to_table_ddl_text(name)
+    if schema_catalog.describe(name) is None:
+        return {"answer": detail, "sql": "", "error": "unknown_table"}
+    return {"answer": detail, "sql": "", "table": name}
 
 
 # ==================== Function Calling 声明 ====================

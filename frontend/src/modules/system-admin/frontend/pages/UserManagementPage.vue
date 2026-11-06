@@ -34,6 +34,9 @@ const editingUser = reactive({
 })
 const isEditMode = computed(() => !!editingUser.id)
 
+// 本地用户初始密码（创建时显式设置）
+const initialPassword = ref('')
+
 // 角色权限分配弹窗
 const showRolePermDialog = ref(false)
 const editingRole = reactive({
@@ -121,6 +124,7 @@ function openCreateUserDialog() {
   Object.assign(editingUser, {
     id: '', username: '', display_name: '', email: '', department: '', role: 'user',
   })
+  initialPassword.value = ''
   showUserDialog.value = true
 }
 
@@ -144,12 +148,17 @@ async function saveUser() {
       })
       showSuccess('用户更新成功')
     } else {
+      if (!initialPassword.value) {
+        showError('请为新用户设置初始密码')
+        return
+      }
       await api.createUser({
         username: editingUser.username,
         display_name: editingUser.display_name,
         email: editingUser.email,
         department: editingUser.department,
         role: editingUser.role,
+        password: initialPassword.value,
       })
       showSuccess('用户创建成功')
     }
@@ -172,9 +181,20 @@ async function deleteUser(user) {
 }
 
 async function resetPassword(user) {
-  if (!confirm(`确认重置用户 "${user.username}" 的密码？重置后新密码为：${user.username}123`)) return
+  const newPassword = prompt(`为用户 "${user.username}" 输入新密码：`)
+  if (newPassword === null) return
+  if (!newPassword.trim()) {
+    showError('新密码不能为空')
+    return
+  }
+  const confirmPassword = prompt('请再次输入新密码以确认：')
+  if (confirmPassword === null) return
+  if (newPassword !== confirmPassword) {
+    showError('两次输入的密码不一致')
+    return
+  }
   try {
-    await api.resetUserPassword(user.id, { new_password: `${user.username}123` })
+    await api.resetUserPassword(user.id, { new_password: newPassword, confirm_password: confirmPassword })
     showSuccess('密码已重置')
   } catch (e) {
     showError('重置失败: ' + e.message)
@@ -395,8 +415,12 @@ onMounted(() => {
             <label>邮箱</label>
             <input v-model="editingUser.email" class="input" placeholder="user@company.com" />
           </div>
+          <div v-if="!isEditMode" class="form-group">
+            <label>初始密码 *</label>
+            <input v-model="initialPassword" class="input" type="password" autocomplete="new-password" placeholder="显式设置初始密码" />
+          </div>
           <div v-if="!isEditMode" class="hint">
-            💡 初始密码为：<code>{{ editingUser.username || 'username' }}123</code>
+            💡 密码将被 PBKDF2 安全哈希后保存，请通过安全渠道告知用户
           </div>
         </div>
         <div class="modal-footer">

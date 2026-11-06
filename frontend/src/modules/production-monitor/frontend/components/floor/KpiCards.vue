@@ -24,14 +24,18 @@ const dtRate = computed(() => {
 <style scoped>
 .kpi-row {
   display: grid;
-  grid-template-columns: auto;
+  grid-template-columns: minmax(260px, 360px);
   gap: 10px;
 }
 .kpi-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 16px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
   position: relative;
   overflow: hidden;
 }
@@ -57,9 +61,10 @@ const dtRate = computed(() => {
   font-weight: 600;
 }
 .kpi-value {
-  font-size: 22px;
-  font-weight: 700;
-  margin-top: 4px;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: 24px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 .kpi-value .unit {

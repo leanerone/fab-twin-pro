@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -25,6 +26,7 @@ from typing import Deque, Dict
 
 from fastapi import APIRouter, Depends
 
+from core.deps import require_admin
 from modules.system_admin.routes.auth import get_current_user
 
 logger = logging.getLogger("fabtwin.perf")
@@ -47,8 +49,9 @@ _slow_sql: Deque[Dict] = deque(maxlen=20)
 # 共享对象引用，worker 里的 += 对中间件侧同样可见）
 _req_ctx: ContextVar = ContextVar("fabtwin_perf_req", default=None)
 
-# R7 2026-11-06：性能快照含各路由延迟画像与慢 SQL 原文（暴露表名列名），补齐登录鉴权
-router = APIRouter(prefix="/api/metrics", tags=["metrics"], dependencies=[Depends(get_current_user)])
+# R7 2026-11-06：性能快照含各路由延迟画像，需登录可见（夜班）；
+# ver3：reset/clear 等写操作收敛到管理员，慢 SQL 只存 sha256 不存原文。
+router = APIRouter(prefix="/api", tags=["metrics"], dependencies=[Depends(get_current_user)])
 
 
 def _percentile(values, pct: float) -> float:
@@ -155,19 +158,41 @@ def install_sql_timing(engine) -> None:
         start = starts.pop()
         ms = (time.perf_counter() - start) * 1000.0
         if ms >= SLOW_SQL_MS:
-            snippet = " ".join(statement.split())[:200]
+            normalized = " ".join(statement.split())
+            operation = normalized.split(" ", 1)[0].upper() if normalized else "UNKNOWN"
+            statement_sha256 = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
             with _lock:
-                _slow_sql.append({"sql": snippet, "ms": round(ms, 1)})
-            logger.warning("[perf] 慢查询 %.0fms: %s", ms, snippet)
+                _slow_sql.append({
+                    "operation": operation,
+                    "ms": round(ms, 1),
+                    "statement_sha256": statement_sha256,
+                })
+            logger.warning(
+                "[perf] 慢查询 %s %.0fms sha256=%s",
+                operation, ms, statement_sha256,
+            )
 
 
-@router.get("/perf")
+@router.get("/metrics/perf")
 def get_perf():
     """性能快照：按 P95 倒序"""
     return snapshot()
 
 
-@router.post("/perf/reset")
+@router.post("/metrics/perf/reset", dependencies=[Depends(require_admin)])
 def reset_perf():
+    reset()
+    return {"ok": True}
+
+
+@router.get("/perf/slow", dependencies=[Depends(require_admin)])
+def get_slow_sql():
+    """返回不含 SQL 原文和绑定值的慢查询摘要。"""
+    with _lock:
+        return {"slow_sql": list(_slow_sql)}
+
+
+@router.post("/perf/clear", dependencies=[Depends(require_admin)])
+def clear_perf():
     reset()
     return {"ok": True}

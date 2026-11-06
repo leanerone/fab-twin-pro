@@ -1,10 +1,16 @@
 // WebSocket 连接管理：实时事件推送 + 自动重连 + VFEI事件解析
-import { ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
 let wsInstance = null
 let reconnectTimer = null
 let reconnectAttempts = 0
+let manualClose = false
 const MAX_RECONNECT_DELAY = 8000
+const WS_PROTOCOL = 'fabtwin.v1'
+
+function tokenProtocol(token) {
+  return `fabtwin-token.${btoa(token).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')}`
+}
 
 // 外部订阅 raw_event 的回调列表（供详情页视图组件消费同一条 WS 流，不再各自开 HTTP 轮询）
 let _rawEventSubscribers = []
@@ -86,22 +92,24 @@ export function useWebSocket() {
     pingTimer: null,
     // 连接 WebSocket，传入 store 用于事件分发
     connect(store) {
+      const token = localStorage.getItem('fabtwin_token')
+      if (!token) return
       if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
         return
       }
+      manualClose = false
       // WebSocket 连接策略：
       // - IIS 部署（port 80/443）：直连后端 8002（URL Rewrite 不支持 WebSocket 升级握手）
       // - Vite dev/preview（其他端口）：走 Vite proxy（原生支持 ws 升级）
-      // T6 2026-11-06：后端要求登录态，query 带 ?token=（浏览器 WS 无法自定义头）
+      // 认证：token 走 WebSocket 子协议（fabtwin-token.<b64>），不进 URL、不落代理日志
       const isIIS = (location.port === '80' || location.port === '443' || location.port === '')
       const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const token = localStorage.getItem('fabtwin_token') || ''
-      const wsUrl = (isIIS
+      const wsUrl = isIIS
         ? `${wsProto}//${location.hostname}:8002/ws/realtime`
-        : `${wsProto}//${location.host}/ws/realtime`) + (token ? `?token=${encodeURIComponent(token)}` : '')
-      console.log('[WS] Connecting to:', wsUrl, isIIS ? '(IIS mode, direct to backend)' : '(Vite proxy mode)')
+        : `${wsProto}//${location.host}/ws/realtime`
+      console.log('[WS] Connecting to realtime stream', isIIS ? '(IIS mode)' : '(Vite proxy mode)')
       try {
-        this.ws = new WebSocket(wsUrl)
+        this.ws = new WebSocket(wsUrl, [WS_PROTOCOL, tokenProtocol(token)])
       } catch (e) {
         console.error('[WS] 创建失败:', e)
         this._scheduleReconnect(store)
@@ -109,6 +117,10 @@ export function useWebSocket() {
       }
 
       this.ws.onopen = () => {
+        if (this.ws.protocol !== WS_PROTOCOL) {
+          this.ws.close(1008, 'Invalid protocol')
+          return
+        }
         const isReconnect = this._everConnected
         reconnectAttempts = 0
         store.wsConnected = true
@@ -192,14 +204,24 @@ export function useWebSocket() {
         console.warn('[WS] 错误:', e)
       }
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
         store.wsConnected = false
+        this.ws = null
         if (this.pingTimer) {
           clearInterval(this.pingTimer)
           this.pingTimer = null
         }
-        console.log('[WS] 连接关闭，准备重连...')
-        this._scheduleReconnect(store)
+        if (event.code === 1008) {
+          manualClose = true
+          localStorage.removeItem('fabtwin_token')
+          localStorage.removeItem('fabtwin_user')
+          localStorage.removeItem('fabtwin_permissions')
+          useAuthStore().loadUser()
+          if (!location.hash.includes('/login')) location.hash = '#/login'
+          console.warn('[WS] 登录状态失效，已停止重连')
+          return
+        }
+        if (!manualClose) this._scheduleReconnect(store)
       }
     },
 
@@ -224,6 +246,7 @@ export function useWebSocket() {
 
     // 断开连接
     disconnect() {
+      manualClose = true
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
         reconnectTimer = null
@@ -241,6 +264,7 @@ export function useWebSocket() {
 
     // 自动重连（指数退避）
     _scheduleReconnect(store) {
+      if (manualClose || !localStorage.getItem('fabtwin_token')) return
       if (reconnectTimer) clearTimeout(reconnectTimer)
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY)
       reconnectAttempts++

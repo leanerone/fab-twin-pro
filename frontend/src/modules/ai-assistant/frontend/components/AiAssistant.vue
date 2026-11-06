@@ -323,8 +323,7 @@ function clearChat() {
         您好，我是机台 AI 助手。可以问我机台状态、报警、温度趋势、产量、异常检测、Lot 追踪等。
       </div>
       <template v-for="(m, i) in messages" :key="i">
-        <div class="chat-msg user">{{ m.content }}</div>
-        <div class="chat-msg ai">
+        <div class="chat-msg" :class="m.role === 'user' ? 'user' : 'ai'">
           <!-- 工具调用过程（T4 流式 agent_thought） -->
           <details v-if="m.thoughts && m.thoughts.length" class="thoughts-panel">
             <summary>工具调用过程（{{ m.thoughts.length }}）</summary>
@@ -389,6 +388,8 @@ function clearChat() {
       <div class="input-wrapper">
         <input
           v-model="input"
+          aria-label="向 AI 助手提问"
+          :disabled="loading"
           @keyup.enter="ask(input)"
           :placeholder="isRecording ? '正在聆听中...' : '如：LOT00123 什么时间加工的？'"
         />
@@ -404,7 +405,7 @@ function clearChat() {
         :text="messages[messages.length - 1]?.content || ''"
         :size="26"
       />
-      <button @click="ask(input)">发送</button>
+      <button class="send-btn" type="button" :disabled="loading || !input.trim()" @click="ask(input)">发送</button>
     </div>
   </div>
 </template>

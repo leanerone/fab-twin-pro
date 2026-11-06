@@ -3,11 +3,12 @@
 设计约束：
 - 零新依赖：PBKDF2-HMAC-SHA256 用 hashlib 标准库实现（Django 同款算法格式），
   离线部署不需要额外 pip 包
-- 兼容存量：数据库无 password_hash 的用户仍可用旧规则（用户名+"123"）登录，
-  登录成功后透明升级为哈希存储；旧 token（裸 user.id）在过渡期内继续可用
+- 数据库无 password_hash 的用户不能本地登录，可由管理员显式设置初始密码；
+  旧 token（裸 user.id）仅在显式开启兼容配置时可用
 - token 形态："{user_id}.{expires_ms}.{hmac}"，HMAC-SHA256 签名，默认 7 天过期；
   密钥取环境变量 FABTWIN_TOKEN_SECRET，未设置时用固定开发默认值（生产应设置）
 """
+import base64
 import hashlib
 import hmac
 import logging
@@ -91,9 +92,38 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def legacy_password_for(username: str) -> str:
-    """旧版默认密码规则（用户名+"123"），仅用于兼容与透明升级"""
-    return f"{username}123"
+# ── WebSocket 子协议令牌包装 ─────────────────────────────────────────────
+WS_SUBPROTOCOL = "fabtwin.v1"
+_WS_TOKEN_PREFIX = "fabtwin-token."
+
+
+def encode_ws_token(token: str) -> str:
+    """把会话令牌编码为不回显的 WebSocket 子协议元素。"""
+    encoded = base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"{_WS_TOKEN_PREFIX}{encoded}"
+
+
+def decode_ws_token(protocols) -> str | None:
+    """从客户端子协议列表解出令牌；格式不合法或重复令牌返回 None。"""
+    protocols = list(protocols or [])
+    if WS_SUBPROTOCOL not in protocols:
+        return None
+    wrapped = [p for p in protocols if p.startswith(_WS_TOKEN_PREFIX)]
+    if len(wrapped) != 1:
+        return None
+    encoded = wrapped[0][len(_WS_TOKEN_PREFIX):]
+    if not encoded or "=" in encoded:
+        return None
+    try:
+        padded = encoded + "=" * (-len(encoded) % 4)
+        token = base64.b64decode(
+            padded.encode("ascii"), altchars=b"-_", validate=True
+        ).decode("utf-8")
+    except (ValueError, UnicodeEncodeError):
+        return None
+    if not token or encode_ws_token(token) != wrapped[0]:
+        return None
+    return token
 
 
 # ── 会话令牌 ────────────────────────────────────────────────────────────

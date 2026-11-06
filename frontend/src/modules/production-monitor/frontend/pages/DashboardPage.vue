@@ -44,15 +44,14 @@ function toggleViewMode() {
   }
 }
 
+// 受管定时器：卸载即清理，页面切到后台时暂停（前台才需要刷 KPI）。
+// 必须在 setup 顶层调用，onMounted 内调用会失去组件实例上下文并触发 Vue 警告。
+useInterval(() => appStore.fetchStats(), 10000)
+
 onMounted(async () => {
   await appStore.fetchMachines()
   appStore.fetchStats()
   await loadFloors()
-
-  // 2026-10-29 修复：原来是裸 setInterval，无句柄、本组件也没有 onUnmounted，
-  // 每次进入首页就多一个永不停止的 10s 轮询。改用受管定时器：卸载即清理，
-  // 且页面切到后台时暂停（前台才需要刷 KPI）。
-  useInterval(() => appStore.fetchStats(), 10000)
 })
 </script>
 
@@ -70,6 +69,7 @@ onMounted(async () => {
               :key="floor.id"
               class="fs-btn"
               :class="{ active: currentFloor === floor.id }"
+              :aria-pressed="currentFloor === floor.id"
               @click="switchFloor(floor.id)"
             >
               <span class="fs-name">{{ floor.name }}</span>
@@ -90,8 +90,12 @@ onMounted(async () => {
             <span class="view-desc">{{ floors.find(f => f.id === currentFloor)?.description }}</span>
           </div>
           <div class="view-actions">
-            <button class="view-toggle" @click="toggleViewMode">
-              {{ viewMode === '3d' ? '📋 平面图' : '🎯 3D视图' }}
+            <button class="view-toggle" type="button" :aria-pressed="viewMode === '3d'" @click="toggleViewMode">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path v-if="viewMode === '3d'" d="M4 4h12v12H4zM7 7h6v6H7z" stroke="currentColor" stroke-width="1.5"/>
+                <path v-else d="m10 2 7 4-7 4-7-4 7-4Zm-7 8 7 4 7-4m-14 4 7 4 7-4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+              {{ viewMode === '3d' ? '平面图' : '3D 视图' }}
             </button>
           </div>
         </div>
@@ -125,7 +129,7 @@ onMounted(async () => {
 
 .dashboard-main {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 264px minmax(0, 1fr);
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -232,15 +236,19 @@ onMounted(async () => {
 }
 
 .view-toggle {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--control-md);
+  padding: 0 12px;
+  border: 1px solid var(--border-2);
   background: var(--panel);
   color: var(--text-dim);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s;
 }
+.view-toggle svg { width: 17px; height: 17px; }
 
 .view-toggle:hover {
   border-color: var(--accent);
@@ -251,5 +259,21 @@ onMounted(async () => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.fs-btn { border-radius: var(--radius-sm); transition: color 0.15s, background-color 0.15s, border-color 0.15s; }
+.fs-btn.active { background: rgba(0, 212, 255, 0.08); }
+.floor-selector { border-radius: var(--radius-md); }
+@media (max-width: 1366px) {
+  .dashboard { gap: 10px; padding: 10px; }
+  .dashboard-main { grid-template-columns: 236px minmax(0, 1fr); gap: 10px; }
+  .sidebar-section { gap: 10px; }
+  .fs-btn { padding: 8px 10px; }
+}
+@media (max-width: 1280px) {
+  .dashboard-main { grid-template-columns: 220px minmax(0, 1fr); }
+  .fs-desc, .view-desc { display: none; }
 }
 </style>

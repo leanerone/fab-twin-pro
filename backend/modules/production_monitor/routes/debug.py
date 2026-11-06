@@ -2,10 +2,12 @@
 
 事件走真实链路：DT_EVENT_RAW → db_poller 轮询 → WebSocket raw_event → 前端动画，
 与外部系统写入效果完全一致，供 Motion2D 调试面板 / 联调使用。
+
+生产安全：写接口要求管理员（require_admin）且必须显式开启环境开关
+FABTWIN_DEBUG_WRITE_ENABLED=1 —— 开关未开启时管理员同样 403，权限不可绕过。
 """
 import json
-import random
-import time
+import os
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -15,9 +17,17 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR, Machine
-from modules.system_admin.routes.auth import get_current_user
+from core.deps import require_admin
+from modules.production_monitor.routes.rvmessages import generate_raw_id
 
 router = APIRouter(prefix="/api/debug", tags=["debug"])
+
+_DEBUG_WRITE_ENV = "FABTWIN_DEBUG_WRITE_ENABLED"
+
+
+def _debug_write_enabled() -> bool:
+    """显式环境开关：仅认 1/true/yes/on（大小写不敏感），默认关闭。"""
+    return os.getenv(_DEBUG_WRITE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 class DebugEventIn(BaseModel):
@@ -29,10 +39,13 @@ class DebugEventIn(BaseModel):
 
 
 @router.post("/event")
-def inject_event(body: DebugEventIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    # T6 2026-11-06：注入事件会写生产表，收口为 admin-only（此前任意登录用户可注入）
-    if getattr(user, "role", "") != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可注入调试事件")
+def inject_event(body: DebugEventIn, db: Session = Depends(get_db), user=Depends(require_admin)):
+    # 环境开关在 require_admin 之后再查：管理员无法绕过未开启的开关。
+    if not _debug_write_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=f"调试写入未启用：请设置 {_DEBUG_WRITE_ENV}=1 后重启服务",
+        )
     tool_id = (body.tool_id or "").strip()
     event_name = (body.event_name or "").strip().upper()
     if not tool_id or not event_name:
@@ -72,9 +85,9 @@ def inject_event(body: DebugEventIn, db: Session = Depends(get_db), user=Depends
         **params,
     }
     payload_json = json.dumps(payload, ensure_ascii=False)
-    # 'Z' 大于数字：词法降序恒排在模拟器 TID.<数字> 之前，保证在 poller 的
-    # "raw_id desc limit 100" 窗口内可见
-    raw_id = f"TID.Z{int(time.time() * 1000)}{random.randint(0, 999):03d}"
+    # 复用 rvmessages 的生成器：TID.Z 前缀 + 固定宽度微秒 + UUID hex，
+    # 字典序==时间序，恒排在模拟器 TID.<数字> 之前，poller 窗口内可见。
+    raw_id = generate_raw_id()
 
     db.add(DT_EVENT_RAW(
         raw_id=raw_id, tool_id=tool_id, source_system="DEBUG",

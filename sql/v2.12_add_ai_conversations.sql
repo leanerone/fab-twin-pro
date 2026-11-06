@@ -2,6 +2,12 @@
 -- v2.12 增量脚本：新增 AI_CONVERSATIONS（T5：session_id → Dify conversation_id 映射持久化）
 -- 目标库：Oracle 11g+（XEPDB1 / fabtwin 账号执行）
 -- 幂等：重复执行不报错；回退见文件末尾注释
+--
+-- ⚠ 注意（2026-11-06）：本脚本为历史版本，USER_ID 为 NUMBER 且以 ID 为主键。
+--    属主隔离整改后请继续执行 sql/v2.14_ai_conversations_owner.sql：
+--    USER_ID → VARCHAR2(255)（与 USERS.ID 统一）、SESSION_ID 单列唯一、
+--    新增 (USER_ID, SESSION_ID) / (USER_ID, UPDATED_AT) 复合索引；
+--    历史 NULL 属主只留审计，不自动映射 UUID。
 -- ============================================================================
 SET DEFINE OFF
 

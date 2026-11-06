@@ -8,7 +8,7 @@ import uuid
 from database import get_db
 from models import User, Role, Permission, RolePermission
 from modules.system_admin.routes.auth import get_current_user, check_permission
-from core.services.security import hash_password, legacy_password_for
+from core.services.security import hash_password
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -61,7 +61,10 @@ class UserCreateRequest(BaseModel):
     email: str = ""
     department: str = ""
     role: str = "user"
-    password: str = ""  # 可选，默认 username + "123"
+    password: str | None = None
+    confirm_password: str | None = None
+    password_confirm: str | None = None
+    sso_only: bool = False
 
 
 class UserUpdateRequest(BaseModel):
@@ -72,7 +75,17 @@ class UserUpdateRequest(BaseModel):
 
 
 class PasswordResetRequest(BaseModel):
-    new_password: str
+    new_password: str | None = None
+    confirm_password: str | None = None
+    password_confirm: str | None = None
+
+
+def _validated_password(password: str | None, *confirmations: str | None) -> str:
+    if password is None or not password.strip():
+        raise HTTPException(status_code=422, detail="密码不能为空")
+    if any(confirmation is not None and confirmation != password for confirmation in confirmations):
+        raise HTTPException(status_code=422, detail="两次输入的密码不一致")
+    return password
 
 
 @router.get("/users")
@@ -110,6 +123,12 @@ def create_user(
     if data.role not in ("admin", "engineer", "user"):
         raise HTTPException(status_code=400, detail="角色必须是 admin/engineer/user 之一")
 
+    password = None
+    if data.password or not data.sso_only:
+        password = _validated_password(
+            data.password, data.confirm_password, data.password_confirm
+        )
+
     now = datetime.now().isoformat()
     user = User(
         id=str(uuid.uuid4()),
@@ -119,6 +138,7 @@ def create_user(
         department=data.department,
         role=data.role,
         windows_sid="",
+        password_hash=hash_password(password) if password is not None else None,
         last_login_at="",
         created_at=now,
         updated_at=now,
@@ -201,29 +221,18 @@ def reset_password(
     db: Session = Depends(get_db),
     _: User = Depends(require_user_manage),
 ):
-    """重置用户密码
-
-    test31：真正落地——密码以 PBKDF2 哈希写入 users.password_hash。
-    新密码取请求参数；未传时重置为默认规则（用户名+"123"）的哈希。
-    """
+    """使用请求中明确提供的新密码重置，并以 PBKDF2 哈希存储。"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    new_password = (getattr(data, "new_password", "") or "").strip()
-    is_default = not new_password
-    if is_default:
-        new_password = legacy_password_for(user.username)
-
+    new_password = _validated_password(
+        data.new_password, data.confirm_password, data.password_confirm
+    )
     user.password_hash = hash_password(new_password)
     user.updated_at = datetime.now().isoformat()
     db.commit()
-    return {
-        "message": (
-            f"用户 {user.username} 密码已重置为默认规则（用户名+123）"
-            if is_default else f"用户 {user.username} 密码已重置"
-        )
-    }
+    return {"message": f"用户 {user.username} 密码已重置"}
 
 
 # ============================================

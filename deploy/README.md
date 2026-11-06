@@ -1,9 +1,10 @@
 # FabTwin Pro — deploy/ 目录说明
 
-> 最后更新：2026-09-23
-> 适用版本：ver2.10.21
+> 最后更新：2026-11-07
+> 适用分支：ver3
 > 本目录是「FabTwin 上线部署」专用脚本集合，按用途分 6 类。
-> 完整的端到端说明见 [`../docs/DEPLOY_SOP.md`](../docs/DEPLOY_SOP.md)（在线打包 → 离线安装 → 离线启动 全流程）。
+> 完整的端到端说明见 [`../docs/sops/DEPLOY_SOP.md`](../docs/sops/DEPLOY_SOP.md)（在线打包 → 离线安装 → 离线启动 全流程）。
+> 上线前请先读本文第 7 节「安全上线三件事」（SSO 共享密钥、管理员恢复、AI 会话迁移预检）。
 
 ---
 
@@ -31,7 +32,7 @@
 - **输出**：`fabtwin-deploy-YYYYMMDD.zip`（位于项目根）
 - **使用场景**：新版功能完成后，准备发版到量产服务器前
 - **注意**：仅在**联网机**运行；生成的 zip 可拷到任何离线机解包使用
-- **见 SOP**：[docs/DEPLOY_SOP.md 第 2 章](../docs/DEPLOY_SOP.md)
+- **见 SOP**：[docs/DEPLOY_SOP.md 第 2 章](../docs/sops/DEPLOY_SOP.md)
 
 ---
 
@@ -47,7 +48,7 @@
   5. 设置 IIS 站点访问 `get_user.asp` 时使用 Windows 认证
 - **何时用**：第一次在新服务器上部署；或 IIS 配置被改坏后想重建
 - **不**启动后端 — 由 `start_iis.bat` 负责
-- **见 SOP**：[docs/DEPLOY_SOP.md 第 6 章](../docs/DEPLOY_SOP.md)
+- **见 SOP**：[docs/DEPLOY_SOP.md 第 6 章](../docs/sops/DEPLOY_SOP.md)
 
 #### `start_iis.bat`
 - **作用**：**薄包装**，委托给 `start_iis.ps1`（避免 PowerShell 执行策略问题）
@@ -64,7 +65,7 @@
 - **架构**：浏览器 → IIS（静态+API 反代）→ FastAPI 8002
 - **WebSocket 走法**：前端**直连** 8002，不经 IIS（IIS URL Rewrite 不支持 WebSocket 握手）
 - **何时用**：每次服务器重启后启动后端
-- **见 SOP**：[docs/DEPLOY_SOP.md 第 7 章](../docs/DEPLOY_SOP.md)
+- **见 SOP**：[docs/DEPLOY_SOP.md 第 7 章](../docs/sops/DEPLOY_SOP.md)
 
 #### `start_direct.bat`
 - **作用**：薄包装，委托给 `start_direct.ps1`
@@ -77,7 +78,7 @@
   3. 在两个新窗口里分别启动前后端
 - **架构**：浏览器 → Vite preview（默认 4173，同时代理 /api + /ws 到 FastAPI 8002）
 - **何时用**：不想装 IIS；或在内网做临时部署
-- **见 SOP**：[docs/DEPLOY_SOP.md 第 7 章（直连模式）](../docs/DEPLOY_SOP.md)
+- **见 SOP**：[docs/DEPLOY_SOP.md 第 7 章（直连模式）](../docs/sops/DEPLOY_SOP.md)
 
 #### `start_backend.bat`
 - **作用**：薄包装，委托给 `start_backend.ps1`
@@ -101,7 +102,7 @@
 ### C. 离线启动 — 开发模式（1 个）
 
 #### `start-dev.bat`
-- **作用**：**开发模式**启动（带热更新），同时启动 Vite dev (3000) + FastAPI (8002)，并尝试启动 db_proxy (8001)
+- **作用**：**开发模式**启动（带热更新），同时启动 Vite dev (5173) + FastAPI (8002)，并尝试启动 db_proxy (8001)
 - **与 start_direct.ps1 的区别**：用 `npm run dev` 而非 `npm run build && npx vite preview`
 - **何时用**：本地写代码、调前端 Vue 组件时
 - **不要在生产服务器上用**
@@ -118,7 +119,7 @@
   3. 调 sqlplus 执行 SQL 脚本
   4. 输出日志到 `init_db.log`
 - **何时用**：第一次部署新环境；或 schema 变更后
-- **见 SOP**：[docs/DEPLOY_SOP.md 第 5 章](../docs/DEPLOY_SOP.md)
+- **见 SOP**：[docs/DEPLOY_SOP.md 第 5 章](../docs/sops/DEPLOY_SOP.md)
 
 ---
 
@@ -129,7 +130,7 @@
 - **支持 action**：`install | start | stop | restart | status | logs | uninstall`
 - **默认端口**：8088（Web UI）、5433（postgres）、6380（redis）
 - **何时用**：需要 AI Agent 编排能力时
-- **见 SOP**：[docs/integration/DEPLOY_SOP.md 第 2~6 步](../../docs/integration/DEPLOY_SOP.md)
+- **见 SOP**：[docs/integration/DEPLOY_SOP.md 第 2~6 步](../docs/integration/DEPLOY_SOP.md)
 
 #### `deploy_n8n.ps1`
 - **作用**：**n8n** Docker Compose 一键部署（postgres + n8n 主容器）
@@ -138,29 +139,31 @@
 - **默认端口**：5678（Web UI）、5434（postgres）
 - **默认账号**：admin / `FabTwin#2026!N8n`
 - **何时用**：需要 n8n 工作流编排（AI 工具调用靠它）
-- **见 SOP**：[docs/integration/DEPLOY_SOP.md 第 2~3 步](../../docs/integration/DEPLOY_SOP.md)
+- **见 SOP**：[docs/integration/DEPLOY_SOP.md 第 2~3 步](../docs/integration/DEPLOY_SOP.md)
 
 ---
 
 ### F. 共享资源（2 个）
 
 #### `env.bat` ⭐ **每个部署都要读它**
-- **作用**：**环境变量配置**（Oracle 连接 + DSN 类型 + Client 路径 + 端口）
+- **作用**：**环境变量配置**（Oracle 连接 + DSN 类型 + Client 路径）
 - **当前内容**（示例）：
   ```bat
+  set DB_TYPE=oracle
   set ORACLE_HOST=10.30.8.119
+  set ORACLE_PORT=1521
   set ORACLE_SERVICE=APCDB
   set ORACLE_USER=emuuser
   set ORACLE_PASSWORD=...
   set ORACLE_DSN_TYPE=sid
   set ORACLE_CLIENT_DIR=C:\app\client\c11463\product\19.0.0\client_1
-  set ORACLE_PORT=1521
-  set FABTWIN_BACKEND_PORT=8002
-  set FABTWIN_FRONTEND_PORT=3000
+  set SIMULATION_ENABLED=False
+  set DB_POLLER_ENABLED=True
   ```
 - **被谁读**：`start_iis.ps1` / `start_direct.ps1` / `start_backend.ps1` / `init_db.bat` / `package_offline.bat`
 - **何时改**：换数据库 / 换端口 / 换 Client 路径时
 - **不要把真实密码提交到 git**（已经在 .gitignore 里）
+- **SSO 部署还需追加两个变量**：`FABTWIN_SSO_TRUSTED_PROXIES` 和 `FABTWIN_SSO_SHARED_KEY`，详见第 7 节。
 
 #### `web.config`
 - 见上面 B 节「离线启动」中的说明。
@@ -183,9 +186,9 @@
 
 | 组件 | 位置 | 端口 | 说明 |
 |---|---|---|---|
-| **db_proxy**（db 转抛服务） | `../services/db_proxy/` | 8001 | AI 集成用，独立部署，详见 [docs/integration/DEPLOY_SOP.md](../../docs/integration/DEPLOY_SOP.md) 第 1 步 |
+| **db_proxy**（db 转抛服务） | `../services/db_proxy/` | 8001 | AI 集成用，独立部署，详见 [docs/integration/DEPLOY_SOP.md](../docs/integration/DEPLOY_SOP.md) 第 1 步 |
 | **后端** | `../backend/` | 8002 | FastAPI 主服务 |
-| **前端** | `../frontend/` | 3000 (dev) / 4173 (preview 默认) | Vue 3 + Vite |
+| **前端** | `../frontend/` | 5173 (dev) / 4173 (preview 默认) | Vue 3 + Vite |
 | **Dify**（可选） | Docker Compose | 8088 | AI Agent 编排 |
 | **n8n**（可选） | Docker Compose | 5678 | 工作流引擎 |
 
@@ -227,4 +230,55 @@ package_offline.bat  ──生成──►  fabtwin-deploy-XXX.zip
                                      ✅ 上线
 ```
 
-详见 [`docs/DEPLOY_SOP.md`](../docs/DEPLOY_SOP.md)。
+详见 [`docs/sops/DEPLOY_SOP.md`](../docs/sops/DEPLOY_SOP.md)。
+
+---
+
+## 7. 安全上线三件事
+
+ver3 起后端对认证做了强制收紧（见 `backend/modules/system_admin/routes/auth.py`）。上线前务必完成下面三项，否则会直接影响登录。
+
+### 7.1 SSO 共享密钥配置（IIS 模式必做）
+
+后端只接受**同时满足**两个条件的 Windows SSO 请求：
+
+1. 请求来源 IP 在 `FABTWIN_SSO_TRUSTED_PROXIES` 白名单内（逗号分隔，填 IIS 服务器本机地址，如 `127.0.0.1`）；
+2. 请求头 `X-FabTwin-SSO-Key` 与环境变量 `FABTWIN_SSO_SHARED_KEY` 完全一致（恒定时间比较）。
+
+`env.bat` 追加示例（**真实密钥不要提交 git**）：
+
+```bat
+set FABTWIN_SSO_TRUSTED_PROXIES=127.0.0.1
+set FABTWIN_SSO_SHARED_KEY=换成一段足够长的随机串
+```
+
+- 两个变量任一未配置，后端对 Windows SSO 直接返回 403「Windows SSO 未配置」；密钥不匹配返回 401。
+- **当前限制（未验证项）**：`scripts/archive/get_user.asp` 与 `web.config` 的反代链路**尚未注入** `X-FabTwin-SSO-Key` 头，真实 IIS 环境下的端到端 SSO 未验证。在未完成 IIS 侧改造前，请让用户走密码登录（直连模式本就走密码登录，不受影响）。
+- IIS 侧改造方向：由 IIS 在转发到后端时注入 `X-FabTwin-SSO-Key` 与 `X-Forwarded-User` 两个头，并确保外部客户端无法自行伪造这两个头到达后端（后端只信任白名单 IP，但不要在边界上再开缺口）。
+
+### 7.2 管理员恢复流程
+
+- **预防**：上线时保留**至少两个**已验证可登录的管理员账号；旧弱密码账号逐个安全重置。
+- **全部管理员失锁时**（应急恢复，在数据库服务器上操作）：
+  1. 用后端同款算法离线生成新密码哈希（需要后端环境的 Python）：
+     ```bat
+     python -c "import sys; sys.path.insert(0, 'backend'); from core.services.security import hash_password; print(hash_password('新密码'))"
+     ```
+  2. 用 sqlplus 更新目标管理员账号：
+     ```sql
+     UPDATE USERS SET PASSWORD_HASH = '<上一步输出的 pbkdf2_sha256$... 串>'
+     WHERE USERNAME = 'admin';
+     COMMIT;
+     ```
+  3. 用新密码登录后，立即在用户管理页再改一次密码，并核查其他账号权限。
+- 注意：`PASSWORD_HASH` 为空（NULL/空串）的账号**无法本地登录**（后端显式拒绝），不要把清空密码当作恢复手段。
+
+### 7.3 AI 会话迁移预检（从旧版本升级必做）
+
+ver3 对 `AI_CONVERSATIONS` 做了属主隔离整改（`USER_ID` 列 + 新索引）。升级脚本为 [`../sql/v2.14_ai_conversations_owner.sql`](../sql/v2.14_ai_conversations_owner.sql)，脚本头部自带预检 SQL：
+
+1. **先跑预检**（脚本注释内的 SELECT）：确认 `SESSION_ID` 无重复、`USER_ID` 无 NULL 残留；预检不通过不要执行后续 ALTER。
+2. 按脚本顺序执行前向迁移（加 `USER_ID_NEW` → 回填 → 换列 → 建索引）。
+3. 跑脚本尾部的验证 SQL 确认行数与索引。
+4. 参考记录：本仓库在 2026-11-04 已在真实 Oracle 核验过 `AI_CONVERSATIONS` 迁移（含四个平台索引与目标列宽），详见 `PROJECT_STATUS.md`。
+- 未执行该迁移就启动新版后端时，历史会话会被视为"无属主"，用户侧表现为旧会话不可见（属主隔离策略，属预期行为而非数据丢失）。

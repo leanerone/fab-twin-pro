@@ -38,24 +38,6 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def _decrement_raw_id(raw_id):
-    """将 raw_id 减 1，兼容 "RAW12345678" 字符串格式和纯数字格式
-
-    测试 DB 的 raw_id 形如 "RAW97166637"（前缀+数字），生产 DB 可能为纯数字字符串。
-    返回与输入相同格式的字符串，用于下一页分页游标。
-    """
-    if raw_id is None:
-        return None
-    s = str(raw_id)
-    m = re.match(r'^([A-Za-z]*)(\d+)$', s)
-    if m:
-        prefix, num_str = m.group(1), m.group(2)
-        return f"{prefix}{int(num_str) - 1}"
-    try:
-        return int(s) - 1
-    except (ValueError, TypeError):
-        return None
-
 from database import get_db
 from modules.system_admin.routes.auth import get_current_user  # P0：生产数据只读端点也必须登录
 from models import DT_EVENT_RAW, MachineToolMapping
@@ -423,12 +405,12 @@ def get_history(
         for ev in paged:
             ev.pop("payload", None)
 
-    # 下一页游标：返回结果中 raw_id 最小值减 1
-    # 兼容 "RAW12345678" 字符串格式和纯数字格式
+    # 下一页游标：直接返回本页最小 raw_id；下一页以 raw_id < 游标严格排他，
+    # 不做"减一"运算 —— 零填充数字（SEED0009489888）减一会丢宽度导致字典序错乱、
+    # 紧邻 ID（100→99）减一会漏行，非数字 ID 则根本不可减。
     next_raw_id = None
     if paged:
-        min_raw_id = min(e["raw_id"] for e in paged)
-        next_raw_id = _decrement_raw_id(min_raw_id)
+        next_raw_id = min(e["raw_id"] for e in paged)
 
     result = {
         "tool_id": tool_id,

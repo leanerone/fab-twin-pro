@@ -43,7 +43,7 @@ from modules.production_monitor.routes.rvmessages import router as rv_router
 from modules.system_admin.routes import auth, users
 from modules.ai_assistant.routes import ai
 from modules.ai_assistant.routes import ai_tools_bridge
-from core.services.realtime import manager
+from core.services.realtime import connect_authenticated, manager
 from modules.production_monitor.services.simulator import start_simulator
 from modules.production_monitor.services.db_poller import start_db_poller
 from core.services.cache import cache
@@ -298,14 +298,16 @@ async def _mcp_auth_middleware(request, call_next):
 # ========== WebSocket 端点 ==========
 @app.websocket("/ws/realtime")
 async def websocket_realtime(websocket: WebSocket, token: str = None):
-    # T6 2026-11-06：WS 要求登录态——浏览器端 WebSocket 无法带 Authorization 头，
-    # 约定 query 参数 ?token=<登录token>（前端 useWebSocket 同步带上）。
-    # 校验失败直接拒绝握手（Starlette close-before-accept → HTTP 403）。
-    from core.services.security import parse_token
-    if not token or not parse_token(token):
-        await websocket.close(code=1008, reason="unauthorized")
+    # 认证主通道：子协议 fabtwin-token.<b64>（前端 useWebSocket，ver3）。
+    # ?token= 查询参数保留为兼容回退（夜班 T6 的存量客户端/脚本；浏览器 WS 无法自定义头）。
+    db = SessionLocal()
+    try:
+        connected = await connect_authenticated(websocket, db, query_token=token)
+    finally:
+        db.close()
+    if not connected:
         return
-    await manager.connect(websocket)
+
     try:
         # 发送连接成功确认，防止代理因无双向通信而断开
         await websocket.send_json({"type": "connected", "ts": datetime.now().isoformat()})
@@ -315,8 +317,10 @@ async def websocket_realtime(websocket: WebSocket, token: str = None):
             if data.strip() == '{"type":"ping"}':
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        pass
     except Exception:
+        pass
+    finally:
         manager.disconnect(websocket)
         # R5 2026-11-06：异常断开补一个显式 close——此前只从 active 移除，
         # 可能残留半关闭连接（对端 FIN 未完成握手）

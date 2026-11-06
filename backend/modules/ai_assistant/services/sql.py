@@ -35,7 +35,19 @@ class SqlSafetyError(Exception):
 # ---- 常量 ----
 DEFAULT_ROW_CAP = 200
 MAX_ROW_CAP = 1000
-STATEMENT_TIMEOUT_SEC = 20
+STATEMENT_TIMEOUT_SEC = 20  # FABTWIN_AI_SQL_TIMEOUT 缺省值
+
+
+def get_statement_timeout_sec() -> float:
+    """读取 FABTWIN_AI_SQL_TIMEOUT（秒），默认 20，钳制到 [1, 120] 的合法边界。"""
+    import os
+    raw = os.environ.get("FABTWIN_AI_SQL_TIMEOUT", "").strip()
+    try:
+        val = float(raw) if raw else 20.0
+    except ValueError:
+        logger.warning("FABTWIN_AI_SQL_TIMEOUT=%r 非法，使用默认 20s", raw)
+        return 20.0
+    return max(1.0, min(val, 120.0))
 
 # 写入 / DDL / 会话控制类动词：出现即杀（在剥离注释后的全文里做词边界匹配）
 _FORBIDDEN_VERBS = (
@@ -239,14 +251,20 @@ def execute_readonly(
     sql: str,
     *,
     row_cap: int = DEFAULT_ROW_CAP,
-    timeout_sec: int = STATEMENT_TIMEOUT_SEC,
+    timeout_sec: Optional[float] = None,
     repair: bool = True,
 ) -> Dict[str, Any]:
     """校验 + 执行 + 结构化返回。
 
+    超时模型：用 SQLAlchemy 底层 driver_connection 设置 python-oracledb 的
+    call_timeout（毫秒），execute / 分批 fetch / LOB 读取共用 time.monotonic
+    总预算；finally 恢复原 call_timeout。Thick 模式或不支持 call_timeout 的
+    驱动会明确报错（不用 asyncio.wait_for 假装取消）。不记录任何绑定值。
     返回 dict：{ok, sql, columns, rows, row_count, truncated, error, repairs}
     永不抛异常给上层（异常转成 error 字段），让 LLM 能读到原因并改写重试。
     """
+    import time
+
     result: Dict[str, Any] = {
         "ok": False, "sql": "", "columns": [], "rows": [], "row_count": 0,
         "truncated": False, "error": None, "repairs": [],
@@ -269,14 +287,33 @@ def execute_readonly(
 
     result["sql"] = final_sql
     result["repairs"] = repairs
+    budget = float(timeout_sec) if timeout_sec else get_statement_timeout_sec()
+    deadline = time.monotonic() + budget
+    driver_conn = None
+    prev_timeout = None
+    timeout_applied = False
     try:
-        stmt = sa_text(final_sql)
-        if timeout_sec and hasattr(db, "connection"):
-            # Oracle 侧超时靠 FABTWIN_AI_SQL_TIMEOUT 走驱动层；这里做 Python 侧兜底
-            pass
-        cur = db.execute(stmt)
+        # python-oracledb Thin：connection.call_timeout（毫秒）。Thick / 其它驱动
+        # 无此属性或赋值即抛错——按设计明确报错，不做假取消。
+        try:
+            raw_conn = db.connection() if hasattr(db, "connection") else None
+            driver_conn = getattr(raw_conn, "driver_connection", None) if raw_conn is not None else None
+        except Exception as exc:
+            raise RuntimeError(f"无法获取底层驱动连接，AI SQL 执行中止: {exc}") from exc
+        if driver_conn is None:
+            raise RuntimeError("当前驱动不暴露 driver_connection，拒绝执行（无法保证语句超时）")
+        prev_timeout = getattr(driver_conn, "call_timeout", 0)
+        driver_conn.call_timeout = int(budget * 1000)
+        timeout_applied = True
+
+        cur = db.execute(sa_text(final_sql))
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"AI SQL 超过总预算 {budget:.1f}s（execute 阶段）")
         cols = list(cur.keys())
-        raw = cur.fetchmany(max(1, min(row_cap, MAX_ROW_CAP)) + 1)
+        fetch_cap = max(1, min(row_cap, MAX_ROW_CAP)) + 1
+        raw = cur.fetchmany(fetch_cap)
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"AI SQL 超过总预算 {budget:.1f}s（fetch 阶段）")
         truncated = len(raw) > min(row_cap, MAX_ROW_CAP)
         rows = raw[: min(row_cap, MAX_ROW_CAP)]
         out: List[Dict[str, Any]] = []
@@ -284,12 +321,13 @@ def execute_readonly(
             values = r._mapping if hasattr(r, "_mapping") else r
             rec: Dict[str, Any] = {}
             for c in cols:
-                v = values[c] if isinstance(values, dict) or hasattr(values, "__getitem__") else None
                 try:
                     v = values[c]
                 except Exception:
                     v = None
                 if hasattr(v, "read"):
+                    if time.monotonic() > deadline:
+                        raise TimeoutError(f"AI SQL 超过总预算 {budget:.1f}s（LOB 读取）")
                     try:
                         v = v.read()
                     except Exception:
@@ -303,6 +341,12 @@ def execute_readonly(
         msg = f"{type(exc).__name__}: {exc}"
         result["error"] = msg
         logger.warning("AI SQL 执行失败：%s | SQL=%s", msg, final_sql[:300])
+    finally:
+        if timeout_applied and driver_conn is not None:
+            try:
+                driver_conn.call_timeout = prev_timeout
+            except Exception:
+                logger.warning("恢复 driver call_timeout 失败", exc_info=True)
     return result
 
 

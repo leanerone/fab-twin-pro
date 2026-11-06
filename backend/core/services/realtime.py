@@ -5,6 +5,9 @@ from typing import List, Optional
 
 from fastapi import WebSocket
 
+from core.services.security import WS_SUBPROTOCOL, decode_ws_token, parse_token
+from models import User
+
 logger = logging.getLogger("fabtwin.realtime")
 
 # raw_event 广播去重（FIFO 有界集合；去重判定在事件循环内串行执行，无并发问题）
@@ -36,11 +39,11 @@ class ConnectionManager:
         # 供线程池里的同步代码（如 rvmessages）通过 run_coroutine_threadsafe 广播
         self.loop: Optional[asyncio.AbstractEventLoop] = None
 
-    async def connect(self, websocket: WebSocket):
-        """接受新连接并加入活跃列表"""
+    async def connect(self, websocket: WebSocket, subprotocol: str | None = None):
+        """接受已认证连接并加入活跃列表。"""
         if self.loop is None:
             self.loop = asyncio.get_running_loop()
-        await websocket.accept()
+        await websocket.accept(subprotocol=subprotocol)
         self.active.append(websocket)
         logger.info("WebSocket 已连接，当前连接数 %d", len(self.active))
 
@@ -94,3 +97,22 @@ class ConnectionManager:
 
 # 全局连接管理器单例
 manager = ConnectionManager()
+
+
+async def connect_authenticated(websocket: WebSocket, db, connection_manager=manager) -> bool:
+    """认证子协议令牌并确认用户存在；未认证连接以 1008 关闭且不注册。"""
+    token = decode_ws_token(websocket.scope.get("subprotocols", []))
+    user_id = parse_token(token) if token else None
+    user = None
+    if user_id is not None:
+        user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        # 必须先 accept 再 close：握手完成前调用 close，Starlette 会将其转为
+        # HTTP 403 握手拒绝，浏览器只能收到 1006 异常关闭（而非 1008），
+        # 客户端基于 1008 的认证清理与停连逻辑将永远不会触发
+        await websocket.accept(subprotocol=WS_SUBPROTOCOL)
+        await websocket.close(code=1008)
+        return False
+
+    await connection_manager.connect(websocket, subprotocol=WS_SUBPROTOCOL)
+    return True
