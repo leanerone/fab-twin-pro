@@ -4,7 +4,7 @@
 // let 改为 ref 传入（.value），卸载清理改为在本工厂内自注册 onUnmounted。
 import { onUnmounted } from 'vue'
 import { api } from '@/api'
-import { parseTs, msToHM, fmtDateMs, MAX_RANGE_MS } from './timeFormat.js'
+import { parseTs, msToHM, hmToMs, fmtDateMs, MAX_RANGE_MS } from './timeFormat.js'
 
 // 回放区段一次最多拉多少条：量产数据量大，一次 5000 条会让后端逐条解析 CLOB、
 // 前端再排序，首屏明显变慢
@@ -54,8 +54,16 @@ export function useMachinePlayback(ctx) {
 
   // 拉取当前日期+时间区段的事件（升序）
   async function fetchRangeEvents(request = newHistoryRequest()) {
-    const start = `${playbackDate.value}T${playbackStartHM.value}:00`
-    const end = `${playbackDate.value}T${playbackEndHM.value}:59.999`
+    // 跨零点区段（如 23:16~00:16，零点刚过时的默认区段必然如此）：
+    // 结束时间属于次日。HM 一律按 ms 偏移比较——字符串比较会漏判，且无法识别
+    // "24:16" 这类同日 24h+ 表示，拼出的小时 24 也不是后端能解析的合法时间
+    const DAY_MS = 86400000
+    const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
+    const sMs = hmToMs(playbackStartHM.value)
+    let eMs = hmToMs(playbackEndHM.value)
+    if (eMs <= sMs) eMs += DAY_MS
+    const start = `${fmtDateMs(dayStart + sMs)}T${msToHM(sMs % DAY_MS)}:00`
+    const end = `${fmtDateMs(dayStart + eMs)}T${msToHM(eMs % DAY_MS)}:59.999`
     const resp = await api.getHistory(machineId.value, {
       start_time: start,
       end_time: end,

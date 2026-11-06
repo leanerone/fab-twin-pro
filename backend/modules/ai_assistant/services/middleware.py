@@ -86,11 +86,12 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         # 启动时加载配置
         self._load_dify_n8n_from_db()  # 加载Dify/N8N
         self._load_llm_config()         # 加载LLM默认配置
-        self._cleanup_old_conversations()  # T5: 清理7天未更新的会话映射（表未建则跳过）
+        # 过期映射只能按属主清理，启动时不做全局删除。
 
 
     def chat(self, question: str, session_id: str = None, machine_id: str = None,
-             context: Dict = None, user_role: str = "user", config_id: int = None) -> Dict[str, Any]:
+             context: Dict = None, user_role: str = "user", config_id: int = None,
+             user_id: str = None, _chat_config: Dict = None) -> Dict[str, Any]:
         """统一聊天入口
 
         Args:
@@ -104,46 +105,47 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         Returns:
             统一响应结构体（含 provider_name、model、usage）
         """
-        if not session_id:
-            session_id = f"sess_{uuid.uuid4().hex[:16]}"
+        # 在任何消息/流开始前完成属主校验，并固定本次调用的配置快照。
+        if _chat_config is None:
+            session_id, chat_config = self.prepare_chat(session_id, user_id, machine_id, config_id)
+        else:
+            chat_config = _chat_config
+        session = self._get_or_create_session(
+            user_id, session_id, machine_id or chat_config.get("_machine_id"),
+        )
+        session_id = session["session_id"]
+        machine_id = chat_config.get("_machine_id") or machine_id
+        route_provider = chat_config["provider"]
+        base_url = chat_config.get("base_url") or ""
+        api_key = chat_config.get("api_key") or ""
+        model_name = chat_config.get("model") or ""
+        provider_name = chat_config.get("provider_name") or ""
+        current_config_id = chat_config.get("current_config_id")
 
-        # 如有指定config_id，切换到对应配置
-        if config_id and config_id != self.current_config_id:
-            self._load_llm_config(config_id)
-
-        # 机台专属 Dify 路由（test31 重构：请求级配置，不再就地改写 self.* ——
-        # 原实现两个用户对不同机台同时提问会互相覆盖 provider/base_url/key，
-        # 且命中后的状态会"粘"在单例上影响后续请求）
+        # 机台专属 Dify 与全局 Dify 都只使用请求级配置，不改写单例。
         machine_dify = None
         if not config_id and machine_id:
             machine_dify = self._get_machine_dify_config(machine_id)
         if machine_dify:
             dify_cfg = {
-                "enabled": True,  # 命中专属Dify必须显式启用，否则_call_dify守卫失败
+                "enabled": True,
                 "base_url": machine_dify.get("dify_base_url", ""),
                 "api_key": machine_dify.get("dify_api_key", ""),
                 "provider_name": machine_dify.get("config_name", "Dify"),
                 "model": f"dify-{machine_dify.get('config_name', '')}",
             }
             route_provider = "dify"
-            print(f"[AI] 机台 {machine_id} 命中专属 Dify: {dify_cfg['provider_name']}, "
-                  f"url={dify_cfg['base_url']!r}, key_len={len(dify_cfg['api_key'] or '')}")
+        elif route_provider in ("dify", "hybrid"):
+            dify_cfg = {
+                "enabled": chat_config.get("dify_enabled", False),
+                "base_url": chat_config.get("dify_base_url", ""),
+                "api_key": chat_config.get("dify_api_key", ""),
+                "app_id": chat_config.get("dify_app_id", ""),
+                "provider_name": provider_name,
+                "model": model_name,
+            }
         else:
             dify_cfg = None
-            route_provider = self.provider
-            # 没有专属配置，确保用默认配置
-            if not config_id and not self.current_config_id:
-                self._load_default_config()
-                route_provider = self.provider
-
-        # 获取或创建会话
-        if session_id not in self.sessions:
-            self.sessions[session_id] = {
-                "messages": [],
-                "created_at": datetime.now().isoformat(),
-                "machine_id": machine_id,
-            }
-        session = self.sessions[session_id]
 
         # 保存用户消息
         session["messages"].append({
@@ -169,8 +171,8 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         execution_log.append({"step": "start", "provider": route_provider, "timestamp": datetime.now().isoformat()})
 
         # 记录路由决策
-        if route_provider in openai_compatible_providers and self.base_url and self.api_key:
-            execution_log.append({"step": "route", "decision": "llm", "provider": route_provider, "model": self.model})
+        if route_provider in openai_compatible_providers and base_url and api_key:
+            execution_log.append({"step": "route", "decision": "llm", "provider": route_provider, "model": model_name})
         elif route_provider in openai_compatible_providers:
             execution_log.append({"step": "route", "decision": "fallback_local", "reason": "缺少 base_url 或 api_key"})
         else:
@@ -185,11 +187,12 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
                     question, machine_id, user_role,
                     usage_tracker=usage, tool_calls_recorder=tool_calls_record,
                 )
-            elif route_provider in openai_compatible_providers and self.base_url and self.api_key:
-                execution_log.append({"step": "call_llm", "url": self._build_chat_url(self.base_url)})
+            elif route_provider in openai_compatible_providers and base_url and api_key:
+                execution_log.append({"step": "call_llm", "url": self._build_chat_url(base_url)})
                 result = self._call_openai_compatible(
                     question, system_prompt, session["messages"], machine_id,
-                    usage_tracker=usage, tool_calls_recorder=tool_calls_record
+                    usage_tracker=usage, tool_calls_recorder=tool_calls_record,
+                    llm_cfg=chat_config,
                 )
                 execution_log.append({"step": "llm_done", "tool_calls_count": len(tool_calls_record)})
             elif route_provider in openai_compatible_providers:
@@ -201,7 +204,7 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
                 result = self._call_dify(
                     question, session_id, machine_id, user_role,
                     usage_tracker=usage, tool_calls_recorder=tool_calls_record,
-                    dify_cfg=dify_cfg,
+                    dify_cfg=dify_cfg, user_id=user_id,
                 )
             elif route_provider == "hybrid":
                 try:
@@ -253,9 +256,9 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
 
         # 注入当前Provider信息到响应（机台专属路由用请求级配置，其余用单例当前值）
         result["provider"] = route_provider
-        result["provider_name"] = (dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name()
-        result["model"] = (dify_cfg or {}).get("model") or self.model
-        result["config_id"] = None if machine_dify else self.current_config_id
+        result["provider_name"] = (dify_cfg or {}).get("provider_name") or provider_name or self._infer_provider_name()
+        result["model"] = (dify_cfg or {}).get("model") or model_name
+        result["config_id"] = None if machine_dify else current_config_id
         result["usage"] = usage
         result["tool_calls"] = tool_calls_record
 
@@ -277,10 +280,10 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         try:
             self._log_usage(
                 session_id=session_id,
-                config_id=None if machine_dify else self.current_config_id,
+                config_id=None if machine_dify else current_config_id,
                 provider=route_provider,
-                provider_name=(dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name(),
-                model=(dify_cfg or {}).get("model") or self.model,
+                provider_name=(dify_cfg or {}).get("provider_name") or provider_name or self._infer_provider_name(),
+                model=(dify_cfg or {}).get("model") or model_name,
                 prompt_tokens=usage.get("prompt_tokens", 0),
                 completion_tokens=usage.get("completion_tokens", 0),
                 total_tokens=usage.get("total_tokens", 0),
@@ -364,28 +367,41 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
         return jump_ts, jump_mid, table_data, extra_sources
 
     async def chat_stream(self, question: str, session_id: str = None, machine_id: str = None,
-                          context: Dict = None, user_role: str = "user", config_id: int = None):
+                          context: Dict = None, user_role: str = "user", config_id: int = None,
+                          user_id: str = None, _chat_config: Dict = None):
         """流式聊天入口（异步生成器），逐帧 yield SSE data 行字符串。
 
         Dify 路由：_stream_dify() 逐 chunk 透传，自管会话保存与 usage 日志；
         非 Dify 路由：委托 chat() 同步执行（它自管会话/日志），结果包装单帧。
         收尾总是发 final 帧 + [DONE]。
         """
-        if not session_id:
-            session_id = f"sess_{uuid.uuid4().hex[:16]}"
+        if _chat_config is None:
+            session_id, chat_config = self.prepare_chat(session_id, user_id, machine_id, config_id)
+        else:
+            chat_config = _chat_config
+        session = self._get_or_create_session(
+            user_id, session_id, machine_id or chat_config.get("_machine_id"),
+        )
+        session_id = session["session_id"]
+        machine_id = chat_config.get("_machine_id") or machine_id
+        route_provider = chat_config["provider"]
+        model_name = chat_config.get("model") or ""
+        provider_name = chat_config.get("provider_name") or ""
+        current_config_id = chat_config.get("current_config_id")
 
-        # ---- 路由判定（不改状态）：机台专属 Dify 命中 或 全局 dify/hybrid ----
+        # 路由只读取本次请求快照，config_id 不得切换全局 Provider。
         machine_dify = None
         if not config_id and machine_id:
             machine_dify = self._get_machine_dify_config(machine_id)
-        route_is_dify = bool(machine_dify) or self.provider in ("dify", "hybrid")
+        route_is_dify = bool(machine_dify) or route_provider in ("dify", "hybrid")
 
         if not route_is_dify:
             # 非 Dify：同步 chat() 仅在短任务期间占用工作线程，不阻塞事件循环
             result = None
             try:
                 result = await asyncio.to_thread(
-                    self.chat, question, session_id, machine_id, context, user_role, config_id
+                    self.chat, question, session_id, machine_id, context, user_role, config_id,
+                    user_id, chat_config,
                 )
             except Exception as e:
                 yield self._sse_line({"event": "error", "message": str(e)[:300]})
@@ -440,17 +456,16 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
             execution_log.append({"step": "route", "decision": "machine_dify", "config": dify_cfg["provider_name"]})
             print(f"[AI-stream] 机台 {machine_id} 命中专属 Dify: {dify_cfg['provider_name']}")
         else:
-            dify_cfg = None
-            route_provider = self.provider  # dify / hybrid
-
-        # 会话：保存用户消息
-        if session_id not in self.sessions:
-            self.sessions[session_id] = {
-                "messages": [],
-                "created_at": datetime.now().isoformat(),
-                "machine_id": machine_id,
+            dify_cfg = {
+                "enabled": chat_config.get("dify_enabled", False),
+                "base_url": chat_config.get("dify_base_url", ""),
+                "api_key": chat_config.get("dify_api_key", ""),
+                "app_id": chat_config.get("dify_app_id", ""),
+                "provider_name": provider_name,
+                "model": model_name,
             }
-        session = self.sessions[session_id]
+
+        # 会话已在路由判定前完成属主校验。
         session["messages"].append({
             "role": "user", "content": question, "timestamp": datetime.now().isoformat(),
         })
@@ -463,6 +478,7 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
                 question, session_id, machine_id, user_role,
                 stream_result=stream_result,
                 dify_cfg=dify_cfg,
+                user_id=user_id,
             ):
                 yield self._sse_line(evt)
         except Exception as e:
@@ -579,10 +595,10 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
             try:
                 self._log_usage(
                     session_id=session_id,
-                    config_id=None if machine_dify else self.current_config_id,
+                    config_id=None if machine_dify else current_config_id,
                     provider=route_provider,
-                    provider_name=(dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name(),
-                    model=(dify_cfg or {}).get("model") or self.model,
+                    provider_name=(dify_cfg or {}).get("provider_name") or provider_name or self._infer_provider_name(),
+                    model=(dify_cfg or {}).get("model") or model_name,
                     prompt_tokens=usage.get("prompt_tokens", 0),
                     completion_tokens=usage.get("completion_tokens", 0),
                     total_tokens=usage.get("total_tokens", 0),
@@ -614,9 +630,9 @@ class AIMiddleware(_ConfigMixin, _ConversationsMixin, _OpenAIMixin, _DifyMixin, 
             "sources": sources,
             "usage": usage,
             "provider": route_provider,
-            "provider_name": (dify_cfg or {}).get("provider_name") or self.provider_name or self._infer_provider_name(),
-            "model": (dify_cfg or {}).get("model") or self.model,
-            "config_id": None if machine_dify else self.current_config_id,
+            "provider_name": (dify_cfg or {}).get("provider_name") or provider_name or self._infer_provider_name(),
+            "model": (dify_cfg or {}).get("model") or model_name,
+            "config_id": None if machine_dify else current_config_id,
             "success": success,
         })
         yield "data: [DONE]\n\n"

@@ -426,6 +426,56 @@ class _ConfigMixin:
             return "自定义OpenAI兼容"
         return ""
 
+    def _resolve_chat_config(self, config_id: Optional[int] = None) -> Dict[str, Any]:
+        """读取单次聊天配置快照；指定 config_id 时绝不修改全局 Provider。"""
+        if config_id is not None:
+            db = _get_db()
+            try:
+                from models import AIProviderConfig
+                cfg = db.query(AIProviderConfig).filter(
+                    AIProviderConfig.id == config_id,
+                    AIProviderConfig.is_enabled == True,
+                ).first()
+                if not cfg:
+                    raise ValueError(f"模型配置 ID={config_id} 不存在或已禁用")
+                provider = (cfg.provider or "openai").strip().lower()
+                if provider not in ("local", "openai", "dify", "hybrid"):
+                    provider = "openai"
+                base_url = (cfg.base_url or "").strip().rstrip("/")
+                return {
+                    "provider": provider,
+                    "base_url": base_url,
+                    "api_key": (cfg.api_key or "").strip(),
+                    "model": (cfg.model or "").strip(),
+                    "temperature": cfg.temperature if cfg.temperature is not None else 0.7,
+                    "max_tokens": cfg.max_tokens or 2048,
+                    "provider_name": self._infer_provider_name(base_url, provider),
+                    "current_config_id": config_id,
+                    "dify_enabled": self.dify_enabled,
+                    "dify_base_url": self.dify_base_url,
+                    "dify_api_key": self.dify_api_key,
+                    "dify_app_id": self.dify_app_id,
+                }
+            finally:
+                db.close()
+
+        if getattr(self, "current_config_id", None) is None:
+            self._load_default_config()
+        return {
+            "provider": getattr(self, "provider", "local"),
+            "base_url": getattr(self, "base_url", ""),
+            "api_key": getattr(self, "api_key", ""),
+            "model": getattr(self, "model", ""),
+            "temperature": getattr(self, "temperature", 0.7),
+            "max_tokens": getattr(self, "max_tokens", 2048),
+            "provider_name": getattr(self, "provider_name", "本地规则引擎"),
+            "current_config_id": getattr(self, "current_config_id", None),
+            "dify_enabled": getattr(self, "dify_enabled", False),
+            "dify_base_url": getattr(self, "dify_base_url", ""),
+            "dify_api_key": getattr(self, "dify_api_key", ""),
+            "dify_app_id": getattr(self, "dify_app_id", ""),
+        }
+
     # ---------- T5：session_id → Dify conversation_id 映射持久化 ----------
     # 读：先查内存 map，miss 再查 ai_conversations 表，命中回填内存；
     # 写：内存 + 落库 upsert。表未建/DB 异常时降级为纯内存（与旧行为一致）。

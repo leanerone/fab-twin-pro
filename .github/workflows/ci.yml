@@ -10,20 +10,26 @@ on:
 
 jobs:
   backend-tests:
-    name: 后端回归（AI中间件 + 模型校验）
+    name: 后端回归（锁文件 + 审计 + 纯单元测试）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: 安装依赖
-        run: pip install -r backend/requirements.txt pytest
-      - name: 运行聚焦回归测试
-        run: python -m pytest tests/test_ai_middleware_regressions.py tests/test_model_draft_validation.py -q
+      - name: 安装锁定依赖
+        run: |
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: 依赖一致性检查
+        run: pip check
+      - name: 已知漏洞审计
+        run: pip-audit -r backend/requirements.txt
+      - name: 运行回归测试（不依赖真实 Oracle）
+        run: python -m pytest tests/test_ai_middleware_regressions.py tests/test_model_draft_validation.py tests/test_security_regressions.py tests/test_svg_motion_validator.py tests/test_ai_data_regressions.py -q
+    # tests/pytest 会写真实 Oracle，仅本机受控环境或隔离数据库 nightly 执行，不纳入 PR 门禁
 
   frontend-build:
-    name: 前端构建
+    name: 前端构建与审计
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +41,9 @@ jobs:
       - name: 安装依赖
         working-directory: frontend
         run: npm ci
+      - name: 依赖漏洞审计
+        working-directory: frontend
+        run: npm audit --audit-level=high
       - name: 构建
         working-directory: frontend
         run: npm run build
@@ -55,3 +64,5 @@ jobs:
           python models/svg_kit/validate.py models/user/lam2300-topview.svg models/user/lam2300-topview.motion.json
           python models/svg_kit/validate.py models/user/centris-sym3-topview.svg models/user/centris-sym3-topview.motion.json
           python models/svg_kit/validate.py models/user/tel-synapse-topview.svg models/user/tel-synapse-topview.motion.json
+      - name: 校验器等级与退出码回归
+        run: pip install pytest && python -m pytest tests/test_svg_motion_validator.py -q

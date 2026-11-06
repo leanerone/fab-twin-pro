@@ -12,6 +12,9 @@ from sqlalchemy import text
 
 from conftest import TEST_RAW_PREFIX, WsReader, make_rv_payload
 
+# /ws/realtime 现在要求认证：通过不回显令牌的 WebSocket 子协议携带会话令牌
+from core.services.security import WS_SUBPROTOCOL, encode_ws_token
+
 
 def test_external_db_write_reaches_websocket(client, db):
     tool = "TEST-RW-WS-" + uuid.uuid4().hex[:6]
@@ -27,7 +30,10 @@ def test_external_db_write_reaches_websocket(client, db):
     )
     db.commit()
 
-    with client.websocket_connect("/ws/realtime") as ws:
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect(
+        "/ws/realtime", subprotocols=[WS_SUBPROTOCOL, encode_ws_token(token)]
+    ) as ws:
         reader = WsReader(ws)
         # 首帧是 connected 握手；随后等 poller 下一轮（1s 间隔）把新事件广播出来
         deadline = time.time() + 25

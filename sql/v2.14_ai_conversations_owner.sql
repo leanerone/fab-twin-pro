@@ -1,0 +1,49 @@
+-- ============================================================================
+-- v2.14: AI_CONVERSATIONS 属主隔离整改（前向迁移 + 预检）
+--
+-- 变更内容：
+--   1) USER_ID 由 NUMBER 改为 VARCHAR2(255)，与 USERS.ID 类型统一；
+--      历史 NUMBER 值无损转字符串，历史 NULL 只留审计、不自动映射任何 UUID。
+--   2) 新增复合索引：IX_AI_CONV_USER_SESSION (USER_ID, SESSION_ID)、
+--      IX_AI_CONV_USER_UPDATED (USER_ID, UPDATED_AT)。
+--
+-- 预检（迁移前请先人工执行）：
+--   SELECT SESSION_ID, COUNT(*) FROM AI_CONVERSATIONS
+--    GROUP BY SESSION_ID HAVING COUNT(*) > 1;
+--   -- 应返回 0 行（SESSION_ID 是主键）。如有重复先人工归并。
+--   SELECT COUNT(*) FROM AI_CONVERSATIONS WHERE USER_ID IS NULL;
+--   -- 仅用于审计知情；这些行保持 NULL，代码侧永不认领、永不展示。
+--
+-- 回滚：
+--   DROP INDEX IX_AI_CONV_USER_SESSION;
+--   DROP INDEX IX_AI_CONV_USER_UPDATED;
+--   DROP INDEX UK_AI_CONV_SESSION_ID;
+--   ALTER TABLE AI_CONVERSATIONS MODIFY (USER_ID NUMBER);
+--   （注意：回滚会丢失非数字字符串属主值，执行前请备份本表）
+-- ============================================================================
+
+-- 1) USER_ID → VARCHAR2(255)。Oracle 不允许直接 MODIFY NUMBER→VARCHAR2，
+--    采用加临时列搬迁的方式；存量数字转字符串，NULL 保持 NULL。
+ALTER TABLE AI_CONVERSATIONS ADD (USER_ID_NEW VARCHAR2(255));
+
+UPDATE AI_CONVERSATIONS
+   SET USER_ID_NEW = TO_CHAR(USER_ID)
+ WHERE USER_ID IS NOT NULL;
+
+ALTER TABLE AI_CONVERSATIONS DROP COLUMN USER_ID;
+ALTER TABLE AI_CONVERSATIONS RENAME COLUMN USER_ID_NEW TO USER_ID;
+
+-- 2) SESSION_ID 单列唯一（新代码以 SESSION_ID 为主键语义）
+--    预检中的重复检查必须先为 0 行，否则本步会报 ORA-02299。
+CREATE UNIQUE INDEX UK_AI_CONV_SESSION_ID
+    ON AI_CONVERSATIONS (SESSION_ID);
+
+-- 3) 按属主查询/清理的复合索引
+CREATE INDEX IX_AI_CONV_USER_SESSION
+    ON AI_CONVERSATIONS (USER_ID, SESSION_ID);
+
+CREATE INDEX IX_AI_CONV_USER_UPDATED
+    ON AI_CONVERSATIONS (USER_ID, UPDATED_AT);
+
+-- 迁移后审计（不修改数据，仅输出核对）：
+--   SELECT USER_ID, COUNT(*) FROM AI_CONVERSATIONS GROUP BY USER_ID;

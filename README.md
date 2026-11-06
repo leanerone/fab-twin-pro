@@ -136,9 +136,13 @@ cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+# 需要跑测试/审计时（CI 同款）再装开发锁：
+python -m pip install -r requirements-dev.txt
 cd ..\frontend
 npm ci
 ```
+
+`requirements.txt` 是从已验证环境生成的完整运行时锁定文件，`requirements-dev.txt` 追加 pytest、pip-audit 等 CI 依赖；直接依赖及兼容范围见 `requirements.in` / `requirements-dev.in`，改依赖时改 `.in` 并重新冻结。
 
 后端没有通用 mock 开关。启动前请找季世庆确认开发 Oracle 连接参数，并核对 `deploy/env.bat` 中的 `ORACLE_*`、`ORACLE_DSN_TYPE` 和 `ORACLE_CLIENT_DIR`。**真实密码不要写进文档，也不要把本机凭据提交到仓库。**
 
@@ -161,7 +165,7 @@ cd backend
 ```
 
 ```powershell
-# 窗口 2：前端，http://localhost:3000
+# 窗口 2：前端，http://localhost:5173
 cd frontend
 npm run dev
 ```
@@ -204,7 +208,16 @@ git switch -c feature/qianming-model-library-upload-check
 ### 后端回归（CI 同款）
 
 ```powershell
-.\backend\venv\Scripts\python.exe -m pytest tests/test_ai_middleware_regressions.py tests/test_model_draft_validation.py -q
+.\backend\venv\Scripts\python.exe -m pytest tests/test_ai_middleware_regressions.py tests/test_model_draft_validation.py tests/test_security_regressions.py tests/test_svg_motion_validator.py tests/test_ai_data_regressions.py -q
+```
+
+### 依赖一致性与漏洞审计（CI 同款）
+
+```powershell
+.\backend\venv\Scripts\python.exe -m pip check
+.\backend\venv\Scripts\python.exe -m pip_audit -r backend/requirements.txt
+cd frontend
+npm audit --audit-level=high
 ```
 
 ### 前端构建（CI 同款）

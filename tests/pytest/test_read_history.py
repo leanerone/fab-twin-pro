@@ -52,13 +52,6 @@ def test_history_cache_cold_vs_warm(client, dense, reset_caches):
     record(f"/history 暖态（60s TTL 命中）", warm)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="已知缺陷：_decrement_raw_id (history.py:41) 对零填充数字后缀丢失填充宽度 —— "
-    "'SEED0009489888' 减 1 得 'SEED9489887'（短了、字典序反而更大），"
-    "raw_id < 游标 命中全部行，第二页与第一页完全重叠，前端翻页死循环。"
-    "修复：保持宽度 f\"{prefix}{n-1:0{len(num_str)}d}\"",
-)
 def test_history_keyset_pagination(client, dense, reset_caches):
     """before_raw_id 翻页：第二页不与第一页重叠，且 raw_id 严格更小。"""
     r1 = _get_history(client, dense["tool"], dense["date"], limit=200)

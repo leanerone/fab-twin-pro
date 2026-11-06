@@ -1,0 +1,4 @@
+# CI/测试依赖（锁文件由 requirements-dev.txt 提供）
+-r requirements.in
+pytest>=8.0
+pip-audit>=2.7

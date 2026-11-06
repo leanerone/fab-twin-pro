@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -22,7 +23,9 @@ import time
 from collections import defaultdict, deque
 from typing import Deque, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from core.deps import require_admin
 
 logger = logging.getLogger("fabtwin.perf")
 
@@ -41,7 +44,7 @@ _slow_sql: Deque[Dict] = deque(maxlen=20)
 # 每请求 SQL 计数（线程本地，中间件与 SQL 钩子共享）
 _tls = threading.local()
 
-router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+router = APIRouter(prefix="/api", tags=["metrics"])
 
 
 def _percentile(values, pct: float) -> float:
@@ -145,19 +148,41 @@ def install_sql_timing(engine) -> None:
         start = starts.pop()
         ms = (time.perf_counter() - start) * 1000.0
         if ms >= SLOW_SQL_MS:
-            snippet = " ".join(statement.split())[:200]
+            normalized = " ".join(statement.split())
+            operation = normalized.split(" ", 1)[0].upper() if normalized else "UNKNOWN"
+            statement_sha256 = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
             with _lock:
-                _slow_sql.append({"sql": snippet, "ms": round(ms, 1)})
-            logger.warning("[perf] 慢查询 %.0fms: %s", ms, snippet)
+                _slow_sql.append({
+                    "operation": operation,
+                    "ms": round(ms, 1),
+                    "statement_sha256": statement_sha256,
+                })
+            logger.warning(
+                "[perf] 慢查询 %s %.0fms sha256=%s",
+                operation, ms, statement_sha256,
+            )
 
 
-@router.get("/perf")
+@router.get("/metrics/perf")
 def get_perf():
     """性能快照：按 P95 倒序"""
     return snapshot()
 
 
-@router.post("/perf/reset")
+@router.post("/metrics/perf/reset", dependencies=[Depends(require_admin)])
 def reset_perf():
+    reset()
+    return {"ok": True}
+
+
+@router.get("/perf/slow", dependencies=[Depends(require_admin)])
+def get_slow_sql():
+    """返回不含 SQL 原文和绑定值的慢查询摘要。"""
+    with _lock:
+        return {"slow_sql": list(_slow_sql)}
+
+
+@router.post("/perf/clear", dependencies=[Depends(require_admin)])
+def clear_perf():
     reset()
     return {"ok": True}

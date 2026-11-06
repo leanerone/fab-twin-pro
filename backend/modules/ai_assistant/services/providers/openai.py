@@ -39,15 +39,20 @@ class _OpenAIMixin:
 
     def _call_openai_compatible(self, question: str, system_prompt: str,
                                 history_messages: List[Dict], machine_id: str = None,
-                                usage_tracker: Dict = None, 
-                                tool_calls_recorder: list = None) -> Dict[str, Any]:
+                                usage_tracker: Dict = None,
+                                tool_calls_recorder: list = None,
+                                llm_cfg: Dict[str, Any] = None) -> Dict[str, Any]:
         """调用OpenAI兼容接口（支持GLM、GPT等），带 Function Calling 工具调用
 
         Args:
             usage_tracker: 外部传入的dict，用于记录token使用量
             tool_calls_recorder: 外部传入的list，用于记录工具调用
         """
-        if not self.base_url or not self.api_key:
+        cfg = llm_cfg or {}
+        base_url = cfg.get("base_url", self.base_url)
+        api_key = cfg.get("api_key", self.api_key)
+        model_name = cfg.get("model", self.model)
+        if not base_url or not api_key:
             return self._local_rule_engine(question, machine_id, tool_calls_record=tool_calls_recorder)
 
         # 构建消息列表
@@ -57,16 +62,16 @@ class _OpenAIMixin:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {api_key}",
         }
-        url = self._build_chat_url(self.base_url)
+        url = self._build_chat_url(base_url)
 
         # 带 tools 的 payload（OpenAI Function Calling）
         payload = {
-            "model": self.model,
+            "model": model_name,
             "messages": messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "temperature": cfg.get("temperature", self.temperature),
+            "max_tokens": cfg.get("max_tokens", self.max_tokens),
             "stream": False,
             "tools": TOOL_DEFINITIONS,
             "tool_choice": "auto",
@@ -143,7 +148,7 @@ class _OpenAIMixin:
                         "jump_machine_id": final_jump_mid,
                         "table_data": collected_table_data,
                         "tool_calls": tool_call_records,
-                        "sources": [{"type": "llm", "model": self.model}],
+                        "sources": [{"type": "llm", "model": model_name}],
                     }
 
                 # 有 tool_calls：执行工具调用
@@ -244,7 +249,7 @@ class _OpenAIMixin:
                 "answer": "（工具调用轮数超限，请缩小问题范围后重试）",
                 "sql": "",
                 "tool_calls": tool_call_records,
-                "sources": [{"type": "llm", "model": self.model}],
+                "sources": [{"type": "llm", "model": model_name}],
             }
 
         except Exception as e:

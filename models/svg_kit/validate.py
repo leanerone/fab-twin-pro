@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from typing import Dict, List, Tuple
@@ -91,6 +92,7 @@ def check_svg(svg_text: str) -> Tuple[List[str], List[str]]:
 def check_motion(motion: dict) -> Tuple[List[str], List[str]]:
     errors: List[str] = []
     warnings: List[str] = []
+    angle_placeholders = set()
 
     for key in ("schema_version", "document", "motions"):
         if key not in motion:
@@ -122,11 +124,32 @@ def check_motion(motion: dict) -> Tuple[List[str], List[str]]:
                     f"{sname}.rules[{ri}] 的 actions 为空（命中后无视觉效果，确认是否为占位）"
                 )
             for ai, a in enumerate(r.get("actions", []) or []):
+                action_path = f"{sname}.rules[{ri}].actions[{ai}]"
                 at = (a or {}).get("type")
                 if at is not None and at not in ACTION_TYPES:
-                    warnings.append(
-                        f"{sname}.rules[{ri}].actions[{ai}] 类型 '{at}' 不在已知集合中 {sorted(ACTION_TYPES)}"
+                    errors.append(
+                        f"{action_path} 类型 '{at}' 不在已知集合中 {sorted(ACTION_TYPES)}"
                     )
+                if at != "rotate":
+                    continue
+                if "angle" not in a:
+                    errors.append(f"{action_path} rotate 缺少 angle")
+                    continue
+                angle = a["angle"]
+                if isinstance(angle, str) and _PLACEHOLDER_RE.fullmatch(angle):
+                    angle_placeholders.add(angle)
+                elif isinstance(angle, bool) or not isinstance(angle, (int, float)):
+                    errors.append(f"{action_path} rotate.angle 必须是数值")
+                elif isinstance(angle, float) and not math.isfinite(angle):
+                    errors.append(
+                        f"{action_path} rotate.angle 必须是有限数值（不能为 NaN/Infinity）"
+                    )
+
+    if angle_placeholders:
+        warnings.append(
+            f"{len(angle_placeholders)} 个 rotate.angle 含运行时占位符，已跳过数值校验"
+            f"（需 deriver 侧保证展开后为有限数值）: {sorted(angle_placeholders)[:8]}"
+        )
     return errors, warnings
 
 

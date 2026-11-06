@@ -42,7 +42,7 @@ from modules.production_monitor.routes import (
 from modules.production_monitor.routes.rvmessages import router as rv_router
 from modules.system_admin.routes import auth, users
 from modules.ai_assistant.routes import ai
-from core.services.realtime import manager
+from core.services.realtime import connect_authenticated, manager
 from modules.production_monitor.services.simulator import start_simulator
 from modules.production_monitor.services.db_poller import start_db_poller
 from core.services.cache import cache
@@ -296,7 +296,14 @@ async def _mcp_auth_middleware(request, call_next):
 # ========== WebSocket 端点 ==========
 @app.websocket("/ws/realtime")
 async def websocket_realtime(websocket: WebSocket):
-    await manager.connect(websocket)
+    db = SessionLocal()
+    try:
+        connected = await connect_authenticated(websocket, db)
+    finally:
+        db.close()
+    if not connected:
+        return
+
     try:
         # 发送连接成功确认，防止代理因无双向通信而断开
         await websocket.send_json({"type": "connected", "ts": datetime.now().isoformat()})
@@ -306,8 +313,10 @@ async def websocket_realtime(websocket: WebSocket):
             if data.strip() == '{"type":"ping"}':
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        pass
     except Exception:
+        pass
+    finally:
         manager.disconnect(websocket)
 
 # ========== 健康检查 ==========

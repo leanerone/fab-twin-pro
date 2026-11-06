@@ -63,19 +63,23 @@ const pendingJumpTs = ref('') // 等待数据加载完成后执行的跳转时�
 const initNow = new Date()
 const playbackStartHM = ref(fmtHM(new Date(initNow.getTime() - HOUR_MS)))
 const playbackEndHM = ref(fmtHM(initNow))
-// 校正区段：结束<=开始自动补1小时；跨度超12小时从结束时间前收；限制在所选日期内
+// 校正区段：结束 HH:MM 小于开始视为次日（跨零点区段，如 23:16~00:16）；
+// 跨度超12小时从结束时间前收；限制在所选日期内
 function normalizeRange(startHM, endHM) {
+  const DAY_MS = 86400000
   const dayStart = new Date(`${playbackDate.value}T00:00:00`).getTime()
-  const dayEnd = dayStart + 86400000 - 1
+  const dayEnd = dayStart + DAY_MS - 1
   let s = dayStart + hmToMs(startHM)
   let e = dayStart + hmToMs(endHM)
   if (isNaN(s) || s < dayStart) s = dayStart
   if (isNaN(e) || e > dayEnd) e = dayEnd
-  if (e <= s) e = s + HOUR_MS
+  if (e < s) e += DAY_MS
+  else if (e === s) e = s + HOUR_MS
   if (e - s > MAX_RANGE_MS) s = e - MAX_RANGE_MS
   if (s < dayStart) s = dayStart
   playbackStartHM.value = msToHM(s - dayStart)
-  playbackEndHM.value = msToHM(e - dayStart)
+  // 折回挂钟 HH:MM 保存（type="time" 只认 00:00~23:59），跨零点由查询侧按 ms 判定
+  playbackEndHM.value = msToHM((e - dayStart) % DAY_MS)
 }
 // 将区段调整为覆盖目标时间（前后各1小时，受日期边界约束）
 function setRangeAround(targetMs) {
@@ -113,15 +117,15 @@ const availableViews = computed(() => {
   // Motion JSON 2D 动画视图：绑定 animation_config（含 schema_version）的机型
   const hasMotion = cfg.view_mode === 'motion2d' || !!cfg.animation_config?.schema_version
   if (hasMotion) {
-    views.push({ key: 'motion2d', label: '🎬 Motion动画' })
+    views.push({ key: 'motion2d', label: 'Motion 2D' })
   }
   // 3D 视图：vpo 专用 3D 或通用 threejs
   if (cfg.views_config?.view_3d?.type === 'vpo' || cfg.view_mode === 'vpo3d' || cfg.view_mode === 'vpo-3d') {
-    views.push({ key: 'vpo3d', label: '🎯 PODOPENER 3D' })
+    views.push({ key: 'vpo3d', label: 'PODOPENER 3D' })
   } else if (cfg.views_config?.view_3d || cfg.view_mode === 'threejs' || cfg.view_mode === 'hybrid') {
-    views.push({ key: '3d', label: '🎯 3D模型' })
+    views.push({ key: '3d', label: '3D 模型' })
   }
-  if (views.length === 0) views.push({ key: '3d', label: '🎯 3D模型' })
+  if (views.length === 0) views.push({ key: '3d', label: '3D 模型' })
   return views
 })
 
@@ -420,17 +424,24 @@ onUnmounted(() => {
   <div class="detail-page">
     <!-- 左侧视图区 -->
     <div class="detail-viewer" :class="{ 'is-2d': viewMode === 'motion2d' }">
-      <!-- 视图模式切换按钮（多于1个视图时才显示，避免单按钮遮挡内容） -->
-      <div v-if="modelConfigReady && availableViews.length > 1" class="view-mode-switcher">
-        <button
-          v-for="v in availableViews"
-          :key="v.key"
-          class="vms-btn"
-          :class="{ active: viewMode === v.key }"
-          @click="viewMode = v.key"
-        >
-          {{ v.label }}
+      <!-- 查看器工具栏：返回与视图切换分区，避免窄屏重叠 -->
+      <div class="viewer-toolbar">
+        <button class="back-btn" type="button" @click="goBack">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m11 4-6 6 6 6m-6-6h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          返回看板
         </button>
+        <div v-if="modelConfigReady && availableViews.length > 1" class="view-mode-switcher" aria-label="机台视图">
+          <button
+            v-for="v in availableViews"
+            :key="v.key"
+            class="vms-btn"
+            :class="{ active: viewMode === v.key }"
+            :aria-pressed="viewMode === v.key"
+            @click="viewMode = v.key"
+          >
+            {{ v.label }}
+          </button>
+        </div>
       </div>
 
       <!-- 外部跳转网站：iframe 嵌入 -->
@@ -485,8 +496,6 @@ onUnmounted(() => {
         :events="events"
         :mode="mode"
       />
-
-      <button class="back-btn" @click="goBack">← 返回看板</button>
 
       <!-- 悬浮信息面板（2D模式下隐藏，避免遮挡） -->
       <div v-show="viewMode === '3d'" class="detail-left-panel glass-panel">
@@ -617,6 +626,7 @@ onUnmounted(() => {
 }
 .detail-viewer {
   flex: 1;
+  min-width: 0;
   position: relative;
   background: #040712;
   overflow: hidden;
@@ -648,81 +658,57 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-/* 新增：视图模式切换按钮 */
-.view-mode-switcher {
+/* 查看器外壳控件：不进入 Motion/3D 动画内部 */
+.viewer-toolbar {
   position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
+  top: 12px;
+  left: 12px;
+  right: 12px;
   z-index: 15;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
 }
-
-/* 2D模式下，切换按钮保持顶部右侧横排（和3D/vpo3d同一层级），
-   不再贴底竖排——之前贴底 bottom:14px 会与 motion2d-debug (right:12px bottom:12px)
-   以及回放面板底部控件重叠，用户反馈"挡住时间回放条和调试按钮" */
-.detail-viewer.is-2d .view-mode-switcher {
-  left: auto;
-  right: 14px;
-  top: 14px;
-  bottom: auto;
-  transform: none;
-  flex-direction: row;
-  gap: 6px;
-}
-
-.detail-viewer.is-2d .vms-btn {
-  padding: 6px 12px;
-  font-size: 11px;
-}
-
-.vms-btn {
-  padding: 8px 16px;
+.view-mode-switcher {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(14, 22, 35, 0.96);
   border: 1px solid var(--border);
-  background: rgba(13, 20, 36, 0.9);
-  backdrop-filter: blur(8px);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+}
+.vms-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-dim);
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
 }
-
-.vms-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.vms-btn.active {
-  background: rgba(0, 212, 255, 0.15);
-  color: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
-}
-
+.vms-btn:hover { color: var(--text); background: var(--panel-3); }
+.vms-btn.active { background: rgba(0, 212, 255, 0.1); color: var(--accent); border-color: rgba(0, 212, 255, 0.25); }
 .back-btn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: rgba(13, 20, 36, 0.9);
-  backdrop-filter: blur(8px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  background: rgba(14, 22, 35, 0.96);
   border: 1px solid var(--border);
-  color: var(--text);
-  padding: 8px 14px;
-  border-radius: 8px;
+  color: var(--text-dim);
+  border-radius: var(--radius-md);
   font-size: 12px;
-  font-weight: 600;
-  z-index: 10;
+  font-weight: 500;
+  pointer-events: auto;
 }
-/* 2D模式下，返回按钮紧凑显示 */
-.detail-viewer.is-2d .back-btn {
-  top: 10px;
-  right: 14px;
-  padding: 6px 12px;
-  font-size: 11px;
-}
+.back-btn svg { width: 17px; height: 17px; }
 
 /* 外部跳转网站 iframe 容器（铺满详情视图区） */
 .ext-iframe-wrap {
@@ -753,7 +739,7 @@ onUnmounted(() => {
 }
 .detail-left-panel {
   position: absolute;
-  top: 14px;
+  top: 60px;
   left: 14px;
   padding: 14px 18px;
   min-width: 280px;
@@ -802,6 +788,7 @@ onUnmounted(() => {
 }
 .detail-right {
   width: 340px;
+  min-height: 0;
   background: var(--panel);
   border-left: 1px solid var(--border);
   display: flex;
@@ -952,4 +939,16 @@ onUnmounted(() => {
   gap: 10px;
 }
 .ai-tab-wrap .dr-section { min-height: 0; }
+@media (max-width: 1366px) {
+  .detail-right { width: 320px; }
+  .vms-btn { padding: 0 9px; }
+  .detail-left-panel { min-width: 240px; padding: 11px 14px; }
+  .dr-time-hint { display: none; }
+}
+@media (max-width: 1280px) {
+  .detail-right { width: 300px; }
+  .viewer-toolbar { top: 9px; left: 9px; right: 9px; }
+  .back-btn { min-height: 34px; padding: 0 10px; }
+  .vms-btn { padding: 0 8px; font-size: 10px; }
+}
 </style>

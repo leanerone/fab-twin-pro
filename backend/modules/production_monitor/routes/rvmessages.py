@@ -12,6 +12,8 @@ from datetime import datetime
 import hmac
 import json
 import os
+import time
+import uuid
 
 from database import get_db
 from models import DT_EVENT_RAW, DT_EVENT_RAW_CUR
@@ -19,6 +21,23 @@ from core.services.realtime import manager
 from core.services.time_utils import normalize_ts
 
 router = APIRouter(prefix="/api/rv", tags=["rv"])
+
+# raw_id 列宽（DT_EVENT_RAW.raw_id VARCHAR2(255)），生成器输出远低于该上限
+_RAW_ID_PREFIX = "TID.Z"
+_RAW_ID_TS_WIDTH = 20  # 微秒时间戳固定宽度，字典序==时间序
+
+
+def generate_raw_id() -> str:
+    """生成 RV/debug 事件 raw_id。
+
+    形态：TID.Z + 20 位零填充微秒时间戳 + 16 位 UUID4 hex（共 41 字符）。
+    - 保留 TID.Z 前缀：与存量事件同序，db_poller 按 raw_id DESC 拉取不会被挤出窗口
+    - 固定宽度微秒：字典序严格等于时间序，keyset 翻页（raw_id < 游标）单调
+    - UUID hex 段：同微秒并发写入不撞主键（原 pid%1000 同秒并发必然冲突）
+    - 总长 41 < 255 列宽，VARCHAR2 排序兼容
+    """
+    micros = int(time.time() * 1_000_000)
+    return f"{_RAW_ID_PREFIX}{micros:0{_RAW_ID_TS_WIDTH}d}{uuid.uuid4().hex[:16]}"
 
 
 def _ingest_key() -> str:
@@ -93,10 +112,10 @@ def receive_rv_message(
     received_ts = data.received_ts_utc or now
     event_ts = data.event_ts_utc or now
 
-    # raw_id 必须与存量事件保持同序（Z{timestamp} 前缀），
+    # raw_id 必须与存量事件保持同序（TID.Z 前缀 + 固定宽度微秒），
     # 否则 db_poller 按 raw_id DESC 拉最近 300 行时新事件被挤出窗口。
     raw_event = DT_EVENT_RAW(
-        raw_id=f"TID.Z{int(datetime.now().timestamp())}{os.getpid() % 1000:03d}",
+        raw_id=generate_raw_id(),
         tool_id=data.tool_id,
         source_system=data.source_system,
         source_message_id=data.source_message_id,

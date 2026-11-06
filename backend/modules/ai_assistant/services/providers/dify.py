@@ -124,7 +124,7 @@ class _DifyMixin:
 
     async def _stream_dify(self, question: str, session_id: str, machine_id: str = None,
                            user_role: str = "user", stream_result: Dict = None,
-                           dify_cfg: Dict = None):
+                           dify_cfg: Dict = None, user_id: str = None):
         """异步流式调用 Dify，逐事件 yield（透传帧，dict 形态）。
 
         与 _call_dify 的差异：
@@ -178,7 +178,7 @@ class _DifyMixin:
         }
         # conversation_id 规则同 _call_dify：必须是 Dify 返回的 UUID，首次不传
         sid_key = str(session_id).strip() if session_id else ""
-        dify_cid = self._conv_get(sid_key) if sid_key else None
+        dify_cid = self._conv_get(user_id, sid_key) if sid_key else None
         if dify_cid:
             payload["conversation_id"] = dify_cid
 
@@ -320,6 +320,10 @@ class _DifyMixin:
 
             stream_result["answer"] = "".join(answer_parts)
             stream_result["fab_text"] = "".join(fab_parts)
+            if sid_key and user_id and stream_result.get("conversation_id"):
+                self._conv_put(
+                    user_id, sid_key, stream_result["conversation_id"], machine_id=machine_id,
+                )
             print(f"[Dify-stream] [DONE] 流结束: answer_len={len(stream_result['answer'])}, "
                   f"fab={'有' if fab_mode else '无'}, thoughts={stream_result['thoughts_count']}")
 
@@ -327,7 +331,7 @@ class _DifyMixin:
                    user_role: str = "user",
                    usage_tracker: Dict = None,
                    tool_calls_recorder: List = None,
-                   dify_cfg: Dict = None) -> Dict[str, Any]:
+                   dify_cfg: Dict = None, user_id: str = None) -> Dict[str, Any]:
         """调用Dify应用
         - 解析 Dify 返回的 metadata.usage 写回 usage_tracker（用于日志计费）
         - 解析 retriever_resources（RAG 知识库引用片段）放入 sources 字段
@@ -397,7 +401,7 @@ class _DifyMixin:
             #   3. 后续请求必须传 Dify 返回的 UUID
             # 因此维护一个映射: session_id → dify_conv_id (UUID)
             sid_key = str(session_id).strip() if session_id else ""
-            dify_cid = self._conv_get(sid_key) if sid_key else None
+            dify_cid = self._conv_get(user_id, sid_key) if sid_key else None
             if dify_cid:
                 payload["conversation_id"] = dify_cid  # 非首次 → 传 Dify 返回的 UUID
             # 注意: 首次请求不传 conversation_id（若传了 sess_xxx 这种非 UUID 会 400）
@@ -490,7 +494,7 @@ class _DifyMixin:
             dify_returned_cid = data.get("conversation_id")
             # 保存 session_id → dify_conv_id 映射（若 Dify 返回了 UUID，后续请求用它）
             if sid_key and dify_returned_cid:
-                self._conv_put(sid_key, dify_returned_cid, machine_id=machine_id)
+                self._conv_put(user_id, sid_key, dify_returned_cid, machine_id=machine_id)
                 print(f"[Dify] ✓ 会话映射已保存: {sid_key} → {dify_returned_cid}")
             conversation_id = dify_returned_cid or session_id
 
@@ -521,7 +525,7 @@ class _DifyMixin:
                 usage_tracker["total_tokens"] = total_tokens
 
             # 解析 RAG 知识库引用（retriever_resources）
-            sources = [{"type": "dify", "app_id": self.dify_app_id}]
+            sources = [{"type": "dify", "app_id": cfg.get("app_id", self.dify_app_id)}]
             rag_refs = data.get("retriever_resources") or []
             if not rag_refs:
                 # Dify 0.10+ 可能改名为 docs

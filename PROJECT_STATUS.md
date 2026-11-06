@@ -1,12 +1,50 @@
 # FabTwin Pro 项目进度文档
 
-> 更新日期：2026-11-04
+> 更新日期：2026-11-07
 > 当前交接版本：ver3
 > 正式主线：**ver3**
 
 ---
 
-## 〇、当前状态速览（2026-11-04）
+## 〇、当前状态速览（2026-11-07）
+
+**ver3 全面整改与界面优化轮已完成**：认证与权限加固、AI 会话隔离、SQL 超时、历史游标与 RV 主键、SVG 契约、依赖锁定、深色工程控制台 UI 统一。以下均为本机实测结果，不是预写结论。
+
+### 本版收口
+
+- 认证：Windows SSO 只信任受信代理注入身份并校验共享密钥；本地密码统一 PBKDF2，删除空哈希弱密码回退；创建用户必须显式初始密码（前端两次校验拦截，空提交不发请求），重置密码两次输入确认。
+- 权限：统一 `require_admin` 依赖；AI Provider/全局配置/MCP/用量、`/api/perf/*`、debug 写接口收敛为管理员；慢 SQL 不再记录原文与绑定值。
+- WebSocket：token 经子协议传递，服务端 accept 后仅协商固定应用协议、不回显 token；无效 token 先 accept 再以 1008 关闭（修复握手前 close 被转为 HTTP 403、浏览器只收 1006 导致的无限重连），客户端 1008 清理认证并停止重连。
+- AI 会话：`AIConversation.user_id` 与 Dify 映射按属主隔离，list/get/delete/chat/clear 全链路校验；历史 NULL 属主不可被认领。
+- 数据正确性：历史游标改为不透明 `raw_id` 字符串（原 strict xfail 转正）；RV `raw_id` 固定宽度微秒时间 + UUID hex；AI SQL 增加 `FABTWIN_AI_SQL_TIMEOUT`（默认 20s）经 `call_timeout` 实施。
+- 回放管线：修复跨零点区段（如 23:16~00:16）查询构造——normalizeRange 保留挂钟 HH:MM，fetchRangeEvents 按 ms 偏移判定并把结束时间进位到次日；同日区段行为不变。
+- 工程质量：前端 Vue 3.5.x / Vite 6.x 定向升级；后端 `requirements.txt` / `requirements-dev.txt` 完整锁定；pytest 严格 markers/xfail。
+- UI：全局深色设计令牌；登录页不再渲染 AppHeader；Dashboard/详情/模型管理/编辑器/AI 浮窗/用户管理统一表面、焦点与紧凑断点（1440/1366/1280 媒体查询已入 CSSOM）。
+- 导航：修复 Shell 重写时顶部主导航被硬编码为两项（主页看板/机台详情）的问题——恢复主页看板/机台详情/模型编辑器/机台管理/AI 配置/用户管理六入口，按 `hasPermission` 过滤，路由层守卫不变。
+
+### 验证结论（2026-11-07 实测）
+
+| 范围 | 实测结果 | 备注 |
+|---|---|---|
+| 后端回归（CI 同款 5 文件） | `78 passed` | 含 WS 1008 accept-then-close 新契约断言 |
+| pip check / pip-audit | 无冲突 / 无已知漏洞 | 锁定环境冻结后实测 |
+| 前端 `npm run build` | 通过，零警告，1.75s | 最大 chunk three 483 kB（gzip 123 kB），无 chunk 警告 |
+| 浏览器回归 | 登录、Dashboard、详情 2D/3D/回放、模型管理、编辑器 4 Tab、AI 浮窗、用户管理通过 | 无页面级横向滚动（2048 视口）；播放/暂停/倍速/seek 正常 |
+| 回放跨零点 | `end_time` 正确进位次日（如 2026-11-07 23:43 → 2026-11-08 00:43），跨零点区段取回 835 LOT / 34 ALARM | 时间输入保持合法挂钟显示 |
+| WS 认证 | 无效 token：accept→1008→清 token→跳登录，0 次重连；有效 token 正常连接 | 修复前为无限退避重连 |
+| 紧凑降级 | 2048 视口锁死，改以 CSSOM 核验：11 条 max-width 媒体查询（1440/1366/1280/1100/900）全部注册 | 实际窄屏现场复测仍建议执行 |
+
+### 未验证边界与发布注意
+
+- 未验证：真实 IIS Windows SSO 链路、Oracle Thick Client、真实 Dify/n8n/MES/EAP 现场、量产数据规模、真实窄屏设备。
+- 必须原子发布：① SSO+本地密码（后端/前端/IIS/共享密钥/弱密码账号处置）② AI 会话（Oracle 前向迁移+ORM+服务+路由全 worker）③ WebSocket（子协议+前端 1008 处理+代理转发）。
+- IIS 部署必须先剥离客户端伪造身份头再注入受信身份；共享密钥只经环境变量配置（见 [deploy/README.md](deploy/README.md)），不写入仓库。
+- 上线前识别旧弱密码账号并逐个安全重置；保留至少一个已验证的管理员恢复账号（恢复流程见 deploy/README.md）。
+- AI 会话迁移含预检脚本：先备份、处理 NULL 属主/重复映射/孤儿数据，再切流。
+
+---
+
+## 历史状态速览（2026-11-04）
 
 **新人唯一入口是 [根 README](README.md)，下一步只读对应模块 README。** 本文件用于查询进度和历史验证，不是第二套交接导航。
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppHeader from '@/platform/frontend/shell/components/AppHeader.vue'
 import AIFloatingBall from '@/modules/ai-assistant/frontend/components/AIFloatingBall.vue'
 import { useAppStore } from './stores/app'
@@ -13,8 +13,21 @@ const modelStore = useModelStore()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-appStore.connectWs()
-modelStore.loadModels()
+const isLoginRoute = computed(() => route.name === 'login')
+
+// 未登录不拉取受保护接口，避免登录页出现 No token 噪音错误；
+// 登录成功后再预热模型库与机台列表，并建立实时连接。
+watch(() => authStore.isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    appStore.connectWs()
+    modelStore.loadModels()
+    if (!appStore.machines.length) {
+      appStore.fetchMachines().catch(e => console.warn('[AI Jump] 加载机台列表失败:', e))
+    }
+  } else {
+    appStore.disconnectWs()
+  }
+}, { immediate: true })
 
 // Toast 通知
 const toasts = ref([])
@@ -77,27 +90,16 @@ function handleAIJump(payload) {
   // 同机台或未指定机台：把跳转请求放入全局 store，由 MachineDetail 消费
   appStore.setPendingJump({ machine_id: mid || currentId || '', timestamp: ts })
 }
-
-// 确保机台列表已加载
-onMounted(async () => {
-  if (!appStore.machines.length) {
-    try {
-      await appStore.fetchMachines()
-    } catch (e) {
-      console.warn('[AI Jump] 加载机台列表失败:', e)
-    }
-  }
-})
 </script>
 
 <template>
   <div class="app-shell">
-    <AppHeader />
-    <main class="app-main">
+    <AppHeader v-if="!isLoginRoute" />
+    <main class="app-main" :class="{ 'app-main--login': isLoginRoute }">
       <router-view />
     </main>
     <!-- 全局悬浮AI球（登录后显示） -->
-    <AIFloatingBall v-if="authStore.isLoggedIn" @jump="handleAIJump" />
+    <AIFloatingBall v-if="!isLoginRoute && authStore.isLoggedIn" @jump="handleAIJump" />
     <!-- 全局 Toast 通知 -->
     <div class="toast-container">
       <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">{{ t.msg }}</div>
@@ -119,6 +121,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+.app-main--login {
+  overflow: auto;
 }
 .toast-container {
   position: fixed;

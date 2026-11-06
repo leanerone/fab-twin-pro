@@ -295,3 +295,40 @@ WHEN NOT MATCHED THEN
             src.IS_ACTIVE, src.CREATED_AT, src.UPDATED_AT);
 
 COMMIT;
+
+-- ============================================
+-- v2.14 (2026-11-06): AI_CONVERSATIONS（Dify 会话映射，属主隔离）
+-- 说明: 与 backend/models.py 的 AIConversation 一致。
+--   - SESSION_ID 为主键；USER_ID VARCHAR2(255) 与 USERS.ID 类型统一
+--   - 历史 NULL 属主仅留审计，代码侧不认领、不展示、不可清理
+--   - MACHINE_ID 首次绑定后不可换绑
+-- 幂等: 已存在（含 v2.12 旧形态）则跳过 CREATE，请另行执行
+--   sql/v2.14_ai_conversations_owner.sql 完成升级。
+-- ============================================
+DECLARE
+    e_table_exists EXCEPTION;
+    PRAGMA EXCEPTION_INIT(e_table_exists, -955);
+BEGIN
+    EXECUTE IMMEDIATE q'[
+        CREATE TABLE AI_CONVERSATIONS (
+            SESSION_ID   VARCHAR2(64)  NOT NULL,
+            USER_ID      VARCHAR2(255),
+            MACHINE_ID   VARCHAR2(64)  DEFAULT '',
+            DIFY_CONV_ID VARCHAR2(64)  DEFAULT '',
+            PROVIDER     VARCHAR2(32)  DEFAULT 'dify',
+            CREATED_AT   VARCHAR2(255),
+            UPDATED_AT   VARCHAR2(255),
+            CONSTRAINT PK_AI_CONVERSATIONS PRIMARY KEY (SESSION_ID)
+        )
+    ]';
+    EXECUTE IMMEDIATE 'CREATE INDEX IX_AI_CONV_USER_SESSION ON AI_CONVERSATIONS (USER_ID, SESSION_ID)';
+    EXECUTE IMMEDIATE 'CREATE INDEX IX_AI_CONV_USER_UPDATED ON AI_CONVERSATIONS (USER_ID, UPDATED_AT)';
+    EXECUTE IMMEDIATE 'CREATE INDEX IDX_AI_CONVERSATIONS_UPDATED ON AI_CONVERSATIONS (UPDATED_AT)';
+    DBMS_OUTPUT.PUT_LINE('[v2.14] AI_CONVERSATIONS 表+索引创建成功');
+EXCEPTION
+    WHEN e_table_exists THEN
+        DBMS_OUTPUT.PUT_LINE('[v2.14] AI_CONVERSATIONS 已存在，跳过 CREATE；旧形态请执行 sql/v2.14_ai_conversations_owner.sql 升级');
+END;
+/
+
+COMMIT;
