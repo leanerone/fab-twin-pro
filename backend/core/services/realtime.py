@@ -99,9 +99,13 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-async def connect_authenticated(websocket: WebSocket, db, connection_manager=manager) -> bool:
-    """认证子协议令牌并确认用户存在；未认证连接以 1008 关闭且不注册。"""
-    token = decode_ws_token(websocket.scope.get("subprotocols", []))
+async def connect_authenticated(websocket: WebSocket, db, connection_manager=manager, query_token: str | None = None) -> bool:
+    """认证子协议令牌并确认用户存在；未认证连接以 1008 关闭且不注册。
+
+    子协议（fabtwin-token.<b64>）为主通道；query_token（?token=）为兼容回退，
+    仅在未提供子协议令牌时生效。
+    """
+    token = decode_ws_token(websocket.scope.get("subprotocols", [])) or (query_token or None)
     user_id = parse_token(token) if token else None
     user = None
     if user_id is not None:
